@@ -4,7 +4,7 @@ import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../
 
 /**
  * Google Gemini — streaming generative AI with function calling
- * Models: gemini-2.5-flash (recommended), gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+ * Models: gemini-2.5-flash-lite (fastest), gemini-2.5-flash (recommended), gemini-2.5-pro, gemini-1.5-flash
  *
  * Tool calling: supported on all Gemini 1.5+ and 2.x models.
  * Gemini uses its own FunctionDeclaration format (type values are uppercase).
