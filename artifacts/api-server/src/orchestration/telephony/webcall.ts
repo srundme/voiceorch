@@ -155,11 +155,14 @@ function extractSentences(buf: string): [string[], string] {
         while (j < buf.length && (buf[j] === ' ' || buf[j] === '\n')) j++;
         const afterSpace = j < buf.length ? buf[j] : undefined;
 
-        // Split when the next real char starts a new sentence (uppercase / quote)
-        // or when nothing follows (trailing period in streaming chunk).
+        // Split when the next real char starts a new sentence (uppercase / quote /
+        // Indic script) or when nothing follows (trailing period in streaming chunk).
+        // Indic scripts (U+0900–U+0D7F) have no uppercase so the letter-case check
+        // never fires for Tamil/Hindi/etc — this range covers all major Indian scripts
+        // so "நான்…. உங்களுக்கு…" correctly splits into two TTS jobs.
         const shouldSplit =
           afterSpace === undefined ||
-          /[A-Z"'(\u2018\u201C]/.test(afterSpace);
+          /[A-Z"'(\u2018\u201C\u0900-\u0D7F]/.test(afterSpace);
 
         if (shouldSplit) {
           // Skip if word before period is ≤ 4 alpha chars (likely an abbreviation).
@@ -2291,6 +2294,25 @@ export async function handleWebCallWebSocket(
         // LLM-generated opening
         sendStatus("thinking");
         let greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
+        // Inject the same language guard that per-turn responses use, so the
+        // LLM generates the greeting in the configured language (not English).
+        if (currentLangWc) {
+          const GREET_LANG_NAMES: Record<string, string> = {
+            "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+            "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+            "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+            "en-IN": "English", "en-US": "English", "en-GB": "English",
+            "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+            "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+            "ar-EG": "Arabic", "ru-RU": "Russian",
+          };
+          const greetLangName = GREET_LANG_NAMES[currentLangWc] ?? currentLangWc;
+          const greetLangGuard =
+            `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${greetLangName}. ` +
+            `This applies to EVERY reply without exception — including the opening greeting. ` +
+            `Never switch to English or any other language under any circumstances.`;
+          greetSystemPrompt = `${greetLangGuard}\n\n${greetSystemPrompt}\n\n${greetLangGuard}`;
+        }
         // Substitute {caller_salutation} — gender not yet known at greeting time, use neutral.
         {
           const _greetRawSal = neutralSal;
