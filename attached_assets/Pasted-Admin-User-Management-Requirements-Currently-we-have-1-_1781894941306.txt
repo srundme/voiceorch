@@ -1,0 +1,143 @@
+Admin User Management Requirements
+
+Currently we have:
+
+1. Customer SaaS Portal
+   - Agent management
+   - Knowledge base
+   - Providers
+   - Calls
+   - Billing
+
+2. Admin Portal
+   - Platform management
+   - Revenue tracking
+   - User management
+   - System monitoring
+
+We need the Admin Portal to have full administrative access over customer accounts.
+
+Required Features:
+
+### User Management
+
+Admins should be able to:
+
+- View all users
+- Search users
+- Filter users
+- View user details
+- Edit user profile
+- Suspend user
+- Reactivate user
+- Delete user
+
+### User Account Access
+
+For each user:
+
+- View all agents
+- View agent configurations
+- View prompts
+- View knowledge bases
+- View phone numbers
+- View API keys (masked)
+- View providers
+- View call logs
+- View recordings
+- View usage
+- View billing history
+- View wallet balance
+
+### Admin Impersonation
+
+Add:
+
+"Login As User"
+
+Button on User Details page.
+
+Behavior:
+
+- Admin can temporarily enter a user's workspace
+- System displays banner:
+
+  "Admin Mode - Logged in as <User Name>"
+
+- All actions are audit logged
+- Admin can exit impersonation at any time
+
+Audit fields:
+
+- Admin ID
+- User ID
+- Timestamp
+- Action Performed
+- IP Address
+
+### Edit Capabilities
+
+Admin should be able to:
+
+- Create agents for users
+- Edit agents
+- Delete agents
+- Modify provider settings
+- Adjust wallet balance
+- Add credits
+- Deduct credits
+- Enable/disable features
+- Reset user settings
+
+### Billing Controls
+
+Admin can:
+
+- Credit wallet
+- Debit wallet
+- View transactions
+- Issue refunds
+- Create manual adjustments
+
+### Security
+
+Do NOT expose raw passwords.
+
+Do NOT expose provider secrets in plaintext.
+
+Sensitive values should remain masked.
+
+### Recommended RBAC
+
+Roles:
+
+1. Super Admin
+   - Full access
+   - User impersonation
+   - Billing controls
+   - Platform settings
+
+2. Support Admin
+   - Read access
+   - User impersonation
+   - Cannot modify billing
+
+3. Finance Admin
+   - Billing access only
+
+4. Operations Admin
+   - User and platform management
+   - No finance access
+
+### Audit Logs
+
+Every admin action must be logged:
+
+- Who performed it
+- Which user was affected
+- What changed
+- Before value
+- After value
+- Timestamp
+
+Create a complete implementation plan and database schema updates before coding.
