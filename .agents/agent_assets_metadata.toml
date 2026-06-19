@@ -108,3 +108,9 @@ id = "8o14UJsnwZkwJB7lhMBxb"
 uri = "file://HANDOVER.pdf"
 type = "pdf"
 title = "SnapServe / VoiceOrch — Architect Handover (PDF)"
+
+[[outputs]]
+id = "cFy1DWOKIx0NPptnP0WnF"
+uri = "file://BOLNA-NOTES.md"
+type = "text"
+title = "Bolna → VoiceOrch: Design Notes & Gap Analysis"
