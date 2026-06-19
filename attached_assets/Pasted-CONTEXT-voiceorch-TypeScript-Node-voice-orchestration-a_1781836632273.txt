@@ -1,0 +1,47 @@
+CONTEXT
+voiceorch — TypeScript/Node voice orchestration (artifacts/api-server/src/orchestration/). Provider calls go out to LLM (Gemini etc.), TTS (Cartesia), and STT (Sarvam/Azure/Deepgram) via adapters in adapters/*/index.ts. Existing performance.now() latency checkpoints in pipeline.ts.
+
+GOAL
+Eliminate per-call TCP + TLS handshake latency (~100–300ms each) on outbound HTTP provider calls by reusing warm, pooled keep-alive connections instead of opening a fresh connection per request. This is an isolated infrastructure change — NO orchestration logic changes, NO safety-net changes, NO barge-in changes.
+
+IMPORTANT FRAMING (Node reality, don't over-promise)
+- The reliable win in Node is HTTP keep-alive connection REUSE (skip repeat TCP+TLS handshakes). Capture that first — it's where most of the latency lives.
+- True HTTP/2 multiplexing is a bonus, only where the provider endpoint AND the SDK's transport support it. Enable h2 only where it's confirmed supported; otherwise keep-alive HTTP/1.1 reuse is the target. Do NOT force h2 and break a provider.
+- Do NOT touch websocket streaming paths (streaming STT/TTS). Those already hold persistent connections; this is only about request/response HTTP calls (LLM REST, batch STT, any TTS REST).
+
+STEP 0 — AUDIT (do before any change)
+For each adapter that makes HTTP calls, report:
+- What HTTP client it uses (native fetch/undici, axios, the provider SDK's built-in client, etc.).
+- Whether it currently reuses a connection or creates a new one per call (look for per-call client instantiation, no keepAlive agent, default global dispatcher, etc.).
+- Whether the client allows injecting a custom agent/dispatcher (most SDKs accept a custom fetch, httpAgent, or dispatcher).
+Output a short table: adapter → client → reuses? → injectable?
+
+STEP 1 — SHARED POOL
+- Create ONE shared keep-alive connection pool/dispatcher module (e.g. orchestration/http/pool.ts). If using undici, a single Agent/Pool with keepAliveTimeout and connections set sensibly; if a provider SDK only accepts a Node https.Agent, provide a shared https.Agent({ keepAlive: true }).
+- Reasonable defaults, all env-configurable: max connections, keepAliveTimeout (~30s), pipelining/concurrency. Document them where env vars are declared.
+- Enable HTTP/2 ONLY for endpoints confirmed to support it and where the transport allows; otherwise keep-alive h1.
+
+STEP 2 — WIRE IT IN
+- Inject the shared pool into each HTTP-making adapter found in STEP 0, via whatever injection point that client supports.
+- One shared instance for the whole process — do NOT create a pool per adapter or per call.
+- Adapters that only use websockets: leave untouched.
+
+STEP 3 — MEASURE
+- Add a one-time log on first vs. subsequent provider call showing connection reuse (e.g. whether a new socket was opened). Enough to prove warm reuse is happening.
+- Using the existing perf checkpoints, confirm the LLM/TTS call segment shrinks on calls after the first. Report before/after on a STUB or real run.
+
+CONSTRAINTS
+- TypeScript only. No orchestration logic touched. No change to request/response payloads or provider behavior.
+- If a provider SDK does not allow injecting a custom agent/dispatcher, report it and leave that adapter as-is rather than hacking around it — note it as a limitation.
+- Graceful shutdown: close/destroy the pool on process exit so it doesn't leak sockets or hang the process.
+- List every file changed with a one-line why.
+
+ACCEPTANCE
+- STEP 0 audit table produced.
+- A single shared pool exists and is reused process-wide.
+- Connection reuse demonstrably happening (log/evidence) for at least the HTTP-based LLM and TTS calls.
+- Latency on post-first provider calls measurably lower, shown via existing checkpoints.
+- Websocket paths untouched; no orchestration/logic diffs.
+- Clean shutdown verified (no leaked sockets / no hang on exit).
+
+Start with STEP 0. Show me the audit table before wiring anything in.
