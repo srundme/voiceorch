@@ -60,27 +60,18 @@ export async function handleVobizWebSocket(
 
   /**
    * Send audio to Vobiz caller via the playAudio WebSocket event.
-   * Pipeline delivers raw 8kHz LINEAR16 PCM (rawPcmOutput: true in session config)
-   * so no mulaw decode is needed.
-   *
-   * audio/x-l16 (per RFC 2586) is big-endian (network byte order).
-   * Our pipeline produces little-endian PCM, so byte-swap every sample pair
-   * before sending — same as the inbound direction but reversed.
+   * Pipeline delivers raw 8kHz LINEAR16 LE PCM (rawPcmOutput: true in session config).
+   * Vobiz accepts the payload as-is in little-endian format despite audio/x-l16 being
+   * nominally big-endian per RFC 2586 — byte-swapping causes silence/garble.
    */
   function sendAudioToVobiz(pcmChunk: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
-    // LE → BE: swap every pair of bytes so Vobiz decodes correctly
-    const beChunk = Buffer.allocUnsafe(pcmChunk.length);
-    for (let i = 0; i + 1 < pcmChunk.length; i += 2) {
-      beChunk[i]     = pcmChunk[i + 1]!;
-      beChunk[i + 1] = pcmChunk[i]!;
-    }
     ws.send(JSON.stringify({
       event: "playAudio",
       media: {
         contentType: "audio/x-l16",
         sampleRate: 8000,
-        payload: beChunk.toString("base64"),
+        payload: pcmChunk.toString("base64"),
       },
     }));
   }
