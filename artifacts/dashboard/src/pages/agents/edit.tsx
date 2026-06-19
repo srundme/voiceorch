@@ -867,16 +867,31 @@ export default function AgentEdit() {
                       )}
                     </div>
 
-                    <FormField control={form.control} name="webhookUrl" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Post-Call Webhook URL</FormLabel>
-                        <FormControl>
-                          <Input placeholder="https://your-server.com/webhook/calls" {...field} />
-                        </FormControl>
-                        <FormDescription>Receives a JSON summary when each call ends.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField control={form.control} name="webhookUrl" render={({ field }) => {
+                      const val = field.value ?? "";
+                      const isEmail = val.includes("@") && !val.startsWith("http");
+                      const isHttp  = val.length > 0 && val.startsWith("http://");
+                      return (
+                        <FormItem>
+                          <FormLabel>Post-Call Webhook URL</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://your-server.com/webhook/calls" {...field} />
+                          </FormControl>
+                          {isEmail && (
+                            <p className="text-xs text-destructive flex items-center gap-1">
+                              ⚠ That looks like an email address, not a URL. Enter an <code>https://</code> endpoint.
+                            </p>
+                          )}
+                          {isHttp && !isEmail && (
+                            <p className="text-xs text-amber-500 flex items-center gap-1">
+                              ⚠ HTTP URLs are not allowed — must be <code>https://</code>
+                            </p>
+                          )}
+                          <FormDescription>Receives a JSON summary when each call ends. Must be HTTPS.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }} />
                     <FormField control={form.control} name="webhookSecret" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Webhook Signing Secret</FormLabel>

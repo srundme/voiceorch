@@ -2656,21 +2656,37 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
           When a call ends we'll POST the full call data (transcript, duration, cost, disposition) to this URL.
         </p>
         <div className="space-y-3">
-          <FormField control={form.control} name="webhookUrl" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="https://your-server.com/voiceorch-webhook"
-                  className="h-9 text-sm font-mono bg-background/50"
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription className="text-[10px]">
-                Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
-              </FormDescription>
-            </FormItem>
-          )} />
+          <FormField control={form.control} name="webhookUrl" render={({ field }) => {
+            const val = field.value ?? "";
+            const isEmail = val.includes("@") && !val.startsWith("http");
+            const isHttp  = val.length > 0 && val.startsWith("http://");
+            return (
+              <FormItem className="space-y-1">
+                <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Webhook URL</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://your-server.com/voiceorch-webhook"
+                    className="h-9 text-sm font-mono bg-background/50"
+                    {...field}
+                  />
+                </FormControl>
+                {isEmail && (
+                  <p className="text-xs text-destructive">
+                    ⚠ That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.
+                  </p>
+                )}
+                {isHttp && !isEmail && (
+                  <p className="text-xs text-amber-500">
+                    ⚠ HTTP is not allowed — must be <code className="font-mono">https://</code>
+                  </p>
+                )}
+                <FormDescription className="text-[10px]">
+                  Must be HTTPS. We send a JSON payload with <code className="font-mono bg-muted px-0.5 rounded">callId</code>, <code className="font-mono bg-muted px-0.5 rounded">status</code>, <code className="font-mono bg-muted px-0.5 rounded">transcript</code>, <code className="font-mono bg-muted px-0.5 rounded">disposition</code> and more.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            );
+          }} />
           <FormField control={form.control} name="webhookSecret" render={({ field }) => (
             <FormItem className="space-y-1">
               <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Signing Secret (optional)</FormLabel>
