@@ -274,14 +274,9 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     return;
   }
 
-  // P2-C: Recording — prepend <Record> to answer XML if enabled
-  const recordingCallbackUrl = cfg["recordingEnabled"] === true
-    ? `${httpBase}/api/webhooks/vobiz/recording`
-    : undefined;
-
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { recordingCallbackUrl, campaignLeadId })
+    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { campaignLeadId })
   );
 });
 

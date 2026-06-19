@@ -161,24 +161,22 @@ export async function handleVobizWebSocket(
 
 /**
  * Return VoiceXML telling Vobiz to open a bidirectional WebSocket stream.
- * P2-C: pass recordingCallbackUrl to prepend a <Record> element.
+ * Recording is handled server-side via RecordingBuffer — no <Record> verb
+ * needed here (it causes a beep tone and can conflict with <Stream> audio routing).
  */
 export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { recordingCallbackUrl?: string; campaignLeadId?: number } = {},
+  opts: { campaignLeadId?: number } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
   if (opts.campaignLeadId) qsParts.push(`campaignLeadId=${opts.campaignLeadId}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
-  const recordTag = opts.recordingCallbackUrl
-    ? `\n  <Record action="${opts.recordingCallbackUrl}" method="POST" maxLength="3600" redirect="false" />`
-    : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>${recordTag}
+<Response>
   <Stream bidirectional="true" keepCallAlive="true">${wsUrl}</Stream>
 </Response>`;
 }
