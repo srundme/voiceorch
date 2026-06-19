@@ -38,12 +38,16 @@ export const authRateLimit = rateLimit({
   },
 });
 
-// Exempt routes that don't need rate limiting
+// Exempt routes that don't need rate limiting.
+// /api/admin/* is excluded: it's already gated by requireAdmin (x-admin-token secret)
+// and typically served to a single admin IP — IP-based limiting causes 429s from
+// the admin panel's own polling queries (platform, alerts, overview, etc.).
 export const exemptPaths = [
   "/api/healthz",
   "/api/campaign-webhook",
   "/api/webhooks",
   "/api/webcall-notify",
+  "/api/admin",
 ];
 
 export function isRateLimitExempt(url: string): boolean {
