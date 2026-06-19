@@ -1957,6 +1957,8 @@ export async function handleWebCallWebSocket(
       // 3. Pipelined sentence playback — synthesis ran in parallel with LLM
       // streaming, so each job is likely already resolved by now.
       let transcriptSent = false;
+      let lastPlayedIndex = -1; // STEP 0b diag: highest sentence index whose audio fully streamed
+      logger.info({ callId, evt: "sentences_queued", sentenceCount: sentenceTexts.length, sentenceTexts }, "STEP 0b sentences_queued: full per-turn TTS job list (does the final clause appear?)");
 
       for (let i = 0; i < sentenceJobs.length; i++) {
         if (closed || interrupted) break;
@@ -2007,7 +2009,9 @@ export async function handleWebCallWebSocket(
           sendSpeechAudio(chunk);
           await new Promise<void>(r => setTimeout(r, 40));
         }
+        if (!interrupted && !closed) lastPlayedIndex = i; // STEP 0b diag: this sentence fully streamed
       }
+      logger.info({ callId, evt: "playback_done", lastPlayedIndex, totalSentences: sentenceJobs.length, interrupted, closed }, "STEP 0b playback_done: did the loop reach the final sentence, or break early (barge-in/close)?");
 
       // Tail silence: send real PCM silence frames so the browser's AudioContext
       // queues them AFTER the last word. A passive wait alone doesn't help —
