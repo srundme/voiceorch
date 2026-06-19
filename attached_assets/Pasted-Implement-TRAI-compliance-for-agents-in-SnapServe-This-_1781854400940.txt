@@ -1,0 +1,38 @@
+Implement TRAI compliance for agents in SnapServe. This must be a non-invasive pre/post wrapper — do not modify the existing STT/LLM/TTS pipeline, conversation logic, or other Advanced tab settings (Timing, Interruption, Limits, Optimize). Only the TRAI toggle on Advanced > Compliance gets wired; IRDAI, DPDP, and HIPAA toggles remain inert.
+
+PART 1 — Backend wiring
+
+1. Find the agent's settings/config table (where Timing, Interruption, Limits are already saved) and add a field: compliance_frameworks (JSON), structure: { trai: { enabled: boolean }, irdai: { enabled: boolean }, dpdp: { enabled: boolean }, hipaa: { enabled: boolean } }.
+
+2. Create two new tables:
+   - trai_suppression_list (id, phone_number unique, status, category_blocked, source, added_at)
+   - trai_call_compliance_log (id, agent_id, call_id, phone_number, pre_dial_status, block_reason, opt_out_detected, created_at)
+
+3. Create lib/traiGate.js with three functions:
+   - traiPreDialCheck(phoneNumber): checks current hour is between 9am-9pm, checks phone_number against trai_suppression_list for full_dnd/opted_out status. Returns { allowed, reason }.
+   - appendTraiDisclosure(basePrompt): appends a fixed disclosure string to the prompt about it being a promotional call and ending respectfully if the caller requests opt-out.
+   - scanForOptOut(agentId, callId, phoneNumber, transcript): scans transcript for opt-out phrases (stop calling, remove my number, don't call again, do not call, unsubscribe, stop contacting). If found, upserts phone_number into trai_suppression_list as opted_out, and logs into trai_call_compliance_log.
+
+4. Wherever a call is initiated for any agent (single call via "Call" button, or campaign dialer), right before dialing: fetch the agent's compliance_frameworks.trai.enabled. If true, call traiPreDialCheck(phoneNumber). If not allowed, block the call, log the reason, do not proceed to dial.
+
+5. Wherever the agent's system prompt is assembled before being sent to the LLM: if agent.compliance_frameworks.trai.enabled is true, call appendTraiDisclosure on the final prompt string before sending.
+
+6. Wherever a call's transcript is finalized and saved (existing post-call save handler): if the agent's compliance_frameworks.trai.enabled is true, call scanForOptOut with agentId, callId, phoneNumber, transcript.
+
+PART 2 — Confirmation modal on enable
+
+7. When the user clicks the TRAI toggle to turn it ON (off-to-on transition only), intercept the click — do not flip the toggle yet. Open a modal instead, styled to match the existing dark theme UI (reuse any existing modal/dialog component in the codebase).
+
+   Modal title: "Enable TRAI Compliance"
+   Modal body (bullet list):
+   - "Calls outside 9 AM–9 PM will be automatically blocked"
+   - "Numbers on the suppression/opt-out list will not be dialed"
+   - "An opt-out disclosure line will be added to the agent's system prompt"
+   - "Caller opt-out requests during calls will be detected and the number suppressed automatically"
+   Footer note: "This applies to all calls made by this agent going forward. It does not affect past calls."
+
+   Buttons: "Cancel" (closes modal, toggle stays OFF) and "Confirm & Enable" (closes modal, toggle flips ON, saves compliance_frameworks.trai.enabled = true via existing save flow).
+
+8. Turning the toggle OFF (on-to-off) does NOT show this modal — remains a direct, immediate toggle off, no confirmation needed.
+
+Do not touch IRDAI, DPDP, or HIPAA toggles or modals in this pass.
