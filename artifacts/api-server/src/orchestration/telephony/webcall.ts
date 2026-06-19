@@ -21,7 +21,7 @@ import { RecordingBuffer } from "../recorder.js";
 import type { ConversationTurn, STTConfig, StreamSTT } from "../types.js";
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "../types.js";
 import { decryptKey } from "../../lib/crypto.js";
-import { getFlatRateCentsPerMin } from "../../services/minute-rates.js";
+import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../../services/minute-rates.js";
 import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCallerName, latchCallerFact, detectCallbackRequest } from "../callerMemory.js";
 
 import { GenderDetector } from "../genderDetector.js";
@@ -2756,14 +2756,15 @@ export async function handleWebCallWebSocket(
       }
 
       // Deduct platform fee from wallet.
-      // Pricing: managed = $0.05/min (5 ¢), BYOP = $0.035/min (3.5 ¢).
-      // All calls billed by ceil(seconds / 60) started minutes.
+      // Mode is resolved dynamically: if user has their own provider keys → BYOP rate;
+      // otherwise → managed rate (SnapServe's platform keys were in use).
       const callUserId = agent.userId ?? null;
       if (callUserId && durationSeconds > 0) {
-        const rateCentsPerMin  = getFlatRateCentsPerMin(agent.agentMode);
+        const billingMode      = await resolveAgentBillingMode(callUserId, agent);
+        const rateCentsPerMin  = getFlatRateCentsPerMin(billingMode);
         const billableMinutes  = Math.ceil(durationSeconds / 60);
         const debitCents       = Math.round(billableMinutes * rateCentsPerMin);
-        const modeLabel        = isManaged ? "managed" : "BYOP";
+        const modeLabel        = billingMode === "managed" ? "managed" : "BYOP";
         const billableLabel    = `${billableMinutes} min × $${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
 
         // Persist cost on the call row so it shows up in call log detail

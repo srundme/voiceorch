@@ -189,7 +189,7 @@ export const agentsTable = pgTable("agents", {
   }>>(),
 
   // ── Mode ──────────────────────────────────────────────────────────────────────
-  agentMode: text("agent_mode").default("byop"), // "managed" | "byop"
+  agentMode: text("agent_mode").default("managed"), // "managed" | "byop"
   managedStack: jsonb("managed_stack").$type<Record<string, unknown>>(),
   useCase: text("use_case"),
 

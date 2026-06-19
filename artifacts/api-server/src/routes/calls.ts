@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
 import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
-import { getFlatRateCentsPerMin } from "../services/minute-rates.js";
+import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
   InitiateOutboundCallBody,
@@ -120,7 +120,8 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
       return;
     }
     if (user && user.walletBalanceCents > 0) {
-      const agentRate = getFlatRateCentsPerMin(agent.agentMode);
+      const billingMode = await resolveAgentBillingMode(agent.userId, agent);
+      const agentRate = getFlatRateCentsPerMin(billingMode);
       if (agentRate > 0) {
         const maxMinutes = Math.floor(user.walletBalanceCents / agentRate);
         maxDurationSeconds = Math.max(60, maxMinutes * 60);
@@ -621,9 +622,12 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   const [agentForBilling] = await db.select().from(agentsTable).where(eq(agentsTable.id, existing.agentId));
 
   // Flat per-minute rate: managed = $0.05/min (5 ¢), BYOP = $0.035/min (3.5 ¢).
-  // All calls billed by ceil(seconds / 60) started minutes.
-  const rateCentsPerMin = getFlatRateCentsPerMin(agentForBilling?.agentMode);
-  const modeLabel = agentForBilling?.agentMode === "managed" ? "managed" : "BYOP";
+  // Mode is resolved dynamically: if the user has their own provider keys for any
+  // of this agent's providers → BYOP; otherwise → managed (platform keys in use).
+  const callClerkId = existing.userId ?? agentForBilling?.userId ?? null;
+  const billingMode = await resolveAgentBillingMode(callClerkId, agentForBilling ?? {});
+  const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
+  const modeLabel = billingMode === "managed" ? "managed" : "BYOP";
   const billableMinutes = durationSeconds <= 0 ? 0 : Math.ceil(durationSeconds / 60);
   const rateLabel = `$${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
   const debitCents = durationSeconds <= 0

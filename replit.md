@@ -16,6 +16,17 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 - Turn safety-net env (optional, sensible defaults in `orchestration/endpointing.ts`): `FORCE_FINALIZE_MS` (default 1800) — if STT streams partials but never a final, force-finalize the turn from the best partial after this many ms; `STALL_BACKSTOP_MS` (default 15000) — if no usable transcript arrives at all, speak a recovery reprompt after this many ms; `STALL_MAX_REPROMPTS` (default 2) — after this many reprompts with continued silence, end the call. Guards the Tamil/Hinglish "Listening…" hang on both telephony (`pipeline.ts`) and webcall (`telephony/webcall.ts`) paths.
 - HTTP keep-alive pool env (optional, defaults in `orchestration/http/pool.ts`): `HTTP_POOL_KEEPALIVE_TIMEOUT_MS` (default 30000) — how long an idle pooled socket stays warm; must comfortably exceed real between-turn gaps (caller pauses, reading digits) or the next provider call re-pays the TCP+TLS handshake — tune up from the `http_pool_connect` reconnect logs; `HTTP_POOL_KEEPALIVE_MAX_TIMEOUT_MS` (default 600000); `HTTP_POOL_CONNECTIONS` (default 128, max per origin); `HTTP_POOL_PIPELINING` (default 1, keep at 1 for h1). Installed at startup via `setGlobalDispatcher` — **process-wide**: covers every outbound HTTP call (LLM/TTS/STT REST, telephony provider REST, self-webhooks, memory proxy, Google Calendar, object storage), not just the provider adapters. WebSocket streaming STT/TTS do NOT use this dispatcher and are unaffected. HTTP/1.1 keep-alive reuse only — h2 is deliberately NOT forced (these REST endpoints don't reliably negotiate it over undici). Graceful shutdown uses `Agent.close()` (not `destroy()`) so in-flight provider calls on a live call survive a Railway SIGTERM redeploy.
 
+## Business model — two plans
+
+- **Managed plan** (default for all sign-ups): User creates agents; SnapServe supplies all provider keys (LLM/ASR/TTS). Billed at **$0.05/min**. This is the experience for users who have NOT added any provider keys in the Providers page.
+- **BYOP (Bring Your Own Providers)**: User adds their own provider API keys in the Providers page. Billed at **$0.035/min** orchestration fee only (user pays providers directly). Activated automatically whenever a user has configured keys for any of the agent's providers.
+
+Billing mode is resolved **dynamically** at call-end time in `minute-rates.ts → resolveAgentBillingMode()`:
+- Check `providers` table for user's keys matching the agent's ASR/LLM/TTS providers.
+- Any match → BYOP rate. No match → managed rate.
+
+**Admin panel** (`/admin`) = SnapServe's internal ops dashboard (not visible to end-users). Manages platform keys, user accounts, platform config.
+
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
