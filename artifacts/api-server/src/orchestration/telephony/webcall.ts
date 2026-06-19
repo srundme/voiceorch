@@ -72,11 +72,11 @@ const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
 const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a phone handoff
 const TTS_VOLUME_GAIN          = 1.5;  // PCM amplitude multiplier — reduced from 2.5 to prevent hard-clipping distortion
 
+// Default backchannel fillers are Tamil.
+// For English or other language agents, configure backchannelPhrases on the agent.
 const BACKCHANNEL_PHRASES = [
-  // Tamil — primary (matches the agent's language for Tamil callers)
   "சரி.", "ஓகே.", "புரிஞ்சுது.", "தெரியும்.", "சரிதான்.",
-  // English — fallback (for English-language agents)
-  "I see.", "Got it.", "Okay.", "Sure.", "I understand.",
+  "ஆமாங்க.", "சரிங்க.", "ஓகே சார்.",
 ];
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
@@ -1523,6 +1523,14 @@ export async function handleWebCallWebSocket(
             { ...lastTurn, content: `${lastTurn.content}\n\n[Reminder: reply in ${langName} only]` },
           ];
         }
+      }
+      // Cap input tokens: keep only the last 12 entries (6 exchange pairs).
+      // Beyond that, LLM input grows unboundedly — call-63 showed 4k→8k→13k→18k tokens
+      // in 4 turns, pushing LLM latency toward 2s+ by turn 8. Earlier context is
+      // already in the system prompt's caller memory/facts section.
+      const MAX_HISTORY_ENTRIES = 12;
+      if (historyForLlm.length > MAX_HISTORY_ENTRIES) {
+        historyForLlm = historyForLlm.slice(-MAX_HISTORY_ENTRIES);
       }
 
       const llmStartMs = Date.now();
