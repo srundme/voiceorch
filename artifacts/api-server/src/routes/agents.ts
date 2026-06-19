@@ -389,11 +389,12 @@ router.get("/agents/:id/memory/facts", requireAuth, async (req, res): Promise<vo
     .orderBy(desc(callerFactsTable.createdAt));
 
   res.json(ListAgentMemoryFactsResponse.parse(facts.map(f => ({
-    id:         f.id,
-    key:        f.key,
-    value:      f.value,
-    confidence: f.confidence,
-    createdAt:  f.createdAt.toISOString(),
+    id:          f.id,
+    key:         f.key,
+    value:       f.value,
+    confidence:  f.confidence,
+    phoneNumber: f.phoneNumber,
+    createdAt:   f.createdAt.toISOString(),
   }))));
 });
 

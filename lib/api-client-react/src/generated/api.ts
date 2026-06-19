@@ -1427,6 +1427,80 @@ export function useListAgentMemoryFacts<TData = Awaited<ReturnType<typeof listAg
 
 
 
+export const getDeleteCallerFactUrl = (id: number,
+    phone: string,
+    factId: number,) => {
+
+
+
+
+  return `/api/agents/${id}/caller-memory/${phone}/facts/${factId}`
+}
+
+/**
+ * @summary Delete a caller fact (entire supersession chain for that key)
+ */
+export const deleteCallerFact = async (id: number,
+    phone: string,
+    factId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCallerFactUrl(id,phone,factId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCallerFactMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCallerFact>>, TError,{id: number;phone: string;factId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCallerFact>>, TError,{id: number;phone: string;factId: number}, TContext> => {
+
+const mutationKey = ['deleteCallerFact'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCallerFact>>, {id: number;phone: string;factId: number}> = (props) => {
+          const {id,phone,factId} = props ?? {};
+
+          return  deleteCallerFact(id,phone,factId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCallerFactMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCallerFact>>>
+
+    export type DeleteCallerFactMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a caller fact (entire supersession chain for that key)
+ */
+export const useDeleteCallerFact = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCallerFact>>, TError,{id: number;phone: string;factId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCallerFact>>,
+        TError,
+        {id: number;phone: string;factId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCallerFactMutationOptions(options));
+    }
+
 export const getListAgentMemoryEpisodesUrl = (id: number,) => {
 
 

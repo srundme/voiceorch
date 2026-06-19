@@ -5,6 +5,7 @@ import {
   Loader2, ChevronRight, Pencil, Calendar,
   ArrowDownLeft, ArrowUpRight, Globe, Star, ArrowRight, ExternalLink,
   MapPin, DollarSign, Bell, HelpCircle, User, Tag, BarChart3, Hash, MessageSquare,
+  Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,11 +21,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListAgentMemorySummaries, getListAgentMemorySummariesQueryKey,
-  useListAgentMemoryFacts,
+  useListAgentMemoryFacts, getListAgentMemoryFactsQueryKey,
   useListAgentMemoryEpisodes,
   useListCalls,
   useListAgents, getListAgentsQueryKey,
   useUpdateAgent,
+  useDeleteCallerFact,
 } from "@workspace/api-client-react";
 import type {
   AgentMemorySummary, AgentMemoryFact, AgentMemoryEpisode, Agent, Call,
@@ -233,25 +235,62 @@ function ViewAllLink({ label, onClick }: { label: string; onClick: () => void })
 }
 
 /* ─── Facts ──────────────────────────────────────────────────────────────── */
-function FactCard({ fact }: { fact: AgentMemoryFact }) {
+function FactCard({ fact, agentId }: { fact: AgentMemoryFact; agentId: number }) {
   const { Icon, cls } = factStyle(fact.key);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const deleteFact = useDeleteCallerFact();
+  const [confirming, setConfirming] = useState(false);
+
+  function handleDelete() {
+    if (!confirming) { setConfirming(true); return; }
+    deleteFact.mutate(
+      { id: agentId, phone: encodeURIComponent(fact.phoneNumber), factId: fact.id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListAgentMemoryFactsQueryKey(agentId) });
+          toast({ title: "Fact deleted" });
+          setConfirming(false);
+        },
+        onError: () => {
+          toast({ title: "Failed to delete fact", variant: "destructive" });
+          setConfirming(false);
+        },
+      }
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-elevated/40 p-3 flex items-start gap-3">
+    <div className="group rounded-xl border border-border bg-elevated/40 p-3 flex items-start gap-3 relative">
       <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${cls}`}>
         <Icon className="w-4 h-4" />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 pr-6">
         <p className="text-[11px] text-muted-foreground truncate">{humanize(fact.key)}</p>
         <p className="text-[12.5px] font-medium text-foreground break-words leading-snug mt-0.5">{fact.value}</p>
       </div>
+      <button
+        onClick={handleDelete}
+        disabled={deleteFact.isPending}
+        title={confirming ? "Click again to confirm deletion" : "Delete this fact"}
+        className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1 ${
+          confirming
+            ? "text-red-400 bg-red-500/10 opacity-100"
+            : "text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+        }`}
+      >
+        {deleteFact.isPending
+          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          : <Trash2 className="w-3.5 h-3.5" />}
+      </button>
     </div>
   );
 }
 
-function FactsGrid({ facts }: { facts: AgentMemoryFact[] }) {
+function FactsGrid({ facts, agentId }: { facts: AgentMemoryFact[]; agentId: number }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-      {facts.map(f => <FactCard key={f.id} fact={f} />)}
+      {facts.map(f => <FactCard key={f.id} fact={f} agentId={agentId} />)}
     </div>
   );
 }
@@ -270,7 +309,7 @@ function FactsTab({ agentId }: { agentId: number }) {
   if (facts.length === 0) {
     return <p className="text-[12.5px] text-muted-foreground py-8 text-center">No facts extracted across this agent’s conversations yet.</p>;
   }
-  return <FactsGrid facts={facts} />;
+  return <FactsGrid facts={facts} agentId={agentId} />;
 }
 
 /* ─── Episodes ───────────────────────────────────────────────────────────── */
@@ -505,7 +544,7 @@ function FactsPreview({ agentId, total, onViewAll }: { agentId: number; total: n
         ) : facts.length === 0 ? (
           <p className="text-[12px] text-muted-foreground py-6 text-center">No facts yet.</p>
         ) : (
-          <FactsGrid facts={facts} />
+          <FactsGrid facts={facts} agentId={agentId} />
         )}
       </div>
       {total > 0 && <ViewAllLink label="View all facts" onClick={onViewAll} />}

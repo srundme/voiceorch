@@ -847,9 +847,20 @@ export const ListAgentMemoryFactsResponseItem = zod.object({
   "key": zod.string(),
   "value": zod.string(),
   "confidence": zod.number(),
+  "phoneNumber": zod.string(),
   "createdAt": zod.coerce.date()
 })
 export const ListAgentMemoryFactsResponse = zod.array(ListAgentMemoryFactsResponseItem)
+
+
+/**
+ * @summary Delete a caller fact (entire supersession chain for that key)
+ */
+export const DeleteCallerFactParams = zod.object({
+  "id": zod.coerce.number(),
+  "phone": zod.coerce.string(),
+  "factId": zod.coerce.number()
+})
 
 
 /**

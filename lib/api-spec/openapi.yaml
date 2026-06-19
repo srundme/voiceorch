@@ -406,6 +406,33 @@ paths:
         "404":
           description: Agent not found
 
+  /agents/{id}/caller-memory/{phone}/facts/{factId}:
+    delete:
+      operationId: deleteCallerFact
+      tags: [agents]
+      summary: Delete a caller fact (entire supersession chain for that key)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: phone
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: factId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Fact deleted
+        "404":
+          description: Agent or fact not found
+
   /agents/{id}/memory/episodes:
     get:
       operationId: listAgentMemoryEpisodes
@@ -6564,7 +6591,7 @@ components:
 
     AgentMemoryFact:
       type: object
-      required: [id, key, value, confidence, createdAt]
+      required: [id, key, value, confidence, phoneNumber, createdAt]
       properties:
         id:
           type: integer
@@ -6574,6 +6601,8 @@ components:
           type: string
         confidence:
           type: number
+        phoneNumber:
+          type: string
         createdAt:
           type: string
           format: date-time

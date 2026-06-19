@@ -952,6 +952,7 @@ export interface AgentMemoryFact {
   key: string;
   value: string;
   confidence: number;
+  phoneNumber: string;
   createdAt: string;
 }
 
