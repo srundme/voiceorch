@@ -45,9 +45,6 @@ interface ProviderDef {
 }
 
 const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
-  orchestration: [
-    { label: "SnapServe", value: "snapserve", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your SnapServe API key…", docsUrl: "https://app.snapserve.ai", docsLabel: "app.snapserve.ai" },
-  ],
   asr: [
     { label: "Deepgram", value: "deepgram", apiKeyLabel: "API Key", apiKeyPlaceholder: "Paste your Deepgram key…", docsUrl: "https://console.deepgram.com", docsLabel: "console.deepgram.com" },
     { label: "Azure Speech", value: "azure", apiKeyLabel: "Speech Key", apiKeyPlaceholder: "Paste your Azure Speech key…", docsUrl: "https://portal.azure.com", docsLabel: "portal.azure.com", extraFields: [{ key: "region", label: "Region", placeholder: "e.g. eastus", hint: "Azure region where your speech resource is deployed" }] },
@@ -80,7 +77,6 @@ const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  orchestration: "Orchestration",
   asr:           "Speech-to-Text",
   llm:           "Language Model",
   tts:           "Text-to-Speech",
@@ -88,7 +84,6 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_DESC: Record<string, string> = {
-  orchestration: "Platform integrations (e.g. SnapServe)",
   asr:           "Transcribe caller speech",
   llm:           "Drive conversation logic",
   tts:           "Synthesize agent voice",
@@ -97,7 +92,7 @@ const TYPE_DESC: Record<string, string> = {
 
 /* ── Form schema ──────────────────────────────────────────────────────────── */
 const providerFormSchema = z.object({
-  providerType: z.enum(["orchestration", "asr", "llm", "tts", "telephony"]),
+  providerType: z.enum(["asr", "llm", "tts", "telephony"]),
   providerName: z.string().min(1, "Please select a provider"),
   apiKey:       z.string().min(1, "API key is required"),
   extraFields:  z.record(z.string()).optional(),
@@ -118,7 +113,7 @@ export default function ProvidersList() {
 
   const form = useForm<ProviderFormValues>({
     resolver: zodResolver(providerFormSchema),
-    defaultValues: { providerType: "orchestration", providerName: "", apiKey: "" },
+    defaultValues: { providerType: "asr", providerName: "", apiKey: "" },
   });
 
   const selectedType          = form.watch("providerType");
@@ -225,7 +220,6 @@ export default function ProvidersList() {
                   <Select onValueChange={(val) => { field.onChange(val); form.setValue("providerName", ""); form.setValue("apiKey", ""); setExtraFieldValues({}); }} value={field.value}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      <SelectItem value="orchestration">Orchestration</SelectItem>
                       <SelectItem value="asr">Speech-to-Text (ASR)</SelectItem>
                       <SelectItem value="llm">Language Model (LLM)</SelectItem>
                       <SelectItem value="tts">Text-to-Speech (TTS)</SelectItem>
@@ -304,7 +298,7 @@ export default function ProvidersList() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {(["orchestration", "asr", "llm", "tts", "telephony"] as const).map(type => {
+          {(["asr", "llm", "tts", "telephony"] as const).map(type => {
             const typeProviders = groupedProviders[type] ?? [];
             const supported     = SUPPORTED_PROVIDERS[type]!;
             return (
