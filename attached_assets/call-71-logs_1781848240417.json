@@ -1,0 +1,307 @@
+[
+  {
+    "id": 1609,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:49:57.891Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a77de491-6e76-40f9-8c54-85a013c2a0d9"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1610,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:49:57.905Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "கார்த்திகேயன்",
+        "callCount": 15
+      },
+      "factCount": 4,
+      "facts": {
+        "location": "near Koniyamman temple",
+        "budget_range": "2 crores",
+        "policy_interest": "villa",
+        "name": "கார்த்திகேயன்"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 1611,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:49:57.905Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Friday, June 19, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 15  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller will likely call to clarify or re-state his preferred property location in Chennai, specifically near the Koniyamman temple, which was misunderstood in the previous call.\n⚠️ ELEVATED RISK (score: 42%) — caller may be frustrated, handle with care\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😞 → 😐 (📉 declining)\n\nKNOWN FACTS:\n• location: near Koniyamman temple  [today]\n• budget_range: 2 crores  [today]\n• policy_interest: villa  [today]\n\nRECENT EPISODES:\n[today] 😐 கார்த்தி"
+    },
+    "metadata": null
+  },
+  {
+    "id": 1612,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:12.735Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா மேடம் பாக்குறேன் மேடம்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 1613,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:12.837Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Friday, June 19, 2026 at 11:20 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 15  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller will likely call to clarify or re-state his preferred property location in Chennai, specifically near the Koniyamman temple, which was misunderstood in the previous call.\n⚠️ ELEVATED RISK (score: 42%) — caller may be frustrated, handle with care\n📊 SENTIMENT ARC: 😐 → 😐 → ",
+      "historyLength": 2,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1614,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:13.774Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 937,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நீங்க எந்த ஏரியாவுல ப்ராப்பர்ட்டி பாக்குறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 4516,
+      "outputTokens": 20,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 1615,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:13.774Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நீங்க எந்த ஏரியாவுல ப்ராப்பர்ட்டி பாக்குறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1616,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:14.586Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 812,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 107520,
+      "textLength": 51,
+      "firstByteMs": 155
+    },
+    "metadata": null
+  },
+  {
+    "id": 1617,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:21.857Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "டி நகர் ல."
+    },
+    "metadata": null
+  },
+  {
+    "id": 1618,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:21.960Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Friday, June 19, 2026 at 11:20 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 15  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller will likely call to clarify or re-state his preferred property location in Chennai, specifically near the Koniyamman temple, which was misunderstood in the previous call.\n⚠️ ELEVATED RISK (score: 42%) — caller may be frustrated, handle with care\n📊 SENTIMENT ARC: 😐 → 😐 → ",
+      "historyLength": 4,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1619,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:22.817Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்களுக்கு எந்த மாதிரி ப்ராப்பர்ட்டி வேணும்?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1620,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:22.821Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 860,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "<emotion value=\"curious\">சரி, உங்களுக்கு எந்த மாதிரி ப்ராப்பர்ட்டி வேணும்? அப்பார்ட்மென்ட், வில்லா, இல்ல ப்ளாட்?</emotion>"
+    },
+    "metadata": {
+      "inputTokens": 9059,
+      "outputTokens": 58,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 1621,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:22.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அப்பார்ட்மென்ட், வில்லா, இல்ல ப்ளாட்?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1622,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:23.474Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 654,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79358,
+      "textLength": 37,
+      "firstByteMs": 146
+    },
+    "metadata": null
+  },
+  {
+    "id": 1623,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:23.524Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 708,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89598,
+      "textLength": 49,
+      "firstByteMs": 143
+    },
+    "metadata": null
+  },
+  {
+    "id": 1624,
+    "callId": 71,
+    "agentId": 5,
+    "ts": "2026-06-19T05:50:26.492Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "disconnected",
+      "durationSeconds": 28,
+      "turns": 3
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]
