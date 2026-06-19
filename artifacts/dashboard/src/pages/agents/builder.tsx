@@ -57,6 +57,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
@@ -1937,6 +1941,7 @@ function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
 
 function AdvancedTab({ form }: { form: any }) {
   const [section, setSection] = useState<AdvSection>("timing");
+  const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
   const llmProvider = form.watch("llmProvider");
   const stagedPromptEnabled = form.watch("stagedPromptEnabled");
@@ -2145,7 +2150,14 @@ function AdvancedTab({ form }: { form: any }) {
                 { name: "complianceHipaa", label: "HIPAA",    badge: "Healthcare",  desc: "Health Insurance Portability and Accountability Act — for healthcare-related calls"           },
                 { name: "complianceTrai",  label: "TRAI",     badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
               ] as const).map(({ name, label, badge, desc }) => (
-                <FormField key={name} control={form.control} name={name} render={({ field }) => (
+                <FormField key={name} control={form.control} name={name} render={({ field }) => {
+                  // TRAI: intercept OFF→ON to require confirmation; ON→OFF stays immediate.
+                  const isTrai = name === "complianceTrai";
+                  const setValue = (next: boolean) => {
+                    if (isTrai && next && !field.value) { setTraiConfirmOpen(true); return; }
+                    field.onChange(next);
+                  };
+                  return (
                   <FormItem
                     className={cn(
                       "rounded-xl border p-4 cursor-pointer transition-all space-y-0",
@@ -2153,7 +2165,7 @@ function AdvancedTab({ form }: { form: any }) {
                         ? "border-primary/40 bg-primary/5"
                         : "border-border/50 bg-card/40 hover:border-border",
                     )}
-                    onClick={() => field.onChange(!field.value)}
+                    onClick={() => setValue(!field.value)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
@@ -2165,14 +2177,48 @@ function AdvancedTab({ form }: { form: any }) {
                         </span>
                       </div>
                       <FormControl>
-                        <Switch checked={!!field.value} onCheckedChange={field.onChange} onClick={e => e.stopPropagation()} className="shrink-0" />
+                        <Switch checked={!!field.value} onCheckedChange={setValue} onClick={e => e.stopPropagation()} className="shrink-0" />
                       </FormControl>
                     </div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed mt-2.5">{desc}</p>
                   </FormItem>
-                )} />
+                  );
+                }} />
               ))}
             </div>
+
+            <AlertDialog open={traiConfirmOpen} onOpenChange={setTraiConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Enable TRAI Compliance</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2.5 text-[12px] text-muted-foreground">
+                      <p>Enabling TRAI compliance changes how this agent makes calls:</p>
+                      <ul className="list-disc pl-4 space-y-1.5">
+                        <li>Calls are blocked outside <span className="font-medium text-foreground">9 AM–9 PM</span> (IST).</li>
+                        <li>Numbers on the suppression list are <span className="font-medium text-foreground">not dialed</span>.</li>
+                        <li>An <span className="font-medium text-foreground">opt-out disclosure</span> is added to the agent's prompt.</li>
+                        <li>Caller opt-out requests are <span className="font-medium text-foreground">auto-detected and suppressed</span> for future calls.</li>
+                      </ul>
+                      <p className="text-[11px] text-muted-foreground/80">
+                        This applies to all calls made by this agent going forward. It does not affect past calls.
+                      </p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setTraiConfirmOpen(false)}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      form.setValue("complianceTrai", true, { shouldDirty: true });
+                      setTraiConfirmOpen(false);
+                    }}
+                  >
+                    Confirm &amp; Enable
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
         )}
 

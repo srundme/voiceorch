@@ -15,6 +15,7 @@ import {
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
+import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import {
   humanPhone,
   loadCallerProfile,
@@ -154,7 +155,7 @@ export async function createSession(params: {
     effectiveSystemPrompt += `\n\n[HIPAA COMPLIANCE — MANDATORY] This call may involve protected health information (PHI). You MUST inform the caller: "This conversation is confidential and handled in accordance with HIPAA guidelines. Any health information you share will be kept strictly private and used only for the purpose of this advisory." Do not request sensitive medical details unnecessarily.`;
   }
   if (complianceCfg?.trai) {
-    effectiveSystemPrompt += `\n\n[TRAI COMPLIANCE — MANDATORY] As per TRAI regulations for commercial communications, at the start of every call you MUST say: "This is a commercial communication. If you wish to stop receiving such calls, please say STOP at any time and we will immediately remove you from our list." If the caller says STOP or asks to be removed, apologize sincerely and end the call immediately without any sales pitch.`;
+    effectiveSystemPrompt = appendTraiDisclosure(effectiveSystemPrompt);
   }
 
   const agentConfig: AgentConfig = {
@@ -828,6 +829,18 @@ export async function endSession(sessionId: string): Promise<void> {
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));
     if (call) {
       const [ag] = await db.select().from(agentsTable).where(eq(agentsTable.id, call.agentId));
+
+      // ── TRAI post-call opt-out scan (fire-and-forget) ────────────────────────
+      // When TRAI is enabled on the agent, detect caller opt-out phrases in the
+      // finalized transcript and suppress the number for future calls.
+      const traiEnabled = !!((ag?.agentConfig as { compliance?: { trai?: boolean } } | null)?.compliance?.trai);
+      if (traiEnabled) {
+        void scanForOptOut(call.agentId, session.callId, call.toNumber, transcript)
+          .catch((scanErr) => {
+            logger.warn({ sessionId, scanErr }, "TRAI post-call opt-out scan failed");
+          });
+      }
+
       // ── Record per-service usage events (STT / LLM / TTS) ────────────────────
       if (ag) {
         const { recordUsage } = await import("../services/usage/record-usage.js");

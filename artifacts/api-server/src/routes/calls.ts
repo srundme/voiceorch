@@ -19,6 +19,7 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { dispatchWebhooks } from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
+import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -100,6 +101,23 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  // TRAI compliance pre-dial gate (calling-hours + suppression list).
+  // Only runs when the agent has TRAI enabled. Blocks before reaching any provider.
+  const traiEnabled = !!((agent.agentConfig as { compliance?: { trai?: boolean } } | null)?.compliance?.trai);
+  if (traiEnabled) {
+    const traiTimezone = (agent.agentConfig as { timezone?: string } | null)?.timezone ?? null;
+    const traiResult = await traiPreDialCheck(toNumber, traiTimezone);
+    await logPreDialDecision({
+      agentId, callId: null, phoneNumber: toNumber,
+      allowed: traiResult.allowed, reason: traiResult.reason,
+    });
+    if (!traiResult.allowed) {
+      req.log.info({ agentId, toNumber, reason: traiResult.reason }, "Outbound call blocked by TRAI compliance");
+      res.status(403).json({ error: traiResult.reason ?? "Call blocked by TRAI compliance.", code: "TRAI_BLOCKED" });
+      return;
+    }
+  }
 
   // Look up agent's assigned outbound phone number (overrides provider fromNumber)
   let agentOutboundNumber: string | null = null;

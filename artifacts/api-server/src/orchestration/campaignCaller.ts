@@ -16,6 +16,7 @@ import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
+import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { scheduleRetry } from "../services/retryEngine.js";
 
 function resolveBaseUrl(): string {
@@ -64,6 +65,32 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       .where(eq(campaignLeadsTable.id, lead.id));
     await addTimelineEvent(lead.id, campaign.id, "dnc_blocked", { normalizedPhone: normalized });
     return;
+  }
+
+  // TRAI compliance pre-dial gate (calling-hours + suppression list).
+  // Independent from DNC. Only runs when the campaign's agent has TRAI enabled.
+  if (campaign.agentId) {
+    const [traiAgent] = await db
+      .select({ agentConfig: agentsTable.agentConfig })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, campaign.agentId));
+    const traiEnabled = !!((traiAgent?.agentConfig as { compliance?: { trai?: boolean } } | null)?.compliance?.trai);
+    if (traiEnabled) {
+      const traiTimezone = (traiAgent?.agentConfig as { timezone?: string } | null)?.timezone ?? null;
+      const traiResult = await traiPreDialCheck(normalized, traiTimezone);
+      await logPreDialDecision({
+        agentId: campaign.agentId, callId: null, phoneNumber: normalized,
+        allowed: traiResult.allowed, reason: traiResult.reason,
+      });
+      if (!traiResult.allowed) {
+        logger.info({ leadId: lead.id, phone: normalized, reason: traiResult.reason }, "Lead blocked by TRAI compliance — skipping");
+        await db.update(campaignLeadsTable)
+          .set({ callStatus: "skipped", notes: traiResult.reason ?? "Blocked by TRAI compliance" })
+          .where(eq(campaignLeadsTable.id, lead.id));
+        await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: traiResult.reason ?? "TRAI compliance block", normalizedPhone: normalized });
+        return;
+      }
+    }
   }
 
   // Check concurrency limit before firing
