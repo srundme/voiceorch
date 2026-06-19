@@ -577,11 +577,13 @@ async function runLLMExtraction(opts: {
         `- negative: caller was unhappy or expressed dissatisfaction\n` +
         `- frustrated: caller was noticeably irritated or escalating\n` +
         `- resolved: caller was frustrated but issue was resolved by end of call\n\n` +
-        `Fact keys to extract (only if explicitly stated by caller):\n` +
-        `name, age, gender, location, occupation, income_range, family_size, spouse_name,\n` +
-        `children_count, health_conditions, medications, existing_policies, policy_interest,\n` +
-        `budget_range, vehicle_info, call_time_pref, language_pref, concerns, follow_up_needed,\n` +
-        `company_name, email, preferred_contact_method\n\n` +
+        `For fact keys: use concise snake_case strings that describe what was explicitly stated.\n` +
+        `Name the key after the actual topic discussed — do NOT impose domain-specific labels.\n` +
+        `Good examples: name, age, gender, location, occupation, budget_range, language_pref,\n` +
+        `timeline, property_type, interested_in, vehicle_type, company_name, email,\n` +
+        `preferred_contact_method, concerns, follow_up_needed.\n` +
+        `Avoid forcing insurance labels (policy_interest, existing_policies, medications)\n` +
+        `unless the caller explicitly discussed insurance or health.\n\n` +
         `Rules:\n` +
         `- Only include facts the caller EXPLICITLY stated — never infer or assume\n` +
         `- confidence: 0.9+ = directly stated, 0.7-0.9 = clearly implied, below 0.7 = skip\n` +
