@@ -1278,10 +1278,12 @@ export async function handleWebCallWebSocket(
           let totalBytes = 0;
           let synthFinished = false;
           let wakeup: (() => void) | null = null;
+          let firstByteMs: number | null = null; // ms from request to first PCM byte (Cartesia TTFB)
 
           const synthDone = tts.synthesizeStream!(
             t,
             (c) => {
+              if (firstByteMs === null) firstByteMs = Date.now() - ttsReqStart;
               if (_tTtsFirstByte === null) _tTtsFirstByte = performance.now();
               totalBytes += c.length;
               chunkQueue.push(c);
@@ -1292,7 +1294,8 @@ export async function handleWebCallWebSocket(
               logger.info({ callId, sentenceText: t, audioBytes: totalBytes }, "TTS sentence synthesized");
               logExecution("TTS", "response", {
                 provider: agent.ttsProvider,
-                responsePayload: { audioBytes: totalBytes, textLength: t.length },
+                // latencyMs = time to LAST byte (full synthesis); firstByteMs = Cartesia TTFB (~40-90ms + network)
+                responsePayload: { audioBytes: totalBytes, textLength: t.length, firstByteMs: firstByteMs ?? null },
                 latencyMs: Date.now() - ttsReqStart,
                 status: "success",
               });
