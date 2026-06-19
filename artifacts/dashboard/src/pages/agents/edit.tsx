@@ -1035,64 +1035,6 @@ export default function AgentEdit() {
             </Card>
           </div>
 
-          {/* ── Voice Activity Detection ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Voice Activity Detection &amp; Barge-in</CardTitle>
-              <CardDescription>Fine-tune how the agent detects speech and handles interruptions.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>VAD Silence Window (ms)</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={50} max={2000} step={50}
-                        value={field.value ?? 250}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                    </FormControl>
-                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 2000 ms</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Allow Barge-in</FormLabel>
-                    <div className="flex items-center gap-3 pt-2">
-                      <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
-                      <span className="text-sm text-muted-foreground">{(field.value ?? true) ? "Enabled" : "Disabled"}</span>
-                    </div>
-                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it's speaking.</FormDescription>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Barge-in Energy Threshold</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={100} max={5000} step={100}
-                        value={field.value ?? 1200}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                    </FormControl>
-                    <FormDescription className="text-[11px]">Min RMS energy to count as speech. Default: 1200</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="bargeInMinFrames" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Barge-in Min Frames</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={1} max={20}
-                        value={field.value ?? 4}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
-                    </FormControl>
-                    <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-            </CardContent>
-          </Card>
-
           {/* ── Latency Tuning ── */}
           <Card>
             <CardHeader>
@@ -1158,6 +1100,64 @@ export default function AgentEdit() {
                     <FormDescription className="text-[11px]">
                       Extra buffer added after the transcript arrives and before the LLM starts responding. Accounts for callers who pause mid-sentence. Default: 0ms (disabled).
                     </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Voice Activity Detection ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Voice Activity Detection &amp; Barge-in</CardTitle>
+              <CardDescription>Fine-tune how the agent detects speech and handles interruptions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>VAD Silence Window (ms)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={50} max={2000} step={50}
+                        value={field.value ?? 250}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 2000 ms</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInEnabled" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Allow Barge-in</FormLabel>
+                    <div className="flex items-center gap-3 pt-2">
+                      <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
+                      <span className="text-sm text-muted-foreground">{(field.value ?? true) ? "Enabled" : "Disabled"}</span>
+                    </div>
+                    <FormDescription className="text-[11px]">Caller can interrupt the agent while it's speaking.</FormDescription>
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInEnergyThreshold" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Energy Threshold</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={100} max={5000} step={100}
+                        value={field.value ?? 1200}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Min RMS energy to count as speech. Default: 1200</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="bargeInMinFrames" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Barge-in Min Frames</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} max={20}
+                        value={field.value ?? 4}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
