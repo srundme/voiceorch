@@ -1930,7 +1930,15 @@ export const CreateCampaignBody = zod.object({
   "concurrentCallLimit": zod.number().default(createCampaignBodyConcurrentCallLimitDefault),
   "callDelaySeconds": zod.number().default(createCampaignBodyCallDelaySecondsDefault),
   "maxAttempts": zod.number().default(createCampaignBodyMaxAttemptsDefault),
-  "retryDelayMinutes": zod.number().default(createCampaignBodyRetryDelayMinutesDefault)
+  "retryDelayMinutes": zod.number().default(createCampaignBodyRetryDelayMinutesDefault),
+  "consentBasis": zod.object({
+  "basisType": zod.enum(['existing_customer', 'service_callback', 'fresh_marketing_consent', 'other']),
+  "attestedBy": zod.string().optional(),
+  "consentSource": zod.string().optional().describe('Required when basisType is fresh_marketing_consent.'),
+  "consentDateRange": zod.string().optional().describe('Required when basisType is fresh_marketing_consent.'),
+  "proofReference": zod.string().optional(),
+  "notes": zod.string().optional().describe('Required when basisType is other.')
+}).optional().describe('DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing.')
 })
 
 
@@ -2014,6 +2022,26 @@ export const UpdateCampaignResponse = zod.object({
 export const DeleteCampaignParams = zod.object({
   "id": zod.coerce.number()
 })
+
+
+/**
+ * @summary Get the DPDP consent basis record for a campaign (audit-only)
+ */
+export const GetCampaignConsentBasisParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignConsentBasisResponse = zod.union([zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "basisType": zod.enum(['existing_customer', 'service_callback', 'fresh_marketing_consent', 'other']),
+  "attestedBy": zod.string().nullish(),
+  "attestedAt": zod.coerce.date(),
+  "consentSource": zod.string().nullish(),
+  "consentDateRange": zod.string().nullish(),
+  "proofReference": zod.string().nullish(),
+  "notes": zod.string().nullish()
+}),zod.null()])
 
 
 /**

@@ -16,6 +16,7 @@ import {
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
+import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import {
   humanPhone,
   loadCallerProfile,
@@ -149,7 +150,7 @@ export async function createSession(params: {
     effectiveSystemPrompt += `\n\n[IRDAI COMPLIANCE — MANDATORY] You are governed by the Insurance Regulatory and Development Authority of India (IRDAI). At the very start of every call, BEFORE any product discussion, you MUST say: "This call is for insurance advisory purposes and is regulated by the Insurance Regulatory and Development Authority of India (IRDAI). The information shared is for reference only and does not constitute a guaranteed offer or contract of insurance." Never skip this disclosure.`;
   }
   if (complianceCfg?.dpdp) {
-    effectiveSystemPrompt += `\n\n[DPDP ACT COMPLIANCE — MANDATORY] As per the Digital Personal Data Protection Act 2023, you MUST early in the call inform the caller: "This call may involve collection of personal data. By continuing this conversation, you consent to data processing as per our privacy policy and the DPDP Act 2023." Do not collect personal information until the caller explicitly agrees to continue.`;
+    effectiveSystemPrompt = appendDpdpDisclosure(effectiveSystemPrompt);
   }
   if (complianceCfg?.hipaa) {
     effectiveSystemPrompt += `\n\n[HIPAA COMPLIANCE — MANDATORY] This call may involve protected health information (PHI). You MUST inform the caller: "This conversation is confidential and handled in accordance with HIPAA guidelines. Any health information you share will be kept strictly private and used only for the purpose of this advisory." Do not request sensitive medical details unnecessarily.`;
@@ -838,6 +839,18 @@ export async function endSession(sessionId: string): Promise<void> {
         void scanForOptOut(call.agentId, session.callId, call.toNumber, transcript)
           .catch((scanErr) => {
             logger.warn({ sessionId, scanErr }, "TRAI post-call opt-out scan failed");
+          });
+      }
+
+      // ── DPDP post-call PII scan (fire-and-forget) ────────────────────────────
+      // When DPDP is enabled, flag whether the finalized transcript contains PII
+      // for downstream analytics redaction. Never alters the transcript and never
+      // blocks anything.
+      const dpdpEnabled = !!((ag?.agentConfig as { compliance?: { dpdp?: boolean } } | null)?.compliance?.dpdp);
+      if (dpdpEnabled) {
+        void scanAndRedactPII(call.agentId, session.callId, call.toNumber, transcript)
+          .catch((scanErr) => {
+            logger.warn({ sessionId, scanErr }, "DPDP post-call PII scan failed");
           });
       }
 

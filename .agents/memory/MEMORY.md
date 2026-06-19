@@ -30,3 +30,4 @@
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound
 - [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard
 - [Webcall echo-grace re-arm](webcall-echo-grace-rearm.md) — webcall START echo-grace must re-arm per sentence (echoGraceUntil), not anchor to one speakingStartedAt, or long replies clip mid-sentence; pipeline already does this via bargeInHoldUntil
+- [DPDP non-blocking wrapper](dpdp-non-blocking.md) — DPDP compliance is pre/post-only (disclosure, post-call PII scan, retention, erasure); NEVER add to dial/pipeline path, never gates dialing

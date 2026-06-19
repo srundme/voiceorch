@@ -204,6 +204,17 @@ export function useSaveManagedPhoneNumbers() {
   });
 }
 
+// DPDP — admin-triggered erasure (right to be forgotten)
+export function useDpdpErasure() {
+  return useMutation({
+    mutationFn: (phoneNumber: string) =>
+      adminFetch<{ ok: boolean; anonymizedCalls: number }>("/dpdp/erasure", {
+        method: "POST",
+        body: JSON.stringify({ phoneNumber }),
+      }),
+  });
+}
+
 // Admin Voices
 export interface AdminVoice {
   id: string;

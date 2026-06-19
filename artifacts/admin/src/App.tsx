@@ -17,6 +17,7 @@ import ManagedKeys from "@/pages/managed-keys";
 import ManagedNumbers from "@/pages/managed-numbers";
 import Voices from "@/pages/voices";
 import PlatformSettings from "@/pages/settings";
+import DpdpPage from "@/pages/dpdp";
 import PromptTemplatePage from "@/pages/prompt-template";
 import AllAgentsPage from "@/pages/all-agents";
 import SchedulingPage from "@/pages/scheduling";
@@ -93,6 +94,7 @@ function Router() {
       <ProtectedRoute path="/health" component={HealthChecklistPage} />
       <ProtectedRoute path="/ambient-sounds" component={AmbientSoundsPage} />
       <ProtectedRoute path="/settings" component={PlatformSettings} />
+      <ProtectedRoute path="/dpdp" component={DpdpPage} />
 
       {/* Family module */}
       <ProtectedRoute path="/family/companies" component={FamilyCompaniesPage} />

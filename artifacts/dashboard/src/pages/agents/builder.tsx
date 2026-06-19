@@ -1942,6 +1942,7 @@ function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
 function AdvancedTab({ form }: { form: any }) {
   const [section, setSection] = useState<AdvSection>("timing");
   const [traiConfirmOpen, setTraiConfirmOpen] = useState(false);
+  const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
   const llmProvider = form.watch("llmProvider");
   const stagedPromptEnabled = form.watch("stagedPromptEnabled");
@@ -2151,10 +2152,12 @@ function AdvancedTab({ form }: { form: any }) {
                 { name: "complianceTrai",  label: "TRAI",     badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
               ] as const).map(({ name, label, badge, desc }) => (
                 <FormField key={name} control={form.control} name={name} render={({ field }) => {
-                  // TRAI: intercept OFF→ON to require confirmation; ON→OFF stays immediate.
+                  // TRAI/DPDP: intercept OFF→ON to require confirmation; ON→OFF stays immediate.
                   const isTrai = name === "complianceTrai";
+                  const isDpdp = name === "complianceDpdp";
                   const setValue = (next: boolean) => {
                     if (isTrai && next && !field.value) { setTraiConfirmOpen(true); return; }
+                    if (isDpdp && next && !field.value) { setDpdpConfirmOpen(true); return; }
                     field.onChange(next);
                   };
                   return (
@@ -2212,6 +2215,39 @@ function AdvancedTab({ form }: { form: any }) {
                     onClick={() => {
                       form.setValue("complianceTrai", true, { shouldDirty: true });
                       setTraiConfirmOpen(false);
+                    }}
+                  >
+                    Confirm &amp; Enable
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={dpdpConfirmOpen} onOpenChange={setDpdpConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Enable DPDP Act Compliance</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2.5 text-[12px] text-muted-foreground">
+                      <p>Enabling DPDP compliance adds data-protection safeguards to this agent:</p>
+                      <ul className="list-disc pl-4 space-y-1.5">
+                        <li>A <span className="font-medium text-foreground">data-purpose disclosure</span> is added to the agent's prompt.</li>
+                        <li>Personal data in transcripts is <span className="font-medium text-foreground">flagged for redaction</span> in analytics.</li>
+                        <li>Call data is <span className="font-medium text-foreground">automatically anonymized</span> after the retention period (default 180 days).</li>
+                        <li>Campaigns using this agent require a <span className="font-medium text-foreground">documented consent basis</span> before launch.</li>
+                      </ul>
+                      <p className="text-[11px] text-muted-foreground/80">
+                        These are audit and privacy safeguards only — they never block or delay calls from dialing.
+                      </p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setDpdpConfirmOpen(false)}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      form.setValue("complianceDpdp", true, { shouldDirty: true });
+                      setDpdpConfirmOpen(false);
                     }}
                   >
                     Confirm &amp; Enable

@@ -64,6 +64,13 @@
       "when": 1782000000000,
       "tag": "0008_add_trai_compliance",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782100000000,
+      "tag": "0009_add_dpdp_compliance",
+      "breakpoints": true
     }
   ]
 }

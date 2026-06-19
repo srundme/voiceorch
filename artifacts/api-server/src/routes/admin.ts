@@ -8,6 +8,7 @@ import { getAllSessions } from "../orchestration/session.js";
 import { logger } from "../lib/logger.js";
 import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount, getAlertCooldownStatus } from "../services/alert-notifications.js";
 import { getAllCampaignConcurrency } from "../services/batchScheduler.js";
+import { processErasureRequest } from "../services/dpdp/index.js";
 import { getRedis } from "../lib/redis.js";
 import { pool } from "@workspace/db";
 
@@ -1286,6 +1287,21 @@ router.put("/admin/settings/token-optimization", async (req, res): Promise<void>
     res.json({ enabled });
   } catch (err) {
     req.log.error({ err }, "admin/settings/token-optimization PUT failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── DPDP Erasure (right to be forgotten) ─────────────────────────────────────
+// Admin-triggered only. Anonymizes all call PII for a given phone number and
+// records an erasure-request audit row. Never automatic; never affects dialing.
+router.post("/admin/dpdp/erasure", async (req, res): Promise<void> => {
+  try {
+    const phoneNumber = typeof req.body?.phoneNumber === "string" ? req.body.phoneNumber.trim() : "";
+    if (!phoneNumber) { res.status(400).json({ error: "phoneNumber is required" }); return; }
+    const result = await processErasureRequest(phoneNumber);
+    res.json({ ok: true, anonymizedCalls: result.anonymizedCalls });
+  } catch (err) {
+    req.log.error({ err }, "admin/dpdp/erasure failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

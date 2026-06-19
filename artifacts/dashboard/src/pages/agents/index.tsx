@@ -292,7 +292,7 @@ export default function AgentsList() {
 
                   {/* Per-minute cost badge */}
                   {(() => {
-                    const costCents = computeAgentRateCents(rateMap, agent);
+                    const costCents = computeAgentRateCents(rateMap, agent as any);
                     if (costCents <= 0) return null;
                     return (
                       <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 rounded-md border border-border bg-muted/30 w-fit text-xs">

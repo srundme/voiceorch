@@ -5,11 +5,61 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, type CampaignFieldMappings } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, type CampaignFieldMappings } from "@workspace/db";
 import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 
 const router: IRouter = Router();
+
+type ConsentBasisInput = {
+  basisType: "existing_customer" | "service_callback" | "fresh_marketing_consent" | "other";
+  attestedBy?: string;
+  consentSource?: string;
+  consentDateRange?: string;
+  proofReference?: string;
+  notes?: string;
+};
+
+/** True when the agent has DPDP compliance enabled in its config. */
+async function isAgentDpdpEnabled(agentId: number | null | undefined): Promise<boolean> {
+  if (!agentId) return false;
+  const [row] = await db
+    .select({ agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+  return !!((row?.agentConfig as { compliance?: { dpdp?: boolean } } | null)?.compliance?.dpdp);
+}
+
+/**
+ * Validate a DPDP consent basis payload. Returns an error string when invalid,
+ * or null when valid. Record-keeping validation only — never blocks dialing.
+ */
+function validateConsentBasis(basis: ConsentBasisInput | undefined): string | null {
+  if (!basis) return "A documented consent basis is required because the assigned agent has DPDP compliance enabled.";
+  if (basis.basisType === "fresh_marketing_consent") {
+    if (!basis.consentSource?.trim() || !basis.consentDateRange?.trim()) {
+      return "Fresh marketing consent requires both a consent source and a consent date range.";
+    }
+  }
+  if (basis.basisType === "other" && !basis.notes?.trim()) {
+    return "Consent basis 'Other' requires notes describing the basis.";
+  }
+  return null;
+}
+
+function toConsentBasisRecord(row: typeof campaignConsentBasisTable.$inferSelect) {
+  return {
+    id:               row.id,
+    campaignId:       row.campaignId,
+    basisType:        row.basisType,
+    attestedBy:       row.attestedBy,
+    attestedAt:       row.attestedAt.toISOString(),
+    consentSource:    row.consentSource,
+    consentDateRange: row.consentDateRange,
+    proofReference:   row.proofReference,
+    notes:            row.notes,
+  };
+}
 
 function toCampaign(row: typeof campaignsTable.$inferSelect) {
   return {
@@ -117,6 +167,17 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     }
   }
 
+  // ── DPDP consent basis (record-keeping only — NEVER blocks dialing) ──
+  // If the assigned agent has DPDP enabled, a documented consent basis must
+  // accompany the campaign. This validates the audit record up front; it does
+  // not gate or delay any outbound call.
+  const consentBasis = parsed.data.consentBasis as ConsentBasisInput | undefined;
+  const dpdpEnabled = await isAgentDpdpEnabled(parsed.data.agentId);
+  if (dpdpEnabled) {
+    const err = validateConsentBasis(consentBasis);
+    if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
+  }
+
   const [campaign] = await db.insert(campaignsTable).values({
     userId,
     name:                parsed.data.name,
@@ -130,6 +191,22 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     retryDelayMinutes:   parsed.data.retryDelayMinutes,
     webhookToken:        randomUUID(),
   }).returning();
+
+  if (dpdpEnabled && consentBasis) {
+    try {
+      await db.insert(campaignConsentBasisTable).values({
+        campaignId:       campaign!.id,
+        basisType:        consentBasis.basisType,
+        attestedBy:       consentBasis.attestedBy ?? userId,
+        consentSource:    consentBasis.consentSource ?? null,
+        consentDateRange: consentBasis.consentDateRange ?? null,
+        proofReference:   consentBasis.proofReference ?? null,
+        notes:            consentBasis.notes ?? null,
+      });
+    } catch (err) {
+      req.log.warn({ err, campaignId: campaign!.id }, "DPDP: failed to record campaign consent basis");
+    }
+  }
 
   res.status(201).json(toCampaign(campaign!));
 });
@@ -163,6 +240,31 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   if (parsed.data.isActive === true  && !parsed.data.status) updateData.status = "active";
   if (parsed.data.isActive === false && !parsed.data.status) updateData.status = "paused";
 
+  // ── DPDP launch check (record-keeping only — NEVER blocks dialing) ──
+  // Activating a campaign whose agent has DPDP enabled requires a documented
+  // consent basis on record. This is a management-layer gate on campaign
+  // activation, not a per-call dial gate — outbound calls are never blocked.
+  const isActivating = updateData.status === "active" || parsed.data.isActive === true;
+  if (isActivating) {
+    const [existing] = await db
+      .select({ agentId: campaignsTable.agentId })
+      .from(campaignsTable)
+      .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)));
+    if (existing && await isAgentDpdpEnabled(existing.agentId)) {
+      const [basis] = await db
+        .select({ id: campaignConsentBasisTable.id })
+        .from(campaignConsentBasisTable)
+        .where(eq(campaignConsentBasisTable.campaignId, id));
+      if (!basis) {
+        res.status(400).json({
+          error: "This campaign's agent has DPDP compliance enabled. A documented consent basis must be recorded before launching the campaign.",
+          code: "DPDP_CONSENT_BASIS_REQUIRED",
+        });
+        return;
+      }
+    }
+  }
+
   const [row] = await db.update(campaignsTable)
     .set(updateData)
     .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)))
@@ -184,6 +286,27 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
 
   if (!deleted.length) { res.status(404).json({ error: "Not found" }); return; }
   res.status(204).end();
+});
+
+// ── GET /campaigns/:id/consent-basis ───────────────────────────────────────
+// Returns the recorded DPDP consent basis for a campaign (audit-only), or null.
+router.get("/campaigns/:id/consent-basis", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const id = parseInt(req.params["id"]!, 10);
+  const [campaign] = await db
+    .select({ id: campaignsTable.id })
+    .from(campaignsTable)
+    .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)));
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [basis] = await db
+    .select()
+    .from(campaignConsentBasisTable)
+    .where(eq(campaignConsentBasisTable.campaignId, id));
+
+  res.json(basis ? toConsentBasisRecord(basis) : null);
 });
 
 // ── GET /campaigns/:id/leads ───────────────────────────────────────────────

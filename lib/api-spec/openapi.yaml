@@ -1650,6 +1650,31 @@ paths:
         "404":
           description: Not found
 
+  /campaigns/{id}/consent-basis:
+    get:
+      operationId: getCampaignConsentBasis
+      tags: [campaigns]
+      summary: Get the DPDP consent basis record for a campaign (audit-only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Consent basis record (or null if none recorded)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ConsentBasisRecord"
+                  - type: "null"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Campaign not found
+
   /campaigns/{id}/leads:
     get:
       operationId: listCampaignLeads
@@ -7450,6 +7475,61 @@ components:
         retryDelayMinutes:
           type: integer
           default: 60
+        consentBasis:
+          $ref: "#/components/schemas/ConsentBasis"
+          description: "DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing."
+
+    ConsentBasis:
+      type: object
+      required: [basisType]
+      description: "DPDP Act documented consent basis for a campaign (audit-only)."
+      properties:
+        basisType:
+          type: string
+          enum: [existing_customer, service_callback, fresh_marketing_consent, other]
+        attestedBy:
+          type: string
+        consentSource:
+          type: string
+          description: "Required when basisType is fresh_marketing_consent."
+        consentDateRange:
+          type: string
+          description: "Required when basisType is fresh_marketing_consent."
+        proofReference:
+          type: string
+        notes:
+          type: string
+          description: "Required when basisType is other."
+
+    ConsentBasisRecord:
+      type: object
+      required: [id, campaignId, basisType, attestedAt]
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        basisType:
+          type: string
+          enum: [existing_customer, service_callback, fresh_marketing_consent, other]
+        attestedBy:
+          type: string
+          nullable: true
+        attestedAt:
+          type: string
+          format: date-time
+        consentSource:
+          type: string
+          nullable: true
+        consentDateRange:
+          type: string
+          nullable: true
+        proofReference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
 
     CampaignUpdate:
       type: object

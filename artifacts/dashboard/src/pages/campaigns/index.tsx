@@ -7,7 +7,7 @@ import {
   useListAgents,
   useListPhoneNumbers,
 } from "@workspace/api-client-react";
-import type { Campaign } from "@workspace/api-client-react";
+import type { Campaign, ConsentBasisBasisType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,15 @@ import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+type ConsentBasisType = ConsentBasisBasisType;
+
+const CONSENT_BASIS_OPTIONS: { value: ConsentBasisType; label: string }[] = [
+  { value: "existing_customer",       label: "Existing customer relationship" },
+  { value: "service_callback",        label: "Service-related callback" },
+  { value: "fresh_marketing_consent", label: "Fresh marketing consent" },
+  { value: "other",                   label: "Other" },
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -224,6 +233,13 @@ function CampaignWizard({
   const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [concurrentCallLimit, setConcurrentCallLimit] = useState(20);
 
+  // ── DPDP consent basis (audit-only; required when agent has DPDP on) ──
+  const [consentBasisType, setConsentBasisType] = useState<ConsentBasisType | "">("");
+  const [consentSource, setConsentSource] = useState("");
+  const [consentDateRange, setConsentDateRange] = useState("");
+  const [consentProofRef, setConsentProofRef] = useState("");
+  const [consentNotes, setConsentNotes] = useState("");
+
   const liveAgentIds = new Set(
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
   );
@@ -231,12 +247,27 @@ function CampaignWizard({
   function reset() {
     setStep("info"); setName(""); setDesc(""); setAgentId(null);
     setFromNumber(null); setConcurrentCallLimit(20);
+    setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
+    setConsentProofRef(""); setConsentNotes("");
   }
   function close() { reset(); onClose(); }
 
   const stepIdx = WIZARD_STEPS.indexOf(step);
   const isLast = step === "review";
   const selectedAgent = agents?.find(a => a.id === agentId);
+  const agentDpdpEnabled = !!(
+    (selectedAgent?.agentConfig as { compliance?: { dpdp?: boolean } } | undefined)?.compliance?.dpdp
+  );
+
+  function consentComplete(): boolean {
+    if (!agentDpdpEnabled) return true;
+    if (!consentBasisType) return false;
+    if (consentBasisType === "fresh_marketing_consent") {
+      return consentSource.trim().length > 0 && consentDateRange.trim().length > 0;
+    }
+    if (consentBasisType === "other") return consentNotes.trim().length > 0;
+    return true;
+  }
 
   function canNext(): boolean {
     if (step === "info") return name.trim().length > 0;
@@ -256,9 +287,19 @@ function CampaignWizard({
 
   async function handleCreate() {
     if (!name.trim() || !agentId) return;
+    if (!consentComplete()) return;
+    const consentBasis = agentDpdpEnabled && consentBasisType
+      ? {
+          basisType:        consentBasisType,
+          consentSource:    consentSource.trim() || undefined,
+          consentDateRange: consentDateRange.trim() || undefined,
+          proofReference:   consentProofRef.trim() || undefined,
+          notes:            consentNotes.trim() || undefined,
+        }
+      : undefined;
     try {
       await create.mutateAsync({
-        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit },
+        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit, consentBasis },
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign created", description: name.trim() });
@@ -464,6 +505,76 @@ function CampaignWizard({
                   </div>
                 ))}
               </div>
+              {agentDpdpEnabled && (
+                <div className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <div>
+                    <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                      <Target className="h-3.5 w-3.5 text-amber-500" />
+                      DPDP Consent Basis <span className="text-destructive">*</span>
+                    </h4>
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">
+                      This agent has DPDP compliance enabled. Record the documented basis for contacting these
+                      recipients (audit-only — it does not block or delay calls).
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Basis</Label>
+                    <Select
+                      value={consentBasisType || undefined}
+                      onValueChange={v => setConsentBasisType(v as ConsentBasisType)}
+                    >
+                      <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a consent basis" /></SelectTrigger>
+                      <SelectContent>
+                        {CONSENT_BASIS_OPTIONS.map(o => (
+                          <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {consentBasisType === "fresh_marketing_consent" && (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Consent Source <span className="text-destructive">*</span></Label>
+                        <Input
+                          className="h-9 text-xs"
+                          placeholder="e.g. Website opt-in form, event sign-up"
+                          value={consentSource}
+                          onChange={e => setConsentSource(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Consent Date Range <span className="text-destructive">*</span></Label>
+                        <Input
+                          className="h-9 text-xs"
+                          placeholder="e.g. Jan 2026 – Mar 2026"
+                          value={consentDateRange}
+                          onChange={e => setConsentDateRange(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Proof Reference <span className="text-muted-foreground/40">(optional)</span></Label>
+                        <Input
+                          className="h-9 text-xs"
+                          placeholder="e.g. Link or ID of stored consent record"
+                          value={consentProofRef}
+                          onChange={e => setConsentProofRef(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+                  {consentBasisType === "other" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Notes <span className="text-destructive">*</span></Label>
+                      <Input
+                        className="h-9 text-xs"
+                        placeholder="Describe the lawful basis for contacting these recipients"
+                        value={consentNotes}
+                        onChange={e => setConsentNotes(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-muted-foreground/40 text-center">
                 You can add batches, set call delays, retries, and business hours from the campaign detail page.
               </p>
@@ -483,7 +594,7 @@ function CampaignWizard({
             ))}
           </div>
           {isLast ? (
-            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending}>
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => void handleCreate()} disabled={create.isPending || !consentComplete()}>
               {create.isPending ? "Creating…" : "Create Campaign"}
             </Button>
           ) : (

@@ -1760,6 +1760,31 @@ export interface Campaign {
  */
 export type CampaignCreateFieldMappings = {[key: string]: string};
 
+export type ConsentBasisBasisType = typeof ConsentBasisBasisType[keyof typeof ConsentBasisBasisType];
+
+
+export const ConsentBasisBasisType = {
+  existing_customer: 'existing_customer',
+  service_callback: 'service_callback',
+  fresh_marketing_consent: 'fresh_marketing_consent',
+  other: 'other',
+} as const;
+
+/**
+ * DPDP Act documented consent basis for a campaign (audit-only).
+ */
+export interface ConsentBasis {
+  basisType: ConsentBasisBasisType;
+  attestedBy?: string;
+  /** Required when basisType is fresh_marketing_consent. */
+  consentSource?: string;
+  /** Required when basisType is fresh_marketing_consent. */
+  consentDateRange?: string;
+  proofReference?: string;
+  /** Required when basisType is other. */
+  notes?: string;
+}
+
 export interface CampaignCreate {
   name: string;
   description?: string;
@@ -1771,6 +1796,30 @@ export interface CampaignCreate {
   callDelaySeconds?: number;
   maxAttempts?: number;
   retryDelayMinutes?: number;
+  /** DPDP consent basis. Required when the assigned agent has DPDP compliance enabled. Record-keeping only — never blocks dialing. */
+  consentBasis?: ConsentBasis;
+}
+
+export type ConsentBasisRecordBasisType = typeof ConsentBasisRecordBasisType[keyof typeof ConsentBasisRecordBasisType];
+
+
+export const ConsentBasisRecordBasisType = {
+  existing_customer: 'existing_customer',
+  service_callback: 'service_callback',
+  fresh_marketing_consent: 'fresh_marketing_consent',
+  other: 'other',
+} as const;
+
+export interface ConsentBasisRecord {
+  id: number;
+  campaignId: number;
+  basisType: ConsentBasisRecordBasisType;
+  attestedBy?: string | null;
+  attestedAt: string;
+  consentSource?: string | null;
+  consentDateRange?: string | null;
+  proofReference?: string | null;
+  notes?: string | null;
 }
 
 export type CampaignUpdateStatus = typeof CampaignUpdateStatus[keyof typeof CampaignUpdateStatus];

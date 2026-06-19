@@ -39,3 +39,4 @@ export * from "./callerEpisodeFactLinks";
 export * from "./agent-versions";
 export * from "./simulation";
 export * from "./trai";
+export * from "./dpdp";

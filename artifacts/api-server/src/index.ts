@@ -13,6 +13,7 @@ import { startSpikeChecker } from "./services/spike-checker.js";
 import { startAlertSweep } from "./services/usage/alert-engine.js";
 import { startRateLimitCleanup } from "./services/rate-limit-cleanup.js";
 import { startBatchScheduler } from "./services/batchScheduler.js";
+import { startDpdpRetentionSweep } from "./services/dpdpRetention.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
@@ -269,6 +270,7 @@ server.listen(port, () => {
       startAlertSweep();
       startRateLimitCleanup();
       startBatchScheduler();
+      startDpdpRetentionSweep();
     })
     .catch((err: unknown) => {
       // Log but do NOT exit — keeps the process alive so Railway's healthcheck

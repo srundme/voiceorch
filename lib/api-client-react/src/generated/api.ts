@@ -107,6 +107,7 @@ import type {
   CancelCampaignBooking200,
   CommandCenterKpis,
   CompleteCampaignCallback200,
+  ConsentBasisRecord,
   CreateAmbientSoundBody,
   CreateCallbackFromIncoming200,
   CreateCallbackFromIncomingBody,
@@ -5725,6 +5726,83 @@ export const useDeleteCampaign = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteCampaignMutationOptions(options));
     }
+
+export const getGetCampaignConsentBasisUrl = (id: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/consent-basis`
+}
+
+/**
+ * @summary Get the DPDP consent basis record for a campaign (audit-only)
+ */
+export const getCampaignConsentBasis = async (id: number, options?: RequestInit): Promise<ConsentBasisRecord | null> => {
+
+  return customFetch<ConsentBasisRecord | null>(getGetCampaignConsentBasisUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignConsentBasisQueryKey = (id: number,) => {
+    return [
+    `/api/campaigns/${id}/consent-basis`
+    ] as const;
+    }
+
+
+export const getGetCampaignConsentBasisQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignConsentBasis>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignConsentBasis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignConsentBasisQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignConsentBasis>>> = ({ signal }) => getCampaignConsentBasis(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignConsentBasis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignConsentBasisQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignConsentBasis>>>
+export type GetCampaignConsentBasisQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the DPDP consent basis record for a campaign (audit-only)
+ */
+
+export function useGetCampaignConsentBasis<TData = Awaited<ReturnType<typeof getCampaignConsentBasis>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignConsentBasis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignConsentBasisQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListCampaignLeadsUrl = (id: number,
     params?: ListCampaignLeadsParams,) => {
