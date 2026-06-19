@@ -1,0 +1,691 @@
+[
+  {
+    "id": 1474,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:29.355Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a77de491-6e76-40f9-8c54-85a013c2a0d9"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1475,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:29.370Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "கார்த்திகேயன்",
+        "callCount": 13
+      },
+      "factCount": 4,
+      "facts": {
+        "budget_range": "2 crores",
+        "policy_interest": "villa",
+        "location": "Vadapalani",
+        "name": "கார்த்திகேயன்"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 1476,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:29.370Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Friday, June 19, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 13  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to inquire about specific villa options in Vadapalani, Chennai, within his 2 crore budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• budget_range: 2 crores  [today]\n• policy_interest: villa  [today]\n• location: Vadapalani  [today]\n\nRECENT EPISODES:\n[today] 😐 கார்த்திகேயன் is looking for a villa in Vadapalani, Chennai, with a budget of 2 crores. He previously expressed interest in Tambaram and Guduvancheri, and is also"
+    },
+    "metadata": null
+  },
+  {
+    "id": 1477,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:43.250Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "தான் பார்க்குறேன் மேடம் நேற்று தானே உங்ககிட்ட பேசியிருந்தேன்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 1478,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:43.354Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓகே சார்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1479,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:43.354Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Friday, June 19, 2026 at 10:46 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 13  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to inquire about specific villa options in Vadapalani, Chennai, within his 2 crore budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• budget_range: 2 crores  [today]\n• policy_interest: villa  [today]\n• location: Vadapalani  [today]\n",
+      "historyLength": 2,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1480,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:43.858Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 508,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 9
+    },
+    "metadata": null
+  },
+  {
+    "id": 1482,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.001Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓஹோ சரிங்க கார்த்திகேயன் சார்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1481,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.001Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நேத்து நீங்க வடபழனில ஒரு property பாக்குறதா சொல்லிருந்தீங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1483,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.003Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1647,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "<emotion value=\"neutral\">ஓஹோ சரிங்க கார்த்திகேயன் சார். நேத்து நீங்க வடபழனில ஒரு property பாக்குறதா சொல்லிருந்தீங்க. அத பத்தி இப்போ பேசுறதுக்கு call பண்ணீங்களா?</emotion>"
+    },
+    "metadata": {
+      "inputTokens": 4412,
+      "outputTokens": 54,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 1484,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.003Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அத பத்தி இப்போ பேசுறதுக்கு call பண்ணீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1485,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.674Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 679,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 30
+    },
+    "metadata": null
+  },
+  {
+    "id": 1486,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.865Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 869,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 125438,
+      "textLength": 60
+    },
+    "metadata": null
+  },
+  {
+    "id": 1487,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:45.877Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 877,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 74238,
+      "textLength": 43
+    },
+    "metadata": null
+  },
+  {
+    "id": 1488,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:59.534Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமாம் அத பத்தி பேச தான் கால் பண்ண நீ என்ன லூசா."
+    },
+    "metadata": null
+  },
+  {
+    "id": 1489,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:59.637Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1490,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:16:59.637Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Friday, June 19, 2026 at 10:46 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 13  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to inquire about specific villa options in Vadapalani, Chennai, within his 2 crore budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• budget_range: 2 crores  [today]\n• policy_interest: villa  [today]\n• location: Vadapalani  [today]\n",
+      "historyLength": 4,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1491,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:00.059Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 424,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 23040,
+      "textLength": 4
+    },
+    "metadata": null
+  },
+  {
+    "id": 1492,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:00.706Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரிங்க சார்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1493,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:00.870Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நம்ம Ravilla Homes-ல இப்போதைக்கு வடபழனில properties இல்லைங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1494,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:01.012Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நம்மகிட்ட இப்போ Red Hills, Madhavaram, Thiruninravur இந்த ஏரியாஸ்ல plots இருக்குதுங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1495,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:01.018Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1377,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "<emotion value=\"calm\">சாரிங்க சார். நம்ம Ravilla Homes-ல இப்போதைக்கு வடபழனில properties இல்லைங்க.</emotion><break time=\"100ms\"/> நம்மகிட்ட இப்போ Red Hills, Madhavaram, Thiruninravur இந்த ஏரியாஸ்ல plots இருக்குதுங்க.<break time=\"100ms\"/> உங்களுக்கு இந்த ஏரியாஸ்ல property பார்க்குறதுக்கு இன்ட்ரஸ்ட் இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 8888,
+      "outputTokens": 146,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 1496,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:01.018Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு இந்த ஏரியாஸ்ல property பார்க்குறதுக்கு இன்ட்ரஸ்ட் இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1497,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:01.214Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 507,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 35840,
+      "textLength": 13
+    },
+    "metadata": null
+  },
+  {
+    "id": 1498,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:01.684Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 814,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112640,
+      "textLength": 61
+    },
+    "metadata": null
+  },
+  {
+    "id": 1499,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:01.966Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 954,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 110080,
+      "textLength": 69
+    },
+    "metadata": null
+  },
+  {
+    "id": 1500,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:02.082Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1071,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 181758,
+      "textLength": 86
+    },
+    "metadata": null
+  },
+  {
+    "id": 1501,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:19.357Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "இல்ல மேடம். நான் பொறுமை பேசுறேன்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 1502,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:19.458Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Friday, June 19, 2026 at 10:47 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திகேயன்  |  Calls: 13  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to inquire about specific villa options in Vadapalani, Chennai, within his 2 crore budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• budget_range: 2 crores  [today]\n• policy_interest: villa  [today]\n• location: Vadapalani  [today]\n",
+      "historyLength": 6,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1503,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:20.667Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓகேங்க சார்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1504,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:20.696Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு எப்போ property வேணுமோ, அப்போ நீங்க எங்கள contact பண்ணுங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1505,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:20.696Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you so much!"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1506,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:20.719Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Have a nice day."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1507,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:20.719Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1260,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ஓகேங்க சார். உங்களுக்கு எப்போ property வேணுமோ, அப்போ நீங்க எங்கள contact பண்ணுங்க. <break time=\"100ms\"/> Thank you so much! Have a nice day."
+    },
+    "metadata": {
+      "inputTokens": 13445,
+      "outputTokens": 199,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 1508,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:21.172Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 505,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 12
+    },
+    "metadata": null
+  },
+  {
+    "id": 1509,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:21.234Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 538,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 18
+    },
+    "metadata": null
+  },
+  {
+    "id": 1510,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:21.249Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 532,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 16
+    },
+    "metadata": null
+  },
+  {
+    "id": 1511,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:21.656Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 961,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 143358,
+      "textLength": 69
+    },
+    "metadata": null
+  },
+  {
+    "id": 1512,
+    "callId": 66,
+    "agentId": 5,
+    "ts": "2026-06-19T05:17:25.124Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "normal",
+      "durationSeconds": 55,
+      "turns": 5
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]
