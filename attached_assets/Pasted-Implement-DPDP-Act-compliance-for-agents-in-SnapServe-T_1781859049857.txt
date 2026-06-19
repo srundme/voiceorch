@@ -1,0 +1,47 @@
+Implement DPDP Act compliance for agents in SnapServe. This must be a non-invasive pre/post wrapper — do not modify the existing STT/LLM/TTS pipeline, conversation logic, or other Advanced tab settings. Only the DPDP toggle on Advanced > Compliance gets wired; IRDAI and HIPAA toggles remain inert. Reuse the existing compliance_frameworks JSON field on the agent config (already added for TRAI) — just use the dpdp.enabled key. Do not touch the existing TRAI implementation — DPDP and TRAI checks run independently if both are enabled on the same agent. This is domain-agnostic — do not reference any specific industry (insurance, healthcare, etc.) anywhere in code, labels, or logic.
+
+PART 1 — Backend wiring
+
+1. Create three new tables:
+   - campaign_consent_basis (id, campaign_id, basis_type, attested_by, attested_at, consent_source, consent_date_range, proof_reference, notes)
+     basis_type options: 'existing_customer', 'service_callback', 'fresh_marketing_consent', 'other'
+   - dpdp_call_compliance_log (id, agent_id, call_id, phone_number, pii_detected boolean, created_at)
+   - dpdp_erasure_requests (id, phone_number, requested_at, status, processed_at)
+
+2. Create lib/dpdpGate.js with three functions:
+   - appendDpdpDisclosure(basePrompt, purpose): appends a fixed disclosure string to the prompt stating the call may involve collecting personal data and the purpose for it, to be communicated before any PII is requested.
+   - scanAndRedactPII(agentId, callId, phoneNumber, transcript): scans transcript for PII patterns (phone numbers, email addresses, ID number formats, DOB patterns) using regex. Logs pii_detected boolean into dpdp_call_compliance_log. Does NOT alter the original transcript — only flags it for downstream redaction in analytics views.
+   - processErasureRequest(phoneNumber): marks all call logs, transcripts, and recordings tied to phoneNumber for deletion/anonymization, inserts a row into dpdp_erasure_requests with status 'completed'. Triggered manually from an admin action, not automatically.
+
+3. At campaign creation, if the agent assigned to that campaign has compliance_frameworks.dpdp.enabled = true, require the user to fill in campaign_consent_basis before the campaign can be saved/launched:
+   - "What is the basis for contacting this list?" dropdown: Existing customer relationship / Service-related callback / Fresh marketing consent / Other
+   - If "Fresh marketing consent" is selected, additionally require: consent_source (text), consent_date_range (date range), proof_reference (optional text/link)
+   - If "Other" is selected, require a notes field explaining the basis
+   This is a REQUIRED FORM FIELD for record-keeping only — it does NOT block dialing or get checked before individual calls. It is purely an audit trail.
+
+4. Wherever the agent's system prompt is assembled before being sent to the LLM: if agent.compliance_frameworks.dpdp.enabled is true, call appendDpdpDisclosure on the final prompt string before sending.
+
+5. Wherever a call's transcript is finalized and saved (existing post-call save handler): if agent.compliance_frameworks.dpdp.enabled is true, call scanAndRedactPII with agentId, callId, phoneNumber, transcript.
+
+6. Add a scheduled background job (daily) that anonymizes phone_number/PII fields in call logs older than a configurable retention period (default 180 days) where DPDP was enabled on that agent at call time. This is a backend job, not user-facing.
+
+7. Do NOT implement any pre-dial consent check or blocking logic for DPDP. No call should ever be blocked from dialing due to DPDP. Only TRAI's existing pre-dial checks (DND, time window) continue to block calls — those remain untouched and independent.
+
+PART 2 — Confirmation modal on enable
+
+8. When the user clicks the DPDP toggle to turn it ON (off-to-on transition only), intercept the click — do not flip the toggle yet. Open a modal, styled to match the existing dark theme UI, reusing the same modal component built for TRAI.
+
+   Modal title: "Enable DPDP Act Compliance"
+   Modal body (bullet list):
+   - "A data-purpose disclosure line will be added to the agent's system prompt"
+   - "Personal data shared during calls will be flagged for redaction in analytics"
+   - "Call data will be automatically anonymized after the retention period (default 180 days)"
+   - "Campaigns using this agent will require a documented consent basis before launch (for audit purposes — does not block calls)"
+
+   Footer note: "This applies to all calls made by this agent going forward. It does not affect past calls."
+
+   Buttons: "Cancel" (closes modal, toggle stays OFF) and "Confirm & Enable" (closes modal, toggle flips ON, saves compliance_frameworks.dpdp.enabled = true via existing save flow).
+
+9. Turning the toggle OFF does NOT show a modal — remains a direct, immediate toggle off.
+
+Do not touch IRDAI or HIPAA toggles or modals in this pass.
