@@ -17,7 +17,12 @@ import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig,
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { performance } from "perf_hooks";
-import { computeEndpointMs } from "./endpointing.js";
+import {
+  computeEndpointMs,
+  TurnSafetyNet,
+  recoveryReprompt,
+  type TurnCloseReason,
+} from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "./transcriptQuality.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -163,9 +168,15 @@ export class OrchestrationPipeline {
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
-  private pendingTranscript: { text: string; emittedAt: number } | null = null;
+  private pendingTranscript: { text: string; emittedAt: number; closeReason: TurnCloseReason } | null = null;
   private streamSTTReconnectAttempts = 0;
   private streamSTTReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Turn safety net — guards the "Listening…" hang (partials but no final, or no
+  // usable transcript at all). See TurnSafetyNet in endpointing.ts.
+  private safetyNet!: TurnSafetyNet;
+  // Reason the current turn closed — read by the turn_latency log line.
+  private _turnCloseReason: TurnCloseReason = "stt_final";
 
   // KB prefetch — fired on the first speech frame of a new utterance so the
   // result is ready by the time STT finishes and processTurn() starts.
@@ -344,6 +355,26 @@ export class OrchestrationPipeline {
       }, 20);
     }
 
+    // Turn safety net — two timers guarding the "Listening…" hang.
+    this.safetyNet = new TurnSafetyNet({
+      onForceFinalize: (transcript) => {
+        if (this.closed) return;
+        logger.warn(
+          { callId: this.config.callId, chars: transcript.length },
+          "Safety net: force-finalizing stuck turn from best partial",
+        );
+        void this.handleStreamingTranscript(transcript, Date.now(), "force_finalized");
+      },
+      onStallReprompt: () => {
+        if (!this.closed) void this.stallReprompt();
+      },
+      onStallGiveUp: () => {
+        if (this.closed) return;
+        logger.warn({ callId: this.config.callId }, "Safety net: stall reprompts exhausted — ending call");
+        void this.playInactivityMessageAndEnd();
+      },
+    });
+
     logger.info({ callId: config.callId, agent: this.agent.name }, "Pipeline initialized");
 
     // Start live streaming STT if the adapter supports it (e.g. Deepgram)
@@ -362,9 +393,19 @@ export class OrchestrationPipeline {
     try {
       this.streamSTT = this.stt.transcribeStream(
         (text, isFinal) => {
-          if (!isFinal || !text.trim() || this.closed) return;
+          if (this.closed) return;
+          // Non-empty interim → drive the force-finalize timer, but ONLY while we
+          // are actually listening (not during agent playback, where partials are
+          // barge-in candidates handled separately). Don't process yet.
+          if (!isFinal) {
+            if (!this.isPlaying && text.trim()) this.safetyNet.onPartial(text);
+            return;
+          }
+          if (!text.trim()) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
+          // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
+          // transcript that is later discarded (tail-echo) does NOT clear the stall.
           void this.handleStreamingTranscript(text, Date.now());
         },
         () => {
@@ -397,7 +438,8 @@ export class OrchestrationPipeline {
    * Called by the streaming STT callback when a final transcript arrives.
    * Handles barge-in detection and queuing if a turn is already in progress.
    */
-  private async handleStreamingTranscript(transcript: string, sttEmittedAt = Date.now()): Promise<void> {
+  private async handleStreamingTranscript(transcript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
+    this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
     this._tTurnVadFlush = _tStreamNow;
     this._tTurnSttFinal = _tStreamNow;
@@ -420,6 +462,9 @@ export class OrchestrationPipeline {
     if (!this.isPlaying && !this.bargeInRequested && Date.now() < this.bargeInHoldUntil) {
       this.streamingBargeInWordCount = 0;
       logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding post-playback echo transcript");
+      // Discarded as echo — stay cleanly in Listening (re-arm stall, drop any
+      // stale best-partial) rather than leaving the turn in limbo.
+      this.safetyNet.beginListening();
       return;
     }
 
@@ -463,8 +508,11 @@ export class OrchestrationPipeline {
       this.streamingBargeInWordCount = 0;
     }
 
+    // Accepted as a real turn — clear the safety timers now (deferred from the STT
+    // callback so the discarded/echo transcripts above can't suppress the stall).
+    this.safetyNet.onFinal();
     if (this.isProcessing) {
-      this.pendingTranscript = { text: transcript, emittedAt: sttEmittedAt };
+      this.pendingTranscript = { text: transcript, emittedAt: sttEmittedAt, closeReason };
       return;
     }
 
@@ -478,9 +526,46 @@ export class OrchestrationPipeline {
       const pending = this.pendingTranscript;
       if (pending) {
         this.pendingTranscript = null;
-        void this.handleStreamingTranscript(pending.text, pending.emittedAt);
+        void this.handleStreamingTranscript(pending.text, pending.emittedAt, pending.closeReason);
+      } else if (!this.closed) {
+        // Turn fully done — re-enter Listening and re-arm the stall backstop.
+        this.safetyNet.beginListening();
       }
     }
+  }
+
+  /**
+   * Stall-backstop recovery: no usable transcript arrived before STALL_BACKSTOP_MS.
+   * Speak a language-aware reprompt and re-enter Listening (do NOT hang up — on
+   * outbound calls a hangup is a lost lead). After STALL_MAX_REPROMPTS the safety
+   * net calls onStallGiveUp instead, which ends the call via the inactivity path.
+   */
+  private async stallReprompt(): Promise<void> {
+    if (this.closed || this.isProcessing || this.isPlaying) {
+      // Activity resumed between expiry and handling — just re-arm.
+      if (!this.closed) this.safetyNet.beginListening();
+      return;
+    }
+    logger.info(
+      { evt: "turn_latency", path: "pipeline", callId: this.config.callId, turn_close_reason: "stall_reprompt" },
+      "turn_latency",
+    );
+    const text = recoveryReprompt(this.currentLang ?? this.agent.language);
+    this.firstAudioSentAt = null;
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+    this.isPlaying = true;
+    try {
+      await this.playSentence(text);
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Stall reprompt playback error");
+    } finally {
+      this.isPlaying = false;
+      this.armTailEchoGrace();
+    }
+    // Reset turn state and re-enter Listening.
+    this.audioBuffer = [];
+    this.pendingTranscript = null;
+    if (!this.closed) this.safetyNet.beginListening();
   }
 
   // ── Audio input ─────────────────────────────────────────────────────────────
@@ -705,6 +790,8 @@ export class OrchestrationPipeline {
       } finally {
         this.isPlaying = false;
         this.armTailEchoGrace();
+        // First entry into Listening — arm the stall backstop.
+        if (!this.closed) this.safetyNet.beginListening();
       }
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Greeting error");
@@ -2063,6 +2150,7 @@ export class OrchestrationPipeline {
         llmProvider:           this.agent.llmProvider,
         ttsProvider:           this.agent.ttsProvider,
         fillerPlayed:          this._fillerPlayedThisTurn,
+        turn_close_reason:     this._turnCloseReason,
       }, "turn_latency");
     }
     this.config.onMetrics?.({ sttLatencyMs, llmLatencyMs, ttsFirstChunkMs });
@@ -2086,6 +2174,7 @@ export class OrchestrationPipeline {
     if (pcm8k.length < MIN_SPEECH_BYTES) return;
 
     this.isProcessing = true;
+    let processed = false;
 
     try {
       const pcm16k = upsample8to16(pcm8k);
@@ -2106,17 +2195,23 @@ export class OrchestrationPipeline {
       const sttLatencyMs = Date.now() - sttStart;
 
       if (!transcript?.trim()) {
+        // No usable transcript — do NOT clear the stall backstop; let it fire so
+        // the caller is reprompted rather than left in a silent "Listening…" hang.
         logger.info({ callId: this.config.callId }, "Empty STT transcript, skipping");
         return;
       }
 
+      this.safetyNet.onFinal();          // real (batch) final — clear safety timers
+      this._turnCloseReason = "stt_final";
       await this.processTurn(transcript, sttLatencyMs);
+      processed = true;
 
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Pipeline error");
     } finally {
       this.isProcessing = false;
       if (this.audioBuffer.length > 0) void this.flushAndProcess();
+      else if (processed && !this.closed) this.safetyNet.beginListening();
     }
   }
 
@@ -2586,6 +2681,7 @@ export class OrchestrationPipeline {
       clearTimeout(this.streamSTTReconnectTimer);
       this.streamSTTReconnectTimer = null;
     }
+    this.safetyNet?.clear();
     this.streamSTT?.close();
     this.streamSTT = null;
     logger.info({ callId: this.config.callId }, "Pipeline closed");

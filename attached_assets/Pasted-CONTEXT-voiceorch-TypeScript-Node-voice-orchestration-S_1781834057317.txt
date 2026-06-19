@@ -1,0 +1,57 @@
+CONTEXT
+voiceorch — TypeScript/Node voice orchestration. STEP 1 and STEP 2 are complete; see BOLNA-NOTES.md. Scope is now narrowed and approved. There are TWO parallel paths that must stay in sync: orchestration/pipeline.ts (telephony) and orchestration/telephony/webcall.ts (browser WS). Both share endpointing.ts.
+
+APPROVED SCOPE (do ONLY this)
+1. Add a hard safety-net endpoint timeout that closes a turn when STT goes quiet without ever emitting a final (the Tamil/Hinglish "Listening…" hang).
+2. Add ONE metric: turn-closed reason = "final" vs "forced", in the existing turn_latency log line.
+Do NOT touch barge-in teardown. Do NOT refactor processTurn. Do NOT add sequence-id gating. Do NOT change the provider abstraction. Touch the minimum number of files and list every change.
+
+STEP 0 — DIAGNOSE FIRST (required, do this BEFORE writing any implementation code)
+The fix shape depends on one unknown. Answer it from the actual code + logs, not assumption:
+
+  In a stuck "Listening…" Tamil/Hinglish session, is the STT emitting NON-EMPTY partial transcripts (and only the final is missing), or is it silent/empty the whole time?
+
+- Find where STT partials/finals are received and logged in pipeline.ts and the STT adapter.
+- If partial content isn't currently logged, add a temporary debug log of partial text + confidence so the answer is observable.
+- Report the finding explicitly: "PARTIALS PRESENT" or "PARTIALS EMPTY", with the evidence.
+
+Then branch the implementation accordingly (see STEP 1). Show me the STEP 0 finding before continuing if it comes back PARTIALS EMPTY — that changes the design. If PARTIALS PRESENT, proceed straight through.
+
+STEP 1 — TWO-TIMER SAFETY NET (not one)
+Implement two independent, env-configurable timers. A single timeout is wrong — one case needs a tight response, the other a loose backstop.
+
+  A) FORCE-FINALIZE TIMER (common case: partials arriving, no final)
+     - Arm when the FIRST non-empty partial of the current turn arrives.
+     - Reset on each subsequent non-empty partial (it tracks silence-since-last-partial).
+     - If it expires (no new partial and no final within the window): force-close the turn using the best available partial as the transcript, then invoke the LLM exactly as a real final would.
+     - Env constant, e.g. FORCE_FINALIZE_MS, default 1800 (tune: above adaptive computeEndpointMs ceiling, well below carrier drop).
+     - GUARD: only force-finalize if the best partial is non-empty after trim. If empty, do NOT send it to the LLM — fall through to the stall path (B).
+
+  B) STALL BACKSTOP TIMER (degenerate case: no usable transcript at all)
+     - Arm at turn start (when we enter "Listening…").
+     - Cleared by a real STT final OR a successful force-finalize.
+     - If it expires with no usable transcript: do NOT inject garbage. Instead emit a recovery reprompt ("Sorry, I didn't catch that — could you say that again?", language-aware if a language is set), reset turn state, and re-enter Listening. Do NOT hang up — on outbound insurance calls a hangup is a lost lead.
+     - Env constant, e.g. STALL_BACKSTOP_MS, default 15000.
+     - Hard ceiling: if the stall reprompt has already fired N times (env, default 2) with still no usable transcript, THEN end the call via the existing inactivity path.
+
+  - Both timers must be cleared correctly on: real STT final, barge-in, and turn completion. No timer leaks across turns. Verify cleanup on every exit path.
+  - Implement in BOTH pipeline.ts and webcall.ts. Keep the shared logic in endpointing.ts if it fits the existing structure; do not duplicate it in two places if it can live in the shared module.
+
+STEP 2 — METRIC
+- In the existing turn_latency log line, add a field: turn_close_reason ∈ {"stt_final","force_finalized","stall_reprompt"}.
+- Reuse existing performance.now() checkpoints; do NOT add new ones (_tTurnLlmFirstClause and _tTurnFirstAudioOut already exist).
+
+CONSTRAINTS
+- TypeScript only, match existing code style and the existing adapter factories.
+- English/working sessions must be unchanged: for a normal turn that ends on a real STT final, neither timer should ever fire. Verify this explicitly.
+- All thresholds are env constants with the defaults above, documented wherever env vars are declared.
+
+ACCEPTANCE
+- STEP 0 finding reported (PARTIALS PRESENT / EMPTY) with evidence.
+- With STUB_PROVIDERS=1: a stubbed transcriber that emits non-empty partials but never a final → turn closes via force_finalize and reaches the LLM. Add/extend a test.
+- With STUB_PROVIDERS=1: a stubbed transcriber that emits NOTHING usable → stall reprompt fires, then call ends after N reprompts. Add/extend a test.
+- A normal English session ending on a real STT final → turn_close_reason="stt_final", neither safety timer fires. No regression.
+- Both pipeline.ts and webcall.ts exhibit identical safety-net behavior.
+- Every changed file listed with a one-line why.
+
+Start with STEP 0. Report the finding, then proceed (pause only if PARTIALS EMPTY).

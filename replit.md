@@ -13,6 +13,7 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 - `pnpm --filter @workspace/scripts run backfill-user-identity` — backfill `email`/`name` from Clerk for users with NULL identity (requires `CLERK_SECRET_KEY`)
 - `DATABASE_URL=<url> pnpm --filter @workspace/scripts run wipe-beta-data` — delete all agents, calls, campaigns, scheduling data from a database while keeping users, providers, wallets, and platform config (use prod URL for production wipe)
 - Required env: `DATABASE_URL` — Postgres connection string; `GROQ_API_KEY` — Seeds `managed_qwen_key` in `platform_settings` at startup if the row is absent; the Admin panel's Managed Keys page can override it at any time. Also used as a runtime fallback if the DB row is missing.
+- Turn safety-net env (optional, sensible defaults in `orchestration/endpointing.ts`): `FORCE_FINALIZE_MS` (default 1800) — if STT streams partials but never a final, force-finalize the turn from the best partial after this many ms; `STALL_BACKSTOP_MS` (default 15000) — if no usable transcript arrives at all, speak a recovery reprompt after this many ms; `STALL_MAX_REPROMPTS` (default 2) — after this many reprompts with continued silence, end the call. Guards the Tamil/Hinglish "Listening…" hang on both telephony (`pipeline.ts`) and webcall (`telephony/webcall.ts`) paths.
 
 ## Stack
 

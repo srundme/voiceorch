@@ -72,6 +72,148 @@ const DANGLING_WORDS = new Set([
   "plus", "however", "actually", "basically",
 ]);
 
+// ── Turn safety-net constants (env-configurable) ──────────────────────────────
+// These guard against the "Listening…" hang where streaming STT emits partial
+// transcripts (or nothing usable) but never delivers a final, so the turn never
+// closes. Two independent timers — see TurnSafetyNet below.
+function envInt(name: string, def: number): number {
+  const raw = process.env[name];
+  if (!raw) return def;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+/** Tight timer: partials arriving but no final → force-close using the best partial.
+ *  Default 1800 ms — above the adaptive computeEndpointMs ceiling (900 ms), well
+ *  below carrier drop. Override with env FORCE_FINALIZE_MS. */
+export const FORCE_FINALIZE_MS  = envInt("FORCE_FINALIZE_MS", 1800);
+/** Loose backstop: no usable transcript at all since we entered "Listening…" →
+ *  recovery reprompt (not a hangup). Override with env STALL_BACKSTOP_MS. */
+export const STALL_BACKSTOP_MS  = envInt("STALL_BACKSTOP_MS", 15000);
+/** Max consecutive stall reprompts before ending the call. Override with env
+ *  STALL_MAX_REPROMPTS. */
+export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);
+
+/** Reason a user turn closed — emitted in the turn_latency log line. */
+export type TurnCloseReason = "stt_final" | "force_finalized" | "stall_reprompt";
+
+// Language-aware recovery reprompt spoken when the stall backstop fires.
+const RECOVERY_REPROMPTS: Record<string, string> = {
+  en: "Sorry, I didn't catch that — could you say that again?",
+  hi: "माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप दोबारा कह सकते हैं?",
+  ta: "மன்னிக்கவும், எனக்கு புரியவில்லை — மீண்டும் சொல்ல முடியுமா?",
+  te: "క్షమించండి, నాకు అర్థం కాలేదు — మళ్ళీ చెప్పగలరా?",
+  kn: "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ — ಇನ್ನೊಮ್ಮೆ ಹೇಳಬಹುದೇ?",
+  mr: "माफ करा, मला समजलं नाही — तुम्ही पुन्हा सांगू शकता का?",
+  gu: "માફ કરશો, મને સમજાયું નહીં — ફરી કહી શકશો?",
+  bn: "দুঃখিত, আমি বুঝতে পারিনি — আবার বলবেন কি?",
+  ml: "ക്ഷമിക്കണം, എനിക്ക് മനസ്സിലായില്ല — ഒന്നുകൂടി പറയാമോ?",
+};
+/** Recovery reprompt text for a BCP-47 / language code (falls back to English). */
+export function recoveryReprompt(lang?: string | null): string {
+  const prefix = (lang ?? "en").split("-")[0] ?? "en";
+  return RECOVERY_REPROMPTS[prefix] ?? RECOVERY_REPROMPTS["en"]!;
+}
+
+export interface TurnSafetyNetOpts {
+  forceFinalizeMs?: number;
+  stallBackstopMs?: number;
+  maxReprompts?: number;
+  /** Force-close the current turn using the best partial, treated as a real final. */
+  onForceFinalize: (transcript: string) => void;
+  /** No usable transcript before the backstop expired — speak a reprompt & re-listen. */
+  onStallReprompt: () => void;
+  /** Reprompts exhausted — end the call via the existing inactivity path. */
+  onStallGiveUp: () => void;
+}
+
+/**
+ * Two-timer turn safety net, shared by pipeline.ts (telephony) and webcall.ts
+ * (browser WS) so both paths behave identically.
+ *
+ *  • FORCE-FINALIZE (tight): armed on the first non-empty partial, reset on each
+ *    subsequent partial. If it expires with a non-empty best-partial, the turn is
+ *    force-closed using that text. Empty best-partial → no-op (stall handles it).
+ *  • STALL BACKSTOP (loose): armed when we enter "Listening…" (beginListening()),
+ *    cleared by a real final (onFinal()) or a successful force-finalize. If it
+ *    expires with nothing usable, fire a recovery reprompt; after maxReprompts,
+ *    give up and end the call.
+ *
+ * Callers MUST invoke beginListening() on entering listening, onPartial() per
+ * interim, onFinal() on a real final, and clear() on barge-in / teardown.
+ */
+export class TurnSafetyNet {
+  private forceTimer: ReturnType<typeof setTimeout> | null = null;
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
+  private bestPartial = "";
+  private repromptCount = 0;
+  private readonly forceMs: number;
+  private readonly stallMs: number;
+  private readonly maxReprompts: number;
+
+  constructor(private readonly opts: TurnSafetyNetOpts) {
+    this.forceMs = opts.forceFinalizeMs ?? FORCE_FINALIZE_MS;
+    this.stallMs = opts.stallBackstopMs ?? STALL_BACKSTOP_MS;
+    this.maxReprompts = opts.maxReprompts ?? STALL_MAX_REPROMPTS;
+  }
+
+  /** Enter "Listening…" — (re)arm the stall backstop. Idempotent per turn. */
+  beginListening(): void {
+    this.clearTimers();
+    this.bestPartial = "";
+    this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+  }
+
+  /** Non-empty interim arrived — track best partial and (re)arm the tight timer. */
+  onPartial(text: string): void {
+    const t = text.trim();
+    if (!t) return;
+    this.bestPartial = t;
+    if (this.forceTimer) clearTimeout(this.forceTimer);
+    this.forceTimer = setTimeout(() => this.onForceExpire(), this.forceMs);
+  }
+
+  /** Real STT final (or otherwise-usable speech) — clear timers, reset reprompts. */
+  onFinal(): void {
+    this.clearTimers();
+    this.bestPartial = "";
+    this.repromptCount = 0;
+  }
+
+  /** Barge-in / teardown — clear timers without firing anything. */
+  clear(): void {
+    this.clearTimers();
+    this.bestPartial = "";
+    this.repromptCount = 0;
+  }
+
+  private onForceExpire(): void {
+    this.forceTimer = null;
+    const best = this.bestPartial.trim();
+    if (!best) return;            // empty → let the stall backstop handle it
+    this.clearTimers();
+    this.bestPartial = "";
+    this.repromptCount = 0;
+    this.opts.onForceFinalize(best);
+  }
+
+  private onStallExpire(): void {
+    this.stallTimer = null;
+    this.clearTimers();
+    this.bestPartial = "";
+    if (this.repromptCount >= this.maxReprompts) {
+      this.opts.onStallGiveUp();
+    } else {
+      this.repromptCount++;
+      this.opts.onStallReprompt();
+    }
+  }
+
+  private clearTimers(): void {
+    if (this.forceTimer) { clearTimeout(this.forceTimer); this.forceTimer = null; }
+    if (this.stallTimer) { clearTimeout(this.stallTimer); this.stallTimer = null; }
+  }
+}
+
 // ── Affirmation / clearly-complete single words ───────────────────────────────
 const AFFIRMATIONS = new Set([
   "yes", "no", "yeah", "nope", "yep", "yup", "sure", "ok", "okay",

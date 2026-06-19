@@ -118,22 +118,89 @@ Already present in `pipeline.ts`:
 
 ---
 
-## Conclusion — narrowed implementation scope (STEP 3, NOT started)
+## STEP 3 — SHIPPED: two-timer turn safety-net + close-reason metric
 
-The priority list assumed four big builds, but the comparison shows three of them
-are already shipped. The **actual remaining work** is small and surgical:
+The comparison narrowed four assumed builds down to one surgical fix, now **done**.
 
-1. **(Priority #3 — the real fix)** Add a **hard safety-net endpoint timeout**:
-   an absolute max-wait that **force-finalizes/closes a turn** when STT goes quiet
-   without ever emitting a final (Tamil "Listening…" hang). Silence threshold as
-   an **env constant**. Must be added to **both** `pipeline.ts` and `webcall.ts`.
-2. **(Metrics)** Add the one missing checkpoint: **turn-closed final-vs-forced**,
-   logged in the existing `turn_latency` line, so we can measure how often the
-   safety net fires.
-3. *(Optional, only if you want it)* tighten the barge-in teardown toward Bolna's
-   ordered cascade / sequence-id gate. **Recommend deferring** — current behavior
-   is acceptable and this is the riskiest change.
+**STEP 0 finding: PARTIALS PRESENT.** In the Tamil/Hinglish "Listening…" hang the
+STT streams non-empty interim transcripts but never emits a `is_final`, so the
+final-driven `scheduleSilenceFlush` is never armed and the turn never closes. The
+common case is "partials, no final"; the degenerate case is "nothing usable".
 
-Priorities #1 (streaming) and #4 (filler-on-TTFT) need **no new code** — they exist.
+Implemented (shared logic in `endpointing.ts`, wired identically into both
+`pipeline.ts` and `telephony/webcall.ts`):
 
-**Stopping here per the gated workflow — awaiting your go-ahead before STEP 3.**
+1. **FORCE-FINALIZE timer** (`FORCE_FINALIZE_MS`, default 1800) — armed on the first
+   non-empty partial, reset on each subsequent partial. On expiry, force-closes the
+   turn from the best partial → LLM, exactly as a real final would. Guard: empty
+   best-partial falls through to the stall path, never sent to the LLM.
+2. **STALL BACKSTOP timer** (`STALL_BACKSTOP_MS`, default 15000) — armed at
+   Listening, cleared by a real final or a successful force-finalize. On expiry with
+   no usable transcript, speaks a language-aware recovery reprompt and re-enters
+   Listening (no hangup — outbound insurance hangups are lost leads). After
+   `STALL_MAX_REPROMPTS` (default 2) it ends the call via the existing inactivity path.
+3. **Metric** `turn_close_reason ∈ {stt_final, force_finalized, stall_reprompt}` added
+   to the existing `turn_latency` log line. No new `performance.now()` checkpoints.
+
+**Design invariant:** the safety net is a *Listening-state* mechanism only — dormant
+during agent speech. `onPartial` is gated on "not playing/speaking"; `onFinal` is
+**deferred** to the point a transcript is actually accepted (after echo/leftover
+discards) so a discarded transcript cannot silently clear the stall backstop. A
+normal English turn ending on a real STT final fires neither timer (verified by
+test). Barge-in teardown, `processTurn`, sequence-id gating, and the provider
+abstraction were left untouched per approved scope.
+
+Tests (`turn-safety-net.test.ts`, `STUB_PROVIDERS=1`): force_finalize reaches the
+LLM; empty-partials → stall reprompt → give-up; real-final fires neither;
+`clear()` cancels; recoveryReprompt language fallback. 6/6 pass.
+
+---
+
+## STEP 4 — Bolna's low-latency trick ("no 1000 ms latency")
+
+The headline trick is **speculative / eager LLM execution**, made possible by
+Deepgram **Flux**'s two-stage end-of-turn signalling. It removes the dead time
+normally spent (a) waiting to *confirm* the user finished and (b) the LLM's
+time-to-first-token — by overlapping them.
+
+### How it works
+Flux emits two signals per turn, each with an `end_of_turn_confidence`:
+- **`EagerEndOfTurn`** at confidence ≥ `DEEPGRAM_FLUX_EAGER_EOT_THRESHOLD` (0.5) —
+  fired *early*, before the user has definitely stopped.
+- **`EndOfTurn`** at confidence ≥ `DEEPGRAM_FLUX_EOT_THRESHOLD` (0.7), or **forced**
+  after `DEEPGRAM_FLUX_EOT_TIMEOUT_MS` (500 ms) of silence.
+
+On `EagerEndOfTurn`, Bolna **speculatively launches the LLM task** against the eager
+transcript (`eager_llm_task`), snapshots history (`eager_history_snapshot`), and lets
+it run *during* the endpointing/silence window. Two outcomes:
+- **Eager was right:** the real `EndOfTurn` arrives carrying `was_eager=true`; Bolna
+  **reuses the already-running eager LLM task** (revalidating its `sequence_id`)
+  instead of starting fresh — the LLM has had a ~300–800 ms head start, so first
+  audio is ready almost immediately on confirmation.
+- **Eager was wrong** (user kept talking): `eager_llm_task.cancel()` + rewind history
+  to the snapshot. The speculative TTS never leaks because cancelled sequence-ids are
+  invalidated (the sequence-id gate — Bolna pattern #5).
+
+Net effect: the ~500–1000 ms normally lost to "confirm end-of-turn → *then* call LLM"
+collapses to near-zero on confident turns, while the higher commit threshold (0.7)
+and the cancel/rewind path protect against acting on false ends.
+
+### Supporting latency mechanisms (secondary, but real)
+- **Shared HTTP/2 connection pool** (`llms/http_client_pool.py`): one keep-alive
+  `httpx.AsyncClient` (200 conns, 30 s keepalive, http2) reused across LLM/TTS calls,
+  eliminating per-call TCP + TLS handshakes (~100–300 ms each).
+- **Streaming clause-by-clause LLM→TTS** with first-chunk latency stamping
+  (`stream_synthesizer.py`): first audio plays before the LLM finishes.
+- **Tight Deepgram endpointing** (`endpointing="400"`, interim results on).
+
+### VoiceOrch gap (research only — NOT in approved scope)
+VoiceOrch's STT adapters don't use Deepgram Flux, so there is no eager-EOT signal to
+speculate on today. The biggest available latency win would be to **adopt speculative
+LLM on a high-confidence interim** (start the LLM on a near-final partial, reuse or
+cancel on the real final) — but that requires the sequence-id stale-audio gate
+(Bolna #5) to be safe, which is explicitly **out of the approved scope** for this
+work. VoiceOrch already has the two cheaper wins: streaming clause-by-clause TTS and
+filler-on-TTFT. A keep-alive HTTP pool for provider calls would be a low-risk,
+isolated follow-up.
+
+**Reference (`/tmp/bolna-ref`) consumed and deleted after this writeup.**

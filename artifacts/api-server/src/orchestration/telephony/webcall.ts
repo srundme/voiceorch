@@ -1,5 +1,10 @@
 import { performance } from "perf_hooks";
-import { computeEndpointMs } from "../endpointing.js";
+import {
+  computeEndpointMs,
+  TurnSafetyNet,
+  recoveryReprompt,
+  type TurnCloseReason,
+} from "../endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "../transcriptQuality.js";
 import type { WebSocket } from "ws";
 import { db, agentsTable, callsTable, callEventsTable, executionLogsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
@@ -428,6 +433,29 @@ export async function handleWebCallWebSocket(
   const history: ConversationTurn[] = [];
   let closed      = false;
 
+  // Turn safety net — guards the "Listening…" hang (partials but no final, or no
+  // usable transcript at all). Shared logic in endpointing.ts; mirrors pipeline.ts.
+  // process/stallReprompt/speakFinalUtterance/hangup are hoisted function decls.
+  let pendingCloseReason: TurnCloseReason = "stt_final";
+  const safetyNet = new TurnSafetyNet({
+    onForceFinalize: (transcript) => {
+      if (closed) return;
+      logger.warn({ callId, chars: transcript.length }, "Safety net: force-finalizing stuck turn from best partial");
+      pendingCloseReason = "force_finalized";
+      streamingTranscriptPending = transcript;
+      void process();
+    },
+    onStallReprompt: () => { if (!closed) void stallReprompt(); },
+    onStallGiveUp: () => {
+      if (closed) return;
+      logger.warn({ callId }, "Safety net: stall reprompts exhausted — ending call");
+      void (async () => {
+        if (agent.inactivityMessage && !closed) await speakFinalUtterance(agent.inactivityMessage);
+        if (!closed) void hangup("silence_timeout");
+      })();
+    },
+  });
+
   // ── Per-call execution logger (fire-and-forget, never blocks the call) ────
   function logExecution(
     component: string,
@@ -478,7 +506,14 @@ export async function handleWebCallWebSocket(
     try {
       streamSTT = stt.transcribeStream(
         (text, isFinal) => {
-          if (!isFinal || !text.trim() || closed) return;
+          if (closed) return;
+          // Non-empty interim → drive the force-finalize timer, but ONLY while we
+          // are actually listening (not during agent speech, where partials are
+          // barge-in candidates). Don't process yet.
+          if (!isFinal) { if (!speaking && text.trim()) safetyNet.onPartial(text); return; }
+          if (!text.trim()) return;
+          // NB: safetyNet.onFinal() is DEFERRED to process() so a transcript that is
+          // later discarded below (echo / leftover) does NOT clear the stall backstop.
           // Barge-in: if agent is speaking, only interrupt if the transcript
           // meets the same wordsForInterruption gate as energy-based barge-in.
           // This prevents a faint background speaker (distant person) producing
@@ -511,6 +546,9 @@ export async function handleWebCallWebSocket(
             // (agent was still speaking, threshold not reached). Replaying this as a new user
             // turn would make the agent answer speech that overlapped with its own output.
             logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (leftover from barge-in detection)");
+            // Discarded leftover — stay cleanly in Listening (re-arm stall, drop
+            // any stale best-partial) instead of clearing the safety net.
+            safetyNet.beginListening();
             return;
           }
           if (processing) {
@@ -538,7 +576,11 @@ export async function handleWebCallWebSocket(
                 if (!fbAdapter.transcribeStream) continue;
                 streamSTT = fbAdapter.transcribeStream(
                   (text: string, isFinal: boolean) => {
-                    if (!isFinal || !text.trim() || closed) return;
+                    if (closed) return;
+                    // Interim → drive force-finalize only while listening (not during speech).
+                    if (!isFinal) { if (!speaking && text.trim()) safetyNet.onPartial(text); return; }
+                    if (!text.trim()) return;
+                    // onFinal() deferred to process() so discarded transcripts don't clear the stall.
                     if (speaking) {
                       const semanticOverride = isSemanticInterrupt(text);
                       const wc = text.trim().split(/\s+/).length;
@@ -557,6 +599,7 @@ export async function handleWebCallWebSocket(
                       logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via fallback streaming STT");
                     } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
                       logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (fallback STT)");
+                      safetyNet.beginListening(); // stay cleanly in Listening
                       return;
                     }
                     if (processing) { streamingTranscriptPending = text; return; }
@@ -884,6 +927,10 @@ export async function handleWebCallWebSocket(
 
     processing  = true;
     interrupted = false;
+    // Snapshot + reset the close reason for the turn_latency metric.
+    const _closeReason = pendingCloseReason;
+    pendingCloseReason = "stt_final";
+    let beganTurn = false;
     const _curTurnIdx = ++_webcallTurnIdx;
     _tVadFlush        = performance.now();
     _tSttFinal        = 0;
@@ -969,7 +1016,12 @@ export async function handleWebCallWebSocket(
       }
 
       if (_tSttFinal === 0) _tSttFinal = performance.now(); // batch STT path: stamp after all fallbacks
+      // Empty transcript — do NOT clear the stall backstop; let it fire so the
+      // caller is reprompted rather than left in a silent "Listening…" hang.
       if (!userText?.trim()) { processing = false; return; }
+
+      safetyNet.onFinal();   // usable transcript — clear safety timers
+      beganTurn = true;
 
       // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
       {
@@ -2133,6 +2185,7 @@ export async function handleWebCallWebSocket(
           llmProvider:           agent.llmProvider,
           ttsProvider:           agent.ttsProvider,
           fillerPlayed:          _tTurnFillerPlayed,
+          turn_close_reason:     _closeReason,
         }, "turn_latency");
       }
       processing = false;
@@ -2151,6 +2204,7 @@ export async function handleWebCallWebSocket(
       // Pick it up now so the next turn starts immediately without waiting for a
       // new audio frame to arrive.
       if (!closed && streamingTranscriptPending) void process();
+      else if (!closed && beganTurn) safetyNet.beginListening();
     }
   }
 
@@ -2205,6 +2259,24 @@ export async function handleWebCallWebSocket(
   // browser's AudioContext plays the final word to completion before the queue
   // empties / the WebSocket closes. Without this the goodbye is clipped because
   // hangup() flips `closed` immediately after the last audio chunk is sent.
+  /**
+   * Stall-backstop recovery (webcall): no usable transcript arrived before
+   * STALL_BACKSTOP_MS. Speak a language-aware reprompt and re-enter Listening —
+   * do NOT hang up. After STALL_MAX_REPROMPTS the safety net calls onStallGiveUp.
+   * Mirrors pipeline.ts stallReprompt().
+   */
+  async function stallReprompt(): Promise<void> {
+    if (closed || processing || speaking) {
+      if (!closed) safetyNet.beginListening();
+      return;
+    }
+    logger.info({ evt: "turn_latency", path: "webcall", callId, turn_close_reason: "stall_reprompt" }, "turn_latency");
+    const text = recoveryReprompt(currentLangWc || agentLanguage);
+    send({ type: "transcript", speaker: "agent", text });
+    await speakFinalUtterance(text);
+    if (!closed) safetyNet.beginListening();
+  }
+
   async function speakFinalUtterance(text: string): Promise<void> {
     if (!text.trim() || closed) return;
     let audio: Buffer;
@@ -2410,6 +2482,9 @@ export async function handleWebCallWebSocket(
 
   maxTimer = setTimeout(() => { void hangup("timeout"); }, (agent.maxDuration ?? 600) * 1000);
 
+  // Entered Listening after the opening greeting — arm the stall backstop.
+  if (!closed) safetyNet.beginListening();
+
   // ── Hangup ────────────────────────────────────────────────────────────────
   // ── Ambient noise interval (webcall) ──────────────────────────────────────
   // Start interval whenever ambient is enabled; for uploaded UUID tracks the
@@ -2428,6 +2503,7 @@ export async function handleWebCallWebSocket(
   async function hangup(reason = "normal", errorDetail?: unknown) {
     if (closed) return;
     closed = true;
+    safetyNet.clear();
     if (streamSTT) { try { streamSTT.close(); } catch { /* best-effort */ } streamSTT = null; }
     if (ambientInterval) { clearInterval(ambientInterval); ambientInterval = null; }
     if (maxTimer) { clearTimeout(maxTimer); maxTimer = undefined; }

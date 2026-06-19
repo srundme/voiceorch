@@ -9,7 +9,7 @@
  * variance: STT=120ms, LLM TTFT=400ms then 20ms/token, TTS first-byte=200ms.
  */
 
-import type { STTAdapter, LLMAdapter, TTSAdapter } from "../../orchestration/types.js";
+import type { STTAdapter, LLMAdapter, TTSAdapter, StreamSTT } from "../../orchestration/types.js";
 
 function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
@@ -21,6 +21,41 @@ export function createStubSTT(latencyMs = 120): STTAdapter {
       await sleep(latencyMs);
       return STUB_TRANSCRIPT;
     },
+  };
+}
+
+/**
+ * Degenerate streaming STT: emits growing interim partials on each audio chunk
+ * but NEVER a final. Reproduces the Tamil/Hinglish "Listening…" hang where the
+ * provider streams partials yet never endpoints — the force-finalize timer must
+ * recover the turn from the best partial.
+ */
+export function createStubStreamingSTTPartialsOnly(
+  onTranscript: (text: string, isFinal: boolean) => void,
+): StreamSTT {
+  const PARTIALS = ["I", "I want", "I want to", "I want to book"];
+  let n = 0;
+  return {
+    sendAudio() {
+      const text = PARTIALS[Math.min(n, PARTIALS.length - 1)]!;
+      n++;
+      onTranscript(text, false); // interim only — never a final
+    },
+    close() { /* no-op */ },
+  };
+}
+
+/**
+ * Degenerate streaming STT: emits nothing at all (the batch-fallback / broken-
+ * Sarvam case where transcription yields no usable transcript). The stall
+ * backstop must reprompt and eventually end the call.
+ */
+export function createStubStreamingSTTSilent(
+  _onTranscript: (text: string, isFinal: boolean) => void,
+): StreamSTT {
+  return {
+    sendAudio() { /* emits nothing */ },
+    close() { /* no-op */ },
   };
 }
 
