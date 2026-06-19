@@ -6010,6 +6010,50 @@ export const ListSimulationTemplatesResponse = zod.array(ListSimulationTemplates
 
 
 /**
+ * @summary Request a password reset OTP email
+ */
+export const RequestPasswordResetBody = zod.object({
+  "email": zod.string()
+})
+
+export const RequestPasswordResetResponse = zod.object({
+  "ok": zod.boolean(),
+  "hint": zod.string().optional().describe('\'google_only\' when the account was created with Google OAuth and has no password')
+})
+
+
+/**
+ * @summary Validate the OTP without consuming it (non-destructive pre-check)
+ */
+export const CheckPasswordResetOtpBody = zod.object({
+  "email": zod.string(),
+  "otp": zod.string().describe('6-digit one-time code to validate')
+})
+
+export const CheckPasswordResetOtpResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Verify OTP and set a new password; returns a session token on success
+ */
+export const verifyPasswordResetBodyNewPasswordMin = 8;
+
+
+
+export const VerifyPasswordResetBody = zod.object({
+  "email": zod.string(),
+  "otp": zod.string().describe('6-digit one-time code from the reset email'),
+  "newPassword": zod.string().min(verifyPasswordResetBodyNewPasswordMin)
+})
+
+export const VerifyPasswordResetResponse = zod.object({
+  "token": zod.string().describe('Session JWT — store and use as Authorization Bearer token')
+})
+
+
+/**
  * Returns a 64-hex-char token valid for 60 seconds and usable exactly once. The frontend passes it as ?ticket= on the WS URL so the session JWT never appears in server access logs.
 
  * @summary Issue a short-lived single-use ticket for a webcall WebSocket upgrade

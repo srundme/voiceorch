@@ -99,15 +99,56 @@ function QueryClientCacheInvalidator() {
   return null;
 }
 
+// ── Shared style constants ─────────────────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "#1f2030",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 12,
+  padding: "14px 16px",
+  fontSize: "0.9rem",
+  color: "#fff",
+  outline: "none",
+  transition: "border-color .15s",
+};
+
+function inputFocus(e: React.FocusEvent<HTMLInputElement>) {
+  e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)";
+}
+function inputBlur(e: React.FocusEvent<HTMLInputElement>) {
+  e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+}
+
+type SignInMode = "login" | "register" | "forgot";
+type ForgotStep = "email" | "otp" | "newPassword";
+
 function SignInPage() {
   const { signIn } = useAuth();
   const [, navigate] = useLocation();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<SignInMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Forgot password flow state
+  const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [googleOnly, setGoogleOnly] = useState(false);
+
+  function resetForgotFlow() {
+    setForgotStep("email");
+    setForgotEmail("");
+    setOtp("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setGoogleOnly(false);
+    setError(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -136,23 +177,329 @@ function SignInPage() {
     }
   }
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-      <div style={{ width: 440, maxWidth: "100%", background: "#161720", borderRadius: 20, padding: "40px 36px 36px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+  async function handleForgotSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotEmail.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      });
+      const data = await res.json() as { ok?: boolean; hint?: string; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      if (data.hint === "google_only") {
+        setGoogleOnly(true);
+        return;
+      }
+      setForgotStep("otp");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-        {/* Icon */}
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: "#162a1e", border: "1px solid rgba(74,222,128,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="13" cy="13" r="5" stroke="#4ade80" strokeWidth="1.6"/>
-              <line x1="13" y1="2" x2="13" y2="7" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-              <line x1="13" y1="19" x2="13" y2="24" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-              <line x1="2" y1="13" x2="7" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-              <line x1="19" y1="13" x2="24" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-              <circle cx="13" cy="13" r="1.8" fill="#4ade80"/>
-            </svg>
+  async function handleForgotVerify(e: React.FormEvent) {
+    e.preventDefault();
+    if (!otp.trim() || otp.trim().length !== 6) {
+      setError("Please enter the 6-digit code from your email.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset/check-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim(), otp: otp.trim() }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Invalid or expired code. Please try again.");
+        return;
+      }
+      setForgotStep("newPassword");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/password-reset/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim(), otp: otp.trim(), newPassword }),
+      });
+      const data = await res.json() as { token?: string; error?: string };
+      if (!res.ok || !data.token) {
+        setError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      signIn(data.token);
+      navigate("/app");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const cardStyle: React.CSSProperties = {
+    width: 440,
+    maxWidth: "100%",
+    background: "#161720",
+    borderRadius: 20,
+    padding: "40px 36px 36px",
+    boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+  };
+
+  const submitBtnStyle = (isLoading: boolean): React.CSSProperties => ({
+    marginTop: 6,
+    width: "100%",
+    background: isLoading ? "#d4d4d4" : "#fff",
+    color: "#0e0f14",
+    fontWeight: 700,
+    fontSize: "0.9rem",
+    padding: "14px 0",
+    borderRadius: 12,
+    border: "none",
+    cursor: isLoading ? "not-allowed" : "pointer",
+    transition: "background .15s",
+    letterSpacing: "-0.1px",
+  });
+
+  const logoIcon = (
+    <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#162a1e", border: "1px solid rgba(74,222,128,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="13" cy="13" r="5" stroke="#4ade80" strokeWidth="1.6"/>
+          <line x1="13" y1="2" x2="13" y2="7" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+          <line x1="13" y1="19" x2="13" y2="24" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+          <line x1="2" y1="13" x2="7" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+          <line x1="19" y1="13" x2="24" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
+          <circle cx="13" cy="13" r="1.8" fill="#4ade80"/>
+        </svg>
+      </div>
+    </div>
+  );
+
+  const errorBanner = error && (
+    <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, fontSize: "0.8rem", color: "#fca5a5" }}>
+      {error}
+    </div>
+  );
+
+  // ── Forgot flow ──────────────────────────────────────────────────────────────
+  if (mode === "forgot") {
+    const backToLogin = (
+      <p style={{ marginTop: 22, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
+        <button
+          onClick={() => { setMode("login"); resetForgotFlow(); }}
+          style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
+        >
+          Back to sign in
+        </button>
+      </p>
+    );
+
+    // Google-only hint
+    if (googleOnly) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+          <div style={cardStyle}>
+            {logoIcon}
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Google account detected</h1>
+              <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.6 }}>
+                This email is linked to a Google account. Password reset isn't available — please sign in with Google instead.
+              </p>
+            </div>
+            {backToLogin}
           </div>
         </div>
+      );
+    }
+
+    // Step: enter email
+    if (forgotStep === "email") {
+      return (
+        <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+          <div style={cardStyle}>
+            {logoIcon}
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Reset your password</h1>
+              <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
+                Enter your email and we'll send a 6-digit code to reset your password.
+              </p>
+            </div>
+            {errorBanner}
+            <form onSubmit={handleForgotSendOtp} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                type="email"
+                placeholder="Email address"
+                required
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                style={inputStyle}
+                onFocus={inputFocus}
+                onBlur={inputBlur}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={submitBtnStyle(loading)}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
+                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
+              >
+                {loading ? "Sending…" : "Send reset code"}
+              </button>
+            </form>
+            {backToLogin}
+          </div>
+        </div>
+      );
+    }
+
+    // Step: enter OTP
+    if (forgotStep === "otp") {
+      return (
+        <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+          <div style={cardStyle}>
+            {logoIcon}
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Check your email</h1>
+              <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
+                We sent a 6-digit code to <strong style={{ color: "#a0a3b8" }}>{forgotEmail}</strong>. Enter it below.
+              </p>
+            </div>
+            {errorBanner}
+            <form onSubmit={handleForgotVerify} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                type="text"
+                placeholder="6-digit code"
+                required
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                style={{ ...inputStyle, letterSpacing: "0.3em", textAlign: "center", fontSize: "1.4rem" }}
+                onFocus={inputFocus}
+                onBlur={inputBlur}
+                autoComplete="one-time-code"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={submitBtnStyle(loading)}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
+                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
+              >
+                {loading ? "Verifying…" : "Verify code"}
+              </button>
+            </form>
+            <p style={{ marginTop: 16, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
+              Didn't receive it?{" "}
+              <button
+                onClick={async () => {
+                  setError(null);
+                  setOtp("");
+                  try {
+                    await fetch("/api/auth/password-reset/request", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email: forgotEmail.trim() }),
+                    });
+                  } catch { /* ignore */ }
+                }}
+                style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
+              >
+                Resend code
+              </button>
+            </p>
+            {backToLogin}
+          </div>
+        </div>
+      );
+    }
+
+    // Step: set new password
+    return (
+      <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={cardStyle}>
+          {logoIcon}
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Set new password</h1>
+            <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
+              Choose a strong password — at least 8 characters.
+            </p>
+          </div>
+          {errorBanner}
+          <form onSubmit={handleForgotSetPassword} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input
+              type="password"
+              placeholder="New password"
+              required
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              style={inputStyle}
+              onFocus={inputFocus}
+              onBlur={inputBlur}
+            />
+            <input
+              type="password"
+              placeholder="Confirm new password"
+              required
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              style={inputStyle}
+              onFocus={inputFocus}
+              onBlur={inputBlur}
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              style={submitBtnStyle(loading)}
+              onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
+              onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
+            >
+              {loading ? "Saving…" : "Set new password"}
+            </button>
+          </form>
+          {backToLogin}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Login / Register ──────────────────────────────────────────────────────────
+  return (
+    <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+      <div style={cardStyle}>
+        {logoIcon}
 
         {/* Heading */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -166,12 +513,7 @@ function SignInPage() {
           </p>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, fontSize: "0.8rem", color: "#fca5a5" }}>
-            {error}
-          </div>
-        )}
+        {errorBanner}
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -181,9 +523,9 @@ function SignInPage() {
               placeholder="Your name (optional)"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{ width: "100%", background: "#1f2030", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: "0.9rem", color: "#fff", outline: "none", transition: "border-color .15s" }}
-              onFocus={e => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)"; }}
-              onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
+              style={inputStyle}
+              onFocus={inputFocus}
+              onBlur={inputBlur}
             />
           )}
           <input
@@ -192,9 +534,9 @@ function SignInPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{ width: "100%", background: "#1f2030", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: "0.9rem", color: "#fff", outline: "none", transition: "border-color .15s" }}
-            onFocus={e => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)"; }}
-            onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
+            style={inputStyle}
+            onFocus={inputFocus}
+            onBlur={inputBlur}
           />
           <input
             type="password"
@@ -203,14 +545,33 @@ function SignInPage() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ width: "100%", background: "#1f2030", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: "0.9rem", color: "#fff", outline: "none", transition: "border-color .15s" }}
-            onFocus={e => { e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)"; }}
-            onBlur={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
+            style={inputStyle}
+            onFocus={inputFocus}
+            onBlur={inputBlur}
           />
+
+          {/* Forgot password link — only on login */}
+          {mode === "login" && (
+            <div style={{ textAlign: "right" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotEmail(email);
+                  resetForgotFlow();
+                  setForgotEmail(email);
+                  setMode("forgot");
+                }}
+                style={{ background: "none", border: "none", color: "#5a5c6e", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}
-            style={{ marginTop: 6, width: "100%", background: loading ? "#d4d4d4" : "#fff", color: "#0e0f14", fontWeight: 700, fontSize: "0.9rem", padding: "14px 0", borderRadius: 12, border: "none", cursor: loading ? "not-allowed" : "pointer", transition: "background .15s", letterSpacing: "-0.1px" }}
+            style={submitBtnStyle(loading)}
             onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
             onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
           >

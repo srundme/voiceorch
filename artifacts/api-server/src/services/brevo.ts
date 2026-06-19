@@ -29,3 +29,38 @@ export async function sendBrevoSms(to: string, content: string): Promise<void> {
 
   logger.info({ to }, "Brevo SMS sent");
 }
+
+/**
+ * Sends a transactional email via Brevo.
+ * Requires BREVO_API_KEY environment variable.
+ */
+export async function sendBrevoEmail(
+  to: string,
+  subject: string,
+  htmlBody: string,
+): Promise<void> {
+  const apiKey = process.env["BREVO_API_KEY"];
+  if (!apiKey) throw new Error("BREVO_API_KEY is not configured. Add it to the environment secrets.");
+
+  const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key":      apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sender:  { name: "SnapServe", email: "noreply@snapserve.ai" },
+      to:      [{ email: to }],
+      subject,
+      htmlContent: htmlBody,
+    }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    logger.warn({ status: resp.status, to }, `Brevo email failed: ${text}`);
+    throw new Error(`Brevo email error ${resp.status}: ${text}`);
+  }
+
+  logger.info({ to }, "Brevo email sent");
+}

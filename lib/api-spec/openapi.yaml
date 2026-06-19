@@ -58,6 +58,8 @@ tags:
     description: Agent simulation testing — manual chat and scenario persona testing
   - name: webcall
     description: Browser-based test call management
+  - name: auth
+    description: Email+password authentication and password reset
 
 paths:
   /healthz:
@@ -5652,6 +5654,78 @@ paths:
                 items: { $ref: "#/components/schemas/SimulationTemplate" }
 
   # ── Webcall ticket ────────────────────────────────────────────────────────
+  # ── Auth ────────────────────────────────────────────────────────────────────
+  /auth/password-reset/request:
+    post:
+      operationId: requestPasswordReset
+      tags: [auth]
+      summary: Request a password reset OTP email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequestBody"
+      responses:
+        "200":
+          description: Always 200 (no user enumeration). Includes hint field for Google-only accounts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetRequestResponse"
+        "400":
+          description: Missing email
+
+  /auth/password-reset/check-otp:
+    post:
+      operationId: checkPasswordResetOtp
+      tags: [auth]
+      summary: Validate the OTP without consuming it (non-destructive pre-check)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetCheckOtpBody"
+      responses:
+        "200":
+          description: OTP is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: Invalid or expired OTP
+        "500":
+          description: Internal error
+
+  /auth/password-reset/verify:
+    post:
+      operationId: verifyPasswordReset
+      tags: [auth]
+      summary: Verify OTP and set a new password; returns a session token on success
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetVerifyBody"
+      responses:
+        "200":
+          description: Password updated; session token returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetVerifyResponse"
+        "400":
+          description: Invalid or expired OTP, missing fields, or password too short
+        "500":
+          description: Internal error
+
   /webcall/ticket:
     post:
       operationId: createWebcallTicket
@@ -10322,3 +10396,51 @@ components:
         successCriteria:
           type: array
           items: { type: string }
+
+    PasswordResetCheckOtpBody:
+      type: object
+      required: [email, otp]
+      properties:
+        email:
+          type: string
+        otp:
+          type: string
+          description: 6-digit one-time code to validate
+
+    PasswordResetRequestBody:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+
+    PasswordResetRequestResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        hint:
+          type: string
+          description: "'google_only' when the account was created with Google OAuth and has no password"
+
+    PasswordResetVerifyBody:
+      type: object
+      required: [email, otp, newPassword]
+      properties:
+        email:
+          type: string
+        otp:
+          type: string
+          description: 6-digit one-time code from the reset email
+        newPassword:
+          type: string
+          minLength: 8
+
+    PasswordResetVerifyResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Session JWT — store and use as Authorization Bearer token

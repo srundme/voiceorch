@@ -4236,6 +4236,35 @@ export interface SimulationTemplate {
   successCriteria: string[];
 }
 
+export interface PasswordResetCheckOtpBody {
+  email: string;
+  /** 6-digit one-time code to validate */
+  otp: string;
+}
+
+export interface PasswordResetRequestBody {
+  email: string;
+}
+
+export interface PasswordResetRequestResponse {
+  ok: boolean;
+  /** 'google_only' when the account was created with Google OAuth and has no password */
+  hint?: string;
+}
+
+export interface PasswordResetVerifyBody {
+  email: string;
+  /** 6-digit one-time code from the reset email */
+  otp: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
+export interface PasswordResetVerifyResponse {
+  /** Session JWT — store and use as Authorization Bearer token */
+  token: string;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -4836,6 +4865,10 @@ export type CreateSimulationRunBody = {
 };
 
 export type DownloadSimulationReport200 = { [key: string]: unknown };
+
+export type CheckPasswordResetOtp200 = {
+  ok: boolean;
+};
 
 export type CreateWebcallTicketBody = {
   agentId: number;

@@ -105,6 +105,7 @@ import type {
   CampaignTransfersPage,
   CampaignUpdate,
   CancelCampaignBooking200,
+  CheckPasswordResetOtp200,
   CommandCenterKpis,
   CompleteCampaignCallback200,
   ConsentBasisRecord,
@@ -205,6 +206,11 @@ import type {
   OnboardingData,
   OnboardingStatus,
   OutboundCallBody,
+  PasswordResetCheckOtpBody,
+  PasswordResetRequestBody,
+  PasswordResetRequestResponse,
+  PasswordResetVerifyBody,
+  PasswordResetVerifyResponse,
   PendriveApiKey,
   PendriveApiKeyCreated,
   PendriveApiKeyInput,
@@ -19108,6 +19114,219 @@ export function useListSimulationTemplates<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getRequestPasswordResetUrl = () => {
+
+
+
+
+  return `/api/auth/password-reset/request`
+}
+
+/**
+ * @summary Request a password reset OTP email
+ */
+export const requestPasswordReset = async (passwordResetRequestBody: PasswordResetRequestBody, options?: RequestInit): Promise<PasswordResetRequestResponse> => {
+
+  return customFetch<PasswordResetRequestResponse>(getRequestPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      passwordResetRequestBody,)
+  }
+);}
+
+
+
+
+export const getRequestPasswordResetMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequestBody>}, TContext> => {
+
+const mutationKey = ['requestPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPasswordReset>>, {data: BodyType<PasswordResetRequestBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>
+    export type RequestPasswordResetMutationBody = BodyType<PasswordResetRequestBody>
+    export type RequestPasswordResetMutationError = ErrorType<void>
+
+    /**
+ * @summary Request a password reset OTP email
+ */
+export const useRequestPasswordReset = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<PasswordResetRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetRequestBody>},
+        TContext
+      > => {
+      return useMutation(getRequestPasswordResetMutationOptions(options));
+    }
+
+export const getCheckPasswordResetOtpUrl = () => {
+
+
+
+
+  return `/api/auth/password-reset/check-otp`
+}
+
+/**
+ * @summary Validate the OTP without consuming it (non-destructive pre-check)
+ */
+export const checkPasswordResetOtp = async (passwordResetCheckOtpBody: PasswordResetCheckOtpBody, options?: RequestInit): Promise<CheckPasswordResetOtp200> => {
+
+  return customFetch<CheckPasswordResetOtp200>(getCheckPasswordResetOtpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      passwordResetCheckOtpBody,)
+  }
+);}
+
+
+
+
+export const getCheckPasswordResetOtpMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkPasswordResetOtp>>, TError,{data: BodyType<PasswordResetCheckOtpBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof checkPasswordResetOtp>>, TError,{data: BodyType<PasswordResetCheckOtpBody>}, TContext> => {
+
+const mutationKey = ['checkPasswordResetOtp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof checkPasswordResetOtp>>, {data: BodyType<PasswordResetCheckOtpBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  checkPasswordResetOtp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CheckPasswordResetOtpMutationResult = NonNullable<Awaited<ReturnType<typeof checkPasswordResetOtp>>>
+    export type CheckPasswordResetOtpMutationBody = BodyType<PasswordResetCheckOtpBody>
+    export type CheckPasswordResetOtpMutationError = ErrorType<void>
+
+    /**
+ * @summary Validate the OTP without consuming it (non-destructive pre-check)
+ */
+export const useCheckPasswordResetOtp = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkPasswordResetOtp>>, TError,{data: BodyType<PasswordResetCheckOtpBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof checkPasswordResetOtp>>,
+        TError,
+        {data: BodyType<PasswordResetCheckOtpBody>},
+        TContext
+      > => {
+      return useMutation(getCheckPasswordResetOtpMutationOptions(options));
+    }
+
+export const getVerifyPasswordResetUrl = () => {
+
+
+
+
+  return `/api/auth/password-reset/verify`
+}
+
+/**
+ * @summary Verify OTP and set a new password; returns a session token on success
+ */
+export const verifyPasswordReset = async (passwordResetVerifyBody: PasswordResetVerifyBody, options?: RequestInit): Promise<PasswordResetVerifyResponse> => {
+
+  return customFetch<PasswordResetVerifyResponse>(getVerifyPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      passwordResetVerifyBody,)
+  }
+);}
+
+
+
+
+export const getVerifyPasswordResetMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPasswordReset>>, TError,{data: BodyType<PasswordResetVerifyBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyPasswordReset>>, TError,{data: BodyType<PasswordResetVerifyBody>}, TContext> => {
+
+const mutationKey = ['verifyPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPasswordReset>>, {data: BodyType<PasswordResetVerifyBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPasswordReset>>>
+    export type VerifyPasswordResetMutationBody = BodyType<PasswordResetVerifyBody>
+    export type VerifyPasswordResetMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify OTP and set a new password; returns a session token on success
+ */
+export const useVerifyPasswordReset = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPasswordReset>>, TError,{data: BodyType<PasswordResetVerifyBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyPasswordReset>>,
+        TError,
+        {data: BodyType<PasswordResetVerifyBody>},
+        TContext
+      > => {
+      return useMutation(getVerifyPasswordResetMutationOptions(options));
+    }
 
 export const getCreateWebcallTicketUrl = () => {
 
