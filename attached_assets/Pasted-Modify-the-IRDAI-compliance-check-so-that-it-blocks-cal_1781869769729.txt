@@ -1,0 +1,20 @@
+Modify the IRDAI compliance check so that it blocks call initiation across ALL call paths — web call, telephony/dial-out call, and campaign (bulk dialer) — when the agent's system prompt has missing IRDAI requirements. This replaces the earlier "informational only" behavior for IRDAI specifically. Do not change this behavior for DPDP or TRAI.
+
+1. Wherever any call gets initiated for an agent — web call button, telephony/single dial-out, or campaign start — before proceeding: check if agent.compliance_frameworks.irdai.enabled is true. If true, check the agent's stored irdai_compliance_status (the array already produced by checkIrdaiCompliance on prompt save).
+
+2. If irdai_compliance_status contains any item with status: 'missing':
+   - Web call: block the call from starting, do not open the web call session.
+   - Telephony single call: block the call from dialing.
+   - Campaign: block the campaign from starting at all. No contacts get dialed. This check happens once, at campaign start — there is no mid-run pause/resume logic needed, since a campaign cannot begin in a non-compliant state in the first place.
+
+3. Show an error message wherever the call/campaign is blocked:
+   "Call blocked: This agent's system prompt does not meet IRDAI compliance requirements. Resolve the missing items listed below before making a call."
+   Below it, list the specific missing items (same list already shown in the Compliance tab warning banner). For campaigns, show this as a banner on the campaign start screen before the user can hit Start/Run.
+
+4. This check re-validates against the latest irdai_compliance_status every time a call or campaign start is attempted. If the prompt is fixed and re-saved (clearing the missing items), the next call attempt or campaign start should succeed automatically with no other changes needed.
+
+5. If irdai_compliance_status has no missing items, or IRDAI is toggled off entirely, all call paths (web, telephony, campaign) work exactly as they do today — no change in that case.
+
+6. The existing warning banner on Advanced > Compliance tab stays as-is. This is an additional enforcement layer at the point of call/campaign initiation, not a replacement for that banner.
+
+Do not modify the call pipeline itself (STT/LLM/TTS, dialer logic) — only add this check as a gate immediately before each call or campaign would otherwise start. Do not change DPDP or TRAI behavior — their existing implementations remain untouched.

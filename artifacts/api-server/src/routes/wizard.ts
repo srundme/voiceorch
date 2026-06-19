@@ -627,19 +627,21 @@ router.get("/admin/managed-phone-numbers", requireAdmin, async (_req, res): Prom
     fetchError = "VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN environment variables are not set on the server.";
   } else {
     try {
-      // Vobiz Account-level API uses HTTP Basic Auth (authId:authToken), NOT X-Auth headers.
-      // X-Auth headers are only for the /api/v1/partner/* endpoints (KYC routes).
-      const basicCreds = Buffer.from(`${authId}:${authToken}`).toString("base64");
-      const resp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/Number/`, {
-        headers: { "Authorization": `Basic ${basicCreds}`, "Accept": "application/json" },
+      // Phone numbers are listed via the Partner API (same X-Auth credentials as KYC).
+      // The Account-level API (/Account/{id}/Number/) requires different account credentials
+      // and is NOT accessible with partner credentials.
+      const resp = await fetch("https://api.vobiz.ai/api/v1/partner/numbers", {
+        headers: { "X-Auth-ID": authId, "X-Auth-Token": authToken, "Accept": "application/json" },
       });
       if (resp.ok) {
-        const data = await resp.json() as { objects?: Array<{ number: string; number_type?: string; region?: string }> };
-        available = (data.objects ?? []).map(n => ({
-          number:     n.number,
+        const data = await resp.json() as {
+          numbers?: Array<{ number?: string; phone_number?: string; number_type?: string; region?: string; country?: string }>;
+        };
+        available = (data.numbers ?? []).map(n => ({
+          number:     n.number ?? n.phone_number ?? "",
           numberType: n.number_type,
-          region:     n.region,
-        }));
+          region:     n.region ?? n.country,
+        })).filter(n => n.number);
       } else {
         const body = await resp.text().catch(() => "");
         fetchError = `Vobiz API error ${resp.status}: ${body.slice(0, 200) || resp.statusText}`;
