@@ -3687,7 +3687,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     );
   };
 
-  const isDirty = form.formState.isDirty;
+  const isDirty   = form.formState.isDirty;
+  const nameValue = form.watch("name");
 
   if (isLoading) {
     return (
@@ -3707,9 +3708,17 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-3">
-          <div className={`h-2 w-2 rounded-full ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
-          <span className="text-base font-semibold">{agent.name}</span>
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono">#{String(agent.id).padStart(4, "0")}</Badge>
+          <div className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
+          <input
+            className="text-base font-semibold bg-transparent outline-none border-b border-transparent hover:border-muted-foreground/30 focus:border-primary transition-colors min-w-0 max-w-[220px] truncate cursor-text"
+            value={nameValue ?? agent.name}
+            onChange={e => form.setValue("name", e.target.value, { shouldDirty: true })}
+            onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur(); void onSave(); } }}
+            onBlur={() => { if (isDirty) void onSave(); }}
+            title="Click to rename"
+            aria-label="Agent name"
+          />
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono shrink-0">#{String(agent.id).padStart(4, "0")}</Badge>
           <span className="text-xs text-muted-foreground">{(agent as any).totalCalls ?? 0} calls</span>
         </div>
         <div className="flex items-center gap-2">
