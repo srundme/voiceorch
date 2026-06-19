@@ -95,10 +95,12 @@ export default function UsersList() {
                   <TableCell className="text-right font-mono tabular-nums">{Math.round((user.totalDurationSeconds ?? 0) / 60).toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{user.agentCount?.toLocaleString() || 0}</TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
-                    {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
-                    {!user.onboardingCompleted && (
-                      <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0 h-4">Pending Setup</Badge>
-                    )}
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      {user.status === "suspended" && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">Suspended</Badge>}
+                      {user.status === "deleted" && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-muted-foreground">Deleted</Badge>}
+                      {!user.onboardingCompleted && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">Pending Setup</Badge>}
+                      <span>{user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}</span>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

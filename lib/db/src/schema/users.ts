@@ -21,6 +21,9 @@ export const usersTable = pgTable("users", {
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   onboardingData: jsonb("onboarding_data"),
   preferences: jsonb("preferences").$type<{ theme?: "light" | "dark" | "system" }>(),
+  status: text("status").notNull().default("active"),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  suspendedReason: text("suspended_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

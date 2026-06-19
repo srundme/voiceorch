@@ -32,7 +32,7 @@ export function useUserDetail(clerkId: string) {
 export function useAdjustWallet(clerkId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { adjustmentCents: number; description: string }) => 
+    mutationFn: (data: { adjustmentCents: number; description: string }) =>
       adminFetch<{ newBalanceCents: number }>(`/users/${clerkId}/wallet`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -56,6 +56,194 @@ export function useSetConcurrentLimit(clerkId: string) {
       queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
     },
+  });
+}
+
+// ─── User Management (new) ────────────────────────────────────────────────────
+
+export function useSetUserStatus(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { status: "active" | "suspended" | "deleted"; reason?: string }) =>
+      adminFetch<{ status: string }>(`/users/${clerkId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
+export function useEditUserProfile(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { email?: string; name?: string; concurrentLimit?: number }) =>
+      adminFetch<any>(`/users/${clerkId}/profile`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+    },
+  });
+}
+
+export function useUserProviders(clerkId: string) {
+  return useQuery({
+    queryKey: ["admin", "users", clerkId, "providers"],
+    queryFn: () => adminFetch<any[]>(`/users/${clerkId}/providers`),
+    enabled: !!clerkId,
+  });
+}
+
+export function useUserCalls(clerkId: string, page = 1) {
+  return useQuery({
+    queryKey: ["admin", "users", clerkId, "calls", page],
+    queryFn: () => adminFetch<any>(`/users/${clerkId}/calls?page=${page}&limit=50`),
+    enabled: !!clerkId,
+  });
+}
+
+export function useUserWalletTransactions(clerkId: string, page = 1) {
+  return useQuery({
+    queryKey: ["admin", "users", clerkId, "wallet-transactions", page],
+    queryFn: () => adminFetch<any>(`/users/${clerkId}/wallet/transactions?page=${page}&limit=100`),
+    enabled: !!clerkId,
+  });
+}
+
+export function useUserAgents(clerkId: string) {
+  return useQuery({
+    queryKey: ["admin", "users", clerkId, "agents"],
+    queryFn: () => adminFetch<any[]>(`/users/${clerkId}/agents`),
+    enabled: !!clerkId,
+  });
+}
+
+// ─── Wallet Controls ──────────────────────────────────────────────────────────
+
+export function useCreditWallet(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { amountCents: number; description?: string }) =>
+      adminFetch<{ newBalanceCents: number }>(`/users/${clerkId}/wallet/credit`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "wallet-transactions"] });
+    },
+  });
+}
+
+export function useDebitWallet(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { amountCents: number; description?: string }) =>
+      adminFetch<{ newBalanceCents: number }>(`/users/${clerkId}/wallet/debit`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "wallet-transactions"] });
+    },
+  });
+}
+
+export function useRefundWallet(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { amountCents: number; description?: string; callId?: number }) =>
+      adminFetch<{ newBalanceCents: number }>(`/users/${clerkId}/wallet/refund`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "wallet-transactions"] });
+    },
+  });
+}
+
+// ─── Agent CRUD (admin) ───────────────────────────────────────────────────────
+
+export function useAdminDeleteAgent(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (agentId: number) =>
+      adminFetch<{ ok: boolean }>(`/agents/${agentId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "agents"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+    },
+  });
+}
+
+export function useAdminEditAgent(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ agentId, data }: { agentId: number; data: Record<string, unknown> }) =>
+      adminFetch<any>(`/agents/${agentId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "agents"] });
+    },
+  });
+}
+
+// ─── Impersonation ────────────────────────────────────────────────────────────
+
+export function useImpersonateUser() {
+  return useMutation({
+    mutationFn: (clerkId: string) =>
+      adminFetch<{ sessionToken: string; userSessionJwt: string; userName: string | null; userEmail: string | null }>(
+        `/impersonate/${clerkId}`,
+        { method: "POST" },
+      ),
+  });
+}
+
+export function useEndImpersonation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionToken: string) =>
+      adminFetch<{ ok: boolean }>(`/impersonate/sessions/${sessionToken}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "impersonate", "sessions"] });
+    },
+  });
+}
+
+export function useImpersonationSessions() {
+  return useQuery({
+    queryKey: ["admin", "impersonate", "sessions"],
+    queryFn: () => adminFetch<any[]>("/impersonate/sessions"),
+    refetchInterval: 30000,
+  });
+}
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+export function useAuditLogs(filters: { userId?: string; action?: string; page?: number } = {}) {
+  const { userId, action, page = 1 } = filters;
+  const params = new URLSearchParams({ page: String(page), limit: "50" });
+  if (userId) params.set("userId", userId);
+  if (action) params.set("action", action);
+
+  return useQuery({
+    queryKey: ["admin", "audit-logs", filters],
+    queryFn: () => adminFetch<any>(`/audit-logs?${params.toString()}`),
+  });
+}
+
+export function useUserAuditLogs(clerkId: string, page = 1) {
+  return useQuery({
+    queryKey: ["admin", "audit-logs", { userId: clerkId, page }],
+    queryFn: () => adminFetch<any>(`/audit-logs?userId=${clerkId}&page=${page}&limit=50`),
+    enabled: !!clerkId,
   });
 }
 

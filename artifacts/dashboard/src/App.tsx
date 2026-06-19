@@ -57,6 +57,8 @@ import TestSimulatorPage from "@/pages/test-simulator";
 import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
+import ImpersonatePage from "@/pages/impersonate";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -320,6 +322,7 @@ function ProtectedApp() {
   if (!isLoaded) return <SnapServeLoader />;
   return (
     <>
+      <ImpersonationBanner />
       <SignedIn>
         <Switch>
           {/* Onboarding is full-screen — no sidebar layout */}
@@ -347,6 +350,7 @@ function Router() {
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignInPage} />
           <Route path="/app/*?" component={ProtectedApp} />
+          <Route path="/impersonate" component={ImpersonatePage} />
           <Route path="/book/cancel" component={CancelBookingPage} />
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
