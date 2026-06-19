@@ -1,0 +1,44 @@
+CONTEXT
+This is voiceorch — a TypeScript/Node voice-agent orchestration platform: STT → LLM → TTS streamed over websockets, telephony via Plivo/Exotel, sessions tracked in an in-memory Map, with existing performance.now() latency instrumentation. Target market is Indian outbound calling (Tamil/Hinglish).
+
+GOAL
+Study how the Bolna open-source framework implements voice orchestration, extract the design patterns that are language-agnostic, and reimplement the valuable ones idiomatically in TypeScript. Bolna is Python — this is a REFERENCE for design, NOT a port and NOT a runtime dependency. Do not add Python. Do not call Bolna at runtime. Do not import asyncio-style patterns literally — translate them to native TS (async generators, Readable/Transform streams, EventEmitter).
+
+STEP 1 — READ THE REFERENCE
+Clone https://github.com/bolna-ai/bolna into a temp directory (NOT into the app tree) and read these specifically:
+- The TaskManager class — how it orchestrates STT→LLM→TTS stages via asyncio queues. This is the core pipeline.
+- bolna/constants.py — interruption handling constants, filler-phrase lists, and endpointing/silence thresholds.
+- input_handlers/telephony_providers/ — how Plivo handles the bidirectional websocket stream (start/media/stop events, base64 audio frames).
+- The provider registry pattern (enums.py + provider config models) — how orchestration is decoupled from specific ASR/LLM/TTS providers.
+- How interruption/barge-in cancels downstream synthesis tasks.
+
+After reading, write a short SUMMARY (in a markdown file BOLNA-NOTES.md) of each pattern in your own words and how it maps to the existing voiceorch architecture. Do this BEFORE writing any implementation code.
+
+STEP 2 — COMPARE TO CURRENT CODE
+List the files in voiceorch responsible for: the STT→LLM→TTS pipeline, interruption handling, endpointing/turn-detection, and telephony input. For each Bolna pattern, state whether voiceorch already has an equivalent, has a weaker version, or is missing it entirely.
+
+STEP 3 — IMPLEMENT (in priority order, in TypeScript)
+Implement the ones that are missing or weaker. Priority:
+
+1. STREAMING PIPELINE — mirror Bolna's queue-based stage decoupling so the LLM streams clause-by-clause into TTS incrementally, instead of waiting for the full LLM response before synthesizing. Use async generators / streams. This fixes the current non-streaming TTS behavior.
+
+2. INTERRUPTION / BARGE-IN CASCADE — replicate the order Bolna tears down in-flight synthesis when the user starts speaking: cancel pending LLM, flush/close the TTS websocket cleanly, reset turn state. Port the state machine, not the syntax. No leaked audio, no leaked timers.
+
+3. ENDPOINTING — translate Bolna's silence/partial-based turn-close logic, but add a hard safety-net timeout so a turn ALWAYS closes even if the STT never emits a confident final (this is the Tamil/Hinglish "Listening..." hang). Make the silence threshold an env constant.
+
+4. FILLER INJECTION — lift Bolna's filler-phrase lists (they're just data) and trigger them when LLM TTFT exceeds the threshold.
+
+CONSTRAINTS
+- TypeScript only. Match existing voiceorch code style and the existing provider abstraction — extend it, don't replace it.
+- Reuse the existing performance.now() checkpoints; add new ones at "first LLM clause", "first TTS audio out", and "turn closed (final vs forced)".
+- Touch the minimum number of files. List every file changed and why.
+- Delete the cloned Bolna repo from temp when done — it must not ship in the app.
+
+ACCEPTANCE
+- BOLNA-NOTES.md exists with the pattern summaries + mapping.
+- TTS audio begins playing before the full LLM response is generated (verify with the latency checkpoints).
+- A barge-in mid-response cleanly cancels TTS with no audio bleed.
+- With STUB_PROVIDERS=1, a stubbed transcriber that emits partials but never a final still closes the turn via the safety-net timeout.
+- No regression for working English sessions.
+
+Start with STEP 1. Do not write implementation code until BOLNA-NOTES.md and the STEP 2 comparison are done. Show me both before proceeding to STEP 3.
