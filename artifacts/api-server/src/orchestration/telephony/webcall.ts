@@ -1100,6 +1100,7 @@ export async function handleWebCallWebSocket(
       // audio is usually already fully collected — minimising first-audio delay.
       let sentenceJobs: Promise<Buffer>[] = [];
       let sentenceTexts: string[] = [];  // parallel to sentenceJobs — canonical text per sentence for UI highlighting
+      let sentenceSynthDoneAt: number[] = []; // STEP 0b diag: ms wall-clock when each sentence's TTS audio finished synthesizing
       let tokenBuf    = "";   // filtered text waiting to be split into sentences
       let fullReply   = "";   // raw LLM output (may include <think> blocks)
 
@@ -1254,6 +1255,7 @@ export async function handleWebCallWebSocket(
         // HTTP streaming (potentially faster than waiting for the full response).
         // Either way, the job resolves to a complete Buffer — played from memory
         // with no per-chunk network jitter.
+        const _jobIdx = sentenceJobs.length; // STEP 0b diag: stable index for this sentence's synth-done stamp
         let job: Promise<Buffer>;
         if (tts.synthesizeStream) {
           job = (async () => {
@@ -1263,6 +1265,7 @@ export async function handleWebCallWebSocket(
               chunks.push(c);
             }, () => {});
             const audio = Buffer.concat(chunks);
+            sentenceSynthDoneAt[_jobIdx] = Date.now(); // STEP 0b diag (a): last TTS byte for this sentence received
             logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
             logExecution("TTS", "response", {
               provider: agent.ttsProvider,
@@ -1274,6 +1277,7 @@ export async function handleWebCallWebSocket(
           })();
         } else {
           job = tts.synthesize(t).then(({ audio }) => {
+            sentenceSynthDoneAt[_jobIdx] = Date.now(); // STEP 0b diag (a): last TTS byte for this sentence received
             logger.info({ callId, sentenceText: t, audioBytes: audio.length }, "TTS sentence synthesized");
             logExecution("TTS", "response", {
               provider: agent.ttsProvider,
@@ -2045,6 +2049,24 @@ export async function handleWebCallWebSocket(
         if (audioChunks.length > 0) {
           logger.info({ callId, dropped: audioChunks.length }, "Discarding during-speech audio (no barge-in triggered)");
           audioChunks.splice(0);
+        }
+        // STEP 0b diag: natural turn-end ordering of (a) final-sentence TTS done,
+        // (b) last audio frame handed to ws.send, (c) flip to "listening" — plus the
+        // WS send buffer still pending at the flip. bufferedAmount > 0 here means the
+        // tail frames were queued but not yet written to the client socket when we
+        // told the client to stop playing (server-side backpressure on the tail).
+        {
+          const _finalIdx = sentenceJobs.length - 1;
+          logger.info({
+            callId,
+            evt: "tail_diag",
+            finalSentenceTtsDoneAt_a: sentenceSynthDoneAt[_finalIdx] ?? null,
+            lastAudioFrameSentAt_b: lastChunkSentAt || null,
+            listenFlipAt_c: Date.now(),
+            wsBufferedAmountAtFlip: ws.bufferedAmount,
+            msSinceLastAudioSend: lastChunkSentAt > 0 ? Date.now() - lastChunkSentAt : null,
+            sentenceCount: sentenceJobs.length,
+          }, "STEP 0b tail_diag: (a) final TTS done / (b) last frame sent / (c) listening flip + WS buffered bytes");
         }
         sendStatus("listening");
       }

@@ -1,0 +1,40 @@
+CONTEXT
+voiceorch — TypeScript/Node voice orchestration. STEP 0 harness already PROVED this is TTS_SIDE, not text-side: the full reply (including the trailing clause) IS enqueued to TTS on both paths, and Cartesia (REST /tts/bytes, body read to done) synthesizes it. The loss is on audio emission / turn-transition, NOT text assembly. Do NOT re-investigate the text side.
+
+LOCALIZATION
+The dropped tail is observed in the BROWSER LIVE TEST, which is the webcall.ts path (orchestration/telephony/webcall.ts) — NOT pipeline.ts. Scope all work to webcall.ts. webcall ends each sentence with withTailSilence (+300ms) plus extra tail-silence frames.
+
+HYPOTHESIS
+The turn-end / transition-to-"Listening" fires based on a timer or a "text/sentences done" flag rather than on the final audio frame actually being flushed to the client. So the WS send loop (or client playback) is cut while the final sentence's tail + tail-silence frames are still unsent → caller hears the last words clipped.
+
+STEP 0b — INSTRUMENT (do before any fix)
+In webcall.ts, log timestamps for, per turn:
+  (a) last TTS byte received from Cartesia for the final sentence
+  (b) last audio frame actually written to the client socket
+  (c) turn-state flip to "Listening" / turn marked complete
+Run a multi-sentence Tamil reply. Report the ordering of (a)(b)(c).
+- If (c) precedes (b): CONFIRMED — turn ends before the final frames drain. Proceed to fix.
+- If (b) precedes (c) but audio still clips: the loss is downstream (client-side playback buffer / WS backpressure). Report that instead and STOP for review — different fix.
+Show the timestamp evidence before fixing.
+
+STEP 1 — FIX (only if STEP 0b confirms (c) before (b))
+- Gate the turn-end / transition-to-Listening on the audio SEND LOOP actually draining: the turn is complete only after the last audio frame (including withTailSilence and the extra tail-silence frames) has been written to the client socket — not on a timer and not on a "sentences enqueued" flag.
+- Do not change the +300ms / tail-silence values; just ensure the transition waits for them to flush.
+
+CRITICAL — BARGE-IN COEXISTENCE
+- The drain-before-end behavior applies to NATURAL turn-end ONLY.
+- A real barge-in MUST still cut the agent off mid-tail instantly — do not "drain the full tail" when the user has interrupted. On barge-in, abandon the remaining tail frames as today.
+- Verify both: natural end plays the full tail; barge-in still clips the agent immediately.
+
+CONSTRAINTS
+- webcall.ts only. Do NOT touch pipeline.ts, the safety net, the provider abstraction, or barge-in DETECTION (only ensure the drain logic yields to an already-detected barge-in).
+- TypeScript only. Minimum diff. List every file changed with one-line why.
+
+ACCEPTANCE
+- STEP 0b ordering evidence reported.
+- After fix: a multi-sentence Tamil reply in the browser Live Test plays its FINAL clause fully (no cut at the previously-highlighted point).
+- A single-sentence reply also plays fully.
+- A barge-in during the agent's tail still cuts it off instantly — no regression.
+- No change to pipeline.ts behavior.
+
+Start with STEP 0b. Report the (a)(b)(c) ordering before applying any fix.
