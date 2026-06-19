@@ -2937,7 +2937,7 @@ function makeThinkFilter(): (token: string) => string {
  *      - Domain names:    "google.com" (period not followed by space)
  *  • Falls back to comma-clause dispatch for long responses with no boundary yet.
  */
-function extractSentences(text: string): { sentences: string[]; remainder: string } {
+export function extractSentences(text: string): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
   let i = 0;
   let segStart = 0;
@@ -2988,7 +2988,11 @@ function extractSentences(text: string): { sentences: string[]; remainder: strin
         //  a) next real char is uppercase/quote (English sentence start), OR
         //  b) nothing follows — period+whitespace is at the tail of the current
         //     streaming chunk (handles Tamil/Indic responses that end with ". ")
-        const shouldSplit = afterSpace === undefined || /[A-Z"'(\u2018\u201C]/.test(afterSpace);
+        // Indic range (\u0900-\u0D7F) mirrors webcall.ts: Indic scripts have no
+        // uppercase, so without it Tamil/Hindi mid-sentence boundaries never split
+        // here, and the end-of-stream flush re-enqueues an already-spoken opening
+        // clause (duplicated heads, e.g. "வணக்கம். வணக்கம். நான்…").
+        const shouldSplit = afterSpace === undefined || /[A-Z"'(\u2018\u201C\u0900-\u0D7F]/.test(afterSpace);
 
         if (shouldSplit) {
           // Only split when word before the period is > 4 letters (not an abbreviation).

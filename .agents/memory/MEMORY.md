@@ -1,6 +1,7 @@
 - [Gender service startup](gender-service-startup.md) — lazy-import librosa; top-level import blocks uvicorn port binding in production
 - [KB FTS Architecture](kb-fts-architecture.md) — AI Knowledge uses PostgreSQL FTS only; no embeddings/pgvector; knowledge_sources + knowledge_entries tables with GIN index
 - [Webcall vs pipeline audio paths](webcall-pipeline-split.md) — webcall handler is fully separate from pipeline.ts; any feature added to pipeline must be duplicated in webcall.ts
+- [extractSentences regex parity](extract-sentences-regex-parity.md) — pipeline.ts & webcall.ts clause-split regexes must both include Indic range \u0900-\u0D7F or Tamil turns duplicate the opening clause
 - [Replit production inter-service networking](replit-production-networking.md) — localhost:80 (proxy) not available inside production container; localhost:PORT works for same-VM services
 - [Scheduling booking path triplication](booking-path-triplication.md) — gcal/email/webhook logic is inlined in 3 separate paths (agent tool-executor, public routes, authed routes); change all three
 - [drizzle-kit push gotchas](drizzle-push-gotchas.md) — long FK names truncate at 63 chars → push loops "Changes applied" forever; raw-SQL-only columns drift silently and get dropped
