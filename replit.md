@@ -85,6 +85,7 @@ AI voice agent orchestration SaaS platform — users bring their own provider AP
 
 - Platform charges orchestration fee only; users bring their own provider keys
 - Inspired by Bolna open-source framework architecture
+- **GitHub push:** Railway deploys from `srundme/voiceorch` main. Push every code edit there via the REST contents API using the `GITHUB_PERSONAL_ACCESS_TOKEN` secret (NOT `GITHUB_PAT`, which is stale/invalid). Auth header `Authorization: token $GITHUB_PERSONAL_ACCESS_TOKEN`. Do this automatically — don't ask each time.
 
 ## Gotchas
 
