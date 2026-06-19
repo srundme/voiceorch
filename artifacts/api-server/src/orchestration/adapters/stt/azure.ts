@@ -133,6 +133,11 @@ export class AzureSTT implements STTAdapter {
   private readonly language: string;
   private readonly endpointId: string | null;
   private readonly cfg: STTConfig;
+  /** How long Azure waits after last speech before finalising the phrase.
+   *  Azure default is ~500ms; 300-400ms is a good balance for Indic languages.
+   *  Lower values (150ms) cut latency but risk splitting sentences mid-breath.
+   *  Configurable via extraConfig.endpointingSilenceMs. */
+  private readonly endpointingSilenceMs: number;
 
   constructor(
     apiKey: string,
@@ -148,6 +153,7 @@ export class AzureSTT implements STTAdapter {
           region?: string;
           language?: string;
           endpointId?: string;
+          endpointingSilenceMs?: number;
         })
       : {};
 
@@ -161,6 +167,10 @@ export class AzureSTT implements STTAdapter {
     // the base model from `language`).
     const guidModel = model && GUID_RE.test(model.trim()) ? model.trim() : null;
     this.endpointId = extra.endpointId ?? guidModel ?? null;
+
+    // Clamp to Azure's accepted range [100, 5000]
+    const raw = extra.endpointingSilenceMs ?? 400;
+    this.endpointingSilenceMs = Math.max(100, Math.min(5000, raw));
   }
 
   // ── Batch REST ────────────────────────────────────────────────────────────
@@ -276,18 +286,29 @@ export class AzureSTT implements STTAdapter {
           ),
         );
 
-        // ② Speech context — phrase list (keyterms only; no LID)
-        if (this.cfg.keyterms.length > 0) {
+        // ② Speech context — segmentation timeout + optional phrase list.
+        // Always sent so we can control endpointing silence (how long Azure
+        // waits after the last spoken word before emitting speech.phrase).
+        // Default 400ms is a good balance for Indic languages; set
+        // extraConfig.endpointingSilenceMs to tune (e.g. 200 for faster
+        // response, 600 for speakers with natural mid-sentence pauses).
+        {
           const ctx: Record<string, unknown> = {
             phraseDetection: {
               onInterim: { resultType: "Always" },
               onSuccess: { resultType: "Always" },
               mode: "Conversation",
-            },
-            phraseList: {
-              onRecognition: { enabled: true, phrases: this.cfg.keyterms },
+              segmentation: {
+                mode: "Custom",
+                segmentationSilenceTimeoutMs: this.endpointingSilenceMs,
+              },
             },
           };
+          if (this.cfg.keyterms.length > 0) {
+            ctx["phraseList"] = {
+              onRecognition: { enabled: true, phrases: this.cfg.keyterms },
+            };
+          }
           ws.send(textFrame("speech.context", JSON.stringify(ctx), requestId));
         }
 
