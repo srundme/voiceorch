@@ -246,7 +246,13 @@ export async function createSession(params: {
     stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
+    // Latency tuning
+    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 400,
+    llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
+    ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 15,
   };
+  // Propagate endpointing silence into STTConfig so Azure adapter picks it up
+  agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
 
   // ── Parallel pre-fetch: caller memory + campaign lead + knowledge base ───────
   // All three are independent DB reads — fire simultaneously to avoid sequential

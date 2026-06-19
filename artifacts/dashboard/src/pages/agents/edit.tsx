@@ -68,6 +68,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
     preferredManagedNumber,
+    asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -88,6 +89,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
+  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 400) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
+  if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
+  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
@@ -317,6 +321,9 @@ export default function AgentEdit() {
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
+      asrEndpointingSilenceMs: 400,
+      llmMaxTokens: undefined,
+      ttsMinSentenceChars: 15,
     },
   });
 
@@ -521,6 +528,9 @@ export default function AgentEdit() {
       stagedPromptEnabled: (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages: (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
+      asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 400,
+      llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
+      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
     });
   }, [agent]);
 
@@ -1073,6 +1083,64 @@ export default function AgentEdit() {
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Latency Tuning ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Latency Tuning</CardTitle>
+              <CardDescription>Control per-stage response speed. Lower values cut latency; higher values improve reliability for slow speakers.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <FormField control={form.control} name="asrEndpointingSilenceMs" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>STT Endpointing Silence (ms)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={100} max={2000} step={50}
+                        value={field.value ?? 400}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">
+                      How long Azure waits after the last spoken word before sending the transcript. <strong>Lower = faster response.</strong> Default: 400ms. Range: 100–2000ms. Try 200ms for fast speakers.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="llmMaxTokens" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>LLM Max Output Tokens</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} max={16000} step={10}
+                        placeholder="Model default (no cap)"
+                        value={field.value ?? ""}
+                        onChange={e => {
+                          const v = e.target.value;
+                          field.onChange(v === "" ? null : parseInt(v, 10));
+                        }} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">
+                      Cap how many tokens the LLM generates per turn. <strong>Lower = faster + shorter replies.</strong> Leave blank for model default. Try 80–120 for concise voice responses.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="ttsMinSentenceChars" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>TTS Early Dispatch Threshold (chars)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={5} max={200} step={5}
+                        value={field.value ?? 15}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">
+                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 15. Range: 5–200.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

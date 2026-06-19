@@ -196,6 +196,9 @@ export interface STTConfig {
   smartEndpointing: string;
   autoFallback: boolean;
   fallbackProviders: Array<{ provider: string; model: string | null }>;
+  /** Azure STT: ms of silence after last spoken word before emitting a final phrase.
+   *  Default 400ms. Range 100–2000ms. Lower = faster response, higher = fewer split turns. */
+  endpointingSilenceMs?: number;
 }
 
 export interface AgentConfig {
@@ -312,6 +315,14 @@ export interface AgentConfig {
   stagedPromptEnabled: boolean;
   stagedPromptStages: Array<{ name: string; content: string }>;
   stagedPromptCoreIdentity: string | null;
+
+  // Latency tuning — exposed in agent builder UI
+  /** ms Azure waits after last spoken word before finalising (default 400). */
+  asrEndpointingSilenceMs: number;
+  /** Cap LLM output tokens to reduce response latency. null = model default. */
+  llmMaxTokens: number | null;
+  /** Min chars before a comma-clause triggers an early TTS dispatch (default 15). */
+  ttsMinSentenceChars: number;
 }
 
 export interface ProviderKey {

@@ -91,6 +91,11 @@ export const agentFormSchema = z.object({
   outboundPhoneNumberId: z.number().optional().nullable(),
   preferredManagedNumber: z.string().optional().nullable(),
 
+  // Latency tuning
+  asrEndpointingSilenceMs: z.number().min(100).max(2000).optional(),
+  llmMaxTokens: z.number().min(1).max(16000).optional().nullable(),
+  ttsMinSentenceChars: z.number().min(5).max(200).optional(),
+
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });

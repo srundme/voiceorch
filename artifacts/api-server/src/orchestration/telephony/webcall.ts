@@ -116,7 +116,7 @@ function rmsEnergy(buf: Buffer): number {
  * This mirrors the pipeline.ts implementation so telephony and webcall paths
  * have identical streaming-TTS behaviour.
  */
-function extractSentences(buf: string): [string[], string] {
+function extractSentences(buf: string, minCommaChars = 15): [string[], string] {
   const sentences: string[] = [];
   let i = 0;
   let segStart = 0;
@@ -207,7 +207,7 @@ function extractSentences(buf: string): [string[], string] {
   // 400–600ms headstart on the main sentence.
   if (sentences.length === 0 && remainder.length >= 60) {
     const commaIdx = remainder.lastIndexOf(", ");
-    if (commaIdx >= 15) {
+    if (commaIdx >= minCommaChars) {
       const clause = remainder.slice(0, commaIdx).trim();
       if (clause.length >= 8) {
         sentences.push(clause);
@@ -804,7 +804,9 @@ export async function handleWebCallWebSocket(
     const combined = Math.max(framesFromWords, framesFromTime);
     if (combined > 0) effectiveBargeInMinFrames = combined;
   }
-  const incrementalDelayMs = (agentCfg["incrementalDelay"] as number | undefined) ?? 0;
+  const incrementalDelayMs    = (agentCfg["incrementalDelay"]        as number | undefined) ?? 0;
+  const ttsMinSentenceChars   = (agentCfg["ttsMinSentenceChars"]     as number | undefined) ?? 15;
+  const llmMaxTokens          = (agentCfg["llmMaxTokens"]            as number | null | undefined) ?? null;
   // Per-agent endpointing: how long to wait after speech ends before sending to STT.
   // Falls back to VAD_SILENCE_MS (200ms) if not configured by the user.
   const agentVadSilenceMs = Math.max(50, Math.min(2000,
@@ -1593,7 +1595,7 @@ export async function handleWebCallWebSocket(
           if (!filtered) return;
           tokenBuf += filtered;
           send({ type: "token", text: filtered });
-          const [sentences, rest] = extractSentences(tokenBuf);
+          const [sentences, rest] = extractSentences(tokenBuf, ttsMinSentenceChars);
           for (const s of sentences) {
             queueSentence(s);
           }
@@ -1641,7 +1643,7 @@ export async function handleWebCallWebSocket(
                   if (!filtered) return;
                   tokenBuf += filtered;
                   send({ type: "token", text: filtered });
-                  const [sentences, remainder] = extractSentences(tokenBuf);
+                  const [sentences, remainder] = extractSentences(tokenBuf, ttsMinSentenceChars);
                   for (const s of sentences) {
                     queueSentence(s);
                   }
@@ -1713,7 +1715,7 @@ export async function handleWebCallWebSocket(
           .replace(/<break[^>]*\/?>/gi, "")
           .replace(/[^\S\r\n]{2,}/g, " ")
           .trim();
-        const [allSentences, trueRemainder] = extractSentences(cleanForFlush);
+        const [allSentences, trueRemainder] = extractSentences(cleanForFlush, ttsMinSentenceChars);
         const trimmedTB = tokenBuf.trim();
         // Guard: if tokenBuf is a TRUNCATED PREFIX of the last complete sentence
         // in the full reply (e.g. the LLM's final streaming token "சார்?" arrived

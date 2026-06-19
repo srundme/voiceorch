@@ -168,8 +168,9 @@ export class AzureSTT implements STTAdapter {
     const guidModel = model && GUID_RE.test(model.trim()) ? model.trim() : null;
     this.endpointId = extra.endpointId ?? guidModel ?? null;
 
-    // Clamp to Azure's accepted range [100, 5000]
-    const raw = extra.endpointingSilenceMs ?? 400;
+    // Clamp to Azure's accepted range [100, 5000].
+    // STTConfig.endpointingSilenceMs (from agent UI) takes priority over extraConfig.
+    const raw = cfg.endpointingSilenceMs ?? extra.endpointingSilenceMs ?? 400;
     this.endpointingSilenceMs = Math.max(100, Math.min(5000, raw));
   }
 
