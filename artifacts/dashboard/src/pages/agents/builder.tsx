@@ -1984,6 +1984,39 @@ function AdvancedTab({ form }: { form: any }) {
         {section === "timing" && (
           <>
             <div>
+              <h3 className="text-[13px] font-semibold text-foreground">Pipeline Latency</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Tune each stage of the STT → LLM → TTS pipeline. Lower values cut response time; higher values add reliability.
+              </p>
+            </div>
+            <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
+              <AdvSlider form={form} name="asrEndpointingSilenceMs"  label="STT Endpointing Silence"     hint="How long Azure waits after last spoken word before sending transcript. Lower = faster. Default: 400ms" min={100} max={2000} step={50}  fmt={v => `${v}ms`} />
+              <AdvSlider form={form} name="ttsMinSentenceChars"       label="TTS Early Dispatch Threshold" hint="Min characters before a comma-clause fires an early TTS request mid-stream. Lower = TTS fires earlier. Default: 15" min={5}   max={200}  step={5}   fmt={v => `${v}ch`} />
+              <AdvSlider form={form} name="linearDelayMs"             label="Post-Transcript Buffer"       hint="Extra wait after transcript arrives before LLM starts — helps callers who pause mid-sentence. Default: 0ms" min={0}   max={2000} step={50}  fmt={v => v === 0 ? "off" : `${v}ms`} />
+              <FormField control={form.control} name="llmMaxTokens" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div>
+                      <FormLabel className="text-[12px] font-medium text-foreground/90">LLM Max Output Tokens</FormLabel>
+                      <p className="text-[10px] text-muted-foreground/70 mt-0.5">Cap LLM output per turn — shorter replies finish faster. Leave blank for model default</p>
+                    </div>
+                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                      {field.value ?? "auto"}
+                    </span>
+                  </div>
+                  <FormControl>
+                    <input
+                      type="number" min={1} max={16000} placeholder="auto"
+                      value={field.value ?? ""}
+                      onChange={e => { const v = e.target.value; field.onChange(v === "" ? null : parseInt(v, 10)); }}
+                      className="w-full h-8 rounded-lg border border-border/60 bg-card/40 px-3 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </FormControl>
+                </FormItem>
+              )} />
+            </div>
+
+            <div>
               <h3 className="text-[13px] font-semibold text-foreground">Response Timing</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Control how long the agent waits after detecting end-of-turn before it starts speaking.
@@ -3637,6 +3670,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
+      asrEndpointingSilenceMs: 400,
+      llmMaxTokens: undefined,
+      ttsMinSentenceChars: 15,
+      linearDelayMs: 0,
     },
   });
 
@@ -3703,6 +3740,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
       preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
+      asrEndpointingSilenceMs:         (agent as any).agentConfig?.asrEndpointingSilenceMs ?? 400,
+      llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
+      ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
+      linearDelayMs:                   (agent as any).agentConfig?.incrementalDelay ?? 0,
     });
   }, [agent]);
 
