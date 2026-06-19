@@ -1,305 +1,322 @@
-import React from 'react';
 import './_group.css';
 
+const WAVE_BARS = 20;
+
+const PROVIDERS = [
+  { name: 'Deepgram', color: '#10b981', cat: 'ASR' },
+  { name: 'OpenAI', color: '#14b8a6', cat: 'LLM' },
+  { name: 'ElevenLabs', color: '#f43f5e', cat: 'TTS' },
+  { name: 'Cartesia', color: '#a78bfa', cat: 'TTS' },
+  { name: 'Twilio', color: '#ef4444', cat: 'TEL' },
+  { name: 'Azure', color: '#3b82f6', cat: 'ASR' },
+  { name: 'Anthropic', color: '#f97316', cat: 'LLM' },
+  { name: 'Plivo', color: '#06b6d4', cat: 'TEL' },
+  { name: 'Whisper', color: '#8b5cf6', cat: 'ASR' },
+  { name: 'DeepSeek', color: '#6366f1', cat: 'LLM' },
+];
+
+const FEATURES = [
+  {
+    title: 'Bring Your Own Providers',
+    desc: 'Mix any ASR, LLM, TTS, or telephony provider. Zero lock-in — swap keys without changing your agent config.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+      </svg>
+    ),
+  },
+  {
+    title: 'Real-time Transcription',
+    desc: 'Sub-200ms streaming transcription with word-level timestamps and automatic language detection.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+    ),
+  },
+  {
+    title: 'Multi-language Support',
+    desc: 'Native support for 30+ languages including Indian languages — Tamil, Hindi, Telugu, and Hinglish.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    ),
+  },
+  {
+    title: 'Call Recording & Logs',
+    desc: 'Full stereo recordings, detailed transcripts, and structured interaction logs. Stored securely, searchable instantly.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z"/>
+      </svg>
+    ),
+  },
+  {
+    title: 'Scheduling & Bookings',
+    desc: 'Native Google Calendar integration. Agents book appointments mid-call, with slot locking to prevent double-booking.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
+  {
+    title: 'Enterprise Compliance',
+    desc: 'Built-in DPDP PII scanning, call disclosure, data retention controls, and IRDAI/TRAI readiness.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    ),
+  },
+];
+
 export function LandingPage() {
+  const providerTrack = [...PROVIDERS, ...PROVIDERS];
+
   return (
-    <div className="snapserve-theme">
-      {/* 1. Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 border-b border-white/5 bg-[#050508]/80 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <div className="ss">
+
+      {/* ── Nav ── */}
+      <nav className="ss-nav">
+        <div className="ss-logo">
+          <div className="ss-logo-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 12h4l3-9 5 18 3-9h5"/>
             </svg>
           </div>
-          <span className="text-xl font-bold tracking-tight">SnapServe</span>
+          SnapServe
         </div>
-        <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
-          <a href="#" className="hover:text-white transition-colors">Product</a>
-          <a href="#" className="hover:text-white transition-colors">Pricing</a>
-          <a href="#" className="hover:text-white transition-colors">Docs</a>
-        </div>
-        <div className="flex items-center gap-4 text-sm">
-          <a href="#" className="font-medium text-gray-400 hover:text-white transition-colors hidden sm:block">Sign in</a>
-          <button className="btn-primary px-4 py-2 rounded-full font-medium">Get started free</button>
+
+        <ul className="ss-nav-links">
+          <li><a href="#">Product</a></li>
+          <li><a href="#">Pricing</a></li>
+          <li><a href="#">Docs</a></li>
+          <li><a href="#">Blog</a></li>
+        </ul>
+
+        <div className="ss-nav-actions">
+          <a href="#" className="ss-link">Sign in</a>
+          <button className="ss-btn-primary">Get started free</button>
         </div>
       </nav>
 
-      {/* 2. Hero */}
-      <section className="relative pt-40 pb-24 px-8 overflow-hidden min-h-[90vh] flex flex-col items-center justify-center">
-        <div className="absolute inset-0 bg-grid pointer-events-none opacity-40"></div>
-        
-        {/* Decorative Orb */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-violet-600/20 rounded-full blur-[120px] animate-pulse-orb pointer-events-none"></div>
+      {/* ── Hero ── */}
+      <section className="ss-hero">
+        <div className="ss-hero-bg">
+          <div className="ss-grid-bg" />
+          <div className="ss-hero-glow" />
+        </div>
 
-        <div className="relative z-10 flex flex-col items-center text-center max-w-4xl mx-auto">
-          {/* Animated Provider Pills (Orbiting) */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbit-1">
-              <span className="pill deepgram"><span className="dot"></span>Deepgram</span>
-            </div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbit-2">
-              <span className="pill openai"><span className="dot"></span>OpenAI</span>
-            </div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbit-3">
-              <span className="pill elevenlabs"><span className="dot"></span>ElevenLabs</span>
-            </div>
+        <div className="ss-badge ss-reveal">
+          <span className="ss-badge-dot" />
+          SnapServe 2.0 — now with BYOP billing
+        </div>
+
+        <h1 className="ss-reveal ss-d1">
+          Orchestrate AI Voice<br />Agents at Scale
+        </h1>
+
+        <p className="ss-reveal ss-d2">
+          The voice AI platform that speaks your stack. Connect your own providers or use our managed infrastructure — deploy production-ready agents in minutes.
+        </p>
+
+        <div className="ss-hero-actions ss-reveal ss-d3">
+          <button className="ss-btn-hero">Get started free →</button>
+          <button className="ss-btn-ghost">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Watch demo
+          </button>
+        </div>
+
+        {/* Waveform visual */}
+        <div className="ss-reveal ss-d4" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="ss-wave-wrap">
+            {Array.from({ length: WAVE_BARS }).map((_, i) => (
+              <div key={i} className="ss-wave-bar" />
+            ))}
           </div>
+          <p className="ss-wave-label">Live voice stream · 38ms latency</p>
+        </div>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm font-medium mb-8 animate-reveal">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
-            </span>
-            SnapServe 2.0 is live
+        {/* Agent conversation card */}
+        <div className="ss-agent-card ss-reveal ss-d5">
+          <div className="ss-agent-meta">
+            <span className="ss-dot-live" />
+            <span>Agent "Support-01" · Deepgram ASR · GPT-4o · Cartesia TTS</span>
           </div>
-
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 animate-reveal delay-100 text-gradient">
-            Orchestrate AI Voice<br />Agents at Scale
-          </h1>
-          
-          <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl animate-reveal delay-200">
-            The voice AI platform that speaks your stack. Connect your own providers or use our managed infrastructure to deploy conversational agents in minutes.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4 animate-reveal delay-300">
-            <button className="btn-primary px-8 py-3.5 rounded-full text-base font-semibold shadow-lg shadow-violet-500/20">
-              Get started free
-            </button>
-            <button className="px-8 py-3.5 rounded-full text-base font-semibold border border-gray-600 hover:border-gray-400 bg-white/5 hover:bg-white/10 transition-all flex items-center gap-2 backdrop-blur-sm">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              Watch demo
-            </button>
+          <div className="ss-bubble-agent">
+            Hi! I'm calling from SnapServe support. I see your subscription renews in 3 days — would you like to review your current plan?
           </div>
-
-          {/* Waveform Visual */}
-          <div className="mt-16 flex items-end justify-center gap-1.5 h-16 opacity-80 animate-reveal delay-400">
-            <div className="w-2 rounded-full bg-violet-500 waveform-bar"></div>
-            <div className="w-2 rounded-full bg-blue-500 waveform-bar"></div>
-            <div className="w-2 rounded-full bg-indigo-500 waveform-bar"></div>
-            <div className="w-2 rounded-full bg-violet-400 waveform-bar"></div>
-            <div className="w-2 rounded-full bg-blue-400 waveform-bar"></div>
-            <div className="w-2 rounded-full bg-indigo-400 waveform-bar"></div>
+          <div className="ss-bubble-user">
+            Yes, actually I wanted to ask about the BYOP pricing option.
+          </div>
+          <div className="ss-bubble-agent">
+            Great question. With BYOP, you pay just $0.035 per minute and bring your own API keys. We handle all the orchestration, endpointing, and failover automatically.
           </div>
         </div>
       </section>
 
-      {/* 3. Logos Strip */}
-      <section className="py-12 border-y border-white/5 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto px-8 text-center">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-widest mb-8">Works with every major provider</p>
-          <div className="flex flex-wrap justify-center gap-x-12 gap-y-6 opacity-60 hover:opacity-100 transition-opacity duration-500 grayscale hover:grayscale-0">
-            <div className="text-xl font-bold text-gray-300">Deepgram</div>
-            <div className="text-xl font-bold text-gray-300">OpenAI</div>
-            <div className="text-xl font-bold text-gray-300">ElevenLabs</div>
-            <div className="text-xl font-bold text-gray-300">Cartesia</div>
-            <div className="text-xl font-bold text-gray-300">Twilio</div>
-            <div className="text-xl font-bold text-gray-300">Azure</div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. How it works */}
-      <section className="py-32 px-8 relative">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-20 animate-reveal">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">From idea to live agent in minutes</h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">No complex integration code required. SnapServe handles the hard parts of real-time audio streaming, endpointing, and interruption handling.</p>
-          </div>
-
-          <div className="relative grid md:grid-cols-3 gap-8">
-            <div className="hidden md:block timeline-connector"></div>
-            
-            {[
-              { step: 1, title: "Build Agent", desc: "Define your agent's persona, system prompt, and tools using our visual builder or API." },
-              { step: 2, title: "Connect Providers", desc: "Bring your own keys for ASR, LLM, and TTS, or use our optimized default stack." },
-              { step: 3, title: "Go Live", desc: "Deploy via web widget, connect a Twilio number, or use our inbound/outbound campaign tools." }
-            ].map((item, i) => (
-              <div key={i} className="relative z-10 glass-card p-8 rounded-2xl animate-reveal" style={{ animationDelay: `${(i+1)*100}ms` }}>
-                <div className="w-12 h-12 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400 font-bold text-xl mb-6 backdrop-blur-md">
-                  {item.step}
-                </div>
-                <h3 className="text-xl font-semibold mb-3">{item.title}</h3>
-                <p className="text-gray-400 leading-relaxed">{item.desc}</p>
+      {/* ── Provider logos ── */}
+      <div className="ss-logos">
+        <p className="ss-logos-label">Works with every major provider</p>
+        <div style={{ overflow: 'hidden', padding: '0 2rem' }}>
+          <div className="ss-logos-track">
+            {providerTrack.map((p, i) => (
+              <div key={i} className="ss-logo-item">
+                <span className="ss-logo-dot" style={{ background: p.color }} />
+                {p.name}
+                <span style={{ fontSize: '0.65rem', color: '#2a2a44', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginLeft: '0.1rem' }}>{p.cat}</span>
               </div>
             ))}
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* 5. Features Grid */}
-      <section className="py-24 px-8 bg-[#08080c]">
-        <div className="max-w-6xl mx-auto">
-          <div className="mb-16 animate-reveal">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything you need to scale</h2>
-            <p className="text-gray-400">Enterprise-grade capabilities built into the core orchestration engine.</p>
+      {/* ── How it works ── */}
+      <div className="ss-section">
+        <p className="ss-eyebrow">How it works</p>
+        <h2 className="ss-section-h">From idea to live agent in three steps</h2>
+        <p className="ss-section-sub" style={{ color: '#555572' }}>
+          No complex integration code. SnapServe handles real-time audio streaming, endpointing, barge-in, and interruption handling out of the box.
+        </p>
+
+        <div className="ss-steps">
+          {[
+            { n: '01', title: 'Build your agent', desc: 'Define persona, system prompt, and tools using our visual builder or REST API. Set greetings, memory, and call-end conditions.' },
+            { n: '02', title: 'Connect providers', desc: 'Add your own Deepgram, OpenAI, Cartesia, or Twilio keys — or use our managed defaults. Switch any provider without touching agent config.' },
+            { n: '03', title: 'Go live', desc: 'Deploy via embeddable web widget, connect a phone number, or trigger outbound campaigns with scheduling. Monitor every call in real time.' },
+          ].map((s, i) => (
+            <div key={i} className="ss-step">
+              <div className="ss-step-num">{s.n}</div>
+              <h3>{s.title}</h3>
+              <p>{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Features ── */}
+      <div className="ss-features-wrap">
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '4rem 2.5rem 2rem' }}>
+          <p className="ss-eyebrow">Capabilities</p>
+          <h2 className="ss-section-h">Everything your voice AI needs</h2>
+        </div>
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 2.5rem 4rem' }}>
+          <div className="ss-features" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
+            {FEATURES.map((f, i) => (
+              <div key={i} className="ss-feat" style={{ borderRight: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="ss-feat-icon">{f.icon}</div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Pricing ── */}
+      <div className="ss-section">
+        <p className="ss-eyebrow">Pricing</p>
+        <h2 className="ss-section-h">Simple, transparent pricing</h2>
+        <p className="ss-section-sub" style={{ color: '#555572' }}>Pay only for what you use. No seat fees, no minimums, no hidden costs.</p>
+
+        <div className="ss-pricing-grid">
+          {/* BYOP */}
+          <div className="ss-plan">
+            <p className="ss-plan-name">BYOP</p>
+            <p className="ss-plan-price">$0.035<span>/min</span></p>
+            <p className="ss-plan-desc">You bring your own API keys. We orchestrate everything else.</p>
+            <ul className="ss-plan-features">
+              {['Orchestration engine', 'Web widget & telephony', 'Full analytics & call logs', 'Unlimited concurrent calls', 'Any provider combination'].map((item, i) => (
+                <li key={i}>
+                  <svg className="ss-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <button className="ss-plan-btn">Get started with BYOP</button>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              { title: "Bring Your Own Providers", desc: "Mix and match Deepgram, OpenAI, Cartesia, and others. Zero lock-in.", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
-              { title: "Real-time Transcription", desc: "Sub-200ms latency streaming transcription with word-level timestamps.", icon: "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" },
-              { title: "Multi-language Support", desc: "Native support for 30+ languages with automatic detection.", icon: "M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 15h4.615M11 21l5-10 5 10M12.751 15h4.615" },
-              { title: "Call Recording & Logs", desc: "Stereo recordings, detailed transcripts, and interaction logs stored securely.", icon: "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" },
-              { title: "Scheduling & Bookings", desc: "Native Google Calendar integration for agents to book appointments mid-call.", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
-              { title: "Enterprise Compliance", desc: "Built for scale with IRDAI, DPDP, TRAI, and HIPAA compliance readiness.", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" }
-            ].map((feature, i) => (
-              <div key={i} className="gradient-border-card p-8 animate-reveal" style={{ animationDelay: `${i*50}ms` }}>
-                <div className="w-10 h-10 mb-4 rounded-lg bg-gray-800 flex items-center justify-center text-violet-400">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d={feature.icon}/>
+          {/* Managed */}
+          <div className="ss-plan ss-plan-featured">
+            <div className="ss-plan-badge">Most Popular</div>
+            <p className="ss-plan-name" style={{ color: '#9d8fff' }}>Managed</p>
+            <p className="ss-plan-price" style={{ background: 'linear-gradient(135deg, #c4b5fd, #e0d9ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              $0.05<span style={{ WebkitTextFillColor: '#555572' }}>/min</span>
+            </p>
+            <p className="ss-plan-desc">Zero setup. Premium models and voices included — just add your system prompt.</p>
+            <ul className="ss-plan-features">
+              {['Everything in BYOP', 'Premium ASR included', 'State-of-the-art LLM', 'High-quality TTS voices', 'Priority support & SLA'].map((item, i) => (
+                <li key={i}>
+                  <svg className="ss-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.5"><path d="M5 13l4 4L19 7"/></svg>
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <button className="ss-plan-btn-featured">Start with Managed →</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── CTA ── */}
+      <div className="ss-cta-wrap">
+        <div className="ss-cta">
+          <p className="ss-eyebrow" style={{ textAlign: 'center' }}>Get started</p>
+          <h2>Start building<br />in minutes</h2>
+          <p>Join teams using SnapServe to deploy production-ready voice AI agents — no infrastructure required.</p>
+          <div className="ss-input-row">
+            <input className="ss-input" type="email" placeholder="your@email.com" />
+            <button className="ss-btn-hero" style={{ whiteSpace: 'nowrap' }}>Get access →</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Footer ── */}
+      <footer className="ss-footer">
+        <div className="ss-footer-inner">
+          <div className="ss-footer-top">
+            <div className="ss-footer-brand">
+              <div className="ss-logo" style={{ marginBottom: 0 }}>
+                <div className="ss-logo-icon" style={{ width: 22, height: 22, borderRadius: 6 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 12h4l3-9 5 18 3-9h5"/>
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold mb-2 text-gray-100">{feature.title}</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">{feature.desc}</p>
+                SnapServe
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 6. Pricing */}
-      <section className="py-24 px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16 animate-reveal">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple, transparent pricing</h2>
-            <p className="text-gray-400">Pay only for what you use. No minimums, no hidden fees.</p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8 items-center max-w-4xl mx-auto">
-            {/* BYOP Plan */}
-            <div className="glass-card rounded-3xl p-8 relative animate-reveal delay-100">
-              <h3 className="text-2xl font-bold mb-2 text-gray-200">Bring Your Own</h3>
-              <p className="text-gray-400 mb-6 h-12">Connect your own API keys. We handle the orchestration.</p>
-              <div className="mb-6">
-                <span className="text-5xl font-extrabold">$0.035</span>
-                <span className="text-gray-400">/min</span>
-              </div>
-              <ul className="space-y-4 mb-8">
-                {['Orchestration engine access', 'Web widget & Telephony', 'Full analytics & logs', 'Unlimited concurrent calls'].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-gray-300">
-                    <svg className="text-blue-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 13l4 4L19 7"/></svg>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <button className="w-full py-3 rounded-xl border border-gray-600 hover:bg-white/5 font-semibold transition-colors">Select BYOP</button>
+              <p>The voice AI platform that speaks your stack.</p>
             </div>
 
-            {/* Managed Plan */}
-            <div className="bg-gradient-to-b from-[#13111C] to-[#0A0A0F] border border-violet-500/30 rounded-3xl p-8 relative shadow-2xl shadow-violet-900/20 transform md:-translate-y-4 animate-reveal delay-200">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-violet-600 text-white text-xs font-bold uppercase tracking-widest py-1 px-4 rounded-full">
-                Most Popular
-              </div>
-              <h3 className="text-2xl font-bold mb-2 text-white">Managed</h3>
-              <p className="text-gray-400 mb-6 h-12">Zero setup. We provide top-tier models and voices out of the box.</p>
-              <div className="mb-6">
-                <span className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-300 to-violet-100">$0.05</span>
-                <span className="text-gray-400">/min</span>
-              </div>
-              <ul className="space-y-4 mb-8">
-                {['Everything in BYOP', 'Premium ASR included', 'Premium LLM included', 'Premium TTS included', 'Priority support'].map((item, i) => (
-                  <li key={i} className="flex items-center gap-3 text-gray-200">
-                    <svg className="text-violet-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 13l4 4L19 7"/></svg>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <button className="w-full btn-primary py-3 rounded-xl font-semibold">Start with Managed</button>
+            <div className="ss-footer-cols">
+              {[
+                { heading: 'Product', links: ['Features', 'Providers', 'Pricing', 'Changelog'] },
+                { heading: 'Docs', links: ['Quickstart', 'API Reference', 'SDKs', 'Examples'] },
+                { heading: 'Company', links: ['About', 'Blog', 'Careers', 'Contact'] },
+                { heading: 'Legal', links: ['Privacy', 'Terms', 'Security', 'Cookies'] },
+              ].map((col, i) => (
+                <div key={i} className="ss-footer-col">
+                  <h4>{col.heading}</h4>
+                  <ul>
+                    {col.links.map((l, j) => <li key={j}><a href="#">{l}</a></li>)}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* 7. CTA Banner */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-violet-900/20 to-blue-900/20 pointer-events-none"></div>
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/50 to-transparent"></div>
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
-        
-        <div className="max-w-4xl mx-auto px-8 text-center relative z-10 animate-reveal">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">Start building in minutes</h2>
-          <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">Join forward-thinking teams using SnapServe to deploy production-ready voice AI agents.</p>
-          
-          <form className="flex flex-col sm:flex-row gap-3 justify-center max-w-lg mx-auto" onSubmit={e => e.preventDefault()}>
-            <input 
-              type="email" 
-              placeholder="Enter your email" 
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-transparent transition-all backdrop-blur-sm"
-              required
-            />
-            <button type="submit" className="btn-primary px-8 py-3.5 rounded-xl font-semibold whitespace-nowrap shadow-lg shadow-violet-500/20">
-              Get Started
-            </button>
-          </form>
-        </div>
-      </section>
-
-      {/* 8. Footer */}
-      <footer className="pt-20 pb-10 px-8 border-t border-white/5 bg-[#050508]">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-10 mb-16">
-          <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2 mb-6">
-              <div className="w-6 h-6 rounded flex items-center justify-center bg-violet-600 text-white">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12h4l3-9 5 18 3-9h5"/></svg>
-              </div>
-              <span className="font-bold">SnapServe</span>
+          <div className="ss-footer-bottom">
+            <span>© {new Date().getFullYear()} SnapServe, Inc.</span>
+            <div className="ss-footer-socials">
+              <a href="#">Twitter</a>
+              <a href="#">GitHub</a>
+              <a href="#">Discord</a>
             </div>
-            <p className="text-sm text-gray-500">The voice AI platform that speaks your stack.</p>
-          </div>
-          
-          <div>
-            <h4 className="font-semibold mb-4 text-gray-200">Product</h4>
-            <ul className="space-y-3 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Features</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Providers</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Changelog</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4 text-gray-200">Docs</h4>
-            <ul className="space-y-3 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Quickstart</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">API Reference</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">SDKs</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Examples</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4 text-gray-200">Company</h4>
-            <ul className="space-y-3 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-violet-400 transition-colors">About</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Blog</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Careers</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Contact</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4 text-gray-200">Legal</h4>
-            <ul className="space-y-3 text-sm text-gray-500">
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Terms of Service</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Cookie Policy</a></li>
-              <li><a href="#" className="hover:text-violet-400 transition-colors">Security</a></li>
-            </ul>
-          </div>
-        </div>
-        
-        <div className="max-w-7xl mx-auto pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-600">
-          <p>© {new Date().getFullYear()} SnapServe, Inc. All rights reserved.</p>
-          <div className="flex gap-6">
-            <a href="#" className="hover:text-gray-300">Twitter</a>
-            <a href="#" className="hover:text-gray-300">GitHub</a>
-            <a href="#" className="hover:text-gray-300">Discord</a>
           </div>
         </div>
       </footer>
+
     </div>
   );
 }
