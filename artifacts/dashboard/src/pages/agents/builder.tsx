@@ -757,7 +757,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           <span className="text-[10px] font-semibold uppercase tracking-widest text-foreground/70">Live Test</span>
           <span className="text-[10px] text-muted-foreground ml-auto">No phone needed</span>
         </div>
-        <WebCallPanel agentId={agent.id} agentName={agent.name} compact />
+        <WebCallPanel agentId={agent.id} agentName={agent.name} compact agent={agent} />
       </div>
 
     </div>

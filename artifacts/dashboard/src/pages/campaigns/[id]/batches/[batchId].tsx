@@ -24,6 +24,7 @@ import {
   User,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { formatDistanceToNow, format } from "date-fns";
@@ -729,8 +730,13 @@ export default function BatchWorkspacePage() {
       await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
       await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
       toast({ title: status === "running" ? "Batch started" : status === "paused" ? "Batch paused" : "Batch stopped" });
-    } catch {
-      toast({ title: "Action failed", variant: "destructive" });
+    } catch (err) {
+      const irdai = getIrdaiBlockedError(err);
+      if (irdai) {
+        toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+      } else {
+        toast({ title: "Action failed", variant: "destructive" });
+      }
     }
   }
 

@@ -8,8 +8,23 @@ import {
 import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, type CampaignFieldMappings } from "@workspace/db";
 import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 
 const router: IRouter = Router();
+
+/**
+ * Evaluate the IRDAI enforcement gate for a campaign's assigned agent. Reads the
+ * agent's latest stored irdaiComplianceStatus (no re-check at call time).
+ * Returns a not-blocked result when the campaign has no agent assigned.
+ */
+async function evaluateCampaignIrdaiGate(agentId: number | null | undefined): Promise<IrdaiGateResult> {
+  if (!agentId) return { blocked: false, missingItems: [] };
+  const [row] = await db
+    .select({ agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+  return evaluateIrdaiGate(row?.agentConfig ?? null);
+}
 
 type ConsentBasisInput = {
   basisType: "existing_customer" | "service_callback" | "fresh_marketing_consent" | "other";
@@ -483,6 +498,12 @@ router.post("/campaigns/:id/redial", async (req, res): Promise<void> => {
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
 
+  const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
+  if (irdaiGate.blocked) {
+    res.status(403).json({ error: IRDAI_BLOCKED_MESSAGE, code: IRDAI_BLOCKED_CODE, missingItems: irdaiGate.missingItems });
+    return;
+  }
+
   const noPickup = await db.select().from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
@@ -516,6 +537,12 @@ router.post("/campaigns/:id/leads/:leadId/retry", async (req, res): Promise<void
   const [lead] = await db.select().from(campaignLeadsTable)
     .where(and(eq(campaignLeadsTable.id, leadId), eq(campaignLeadsTable.campaignId, campaignId)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+  const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
+  if (irdaiGate.blocked) {
+    res.status(403).json({ error: IRDAI_BLOCKED_MESSAGE, code: IRDAI_BLOCKED_CODE, missingItems: irdaiGate.missingItems });
+    return;
+  }
 
   // Reset to pending, then fire
   const [updated] = await db.update(campaignLeadsTable)

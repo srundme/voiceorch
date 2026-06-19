@@ -52,6 +52,8 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
+import { getIrdaiBlock, getIrdaiBlockedError, type IrdaiMissingItem } from "@/lib/irdai-block";
+import { IrdaiBlockBanner } from "@/components/irdai-block-banner";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { format } from "date-fns";
 import { computePipelineCost } from "@/lib/provider-pricing";
@@ -369,7 +371,9 @@ function detectUserVars(prompt: string): string[] {
   return Array.from(found);
 }
 
-function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agentId: number; agentName: string; systemPrompt: string }) {
+function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt, agent }: { agentId: number; agentName: string; systemPrompt: string; agent?: unknown }) {
+  const irdaiBlock = getIrdaiBlock(agent as Parameters<typeof getIrdaiBlock>[0]);
+  const [irdaiServerBlock, setIrdaiServerBlock] = useState<{ message: string; missingItems: IrdaiMissingItem[] } | null>(null);
   const [status, setStatus]     = useState<CallStatus>("idle");
   const [msgs, setMsgs]         = useState<Msg[]>([]);
   const [error, setError]       = useState<string | null>(null);
@@ -438,6 +442,7 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agent
   }
 
   const startCall = useCallback(async (vars: Record<string, string> = {}) => {
+    if (irdaiBlock.blocked) return;
     setError(null); setMsgs([]); setDuration(null); setStatus("connecting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 } });
@@ -487,7 +492,7 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agent
       ws.onclose = () => { cleanup(); };
       ws.onerror = () => { setError("WebSocket connection failed. Check your API keys."); setStatus("idle"); cleanup(); };
     } catch { setError("Microphone access denied or unavailable."); setStatus("idle"); }
-  }, [agentId]);
+  }, [agentId, irdaiBlock.blocked]);
 
   const endCall = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: "end" }));
@@ -621,7 +626,15 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt }: { agent
           {error && (
             <div className="text-sm text-foreground bg-muted border border-border rounded-xl px-3 py-2">{error}</div>
           )}
-          <Button className="w-full gap-2" onClick={() => {
+          {(irdaiBlock.blocked || irdaiServerBlock) && (
+            <IrdaiBlockBanner
+              missingItems={irdaiBlock.blocked ? irdaiBlock.missingItems : (irdaiServerBlock?.missingItems ?? [])}
+              message={irdaiBlock.blocked ? undefined : irdaiServerBlock?.message}
+            />
+          )}
+          <Button className="w-full gap-2" disabled={irdaiBlock.blocked}
+            title={irdaiBlock.blocked ? "Blocked by IRDAI compliance" : undefined}
+            onClick={() => {
             if (userVars.length > 0) {
               setVarValues(Object.fromEntries(userVars.map(k => [k, varValues[k] ?? ""])));
               setShowVarsDialog(true);
@@ -3071,7 +3084,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           {/* ═══ TEST ═══════════════════════════════════════════════════ */}
           {activeTab === "test" && (
             <div className="p-5 max-w-lg">
-              <WebCallPanel agentId={agentId} agentName={agentName || agent.name} systemPrompt={agent.systemPrompt ?? ""} />
+              <WebCallPanel agentId={agentId} agentName={agentName || agent.name} systemPrompt={agent.systemPrompt ?? ""} agent={agent} />
             </div>
           )}
 
@@ -3184,13 +3197,17 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-border text-muted-foreground" onClick={() => setOutboundDialogOpen(false)}>Cancel</Button>
-            <Button className="bg-primary hover:opacity-90 text-primary-foreground" disabled={!toNumber.trim() || initiateOutbound.isPending}
+            <Button className="bg-primary hover:opacity-90 text-primary-foreground" disabled={!toNumber.trim() || initiateOutbound.isPending || getIrdaiBlock(agent).blocked}
+              title={getIrdaiBlock(agent).blocked ? "Blocked by IRDAI compliance" : undefined}
               onClick={() => initiateOutbound.mutate(
                 { data: { agentId: agent.id, toNumber: toNumber.trim(), webhookBaseUrl: window.location.origin } },
                 {
                   onSuccess: () => { toast({ title: "Call initiated", description: `Dialing ${toNumber} via ${agent.name}.` }); setOutboundDialogOpen(false); setToNumber(""); },
                   onError: (err: unknown) => {
-                    if (isKycError(err)) {
+                    const irdai = getIrdaiBlockedError(err);
+                    if (irdai) {
+                      toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+                    } else if (isKycError(err)) {
                       toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
                       navigate("/app/kyc");
                     } else if (isDestinationUnverifiedError(err)) {

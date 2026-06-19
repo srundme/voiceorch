@@ -5,6 +5,7 @@ import { getAuth } from "../lib/auth-compat.js";
 import { issueTicket } from "../lib/webcall-ticket.js";
 import { z } from "zod/v4";
 import { logger } from "../lib/logger.js";
+import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
 
 const router = Router();
 
@@ -36,13 +37,27 @@ router.post("/webcall/ticket", async (req, res) => {
   const { agentId } = parsed.data;
 
   const [agent] = await db
-    .select({ userId: agentsTable.userId })
+    .select({ userId: agentsTable.userId, agentConfig: agentsTable.agentConfig })
     .from(agentsTable)
     .where(eq(agentsTable.id, agentId));
 
   if (!agent || agent.userId !== userId) {
     logger.warn({ agentId, userId }, "webcall ticket refused: agent not found or not owned");
     res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  // IRDAI compliance enforcement gate. Reads the agent's latest stored
+  // irdaiComplianceStatus (no re-check at call time). Blocks the web call when
+  // IRDAI is enabled AND any required disclosure is still missing.
+  const irdaiGate = evaluateIrdaiGate(agent.agentConfig);
+  if (irdaiGate.blocked) {
+    logger.info({ agentId, missing: irdaiGate.missingItems.map((m) => m.requirement) }, "web call blocked by IRDAI compliance");
+    res.status(403).json({
+      error: IRDAI_BLOCKED_MESSAGE,
+      code: IRDAI_BLOCKED_CODE,
+      missingItems: irdaiGate.missingItems,
+    });
     return;
   }
 

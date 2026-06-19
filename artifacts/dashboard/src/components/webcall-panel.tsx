@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, PhoneOff, Volume2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { getIrdaiBlock, getIrdaiBlockedError, type IrdaiMissingItem } from "@/lib/irdai-block";
+import { IrdaiBlockBanner } from "@/components/irdai-block-banner";
 
 type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended";
 interface Msg { speaker: "user" | "agent"; text: string }
@@ -48,14 +50,17 @@ function AgentText({ text, highlight }: { text: string; highlight: string }) {
 }
 
 export function WebCallPanel({
-  agentId, agentName, autostart, callbackId, compact,
+  agentId, agentName, autostart, callbackId, compact, agent,
 }: {
   agentId: number;
   agentName: string;
   autostart?: boolean;
   callbackId?: number;
   compact?: boolean;
+  agent?: unknown;
 }) {
+  const irdaiBlock = getIrdaiBlock(agent as Parameters<typeof getIrdaiBlock>[0]);
+  const [irdaiServerBlock, setIrdaiServerBlock] = useState<{ message: string; missingItems: IrdaiMissingItem[] } | null>(null);
   const [status, setStatus]               = useState<CallStatus>("idle");
   const [msgs, setMsgs]                   = useState<Msg[]>([]);
   const [error, setError]                 = useState<string | null>(null);
@@ -166,6 +171,7 @@ export function WebCallPanel({
 
   const startCall = useCallback(async () => {
     if (wsRef.current || (statusRef.current !== "idle" && statusRef.current !== "ended")) return;
+    if (irdaiBlock.blocked) return;
     setError(null);
     setMsgs([]);
     setDuration(null);
@@ -192,7 +198,22 @@ export function WebCallPanel({
         headers: ticketHeaders,
         body: JSON.stringify({ agentId }),
       });
-      if (!ticketRes.ok) throw new Error("Failed to obtain webcall ticket — check your session.");
+      if (!ticketRes.ok) {
+        type TicketErrBody = { code?: string; error?: string; missingItems?: IrdaiMissingItem[] };
+        let body: TicketErrBody | null = null;
+        try { body = await ticketRes.json() as TicketErrBody; } catch { /* non-JSON */ }
+        if (body?.code === "IRDAI_BLOCKED") {
+          setIrdaiServerBlock({
+            message: body.error ?? "Call blocked by IRDAI compliance.",
+            missingItems: Array.isArray(body.missingItems) ? body.missingItems : [],
+          });
+          setStatus("idle");
+          streamRef.current?.getTracks().forEach(t => t.stop());
+          streamRef.current = null;
+          return;
+        }
+        throw new Error("Failed to obtain webcall ticket — check your session.");
+      }
       const { ticket } = await ticketRes.json() as { ticket: string };
       const qsParts: string[] = [`ticket=${encodeURIComponent(ticket)}`];
       if (callerUserId) qsParts.push(`callerId=${encodeURIComponent(callerUserId)}`);
@@ -328,7 +349,7 @@ export function WebCallPanel({
       setError("Microphone access was denied or is unavailable.");
       setStatus("idle");
     }
-  }, [agentId, callerUserId, callbackId]);
+  }, [agentId, callerUserId, callbackId, irdaiBlock.blocked]);
 
   const endCall = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: "end" }));
@@ -347,11 +368,18 @@ export function WebCallPanel({
   const keysReady = !keyLoading && keyStatus !== null && missingKeys.length === 0;
 
   useEffect(() => {
-    if (autostart && keysReady && status === "idle" && !hasAutoStarted.current) {
+    if (autostart && keysReady && status === "idle" && !hasAutoStarted.current && !irdaiBlock.blocked) {
       hasAutoStarted.current = true;
       void startCall();
     }
-  }, [autostart, keysReady, status, startCall]);
+  }, [autostart, keysReady, status, startCall, irdaiBlock.blocked]);
+
+  const irdaiBanner = irdaiBlock.blocked
+    ? { message: undefined, missingItems: irdaiBlock.missingItems }
+    : irdaiServerBlock
+      ? { message: irdaiServerBlock.message, missingItems: irdaiServerBlock.missingItems }
+      : null;
+  const callDisabled = irdaiBlock.blocked;
 
   const statusConfig: Record<CallStatus, { label: string; dot: string; pulse: boolean }> = {
     idle:       { label: "Ready to test",  dot: "bg-muted-foreground/30", pulse: false },
@@ -432,6 +460,13 @@ export function WebCallPanel({
           )}
         </div>
 
+        {/* IRDAI compliance block */}
+        {irdaiBanner && (
+          <div className="mx-3 mt-2 shrink-0">
+            <IrdaiBlockBanner missingItems={irdaiBanner.missingItems} message={irdaiBanner.message} compact />
+          </div>
+        )}
+
         {/* Error */}
         {error && (
           <div className="mx-3 mt-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 shrink-0">
@@ -470,8 +505,8 @@ export function WebCallPanel({
             <Button
               className="w-full h-9 gap-2 text-xs"
               onClick={() => void startCall()}
-              disabled={keyLoading || !keysReady}
-              title={!keysReady && !keyLoading ? `Missing: ${missingKeys.join(", ")}` : undefined}
+              disabled={keyLoading || !keysReady || callDisabled}
+              title={callDisabled ? "Blocked by IRDAI compliance" : (!keysReady && !keyLoading ? `Missing: ${missingKeys.join(", ")}` : undefined)}
             >
               {keyLoading
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking keys…</>
@@ -520,6 +555,9 @@ export function WebCallPanel({
               {error}
             </div>
           )}
+          {irdaiBanner && (
+            <IrdaiBlockBanner missingItems={irdaiBanner.missingItems} message={irdaiBanner.message} />
+          )}
           <div ref={transcriptRef} className="h-64 overflow-y-auto space-y-3 pr-1 scroll-smooth">
             {msgs.length === 0 && !streamingText ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-2">
@@ -538,8 +576,8 @@ export function WebCallPanel({
               <Button
                 className="flex-1 gap-2"
                 onClick={() => void startCall()}
-                disabled={keyLoading || !keysReady}
-                title={!keysReady && !keyLoading ? `Missing keys: ${missingKeys.join(", ")}` : undefined}
+                disabled={keyLoading || !keysReady || callDisabled}
+                title={callDisabled ? "Blocked by IRDAI compliance" : (!keysReady && !keyLoading ? `Missing keys: ${missingKeys.join(", ")}` : undefined)}
               >
                 {keyLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking…</>

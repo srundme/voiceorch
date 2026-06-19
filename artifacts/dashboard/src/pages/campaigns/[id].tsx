@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import {
   ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
   ChevronRight, Calendar, Trash2, Users, Clock, AlertCircle,
@@ -257,8 +258,13 @@ function CreateBatchWizard({
       await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
       toast({ title: "Batch created", description: csvData ? `${csvData.rows.length} leads imported.` : "Batch created." });
       close();
-    } catch {
-      toast({ title: "Failed to create batch", variant: "destructive" });
+    } catch (err) {
+      const irdai = getIrdaiBlockedError(err);
+      if (irdai) {
+        toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+      } else {
+        toast({ title: "Failed to create batch", variant: "destructive" });
+      }
     }
   }
 
@@ -754,8 +760,13 @@ export default function CampaignDetailPage() {
     try {
       await update.mutateAsync({ id: campaignId, data: { status } });
       await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
-    } catch {
-      toast({ title: "Failed to update status", variant: "destructive" });
+    } catch (err) {
+      const irdai = getIrdaiBlockedError(err);
+      if (irdai) {
+        toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+      } else {
+        toast({ title: "Failed to update status", variant: "destructive" });
+      }
     }
   }
 

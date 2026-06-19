@@ -20,6 +20,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { dispatchWebhooks } from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
+import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE } from "../services/irdai/gate.js";
 
 function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?: number; ttsFirstChunkMs?: number } {
   if (!body || typeof body !== "object") return {};
@@ -101,6 +102,20 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  // IRDAI compliance enforcement gate. Reads the agent's latest stored
+  // irdaiComplianceStatus (no re-check at call time). Blocks the dial-out when
+  // IRDAI is enabled AND any required disclosure is still missing.
+  const irdaiGate = evaluateIrdaiGate(agent.agentConfig);
+  if (irdaiGate.blocked) {
+    req.log.info({ agentId, missing: irdaiGate.missingItems.map((m) => m.requirement) }, "Outbound call blocked by IRDAI compliance");
+    res.status(403).json({
+      error: IRDAI_BLOCKED_MESSAGE,
+      code: IRDAI_BLOCKED_CODE,
+      missingItems: irdaiGate.missingItems,
+    });
+    return;
+  }
 
   // TRAI compliance pre-dial gate (calling-hours + suppression list).
   // Only runs when the agent has TRAI enabled. Blocks before reaching any provider.

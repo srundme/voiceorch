@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
 import {
   db, campaignsTable, campaignBatchesTable, campaignLeadsTable, callsTable,
-  leadTimelineTable, batchImportRunsTable,
+  leadTimelineTable, batchImportRunsTable, agentsTable,
   type CampaignFieldMappings,
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql } from "drizzle-orm";
@@ -14,8 +14,23 @@ import {
   checkDuplicate, createImportSummary,
   type DuplicatePolicy, type DuplicateReportEntry,
 } from "../services/duplicate-detection.js";
+import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 
 const router: IRouter = Router();
+
+/**
+ * Evaluate the IRDAI enforcement gate for a campaign's assigned agent. Reads the
+ * agent's latest stored irdaiComplianceStatus (no re-check at call time).
+ * Returns a not-blocked result when the campaign has no agent assigned.
+ */
+async function evaluateCampaignIrdaiGate(agentId: number | null | undefined): Promise<IrdaiGateResult> {
+  if (!agentId) return { blocked: false, missingItems: [] };
+  const [row] = await db
+    .select({ agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+  return evaluateIrdaiGate(row?.agentConfig ?? null);
+}
 
 type CampaignRow = typeof campaignsTable.$inferSelect;
 type BatchRow    = typeof campaignBatchesTable.$inferSelect;
@@ -275,10 +290,14 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
 
   const [fresh] = await db.select().from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batch!.id));
 
-  if (fresh && fresh.scheduledStartAt && fresh.scheduledStartAt <= new Date()) {
-    await db.update(campaignBatchesTable).set({ status: "running" }).where(eq(campaignBatchesTable.id, fresh.id));
-    await fireStartBatch(fresh, campaign);
-  } else if (body.autoStart) {
+  const wantsImmediateStart =
+    (fresh && fresh.scheduledStartAt && fresh.scheduledStartAt <= new Date()) || !!body.autoStart;
+  if (wantsImmediateStart) {
+    const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
+    if (irdaiGate.blocked) {
+      res.status(403).json({ error: IRDAI_BLOCKED_MESSAGE, code: IRDAI_BLOCKED_CODE, missingItems: irdaiGate.missingItems });
+      return;
+    }
     await db.update(campaignBatchesTable).set({ status: "running" }).where(eq(campaignBatchesTable.id, fresh!.id));
     await fireStartBatch(fresh!, campaign);
   }
@@ -431,6 +450,15 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
   if (!batch) { res.status(404).json({ error: "Not found" }); return; }
 
   const body = req.body as { status?: string; scheduledStartAt?: string | null };
+
+  if (body.status === "running" && batch.status !== "running") {
+    const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
+    if (irdaiGate.blocked) {
+      res.status(403).json({ error: IRDAI_BLOCKED_MESSAGE, code: IRDAI_BLOCKED_CODE, missingItems: irdaiGate.missingItems });
+      return;
+    }
+  }
+
   const updateData: Partial<typeof campaignBatchesTable.$inferInsert> = {};
   if (body.status) updateData.status = body.status;
   if ("scheduledStartAt" in body) {
@@ -589,6 +617,12 @@ router.post("/campaigns/:id/batches/:batchId/redial", async (req, res): Promise<
 
   const batch = await requireBatch(batchId, campaignId);
   if (!batch) { res.status(404).json({ error: "Not found" }); return; }
+
+  const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
+  if (irdaiGate.blocked) {
+    res.status(403).json({ error: IRDAI_BLOCKED_MESSAGE, code: IRDAI_BLOCKED_CODE, missingItems: irdaiGate.missingItems });
+    return;
+  }
 
   const noPickup = await db.select().from(campaignLeadsTable)
     .where(and(

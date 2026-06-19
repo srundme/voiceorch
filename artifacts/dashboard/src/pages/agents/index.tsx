@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
+import { getIrdaiBlock, getIrdaiBlockedError } from "@/lib/irdai-block";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 
 export default function AgentsList() {
@@ -84,6 +85,10 @@ export default function AgentsList() {
     );
   };
 
+  const outboundIrdaiBlock = getIrdaiBlock(
+    outboundAgent ? (agents ?? []).find((a) => a.id === outboundAgent.id) : null,
+  );
+
   const handleOutboundSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!outboundAgent || !toNumber.trim()) return;
@@ -97,7 +102,10 @@ export default function AgentsList() {
           setToNumber("");
         },
         onError: (err: unknown) => {
-          if (isKycError(err)) {
+          const irdai = getIrdaiBlockedError(err);
+          if (irdai) {
+            toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+          } else if (isKycError(err)) {
             toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
             navigate("/app/kyc");
           } else if (isDestinationUnverifiedError(err)) {
@@ -359,7 +367,10 @@ export default function AgentsList() {
                 setOutboundAgent(null);
                 setToNumber("");
               },
-              onError: (err) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }),
+              onError: (err) => {
+                const irdai = getIrdaiBlockedError(err);
+                toast({ title: irdai ? "Call blocked" : "Error", description: irdai ? irdai.message : formatApiError(err), variant: "destructive" });
+              },
             },
           );
         }}
@@ -397,7 +408,8 @@ export default function AgentsList() {
               </Button>
               <Button
                 type="submit"
-                disabled={initiateOutbound.isPending || !toNumber.trim()}
+                disabled={initiateOutbound.isPending || !toNumber.trim() || outboundIrdaiBlock.blocked}
+                title={outboundIrdaiBlock.blocked ? "Blocked by IRDAI compliance" : undefined}
                 className="gap-2"
               >
                 <PhoneCall className="h-3.5 w-3.5" />

@@ -719,7 +719,7 @@ export default function AgentDetail() {
 
           {/* ── Test Call ── */}
           <TabsContent value="test" className="m-0">
-            <WebCallPanel agentId={agent.id} agentName={agent.name} autostart={isAutostart} callbackId={urlCallbackId} />
+            <WebCallPanel agentId={agent.id} agentName={agent.name} autostart={isAutostart} callbackId={urlCallbackId} agent={agent} />
           </TabsContent>
 
           {/* ── Configuration ── */}
