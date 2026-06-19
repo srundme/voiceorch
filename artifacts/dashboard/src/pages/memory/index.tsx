@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Brain, Search, Phone, FileText, Layers, Clock, MoreVertical, Plus, Bot,
   Loader2, ChevronRight, Pencil, Calendar,
-  ArrowDownLeft, ArrowUpRight, Globe, Sparkles, Star, ArrowRight, ExternalLink,
+  ArrowDownLeft, ArrowUpRight, Globe, Star, ArrowRight, ExternalLink,
   MapPin, DollarSign, Bell, HelpCircle, User, Tag, BarChart3, Hash, MessageSquare,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -717,7 +717,6 @@ function NoAgentsState() {
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 export default function MemoryPage() {
   const [search, setSearch]           = useState("");
-  const [agentFilter, setAgentFilter] = useState("all");
   const [selectedId, setSelectedId]   = useState<number | null>(null);
 
   const { toast } = useToast();
@@ -739,11 +738,10 @@ export default function MemoryPage() {
 
   const filtered = useMemo(() => {
     return summaries.filter(s => {
-      if (agentFilter !== "all" && String(s.agentId) !== agentFilter) return false;
       if (search.trim() && !s.agentName.toLowerCase().includes(search.trim().toLowerCase())) return false;
       return true;
     });
-  }, [summaries, agentFilter, search]);
+  }, [summaries, search]);
 
   // Keep a valid selection
   const selected = useMemo(() => {
@@ -755,18 +753,9 @@ export default function MemoryPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0 gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Brain className="w-4 h-4 text-muted-foreground/60" />
-          <div>
-            <h1 className="font-semibold text-foreground text-[14px]">Memory / CRM</h1>
-            <p className="text-[11.5px] text-muted-foreground mt-0.5">Per-agent memory — facts, episodes & call history rolled up by AI agent</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-elevated">
-          <Sparkles className="w-3 h-3 text-muted-foreground/50" />
-          <span className="text-[10.5px] text-muted-foreground font-medium">Exclusive to SnapServe</span>
-        </div>
+      <div className="flex items-center px-5 py-4 border-b border-border shrink-0 gap-3">
+        <Brain className="w-4 h-4 text-muted-foreground/60" />
+        <h1 className="font-semibold text-foreground text-[14px]">Memory / CRM</h1>
       </div>
 
       {/* Body: two panels */}
@@ -785,16 +774,6 @@ export default function MemoryPage() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <select
-              className="w-full h-8 text-xs px-2.5 rounded-md border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              value={agentFilter}
-              onChange={e => setAgentFilter(e.target.value)}
-            >
-              <option value="all">All agents</option>
-              {summaries.map(s => (
-                <option key={s.agentId} value={s.agentId}>{s.agentName}</option>
-              ))}
-            </select>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground tabular-nums px-0.5">
               {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
               {filtered.length} {filtered.length === 1 ? "agent" : "agents"}
