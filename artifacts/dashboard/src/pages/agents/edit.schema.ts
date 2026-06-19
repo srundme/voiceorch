@@ -95,6 +95,7 @@ export const agentFormSchema = z.object({
   asrEndpointingSilenceMs: z.number().min(100).max(2000).optional(),
   llmMaxTokens: z.number().min(1).max(16000).optional().nullable(),
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
+  linearDelayMs: z.number().min(0).max(2000).optional(),
 
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);

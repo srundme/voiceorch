@@ -68,7 +68,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack,
     preferredManagedNumber,
-    asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars,
+    asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -92,6 +92,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 400) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
+  if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
@@ -324,6 +325,7 @@ export default function AgentEdit() {
       asrEndpointingSilenceMs: 400,
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
+      linearDelayMs: 0,
     },
   });
 
@@ -531,6 +533,7 @@ export default function AgentEdit() {
       asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 400,
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
+      linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
     });
   }, [agent]);
 
@@ -1140,6 +1143,20 @@ export default function AgentEdit() {
                     </FormControl>
                     <FormDescription className="text-[11px]">
                       Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 15. Range: 5–200.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="linearDelayMs" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Linear Delay (ms)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={0} max={2000} step={50}
+                        value={field.value ?? 0}
+                        onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">
+                      Extra buffer added after the transcript arrives and before the LLM starts responding. Accounts for callers who pause mid-sentence. Default: 0ms (disabled).
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
