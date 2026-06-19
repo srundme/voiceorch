@@ -144,6 +144,14 @@ export async function createSession(params: {
     effectiveSystemPrompt += `\n\nIf the caller asks you to speak in English, switch immediately and continue in English.`;
   }
 
+  // TTS output formatting — always injected so the LLM never produces patterns that
+  // cause text-to-speech to spell out letters (e.g. "T. Nagar" → T N A G A R).
+  effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:
+- Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
+- Never use ALL-CAPS words or acronyms (AMD, STT, LLM etc.) — write them in lowercase or spell them out naturally.
+- Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
+- Use only plain conversational sentences suitable for speech.`;
+
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; hipaa?: boolean; trai?: boolean } | undefined;
   if (complianceCfg?.irdai) {

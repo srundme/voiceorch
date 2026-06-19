@@ -1250,9 +1250,30 @@ export async function handleWebCallWebSocket(
         return out;
       }
       // ──────────────────────────────────────────────────────────────────────
+      /**
+       * Normalize LLM text for TTS so abbreviations are not spelled letter-by-letter.
+       *
+       * Problems this solves:
+       *   "T. Nagar"  → TTS reads "T N A G A R" (treats dot as abbreviation marker)
+       *   "AMD", "STT" → TTS spells out each letter
+       *
+       * Fixes:
+       *   1. Strip period from single-letter abbreviations: "T. " → "T "
+       *      (common in Indian place names: T. Nagar, R.K. Salai, M.G. Road)
+       *   2. Lowercase isolated ALL-CAPS words 2–5 chars so TTS reads them as
+       *      a word instead of spelling each letter: "AMD" → "amd"
+       */
+      function normalizeTtsText(raw: string): string {
+        // "T. Nagar" → "T Nagar", "R.K. Salai" → "R K Salai"
+        let out = raw.replace(/\b([A-Z])\.\s*/g, "$1 ");
+        // "AMD" → "amd", "STT" → "stt" (2-5 consecutive uppercase letters standing alone)
+        out = out.replace(/\b([A-Z]{2,5})\b/g, (m) => m.toLowerCase());
+        // collapse any double-spaces introduced by the above
+        return out.replace(/  +/g, " ").trim();
+      }
 
       function queueSentence(text: string) {
-        const t = text.trim();
+        const t = normalizeTtsText(text);
         if (!t) return;
         if (_llmStreamActive && _tLlmFirstClause === null) {
           _tLlmFirstClause = performance.now();
