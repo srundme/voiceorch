@@ -10,7 +10,7 @@ import {
   getListAgentsQueryKey,
   getListCallsQueryKey,
 } from "@workspace/api-client-react";
-import { useMinuteRatesMap, computeAgentRateCents } from "@/hooks/use-minute-rates";
+import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,7 @@ export default function AgentsList() {
     query: { queryKey: getListAgentsQueryKey() }
   });
   const rateMap = useMinuteRatesMap();
+  const userProviderNames = useUserProviderNames();
   
   const createAgent = useCreateAgent();
   const toggleAgent = useToggleAgent();
@@ -292,7 +293,7 @@ export default function AgentsList() {
 
                   {/* Per-minute cost badge */}
                   {(() => {
-                    const costCents = computeAgentRateCents(rateMap, agent as any);
+                    const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
                     if (costCents <= 0) return null;
                     return (
                       <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 rounded-md border border-border bg-muted/30 w-fit text-xs">

@@ -69,7 +69,7 @@ import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
 } from "@/lib/agent-providers";
-import { useMinuteRatesMap, computeAgentRateCents } from "@/hooks/use-minute-rates";
+import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { WebCallPanel } from "@/components/webcall-panel";
 import { SimulationTab } from "./builder/SimulationTab";
@@ -298,6 +298,7 @@ type CardSection = "transcriber" | "model" | "voice";
 function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
   const [openCard, setOpenCard] = useState<CardSection | null>(null);
   const [, navigate] = useLocation();
+  const userProviderNames = useUserProviderNames();
 
   const asrProvider           = form.watch("asrProvider");
   const llmProvider           = form.watch("llmProvider");
@@ -384,7 +385,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsVoiceLabel  = (!ttsVoice || ttsVoice === "__custom__") ? "" : (curatedVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice);
   const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
-  const costCents = agent ? computeAgentRateCents(rateMap, agent as any) : null;
+  const costCents = agent ? computeAgentRateCents(rateMap, agent as any, userProviderNames) : null;
 
   const toggle = (c: CardSection) => setOpenCard(prev => prev === c ? null : c);
 
@@ -2440,6 +2441,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const createAgent = useCreateAgent();
   const { toast } = useToast();
+  const userProviderNames = useUserProviderNames();
 
   const handleCreate = () => {
     createAgent.mutate(
@@ -2481,7 +2483,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
         )}
         {filtered.map(agent => {
           const isSelected = agent.id === selectedId;
-          const costCents = computeAgentRateCents(rateMap, agent as any);
+          const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
           return (
             <button key={agent.id} onClick={() => onSelect(agent.id)}
               className={`w-full text-left px-3 py-2.5 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0 ${isSelected ? "bg-accent" : ""}`}>
