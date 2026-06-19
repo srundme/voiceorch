@@ -1304,4 +1304,44 @@ router.post("/admin/dpdp/erasure", async (req, res): Promise<void> => {
   }
 });
 
+// ─── GitHub Sync Status ───────────────────────────────────────────────────────
+
+router.get("/admin/github-sync", async (req, res): Promise<void> => {
+  const token = process.env["GITHUB_PERSONAL_ACCESS_TOKEN"];
+  const repo  = "srundme/voiceorch";
+  try {
+    const ghRes = await fetch(`https://api.github.com/repos/${repo}/commits/main`, {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "VoiceOrch-Admin",
+        ...(token ? { Authorization: `token ${token}` } : {}),
+      },
+    });
+    if (!ghRes.ok) {
+      res.status(502).json({ error: `GitHub API returned ${ghRes.status}` });
+      return;
+    }
+    const data = await ghRes.json() as {
+      sha: string;
+      commit: {
+        message: string;
+        author: { name: string; date: string };
+      };
+      html_url: string;
+    };
+    res.json({
+      sha:       data.sha,
+      shortSha:  data.sha.slice(0, 7),
+      message:   data.commit.message.split("\n")[0],
+      author:    data.commit.author.name,
+      pushedAt:  data.commit.author.date,
+      url:       data.html_url,
+      repo,
+    });
+  } catch (err) {
+    req.log.error({ err }, "admin/github-sync failed");
+    res.status(502).json({ error: "Failed to reach GitHub API" });
+  }
+});
+
 export default router;

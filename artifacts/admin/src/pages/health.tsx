@@ -12,8 +12,124 @@ import {
   Phone,
   BarChart3,
   Clock,
+  GitBranch,
+  ExternalLink,
+  Rocket,
 } from "lucide-react";
 import { useState } from "react";
+
+// ── GitHub sync ──────────────────────────────────────────────────────────────
+
+interface GitHubSyncData {
+  sha: string;
+  shortSha: string;
+  message: string;
+  author: string;
+  pushedAt: string;
+  url: string;
+  repo: string;
+}
+
+function useGitHubSync() {
+  return useQuery({
+    queryKey: ["admin", "github-sync"],
+    queryFn: () => adminFetch<GitHubSyncData>("/github-sync"),
+    refetchInterval: 60_000,
+  });
+}
+
+function GitHubSyncCard() {
+  const { data, isLoading, isError, refetch, isFetching } = useGitHubSync();
+
+  const ageMs   = data ? Date.now() - new Date(data.pushedAt).getTime() : null;
+  const ageMin  = ageMs != null ? Math.floor(ageMs / 60_000) : null;
+  const ageStr  = ageMs == null ? null
+    : ageMs < 60_000         ? "just now"
+    : ageMin === 1           ? "1 minute ago"
+    : ageMin! < 60           ? `${ageMin} minutes ago`
+    : ageMin! < 120          ? "1 hour ago"
+    : `${Math.floor(ageMin! / 60)} hours ago`;
+
+  // Railway deploys ~2-3 min after push
+  const likelyDeployed = ageMs != null && ageMs > 3 * 60_000;
+
+  return (
+    <Card className="border-border shadow-sm">
+      <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <GitBranch className="h-4 w-4 text-zinc-400" />
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            GitHub Sync
+          </CardTitle>
+        </div>
+        <div className="flex items-center gap-2">
+          {data && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${
+              likelyDeployed
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+            }`}>
+              <Rocket className="h-2.5 w-2.5" />
+              {likelyDeployed ? "DEPLOYED" : "DEPLOYING…"}
+            </span>
+          )}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border border-border hover:bg-muted transition-colors disabled:opacity-40"
+          >
+            <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="text-xs text-muted-foreground animate-pulse">Fetching latest commit…</div>
+        ) : isError ? (
+          <div className="text-xs text-red-400">Failed to reach GitHub API. Check GITHUB_PERSONAL_ACCESS_TOKEN.</div>
+        ) : data ? (
+          <div className="space-y-3">
+            {/* Commit row */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{data.message}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  <span className="font-mono">{data.shortSha}</span>
+                  {" · "}
+                  {data.author}
+                  {" · "}
+                  {ageStr}
+                </p>
+              </div>
+              <a
+                href={data.url}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+
+            {/* Status bar */}
+            <div className="rounded-md bg-muted/40 border border-border px-3 py-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                <span className="font-mono text-foreground">{data.repo}</span> · main
+              </span>
+              <span className={likelyDeployed ? "text-emerald-400" : "text-yellow-400"}>
+                {likelyDeployed
+                  ? "Railway likely live"
+                  : `Waiting for Railway (~${Math.max(0, 3 - Math.floor((ageMs ?? 0) / 60_000))} min)`}
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Health check ─────────────────────────────────────────────────────────────
 
 interface HealthCheck {
   status: string;
@@ -106,6 +222,9 @@ export default function HealthChecklistPage() {
           </button>
         </div>
       </div>
+
+      {/* GitHub Sync */}
+      <GitHubSyncCard />
 
       {/* Overall status card */}
       <Card className={`border ${overallBg}`}>
