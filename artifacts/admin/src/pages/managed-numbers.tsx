@@ -122,13 +122,11 @@ export default function ManagedNumbers() {
           ) : available.length === 0 ? (
             <div className="flex items-start gap-2 text-sm py-2">
               <Info className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-              {fetchError ? (
-                <span className="text-destructive">{fetchError}</span>
-              ) : (
-                <span className="text-muted-foreground">
-                  No numbers registered in the master Vobiz account.
-                </span>
-              )}
+              <span className="text-muted-foreground">
+                No numbers found via the Vobiz partner API.{" "}
+                {fetchError && <span className="text-xs text-muted-foreground/70">({fetchError})</span>}
+                {" "}If you have a Vobiz number, enter it manually in the <strong>Active Pool</strong> section above using the +&nbsp;Add field.
+              </span>
             </div>
           ) : (
             <div className="space-y-2">
