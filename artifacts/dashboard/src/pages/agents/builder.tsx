@@ -3848,16 +3848,42 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 /* ── Main page ──────────────────────────────────────────────────────────────── */
 
+const LAST_AGENT_ID_KEY = "voiceorch:lastAgentId";
+
 export default function AgentBuilder() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
   const createAgent = useCreateAgent();
   const { toast } = useToast();
   const rateMap = useMinuteRatesMap();
+  const { data: agents, isLoading: agentsLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
 
   const selectedId = params.id ? parseInt(params.id, 10) : null;
 
-  const handleSelect = (id: number) => navigate(`/app/agents/${id}`);
+  const handleSelect = (id: number) => {
+    try { localStorage.setItem(LAST_AGENT_ID_KEY, String(id)); } catch { /* ignore */ }
+    navigate(`/app/agents/${id}`);
+  };
+
+  // Persist the currently-viewed agent so it can be restored next session.
+  useEffect(() => {
+    if (selectedId == null) return;
+    try { localStorage.setItem(LAST_AGENT_ID_KEY, String(selectedId)); } catch { /* ignore */ }
+  }, [selectedId]);
+
+  // Auto-select an agent when landing on the page with none selected.
+  useEffect(() => {
+    if (selectedId != null) return;
+    if (agentsLoading) return;
+    if (!agents || agents.length === 0) return;
+    let stored: number | null = null;
+    try {
+      const raw = localStorage.getItem(LAST_AGENT_ID_KEY);
+      stored = raw ? parseInt(raw, 10) : null;
+    } catch { /* ignore */ }
+    const target = (stored != null && agents.some(a => a.id === stored)) ? stored : agents[0].id;
+    navigate(`/app/agents/${target}`, { replace: true });
+  }, [selectedId, agentsLoading, agents, navigate]);
 
   const handleCreate = () => {
     createAgent.mutate(
@@ -3871,7 +3897,9 @@ export default function AgentBuilder() {
       <AgentListPanel selectedId={selectedId} onSelect={handleSelect} rateMap={rateMap} />
       {selectedId
         ? <AgentEditorPanel agentId={selectedId} />
-        : <EmptyState onCreate={handleCreate} />
+        : (agentsLoading || (agents && agents.length > 0))
+          ? <div className="flex-1" />
+          : <EmptyState onCreate={handleCreate} />
       }
     </div>
   );
