@@ -1,0 +1,100 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Buffering
+
+> Control how text is buffered before speech generation to balance prosody and latency
+
+Cartesia supports two buffering modes for streaming TTS: **managed buffering** and **custom buffering**. The right choice depends on how much control you need over the prosody-latency tradeoff.
+
+<Tip>
+  **Start with managed buffering.** It produces natural-sounding speech with minimal integration effort. Switch to custom buffering only if you need fine-grained control.
+</Tip>
+
+## Managed buffering
+
+Stream LLM tokens directly to Cartesia and let the API decide when to start generating speech. This is the same approach used in Cartesia's managed voice agents platform.
+
+Set `max_buffer_delay_ms` to a value greater than 0 (the default is 3000ms) and stream text token by token.
+
+```json theme={null}
+{
+  "model_id": "sonic-3.5",
+  "transcript": "Hello",
+  "voice": {
+    "mode": "id",
+    "id": "a0e99841-438c-4a64-b679-ae501e7d6091"
+  },
+  "context_id": "my-context",
+  "continue": true,
+  "max_buffer_delay_ms": 3000
+}
+```
+
+The API buffers incoming text until it has enough context to produce high-quality speech, or until `max_buffer_delay_ms` elapses—whichever comes first. This produces results similar to sentence-level aggregation while still optimizing for latency.
+
+**When to use managed buffering:**
+
+* You're streaming LLM output token by token
+* You want natural-sounding speech without building buffering logic
+* You want a simple integration with good defaults
+
+## Custom buffering
+
+Handle buffering yourself and send complete phrases or sentences to Cartesia. Set `max_buffer_delay_ms` to `0` so the API generates speech immediately from whatever you provide.
+
+```json theme={null}
+{
+  "model_id": "sonic-3.5",
+  "transcript": "Hello, my name is Sonic.",
+  "voice": {
+    "mode": "id",
+    "id": "a0e99841-438c-4a64-b679-ae501e7d6091"
+  },
+  "context_id": "my-context",
+  "continue": true,
+  "max_buffer_delay_ms": 0
+}
+```
+
+With custom buffering, you control the prosody-latency tradeoff directly:
+
+* **Full sentences** produce the best prosody but add latency while you wait for the sentence to complete.
+* **Partial sentences** reduce latency but may result in less natural speech at chunk boundaries.
+
+**When to use custom buffering:**
+
+* You need precise control over when speech generation starts
+* You have your own sentence detection or text aggregation logic
+* You're optimizing for a specific latency target
+
+## Avoid the middle ground
+
+A common mistake is to aggregate text client-side into sentences or phrases *and* use the default `max_buffer_delay_ms` of 3000ms. This can cause unnecessary latency—after receiving a complete sentence, the API may wait up to 3000ms for additional input before generating speech.
+
+Pick one approach:
+
+* **Managed buffering:** Stream tokens with `max_buffer_delay_ms > 0` and let Cartesia handle aggregation.
+* **Custom buffering:** Aggregate text yourself and set `max_buffer_delay_ms = 0`.
+
+## Configuration reference
+
+<ParamField path="max_buffer_delay_ms" type="number" default="3000">
+  Maximum time in milliseconds the API waits for additional input before generating speech from buffered text.
+
+  * **Range:** 0–5000ms
+  * **Default:** 3000ms
+  * Set to `0` for custom buffering (no server-side buffering)
+  * Set to `> 0` for managed buffering
+</ParamField>
+
+<Warning>
+  If you use `speed` or `volume` [SSML tags](/build-with-cartesia/capability-guides/ssml-tags) with managed buffering, make sure decimal values are not split across tokens. Submitting `1.0` as `1`, `.`, `0` will cause parsing errors.
+</Warning>
+
+## Tips for best results
+
+* **End sentences with punctuation.** Without closing punctuation (`.`, `?`, `!`), the model may treat text as incomplete and wait for the buffer delay to elapse before generating. See [streaming inputs with continuations](/build-with-cartesia/capability-guides/stream-inputs-using-continuations) for more details.
+* **Signal when input is done.** When a turn is complete, use `continue: false` (WebSocket) or `no_more_inputs()` (SDK) so the model doesn't wait for more text.
+* **Test with realistic input patterns.** Buffering behavior depends on how text arrives—test with actual LLM output rather than pre-written text.
