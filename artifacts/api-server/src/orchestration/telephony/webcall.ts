@@ -1473,7 +1473,7 @@ export async function handleWebCallWebSocket(
       // ── Backchanneling: queue a filler phrase before LLM warms up ─────────
       // Only on the first tool iteration so we don't repeat after tool calls.
       if (toolIterations === 0 && agent.backchannelingEnabled && !interrupted) {
-        const freq = (agent.backchannelingFrequency ?? 0.3) as number;
+        const freq = (agent.backchannelingFrequency ?? 0.6) as number;
         if (Math.random() < freq) {
           const customPhrases = agent.backchannelPhrases
             ? agent.backchannelPhrases.split(",").map(s => s.trim()).filter(Boolean)
@@ -1528,7 +1528,7 @@ export async function handleWebCallWebSocket(
       // Beyond that, LLM input grows unboundedly — call-63 showed 4k→8k→13k→18k tokens
       // in 4 turns, pushing LLM latency toward 2s+ by turn 8. Earlier context is
       // already in the system prompt's caller memory/facts section.
-      const MAX_HISTORY_ENTRIES = 12;
+      const MAX_HISTORY_ENTRIES = 8; // 4 exchange pairs — caps LLM input at ~18k tokens
       if (historyForLlm.length > MAX_HISTORY_ENTRIES) {
         historyForLlm = historyForLlm.slice(-MAX_HISTORY_ENTRIES);
       }
