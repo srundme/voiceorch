@@ -1119,11 +1119,9 @@ router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const headers = {
-      "X-Auth-ID":    authId,
-      "X-Auth-Token": authToken,
-      "Accept":       "application/json",
-    };
+    // Vobiz Account-level API uses HTTP Basic Auth, NOT X-Auth headers.
+    const basicCreds = Buffer.from(`${authId}:${authToken}`).toString("base64");
+    const headers = { "Authorization": `Basic ${basicCreds}`, "Accept": "application/json" };
 
     const resp = await fetch(
       `https://api.vobiz.ai/api/v1/Account/${authId}/balance/INR`,

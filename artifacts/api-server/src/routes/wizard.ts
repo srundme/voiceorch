@@ -627,8 +627,11 @@ router.get("/admin/managed-phone-numbers", requireAdmin, async (_req, res): Prom
     fetchError = "VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN environment variables are not set on the server.";
   } else {
     try {
+      // Vobiz Account-level API uses HTTP Basic Auth (authId:authToken), NOT X-Auth headers.
+      // X-Auth headers are only for the /api/v1/partner/* endpoints (KYC routes).
+      const basicCreds = Buffer.from(`${authId}:${authToken}`).toString("base64");
       const resp = await fetch(`https://api.vobiz.ai/api/v1/Account/${authId}/Number/`, {
-        headers: { "X-Auth-ID": authId, "X-Auth-Token": authToken, "Accept": "application/json" },
+        headers: { "Authorization": `Basic ${basicCreds}`, "Accept": "application/json" },
       });
       if (resp.ok) {
         const data = await resp.json() as { objects?: Array<{ number: string; number_type?: string; region?: string }> };
