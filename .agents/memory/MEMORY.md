@@ -31,3 +31,5 @@
 - [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard
 - [Webcall echo-grace re-arm](webcall-echo-grace-rearm.md) — webcall START echo-grace must re-arm per sentence (echoGraceUntil), not anchor to one speakingStartedAt, or long replies clip mid-sentence; pipeline already does this via bargeInHoldUntil
 - [DPDP non-blocking wrapper](dpdp-non-blocking.md) — DPDP compliance is pre/post-only (disclosure, post-call PII scan, retention, erasure); NEVER add to dial/pipeline path, never gates dialing
+- [Vobiz audio byte order](vobiz-audio-byte-order.md) — Vobiz uses LE PCM both ways; no byte-swap in either direction; contentType header still required or µ-law tractor noise
+- [Managed plan post-call memory](managed-plan-memory.md) — updateCallerProfile skips silently if no BYOP key; must fall back to platform managed key from platform_settings then GROQ_API_KEY env
