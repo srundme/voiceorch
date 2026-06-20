@@ -1180,7 +1180,7 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
     const familyAgentId = body["familyAgentId"] as string | undefined;
     if (!familyAgentId) { res.status(400).json({ error: "familyAgentId required" }); return; }
 
-    const asrProvider       = (body["asrProvider"] as string) || "deepgram";
+    const asrProvider       = (body["asrProvider"] as string) || "sarvam";
     const llmProvider       = (body["llmProvider"] as string) || "qwen";
     const ttsProvider       = (body["ttsProvider"] as string) || "cartesia";
     const telephonyProvider = (body["telephonyProvider"] as string) || "vobiz";
