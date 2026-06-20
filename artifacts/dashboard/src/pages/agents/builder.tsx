@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle,
+  Upload, Archive, Info, AlertCircle, Calendar, Download,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -2825,10 +2825,22 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   voicemail:         { bg: "bg-purple-500/10",  text: "text-purple-400" },
 };
 
+const fmtDur = (s?: number | null) => {
+  if (!s) return "—";
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+};
+
+const csvEscape = (v: string) =>
+  /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+
 function LogsTab({ agentId }: { agentId: number }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter,   setTypeFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
+  const [startDate,    setStartDate]    = useState("");
+  const [endDate,      setEndDate]      = useState("");
+  const [dateOpen,     setDateOpen]     = useState(false);
   const [page,         setPage]         = useState(1);
   const PAGE_SIZE = 25;
 
@@ -2853,46 +2865,81 @@ function LogsTab({ agentId }: { agentId: number }) {
         c.fromNumber?.toLowerCase().includes(q)
       );
     }
+    if (startDate) {
+      const startMs = new Date(`${startDate}T00:00:00`).getTime();
+      r = r.filter(c => parseISO(c.createdAt).getTime() >= startMs);
+    }
+    if (endDate) {
+      const endMs = new Date(`${endDate}T23:59:59.999`).getTime();
+      r = r.filter(c => parseISO(c.createdAt).getTime() <= endMs);
+    }
     return r;
-  }, [calls, statusFilter, typeFilter, search]);
+  }, [calls, statusFilter, typeFilter, search, startDate, endDate]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd   = Math.min(page * PAGE_SIZE, filtered.length);
 
-  const fmtDur = (s?: number | null) => {
-    if (!s) return "—";
-    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  const dateLabel = startDate || endDate
+    ? `${startDate ? format(parseISO(startDate), "MMM d, yyyy") : "…"} – ${endDate ? format(parseISO(endDate), "MMM d, yyyy") : "…"}`
+    : "Date Range";
+
+  const handleExport = () => {
+    const header = ["Call Type", "Call ID", "Phone Number", "Status", "Start Time", "Duration", "Cost"];
+    const rows = filtered.map(c => {
+      const isWeb = !c.toNumber || c.toNumber.trim() === "";
+      const costCents = (c as any).costCents ?? 0;
+      return [
+        isWeb ? "Web Call" : "Live Call",
+        `#${c.id}`,
+        c.toNumber || c.fromNumber || "",
+        STATUS_LABELS[c.status] ?? c.status,
+        format(parseISO(c.createdAt), "MMM d, yyyy h:mm a"),
+        fmtDur(c.durationSeconds),
+        costCents > 0 ? `$${(costCents / 100).toFixed(3)}` : "",
+      ];
+    });
+    const csv = [header, ...rows].map(r => r.map(v => csvEscape(String(v))).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `agent-${agentId}-call-logs.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Filter bar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border shrink-0 flex-wrap">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
+      <div className="flex items-center gap-2 px-6 py-3 border-b border-border shrink-0 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
           <Input
-            className="h-8 pl-8 w-48 text-xs bg-background/50"
-            placeholder="Call ID or phone…"
+            className="h-9 pl-9 w-full text-xs bg-background/50"
+            placeholder="Search by Call ID or Phone Number…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
 
         <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
-          <SelectTrigger className="h-8 text-xs w-36 bg-background/50">
-            <SelectValue placeholder="Call Types" />
+          <SelectTrigger className="h-9 text-xs w-40 bg-background/50">
+            <SelectValue placeholder="All Call Types" />
           </SelectTrigger>
           <SelectContent position="popper">
-            <SelectItem value="all" className="text-xs">All Types</SelectItem>
-            <SelectItem value="webcall" className="text-xs">Webcall</SelectItem>
-            <SelectItem value="telephony" className="text-xs">Telephony</SelectItem>
+            <SelectItem value="all" className="text-xs">All Call Types</SelectItem>
+            <SelectItem value="webcall" className="text-xs">Web Call</SelectItem>
+            <SelectItem value="telephony" className="text-xs">Live Call</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="h-8 text-xs w-36 bg-background/50">
-            <SelectValue placeholder="Status" />
+          <SelectTrigger className="h-9 text-xs w-40 bg-background/50">
+            <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent position="popper">
             <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
@@ -2907,9 +2954,61 @@ function LogsTab({ agentId }: { agentId: number }) {
           </SelectContent>
         </Select>
 
-        <span className="ml-auto text-[10px] text-muted-foreground/30">
-          {filtered.length} call{filtered.length !== 1 ? "s" : ""}
-        </span>
+        <Popover open={dateOpen} onOpenChange={setDateOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "h-9 text-xs gap-2 bg-background/50 font-normal justify-start min-w-[180px]",
+                !(startDate || endDate) && "text-muted-foreground"
+              )}
+            >
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{dateLabel}</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-3 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">Start date</Label>
+              <Input
+                type="date"
+                className="h-8 text-xs bg-background/50"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={e => { setStartDate(e.target.value); setPage(1); }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">End date</Label>
+              <Input
+                type="date"
+                className="h-8 text-xs bg-background/50"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={e => { setEndDate(e.target.value); setPage(1); }}
+              />
+            </div>
+            {(startDate || endDate) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-full text-xs"
+                onClick={() => { setStartDate(""); setEndDate(""); setPage(1); }}
+              >
+                Clear dates
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        <Button
+          variant="outline"
+          className="h-9 text-xs gap-2 bg-background/50 ml-auto"
+          onClick={handleExport}
+          disabled={filtered.length === 0}
+        >
+          <Download className="h-3.5 w-3.5" /> Export
+        </Button>
       </div>
 
       {/* Table */}
@@ -2917,21 +3016,28 @@ function LogsTab({ agentId }: { agentId: number }) {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent border-b border-border">
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[110px]">Type</TableHead>
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[80px]">Call ID</TableHead>
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9">Phone Number</TableHead>
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[110px]">Status</TableHead>
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[130px]">Start Time</TableHead>
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[90px]">Duration</TableHead>
-              <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 h-9 w-[80px]">Cost</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pl-6 w-[130px]">Call Type</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[90px]">Call ID</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11">Phone Number</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[130px]">Status</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[200px]">
+                <span className="inline-flex items-center gap-1">Start Time <ChevronDown className="h-3 w-3" /></span>
+              </TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[110px]">Duration</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pr-6 w-[100px] text-right">Cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
+              Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={i} className="border-b border-border/40">
                   {Array.from({ length: 7 }).map((_, j) => (
-                    <TableCell key={j} className="py-3"><Skeleton className="h-3 w-16" /></TableCell>
+                    <TableCell
+                      key={j}
+                      className={cn("py-3.5", j === 0 && "pl-6", j === 6 && "pr-6")}
+                    >
+                      <Skeleton className={cn("h-3", j === 6 ? "h-3 w-12 ml-auto" : "w-16")} />
+                    </TableCell>
                   ))}
                 </TableRow>
               ))
@@ -2942,33 +3048,33 @@ function LogsTab({ agentId }: { agentId: number }) {
                 const sc = STATUS_COLORS[call.status] ?? { bg: "bg-zinc-500/10", text: "text-zinc-400" };
                 return (
                   <TableRow key={call.id} className="hover:bg-muted/20 border-b border-border/40 cursor-default">
-                    <TableCell className="py-2.5">
-                      <span className={cn(
-                        "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded",
-                        isWeb ? "bg-cyan-500/10 text-cyan-400" : "bg-violet-500/10 text-violet-400"
-                      )}>
-                        {isWeb ? <Globe className="h-3 w-3" /> : <Phone className="h-3 w-3" />}
-                        {isWeb ? "Webcall" : "Telephony"}
+                    <TableCell className="py-3.5 pl-6">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+                        {isWeb
+                          ? <Globe className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          : <Phone className="h-3.5 w-3.5 text-muted-foreground/50" />}
+                        {isWeb ? "Web Call" : "Live Call"}
                       </span>
                     </TableCell>
-                    <TableCell className="py-2.5 font-mono text-[10px] text-muted-foreground/40">
+                    <TableCell className="py-3.5 font-mono text-xs text-muted-foreground/50">
                       #{call.id}
                     </TableCell>
-                    <TableCell className="py-2.5 font-mono text-xs text-foreground/70">
+                    <TableCell className="py-3.5 font-mono text-xs text-foreground/80">
                       {call.toNumber || call.fromNumber || <span className="text-muted-foreground/25">—</span>}
                     </TableCell>
-                    <TableCell className="py-2.5">
-                      <span className={cn("inline-block text-[10px] font-medium px-1.5 py-0.5 rounded", sc.bg, sc.text)}>
+                    <TableCell className="py-3.5">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground/70">
+                        <span className={cn("h-1.5 w-1.5 rounded-full", sc.text.replace("text-", "bg-"))} />
                         {STATUS_LABELS[call.status] ?? call.status}
                       </span>
                     </TableCell>
-                    <TableCell className="py-2.5 text-[11px] text-muted-foreground/50 whitespace-nowrap">
-                      {format(parseISO(call.createdAt), "MMM d, HH:mm")}
+                    <TableCell className="py-3.5 text-xs text-muted-foreground/60 whitespace-nowrap">
+                      {format(parseISO(call.createdAt), "MMM d, yyyy h:mm a")}
                     </TableCell>
-                    <TableCell className="py-2.5 font-mono text-xs text-muted-foreground/50">
+                    <TableCell className="py-3.5 font-mono text-xs text-muted-foreground/60">
                       {fmtDur(call.durationSeconds)}
                     </TableCell>
-                    <TableCell className="py-2.5 font-mono text-xs text-muted-foreground/50">
+                    <TableCell className="py-3.5 pr-6 font-mono text-xs text-foreground/70 text-right">
                       {costCents > 0 ? `$${(costCents / 100).toFixed(3)}` : "—"}
                     </TableCell>
                   </TableRow>
@@ -2994,23 +3100,22 @@ function LogsTab({ agentId }: { agentId: number }) {
       </div>
 
       {/* Pagination footer */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t border-border text-[11px] text-muted-foreground/40">
+      <div className="shrink-0 flex items-center justify-between px-6 py-3 border-t border-border text-xs text-muted-foreground/50">
+        <div>
+          {rangeStart}–{rangeEnd} of {filtered.length}
+        </div>
         <div className="flex items-center gap-1">
           <button
             disabled={page <= 1}
-            onClick={() => setPage(p => p - 1)}
-            className="px-2 py-1 rounded hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            className="h-7 px-2.5 rounded-md border border-border hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
           >‹</button>
-          <span className="px-2">Page {page}</span>
+          <span className="px-3">Page {page} of {totalPages}</span>
           <button
             disabled={page >= totalPages}
-            onClick={() => setPage(p => p + 1)}
-            className="px-2 py-1 rounded hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            className="h-7 px-2.5 rounded-md border border-border hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
           >›</button>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span>Rows per page</span>
-          <span className="font-semibold text-foreground/50">{PAGE_SIZE}</span>
         </div>
       </div>
     </div>
@@ -3911,7 +4016,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   return (
     <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-3">
           <div className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
           <input
@@ -3956,10 +4061,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       </div>
 
       {/* Tab strip */}
-      <div className="flex items-center gap-0.5 px-4 border-b border-border/60 shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-1 px-6 border-b border-border/60 shrink-0 overflow-x-auto">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
               activeTab === tab.id
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
