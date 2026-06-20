@@ -13,6 +13,9 @@ import { logger } from "../../lib/logger.js";
 const router: IRouter = Router();
 
 const DASHBOARD_BASE = () => {
+  if (process.env["APP_BASE_URL"]) {
+    return process.env["APP_BASE_URL"].replace(/\/$/, "");
+  }
   const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
   return domain ? `https://${domain}` : "http://localhost:80";
 };
@@ -20,6 +23,7 @@ const DASHBOARD_BASE = () => {
 /**
  * Allow the callback to redirect back to the origin that initiated the flow.
  * Accepts:
+ *   - The explicit APP_BASE_URL origin (e.g. https://app.snapserve.ai)
  *   - Any origin listed in REPLIT_DOMAINS (production + dev previews registered there)
  *   - Any *.sisko.replit.dev or *.replit.dev Replit workspace domain (dev previews)
  * Rejects anything else to prevent open-redirect abuse.
@@ -29,6 +33,14 @@ function isTrustedOrigin(origin: string): boolean {
     const url = new URL(origin);
     if (url.protocol !== "https:") return false;
     const host = url.hostname;
+    if (process.env["APP_BASE_URL"]) {
+      try {
+        const appUrl = new URL(process.env["APP_BASE_URL"]);
+        if (appUrl.hostname === host) return true;
+      } catch {
+        // ignore malformed APP_BASE_URL
+      }
+    }
     // Production domains explicitly registered
     const registered = (process.env["REPLIT_DOMAINS"] ?? "").split(",").map(d => d.trim()).filter(Boolean);
     if (registered.includes(host)) return true;

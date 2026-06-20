@@ -66,6 +66,9 @@ packages = ["ffmpeg-full", "libsndfile"]
 [userenv.shared]
 
 [userenv.production]
+APP_BASE_URL = "https://app.snapserve.ai"
+GOOGLE_LOGIN_REDIRECT_URI = "https://app.snapserve.ai/api/auth/google/callback"
+GOOGLE_REDIRECT_URI = "https://app.snapserve.ai/api/scheduling/google/callback"
 
 [[ports]]
 localPort = 5000
