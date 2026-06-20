@@ -457,7 +457,7 @@ router.get("/auth/google/connect", (req, res): void => {
 
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const { code, error, state } = req.query as { code?: string; error?: string; state?: string };
-  const base = dashboardBase();
+  const base = dashboardBase(req);
   const errorRedirect = `${base}/?google_error=true`;
 
   if (error || !code || !state) {

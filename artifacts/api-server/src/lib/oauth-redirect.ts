@@ -8,8 +8,21 @@
  */
 import type { Request } from "express";
 
-/** Origin the dashboard is served from (used as a fallback redirect target). */
-export function dashboardBase(): string {
+/**
+ * Origin the dashboard is served from (used as a fallback redirect target).
+ * When a request is provided, the externally-visible host from
+ * x-forwarded-host / x-forwarded-proto is preferred so that the redirect
+ * lands on the correct Replit dev-preview domain instead of localhost.
+ */
+export function dashboardBase(req?: Request): string {
+  if (req) {
+    const forwardedHost = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim();
+    const forwardedProto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() ?? "https";
+    const host = forwardedHost ?? req.hostname;
+    if (host && isTrustedOrigin(`${forwardedProto}://${host}`)) {
+      return `${forwardedProto}://${host}`;
+    }
+  }
   const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
   return domain ? `https://${domain}` : "http://localhost:80";
 }
