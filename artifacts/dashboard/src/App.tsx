@@ -330,6 +330,56 @@ function SignInPage() {
     </div>
   );
 
+  const googleBtn = (
+    <a
+      href="/api/auth/google/connect"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+        width: "100%",
+        background: "#1a1b27",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 12,
+        padding: "13px 0",
+        color: "#fff",
+        fontSize: "0.9rem",
+        fontWeight: 600,
+        textDecoration: "none",
+        cursor: "pointer",
+        transition: "background .15s, border-color .15s",
+        letterSpacing: "-0.1px",
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLAnchorElement).style.background = "#21223200";
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.16)";
+        (e.currentTarget as HTMLAnchorElement).style.background = "#21222e";
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLAnchorElement).style.background = "#1a1b27";
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.08)";
+      }}
+    >
+      <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        <path fill="none" d="M0 0h48v48H0z"/>
+      </svg>
+      Continue with Google
+    </a>
+  );
+
+  const orDivider = (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0" }}>
+      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+      <span style={{ fontSize: "0.78rem", color: "#3a3c4e", fontWeight: 500, letterSpacing: "0.04em" }}>or</span>
+      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+    </div>
+  );
+
   // ── Forgot flow ──────────────────────────────────────────────────────────────
   if (mode === "forgot") {
     const backToLogin = (
@@ -352,9 +402,10 @@ function SignInPage() {
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Google account detected</h1>
               <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.6 }}>
-                This email is linked to a Google account. Password reset isn't available — please sign in with Google instead.
+                This email is linked to a Google account. Password reset isn't available — sign in with Google instead.
               </p>
             </div>
+            {googleBtn}
             {backToLogin}
           </div>
         </div>
@@ -539,6 +590,10 @@ function SignInPage() {
         </div>
 
         {errorBanner}
+
+        {/* Google OAuth */}
+        {googleBtn}
+        {orDivider}
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
