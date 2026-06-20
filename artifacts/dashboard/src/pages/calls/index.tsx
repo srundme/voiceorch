@@ -6,7 +6,7 @@ import {
   Filter, Calendar, Headphones, BarChart3, Download, X,
   ChevronDown, ChevronUp, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
-  UserCheck, Users, Hash, TrendingUp, Activity
+  UserCheck, Users, Globe, TrendingUp, Activity
 } from "lucide-react";
 import {
   useListCalls,
@@ -44,11 +44,6 @@ const formatDuration = (seconds?: number | null) => {
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 };
 
-const formatMs = (ms?: number | null) => {
-  if (ms == null) return null;
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
-};
-
 // Reserved meta keys in calls.dispositionResult that are NOT classification values.
 const DISPOSITION_META_KEYS = new Set(["confidence", "summary"]);
 
@@ -60,6 +55,23 @@ function getDispositionValues(
   return Object.entries(result)
     .filter(([k, v]) => !DISPOSITION_META_KEYS.has(k) && v != null && v !== "")
     .map(([, v]) => String(v));
+}
+
+function isWebCall(call: {
+  toNumber?: string | null;
+  fromNumber?: string | null;
+  metadata?: string | null;
+}): boolean {
+  if (call.toNumber === "webcall" || call.fromNumber === "browser") return true;
+  if (call.metadata) {
+    try {
+      const md = JSON.parse(call.metadata) as Record<string, unknown>;
+      if (md?.channel === "webcall") return true;
+    } catch {
+      /* ignore non-JSON metadata */
+    }
+  }
+  return false;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -154,26 +166,6 @@ function StatusBadge({ status }: { status: string }) {
       <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
     </span>
-  );
-}
-
-function LatencyBar({ value, max, label, color }: { value: number; max: number; label: string; color: string }) {
-  const pct = Math.min((value / max) * 100, 100);
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex items-center gap-1.5 cursor-default">
-          <span className="text-[9px] text-muted-foreground/50 w-6">{label}</span>
-          <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-[10px] font-mono text-muted-foreground/50">{formatMs(value)}</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {label} latency: {formatMs(value)}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -487,17 +479,12 @@ export default function CallsList() {
           <Table>
             <TableHeader className="sticky top-0 z-10">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[50px]">
-                  <Hash className="h-3 w-3 text-muted-foreground/30" />
-                </TableHead>
                 <TableHead className="w-[130px]">Date & Time</TableHead>
-                <TableHead className="w-[90px]">Exec ID</TableHead>
+                <TableHead className="w-[90px]">Call ID</TableHead>
                 <TableHead>Agent</TableHead>
+                <TableHead className="w-[120px]">Call Type</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
-                <TableHead className="w-[130px]">Disposition</TableHead>
-                <TableHead>Contact</TableHead>
                 <TableHead className="w-[80px]">Duration</TableHead>
-                <TableHead className="w-[140px]">Latency</TableHead>
                 <TableHead className="w-[70px]">Cost</TableHead>
                 <TableHead className="w-[80px] text-right">Actions</TableHead>
               </TableRow>
@@ -506,34 +493,22 @@ export default function CallsList() {
               {callsLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell><Skeleton className="h-3 w-6" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-28" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-28" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-10" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-10" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-7 w-14 ml-auto rounded-lg" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredCalls.length > 0 ? (
-                filteredCalls.map((call, idx) => {
-                  const sttMs = call.sttLatencyMs;
-                  const llmMs = call.llmLatencyMs;
-                  const ttsMs = call.ttsFirstChunkMs;
-                  const hasLatency =
-                    sttMs != null || llmMs != null || ttsMs != null;
-                  const maxLatency = Math.max(sttMs ?? 0, llmMs ?? 0, ttsMs ?? 0, 1);
+                filteredCalls.map((call) => {
                   const costCents = (call as any).costCents ?? 0;
 
                   return (
                     <TableRow key={call.id} className="group cursor-default">
-                      <TableCell className="text-[10px] font-mono text-muted-foreground/30">
-                        {idx + 1}
-                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <div className="text-[11px] text-foreground/80 font-medium">
                           {format(parseISO(call.createdAt), "MMM d, yyyy")}
@@ -556,72 +531,23 @@ export default function CallsList() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {isWebCall(call) ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                            <Globe className="h-3 w-3" />
+                            Web Call
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+                            <Phone className="h-3 w-3" />
+                            Live Call
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <StatusBadge status={call.status} />
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const values = getDispositionValues(
-                            (call as any).dispositionResult,
-                          );
-                          if (values.length === 0) {
-                            return <span className="text-muted-foreground/25 text-[10px]">—</span>;
-                          }
-                          return (
-                            <div className="flex flex-wrap gap-1">
-                              {values.map((v, i) => (
-                                <span
-                                  key={i}
-                                  className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-elevated border border-border text-foreground/70 capitalize"
-                                >
-                                  {v}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-xs font-mono text-foreground/70">
-                          {call.toNumber}
-                        </div>
-                        <div className="text-[10px] font-mono text-muted-foreground/40">
-                          {call.fromNumber}
-                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground/60">
                         {formatDuration(call.durationSeconds)}
-                      </TableCell>
-                      <TableCell>
-                        {hasLatency ? (
-                          <div className="flex flex-col gap-0.5">
-                            {sttMs != null && (
-                              <LatencyBar
-                                value={sttMs}
-                                max={maxLatency}
-                                label="STT"
-                                color="bg-blue-500"
-                              />
-                            )}
-                            {llmMs != null && (
-                              <LatencyBar
-                                value={llmMs}
-                                max={maxLatency}
-                                label="LLM"
-                                color="bg-violet-500"
-                              />
-                            )}
-                            {ttsMs != null && (
-                              <LatencyBar
-                                value={ttsMs}
-                                max={maxLatency}
-                                label="TTS"
-                                color="bg-emerald-500"
-                              />
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground/25 text-[10px]">—</span>
-                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
@@ -656,7 +582,7 @@ export default function CallsList() {
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={11} className="h-64 text-center border-0">
+                  <TableCell colSpan={8} className="h-64 text-center border-0">
                     <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
                       <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center">
                         <Phone className="h-6 w-6" />
