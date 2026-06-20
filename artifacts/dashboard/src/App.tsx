@@ -205,6 +205,10 @@ function SignInPage() {
         body: JSON.stringify({ email: forgotEmail.trim() }),
       });
       const data = await res.json() as { ok?: boolean; hint?: string; error?: string };
+      if (res.status === 429) {
+        setError("Too many attempts — please wait a few minutes before requesting another code.");
+        return;
+      }
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
         return;

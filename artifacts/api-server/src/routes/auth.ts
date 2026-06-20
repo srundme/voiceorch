@@ -13,11 +13,18 @@ import { Router, type IRouter } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { db } from "@workspace/db";
-import { usersTable, walletTransactionsTable, passwordResetOtpsTable } from "@workspace/db/schema";
+import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable } from "@workspace/db/schema";
 import { eq, and, isNull, gt, desc } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
+import { registerTransientKey } from "../services/rate-limit-cleanup.js";
+
+const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
+const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
+const OTP_RATE_LIMIT_PREFIX = "otp_rate_limit:";
+
+registerTransientKey({ prefix: OTP_RATE_LIMIT_PREFIX, windowMs: OTP_RATE_LIMIT_WINDOW_MS });
 
 const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
@@ -199,6 +206,38 @@ router.post("/auth/password-reset/request", async (req, res): Promise<void> => {
       res.json({ ok: true, hint: "google_only" });
       return;
     }
+
+    // ── Rate-limit OTP requests per email ────────────────────────────────────
+    const rlKey = `${OTP_RATE_LIMIT_PREFIX}${normalizedEmail}`;
+    const now = Date.now();
+
+    const [rlRow] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, rlKey));
+
+    const rawTimestamps: unknown = rlRow?.value ? JSON.parse(rlRow.value) : [];
+    const recentTimestamps = (Array.isArray(rawTimestamps) ? (rawTimestamps as number[]) : []).filter(
+      (t) => now - t < OTP_RATE_LIMIT_WINDOW_MS,
+    );
+
+    if (recentTimestamps.length >= OTP_RATE_LIMIT_MAX) {
+      const retryAfterSec = Math.ceil((OTP_RATE_LIMIT_WINDOW_MS - (now - recentTimestamps[0]!)) / 1000);
+      res.setHeader("Retry-After", String(retryAfterSec));
+      logger.warn({ email: normalizedEmail }, "OTP rate limit exceeded");
+      res.status(429).json({ error: "Too many attempts — please wait a few minutes before requesting another code." });
+      return;
+    }
+
+    const updatedTimestamps = [...recentTimestamps, now];
+    await db
+      .insert(platformSettingsTable)
+      .values({ key: rlKey, value: JSON.stringify(updatedTimestamps) })
+      .onConflictDoUpdate({
+        target: platformSettingsTable.key,
+        set: { value: JSON.stringify(updatedTimestamps), updatedAt: new Date() },
+      });
+    // ─────────────────────────────────────────────────────────────────────────
 
     const otp = generateOtp();
     const otpHash = await hashOtp(otp);
