@@ -453,6 +453,7 @@ export async function createSession(params: {
 
   const [callRecord] = await db.insert(callsTable).values({
     agentId: params.agentId,
+    userId: agent.userId ?? null,
     status: "in_progress",
     toNumber: params.toNumber,
     fromNumber: params.fromNumber,

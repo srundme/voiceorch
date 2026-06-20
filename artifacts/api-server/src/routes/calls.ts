@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { randomBytes } from "crypto";
-import { eq, desc, and, sql, gte, gt } from "drizzle-orm";
+import { eq, desc, and, or, sql, gte, gt, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import {
@@ -320,6 +320,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db.insert(callsTable).values({
     agentId, toNumber, fromNumber: effectiveFromNumber, status: "in_progress",
+    userId: agent.userId ?? null,
     executionId,
     metadata: JSON.stringify({ providerCallId, provider }),
   }).returning();
@@ -424,17 +425,26 @@ router.get("/calls", requireAuth, async (req, res): Promise<void> => {
 
   const clerkId = (req as any).clerkUserId as string;
 
-  const conditions: ReturnType<typeof eq>[] = [eq(callsTable.userId, clerkId)];
-  if (query.data.agentId != null) conditions.push(eq(callsTable.agentId, query.data.agentId));
+  // Ownership: rows the user directly owns, plus legacy/live-call rows where
+  // userId is null but the call's agent belongs to the requester (mirrors the
+  // fallback used by GET /calls/:id). Keeps the optional agentId filter intact.
+  const ownedAgentIds = db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, clerkId));
+  const ownership = or(
+    eq(callsTable.userId, clerkId),
+    and(isNull(callsTable.userId), inArray(callsTable.agentId, ownedAgentIds)),
+  );
+  const where = query.data.agentId != null
+    ? and(ownership, eq(callsTable.agentId, query.data.agentId))
+    : ownership;
 
-  let dbQuery = db.select().from(callsTable).$dynamic();
-  if (conditions.length === 1) {
-    dbQuery = dbQuery.where(conditions[0]) as typeof dbQuery;
-  } else {
-    dbQuery = dbQuery.where(and(...conditions)) as typeof dbQuery;
-  }
-
-  const calls = await dbQuery.orderBy(desc(callsTable.createdAt));
+  const calls = await db
+    .select()
+    .from(callsTable)
+    .where(where)
+    .orderBy(desc(callsTable.createdAt));
   const enriched = await Promise.all(calls.map(enrichCall));
   res.json(ListCallsResponse.parse(enriched));
 });
@@ -469,7 +479,7 @@ router.post("/calls", async (req, res): Promise<void> => {
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db
     .insert(callsTable)
-    .values({ ...parsed.data, status: "pending", executionId })
+    .values({ ...parsed.data, userId: agent.userId ?? null, status: "pending", executionId })
     .returning();
 
   await db
