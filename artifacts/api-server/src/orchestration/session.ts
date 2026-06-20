@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, executionLogsTable } from "@workspace/db";
+import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and } from "drizzle-orm";
@@ -464,6 +465,23 @@ export async function createSession(params: {
   }).returning();
 
   if (!callRecord) throw new Error("Failed to create call record");
+
+  // ── Seed execution log (enables Logs tab for telephony calls) ─────────────────
+  void db.insert(executionLogsTable).values({
+    callId:    callRecord.id,
+    agentId:   params.agentId,
+    component: "Agent",
+    direction: "system",
+    status:    "info",
+    requestPayload: {
+      agentId:           params.agentId,
+      telephonyProvider: params.telephonyProvider,
+      asrProvider:       agent.asrProvider,
+      llmProvider:       agent.llmProvider,
+      ttsProvider:       agent.ttsProvider,
+      ttsVoice:          agent.ttsVoice ?? null,
+    },
+  }).catch(() => {});
 
   const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
   let wasTransferred = false;
@@ -945,6 +963,59 @@ export async function endSession(sessionId: string): Promise<void> {
           avgLlmLatencyMs:    rollingLatency(ag.avgLlmLatencyMs,     avgLlmMs),
           avgTtsFirstChunkMs: rollingLatency(ag.avgTtsFirstChunkMs,  avgTtsMs),
         }).where(eq(agentsTable.id, ag.id));
+
+        // ── Billing: compute costCents and debit wallet (telephony path) ──────────
+        // The HTTP PATCH /calls/:id/end route handles billing for calls ended via
+        // the API, but telephony sessions end via WebSocket close and never hit
+        // that route.  We bill here instead — skipped if costCents is already set
+        // (prevents double-debit if the route is also called).
+        const sessionCallUserId = call.userId ?? ag.userId ?? null;
+        if (sessionCallUserId && durationSeconds > 0 && !(call.costCents != null && call.costCents > 0)) {
+          try {
+            const billingMode     = await resolveAgentBillingMode(sessionCallUserId, ag);
+            const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
+            const billableMinutes = Math.ceil(durationSeconds / 60);
+            const modeLabel       = billingMode === "managed" ? "managed" : "BYOP";
+            const rateLabel       = `$${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
+            const debitCents      = Math.round(billableMinutes * rateCentsPerMin);
+            if (debitCents > 0) {
+              await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, session.callId));
+              const [billingUser] = await db.select().from(usersTable).where(eq(usersTable.clerkId, sessionCallUserId));
+              if (billingUser) {
+                const newBalance = Math.max(0, billingUser.walletBalanceCents - debitCents);
+                await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, billingUser.id));
+                await db.insert(walletTransactionsTable).values({
+                  userId:      billingUser.id,
+                  type:        "call_debit",
+                  amountCents: -debitCents,
+                  description: `Call #${session.callId} — ${billableMinutes} min × ${rateLabel}`,
+                  status:      "completed",
+                  callId:      session.callId,
+                });
+                logger.info({ sessionId, callId: session.callId, debitCents, billingMode }, "Call billed in endSession");
+              }
+            }
+          } catch (billingErr) {
+            logger.error({ sessionId, billingErr }, "Billing failed in endSession");
+          }
+        }
+
+        // ── End-of-call execution log ─────────────────────────────────────────────
+        void db.insert(executionLogsTable).values({
+          callId:    session.callId,
+          agentId:   ag.id,
+          component: "Agent",
+          direction: "response",
+          status:    "info",
+          latencyMs: avgLlmMs,
+          metadata: {
+            durationSeconds,
+            turns:     metricsAcc.count,
+            avgSttMs,
+            avgLlmMs,
+            avgTtsMs,
+          },
+        }).catch(() => {});
 
         // ── Post-call AI summary + disposition + webhook (sequential, one async block) ──
         // Running them in sequence ensures the webhook payload includes the final

@@ -70,10 +70,11 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
 const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after playback starts —
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
-const TELEPHONY_TAIL_DRAIN_MS = 300;    // After the final utterance fully streams, wait this long
+const TELEPHONY_TAIL_DRAIN_MS = 600;    // After the final utterance fully streams, wait this long
                                          // before tearing the call down so the carrier's jitter
                                          // buffer plays out the last words (mirrors the web path's
                                          // AUDIO_TAIL_SILENCE_MS) — prevents clipped goodbyes.
+                                         // 600 ms is empirically safer for long VoBiz responses.
 const KB_CONTEXT_RACE_MS      = 200;    // Max time the turn waits for KB-context retrieval before
                                          // starting the LLM. If the prefetch is slower than this, the
                                          // turn proceeds with whatever context resolved (possibly none)

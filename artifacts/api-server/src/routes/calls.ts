@@ -667,13 +667,16 @@ router.patch("/calls/:id/end", async (req, res): Promise<void> => {
   // Flat per-minute rate: managed = $0.05/min (5 ¢), BYOP = $0.035/min (3.5 ¢).
   // Mode is resolved dynamically: if the user has their own provider keys for any
   // of this agent's providers → BYOP; otherwise → managed (platform keys in use).
+  // Skip billing when costCents is already set (endSession handled it for
+  // telephony calls that end via WebSocket close, not this HTTP route).
+  const alreadyBilled = existing.costCents != null && existing.costCents > 0;
   const callClerkId = existing.userId ?? agentForBilling?.userId ?? null;
-  const billingMode = await resolveAgentBillingMode(callClerkId, agentForBilling ?? {});
+  const billingMode = alreadyBilled ? "managed" : await resolveAgentBillingMode(callClerkId, agentForBilling ?? {});
   const rateCentsPerMin = getFlatRateCentsPerMin(billingMode);
   const modeLabel = billingMode === "managed" ? "managed" : "BYOP";
   const billableMinutes = durationSeconds <= 0 ? 0 : Math.ceil(durationSeconds / 60);
   const rateLabel = `$${(rateCentsPerMin / 100).toFixed(3)}/min (${modeLabel})`;
-  const debitCents = durationSeconds <= 0
+  const debitCents = alreadyBilled || durationSeconds <= 0
     ? 0
     : Math.round(billableMinutes * rateCentsPerMin);
 

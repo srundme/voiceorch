@@ -275,8 +275,10 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   }
 
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
+  const inboundFrom = String(req.body?.From ?? req.body?.from ?? "").trim() || undefined;
+  const inboundTo   = String(req.body?.To   ?? req.body?.to   ?? "").trim() || undefined;
   res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { campaignLeadId })
+    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { campaignLeadId, from: inboundFrom, to: inboundTo })
   );
 });
 

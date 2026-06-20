@@ -171,7 +171,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -184,8 +184,14 @@ export function getVobizAnswerXML(
   // playAudio payload — producing the "tractor/glitch" audio artifact on the
   // caller side.  Per Vobiz docs the playAudio contentType must match the
   // stream-negotiated format, so locking it here fixes the outbound path.
+  //
+  // From/To are embedded as <Parameter> child elements (Twilio-compatible syntax
+  // that Vobiz echoes back in customParameters of the start event) so the session
+  // can store the real caller/callee numbers instead of +10000000000 fallbacks.
+  const fromParam = opts.from ? `\n  <Parameter name="From" value="${opts.from.replace(/"/g, "&quot;")}"/>` : "";
+  const toParam   = opts.to   ? `\n  <Parameter name="To"   value="${opts.to.replace(/"/g, "&quot;")}"/>` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrl}</Stream>
+  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrl}${fromParam}${toParam}</Stream>
 </Response>`;
 }
