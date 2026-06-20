@@ -1577,6 +1577,24 @@ export const GetAccountResponse = zod.object({
 
 
 /**
+ * @summary Change the authenticated user's password (email+password users only)
+ */
+
+export const changePasswordBodyNewPasswordMin = 8;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string().min(1),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
+})
+
+export const ChangePasswordResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Regenerate the user's API key
  */
 export const RegenerateApiKeyResponse = zod.object({

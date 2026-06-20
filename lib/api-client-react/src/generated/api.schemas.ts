@@ -4302,6 +4302,25 @@ limit?: number;
 offset?: number;
 };
 
+export type ChangePasswordBody = {
+  /** @minLength 1 */
+  currentPassword: string;
+  /** @minLength 8 */
+  newPassword: string;
+};
+
+export type ChangePassword200 = {
+  ok: boolean;
+};
+
+export type ChangePassword400 = {
+  error: string;
+};
+
+export type ChangePassword403 = {
+  error: string;
+};
+
 export type ListActivityLogsParams = {
 limit?: number;
 };

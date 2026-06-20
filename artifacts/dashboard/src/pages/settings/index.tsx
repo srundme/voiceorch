@@ -4,16 +4,19 @@ import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
   RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video, Timer,
-  Sun, Moon, Monitor, Palette,
+  Sun, Moon, Monitor, Palette, Lock,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey, setDefaultTimeoutMs } from "@workspace/api-client-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useListAgents, useListProviders, useGetAccount, useRegenerateApiKey, useAddConcurrentSlot, useChangePassword, getListAgentsQueryKey, getListProvidersQueryKey, getGetAccountQueryKey, setDefaultTimeoutMs } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
 import { formatApiError } from "@/lib/format-api-error";
+import { useAuth } from "@/lib/auth";
 import type { ProviderConfigProviderType } from "@workspace/api-client-react";
 import CalendarsPage from "@/pages/scheduling/Calendars";
 import ConferencingPage from "@/pages/settings/Conferencing";
@@ -263,6 +266,142 @@ function MaskedKey({ value }: { value: string | null | undefined }) {
   );
 }
 
+function ChangePasswordCard() {
+  const { userId } = useAuth();
+  const { toast } = useToast();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const changePassword = useChangePassword();
+
+  const isEmailUser = typeof userId === "string" && userId.startsWith("email:");
+
+  if (!isEmailUser) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Lock className="h-5 w-5 text-primary" />
+            Password
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Your account uses Google sign-in. Password changes are managed through your Google account.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword !== confirm) {
+      toast({ title: "Passwords don't match", description: "New password and confirmation must match.", variant: "destructive" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast({ title: "Password too short", description: "New password must be at least 8 characters.", variant: "destructive" });
+      return;
+    }
+    changePassword.mutate(
+      { data: { currentPassword, newPassword } },
+      {
+        onSuccess: () => {
+          toast({ title: "Password updated", description: "Your password has been changed successfully." });
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirm("");
+        },
+        onError: (err: unknown) => {
+          toast({ title: "Error", variant: "destructive", description: formatApiError(err) });
+        },
+      },
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Lock className="h-5 w-5 text-primary" />
+          Change Password
+        </CardTitle>
+        <CardDescription>Update your account password. You'll need your current password to confirm.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4 max-w-sm">
+          <div className="space-y-1.5">
+            <Label htmlFor="current-password">Current password</Label>
+            <div className="relative">
+              <Input
+                id="current-password"
+                type={showCurrent ? "text" : "password"}
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrent(s => !s)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                tabIndex={-1}
+              >
+                {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="new-password">New password</Label>
+            <div className="relative">
+              <Input
+                id="new-password"
+                type={showNew ? "text" : "password"}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+                minLength={8}
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew(s => !s)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                tabIndex={-1}
+              >
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">At least 8 characters.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+
+          <Button type="submit" disabled={changePassword.isPending} className="w-full sm:w-auto">
+            {changePassword.isPending ? "Updating…" : "Update password"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function GeneralTab() {
   const [expandedProvider, setExpandedProvider] = useState<string | null>("twilio");
   const [selectedAgentId, setSelectedAgentId] = useState<number>(1);
@@ -461,6 +600,7 @@ function GeneralTab() {
         </CardContent>
       </Card>
 
+      <ChangePasswordCard />
       <RequestTimeoutCard />
       <AppearanceCard />
 

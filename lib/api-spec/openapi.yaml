@@ -1162,6 +1162,59 @@ paths:
         "401":
           description: Unauthorized
 
+  /account/change-password:
+    post:
+      operationId: changePassword
+      tags: [account]
+      summary: Change the authenticated user's password (email+password users only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                  minLength: 1
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: Validation error or wrong current password
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Google-only account (no password set)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+        "401":
+          description: Unauthorized
+
   /account/regenerate-api-key:
     post:
       operationId: regenerateApiKey

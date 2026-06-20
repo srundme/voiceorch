@@ -1,10 +1,28 @@
 import { Router, type IRouter } from "express";
-import { randomBytes } from "crypto";
+import { randomBytes, scrypt, timingSafeEqual } from "crypto";
+import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import { GetPreferencesResponse, UpdatePreferencesBody } from "@workspace/api-zod";
+
+const scryptAsync = promisify(scrypt);
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${buf.toString("hex")}`;
+}
+
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  const expected = Buffer.from(hash, "hex");
+  if (buf.length !== expected.length) return false;
+  return timingSafeEqual(buf, expected);
+}
 
 const router: IRouter = Router();
 
@@ -77,6 +95,48 @@ router.post("/account/add-concurrent", requireAuth, async (req, res): Promise<vo
   });
 
   res.json(toAccountInfo(updated));
+});
+
+router.post("/account/change-password", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword?: string;
+    newPassword?: string;
+  };
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "Current password and new password are required." });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: "New password must be at least 8 characters." });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  if (!user.passwordHash) {
+    res.status(403).json({ error: "Your account uses Google sign-in and does not have a password." });
+    return;
+  }
+
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) {
+    res.status(400).json({ error: "Current password is incorrect." });
+    return;
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await db.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.clerkId, clerkId));
+
+  await logActivity({
+    userId: clerkId,
+    eventType: "account.password_changed",
+    description: "Password changed",
+  });
+
+  res.json({ ok: true });
 });
 
 router.get("/account/preferences", requireAuth, async (req, res): Promise<void> => {
