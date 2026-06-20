@@ -139,6 +139,19 @@ function SignInPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [googleOnly, setGoogleOnly] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Start / restart the 60-second resend cooldown
+  function startResendCooldown() {
+    setResendCooldown(60);
+  }
+
+  // Tick the cooldown down every second
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
 
   function resetForgotFlow() {
     setForgotStep("email");
@@ -201,6 +214,7 @@ function SignInPage() {
         return;
       }
       setForgotStep("otp");
+      startResendCooldown();
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
@@ -421,22 +435,29 @@ function SignInPage() {
             </form>
             <p style={{ marginTop: 16, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
               Didn't receive it?{" "}
-              <button
-                onClick={async () => {
-                  setError(null);
-                  setOtp("");
-                  try {
-                    await fetch("/api/auth/password-reset/request", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email: forgotEmail.trim() }),
-                    });
-                  } catch { /* ignore */ }
-                }}
-                style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
-              >
-                Resend code
-              </button>
+              {resendCooldown > 0 ? (
+                <span style={{ color: "#5a5c6e", fontSize: "0.85rem" }}>
+                  Resend in 0:{String(resendCooldown).padStart(2, "0")}
+                </span>
+              ) : (
+                <button
+                  onClick={async () => {
+                    setError(null);
+                    setOtp("");
+                    startResendCooldown();
+                    try {
+                      await fetch("/api/auth/password-reset/request", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: forgotEmail.trim() }),
+                      });
+                    } catch { /* ignore */ }
+                  }}
+                  style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
+                >
+                  Resend code
+                </button>
+              )}
             </p>
             {backToLogin}
           </div>
