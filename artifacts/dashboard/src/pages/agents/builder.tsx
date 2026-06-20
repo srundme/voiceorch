@@ -2834,6 +2834,9 @@ const fmtDur = (s?: number | null) => {
 const csvEscape = (v: string) =>
   /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
+const isWebCall = (call: { toNumber?: string | null; fromNumber?: string | null }) =>
+  (call.toNumber ?? "").trim().startsWith("webcall") || call.fromNumber === "browser";
+
 function LogsTab({ agentId }: { agentId: number }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter,   setTypeFilter]   = useState("all");
@@ -2854,7 +2857,7 @@ function LogsTab({ agentId }: { agentId: number }) {
     if (statusFilter !== "all") r = r.filter(c => c.status === statusFilter);
     if (typeFilter !== "all") {
       r = r.filter(c =>
-        typeFilter === "webcall" ? (!c.toNumber || c.toNumber === "") : !!(c.toNumber)
+        typeFilter === "webcall" ? isWebCall(c) : !isWebCall(c)
       );
     }
     if (search.trim()) {
@@ -2888,16 +2891,16 @@ function LogsTab({ agentId }: { agentId: number }) {
   const handleExport = () => {
     const header = ["Call Type", "Call ID", "Phone Number", "Status", "Start Time", "Duration", "Cost"];
     const rows = filtered.map(c => {
-      const isWeb = !c.toNumber || c.toNumber.trim() === "";
-      const costCents = (c as any).costCents ?? 0;
+      const isWeb = isWebCall(c);
+      const costCents = c.costCents;
       return [
         isWeb ? "Web Call" : "Live Call",
         `#${c.id}`,
-        c.toNumber || c.fromNumber || "",
+        isWeb ? "" : (c.toNumber || c.fromNumber || ""),
         STATUS_LABELS[c.status] ?? c.status,
         format(parseISO(c.createdAt), "MMM d, yyyy h:mm a"),
         fmtDur(c.durationSeconds),
-        costCents > 0 ? `$${(costCents / 100).toFixed(3)}` : "",
+        costCents != null ? `$${(costCents / 100).toFixed(3)}` : "",
       ];
     });
     const csv = [header, ...rows].map(r => r.map(v => csvEscape(String(v))).join(",")).join("\n");
@@ -3016,15 +3019,15 @@ function LogsTab({ agentId }: { agentId: number }) {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent border-b border-border">
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pl-6 w-[130px]">Call Type</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pl-6 w-[140px]">Call Type</TableHead>
               <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[90px]">Call ID</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11">Phone Number</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[130px]">Status</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[200px]">
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[170px]">Phone Number</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[140px]">Status</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11">
                 <span className="inline-flex items-center gap-1">Start Time <ChevronDown className="h-3 w-3" /></span>
               </TableHead>
               <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[110px]">Duration</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pr-6 w-[100px] text-right">Cost</TableHead>
+              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pr-6 w-[110px] text-right">Cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -3043,8 +3046,8 @@ function LogsTab({ agentId }: { agentId: number }) {
               ))
             ) : pageItems.length > 0 ? (
               pageItems.map(call => {
-                const isWeb = !call.toNumber || call.toNumber.trim() === "";
-                const costCents = (call as any).costCents ?? 0;
+                const isWeb = isWebCall(call);
+                const costCents = call.costCents;
                 const sc = STATUS_COLORS[call.status] ?? { bg: "bg-zinc-500/10", text: "text-zinc-400" };
                 return (
                   <TableRow key={call.id} className="hover:bg-muted/20 border-b border-border/40 cursor-default">
@@ -3060,7 +3063,9 @@ function LogsTab({ agentId }: { agentId: number }) {
                       #{call.id}
                     </TableCell>
                     <TableCell className="py-3.5 font-mono text-xs text-foreground/80">
-                      {call.toNumber || call.fromNumber || <span className="text-muted-foreground/25">—</span>}
+                      {isWeb
+                        ? <span className="text-muted-foreground/25">—</span>
+                        : (call.toNumber || call.fromNumber || <span className="text-muted-foreground/25">—</span>)}
                     </TableCell>
                     <TableCell className="py-3.5">
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground/70">
@@ -3075,7 +3080,7 @@ function LogsTab({ agentId }: { agentId: number }) {
                       {fmtDur(call.durationSeconds)}
                     </TableCell>
                     <TableCell className="py-3.5 pr-6 font-mono text-xs text-foreground/70 text-right">
-                      {costCents > 0 ? `$${(costCents / 100).toFixed(3)}` : "—"}
+                      {costCents != null ? `$${(costCents / 100).toFixed(3)}` : "—"}
                     </TableCell>
                   </TableRow>
                 );
