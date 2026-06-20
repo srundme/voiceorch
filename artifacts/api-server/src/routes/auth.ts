@@ -5,6 +5,8 @@
  *   POST /api/auth/login                   — sign in, returns { token }
  *   POST /api/auth/password-reset/request  — send OTP email for password reset
  *   POST /api/auth/password-reset/verify   — verify OTP + set new password, returns { token }
+ *   GET  /api/auth/google/connect          — redirect to Google OAuth consent screen
+ *   GET  /api/auth/google/callback         — handle Google OAuth callback, issue session token
  *
  * The session token is an HS256 JWT. The frontend stores it in
  * localStorage["voiceorch:session"] and sends it as Authorization: Bearer <token>.
@@ -19,6 +21,8 @@ import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import { registerTransientKey } from "../services/rate-limit-cleanup.js";
+import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
+import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
 const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
@@ -418,6 +422,145 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err }, "Password reset verify error");
     res.status(500).json({ error: "Failed to reset password. Please try again." });
+  }
+});
+
+// ── Google Sign-In ────────────────────────────────────────────────────────────
+
+const LOGIN_CALLBACK_PATH = "/api/auth/google/callback";
+
+router.get("/auth/google/connect", (req, res): void => {
+  if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
+    res.status(503).json({ error: "Google Sign-In is not configured on this platform." });
+    return;
+  }
+
+  // Opaque random state — bound to this browser via an HttpOnly cookie.
+  // The cookie is the binding mechanism; the state in the URL is only used
+  // to match it on the callback. No signature needed because without a
+  // matching server-issued cookie Google cannot be made to call our callback
+  // with an attacker-controlled state.
+  const state = randomBytes(24).toString("hex");
+  const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);
+
+  res.cookie("google_login_state", state, {
+    httpOnly: true,
+    secure: process.env["NODE_ENV"] !== "development",
+    sameSite: "lax",
+    maxAge: 10 * 60 * 1000, // 10 minutes
+  });
+
+  const url = getLoginAuthUrl(state, redirectUri);
+  logger.info({ redirectUri }, "Google Sign-In: redirecting to consent screen");
+  res.redirect(url);
+});
+
+router.get("/auth/google/callback", async (req, res): Promise<void> => {
+  const { code, error, state } = req.query as { code?: string; error?: string; state?: string };
+  const base = dashboardBase();
+  const errorRedirect = `${base}/?google_error=true`;
+
+  if (error || !code || !state) {
+    logger.warn({ error }, "Google Sign-In callback: missing params or user denied access");
+    res.redirect(errorRedirect);
+    return;
+  }
+
+  // Strict cookie-bound CSRF check. cookie-parser is installed and wired in
+  // app.ts, so req.cookies is always available here.
+  const cookieState = (req as any).cookies?.["google_login_state"] as string | undefined;
+  if (!cookieState || cookieState !== state) {
+    logger.warn({ hasCookie: !!cookieState }, "Google Sign-In callback: CSRF state mismatch or missing cookie");
+    res.redirect(errorRedirect);
+    return;
+  }
+
+  // Clear the one-time state cookie immediately
+  res.clearCookie("google_login_state");
+
+  try {
+    const redirectUri = deriveRedirectUri(req, LOGIN_CALLBACK_PATH);
+    const profile = await exchangeLoginCode(code, redirectUri);
+
+    if (!profile.sub) {
+      logger.warn("Google Sign-In callback: no sub in profile");
+      res.redirect(errorRedirect);
+      return;
+    }
+
+    const googleSub = `google:${profile.sub}`;
+    const normalizedEmail = profile.email?.trim().toLowerCase() ?? null;
+
+    // Look up by google sub first
+    let [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, googleSub));
+
+    if (!user && normalizedEmail) {
+      // Check for existing email-based account with the same address
+      const [emailUser] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.email, normalizedEmail));
+
+      if (emailUser) {
+        if (!emailUser.passwordHash) {
+          // Pure Google-only or social user — adopt the google sub
+          await db
+            .update(usersTable)
+            .set({ clerkId: googleSub })
+            .where(eq(usersTable.id, emailUser.id));
+          user = { ...emailUser, clerkId: googleSub };
+          logger.info({ id: emailUser.id, email: normalizedEmail }, "Google Sign-In: migrated email account to google sub");
+        } else {
+          // Email+password account — create a separate google: row (both login methods allowed)
+          logger.info({ email: normalizedEmail }, "Google Sign-In: email+password account found; creating parallel google: entry");
+        }
+      }
+    }
+
+    if (!user) {
+      // New user — provision with welcome credit
+      const displayName = profile.name?.trim() || normalizedEmail?.split("@")[0] || "User";
+      const [created] = await db
+        .insert(usersTable)
+        .values({
+          clerkId: googleSub,
+          email: normalizedEmail,
+          name: displayName,
+          walletBalanceCents: FREE_CREDIT_CENTS,
+          freeCreditsGranted: true,
+          apiKey: generateApiKey(),
+          orgKey: generateOrgKey(),
+        })
+        .returning();
+      user = created;
+
+      await db.insert(walletTransactionsTable).values({
+        userId: user.id,
+        type: "free_credit",
+        amountCents: FREE_CREDIT_CENTS,
+        description: "Welcome credit — $5.00 free to get started",
+        status: "completed",
+      });
+
+      logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: new user registered");
+    } else {
+      logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: existing user signed in");
+    }
+
+    const token = createSessionToken({
+      sub: googleSub,
+      email: user.email ?? normalizedEmail,
+      name: user.name ?? profile.name,
+    });
+
+    // Deliver the token via URL fragment — same pattern as email/password login
+    res.redirect(`${base}/#session=${encodeURIComponent(token)}`);
+  } catch (err) {
+    logger.error({ err }, "Google Sign-In callback: unexpected error");
+    res.redirect(errorRedirect);
   }
 });
 
