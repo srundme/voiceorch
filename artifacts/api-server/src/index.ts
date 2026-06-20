@@ -206,13 +206,21 @@ if (process.env["GOOGLE_REDIRECT_URI"]) {
 }
 
 // Seed the Drizzle migration journal for pre-existing production DBs.
-// If the DB was bootstrapped via drizzle-kit push (no journal), mark the two
-// known historical migrations as already applied so migrate() only runs NEW ones.
+// If the DB was bootstrapped via drizzle-kit push (no journal), mark all known
+// historical migrations as already applied so migrate() only runs NEW ones.
+// Extend this list whenever a new migration is confirmed applied on all prod DBs.
 async function bootstrapMigrationJournal(): Promise<void> {
   const KNOWN = [
     { hash: "e2b1a59f6d146aa9caa4a43233e860debafcf1655f7286a07f2c7c3c2519f559", created_at: 1781539061605 },
     { hash: "b7c04adb1d16b404a9cd1e22d854e7db01af1846504f561990a4b70bcf1a3b91", created_at: 1781693800000 },
     { hash: "03e45f9b6656453f1448ab5719eef5e8a5182d075c5f5d7becfd5dab64d4bbbf", created_at: 1781722900000 },
+    { hash: "8ca3b3f19137ceab328011596551cd460d7867e52c45d43ae98f998f906d404f", created_at: 1781746700000 },
+    { hash: "323b47d5f4c8b169d2ae7e44b7a943782383961a0512877cc578f2695cdd365a", created_at: 1781747200000 },
+    { hash: "953ef28a6884c0110d2a1a4c06c0f4cf0508e412a46db271600789d6a5527581", created_at: 1781766600000 },
+    { hash: "0534e771db66625444151d9a7968caee950ebf49015d0e2ce98af400cf8c3018", created_at: 1781800000000 },
+    { hash: "d3ff2d6870fb28a57098fb713f847ed4feb49078a43d32c512747771848dc470", created_at: 1781900000000 },
+    { hash: "6583f0bbf516191499036d864174bf2a682ef18553e2395248953f1ce2472a7a", created_at: 1782000000000 },
+    { hash: "73113b9037eebaef3316e263fa2374fade6f98c0d27b0e2fbf5f5cf201f7513c", created_at: 1782100000000 },
   ];
 
   // Check if the users table exists (= DB was created outside of migrations)
