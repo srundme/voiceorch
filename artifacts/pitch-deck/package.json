@@ -26,5 +26,9 @@
     "vite": "catalog:",
     "wouter": "catalog:",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "framer-motion": "catalog:",
+    "gsap": "^3.15.0"
   }
 }
