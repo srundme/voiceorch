@@ -111,7 +111,9 @@ export class SarvamSTT implements STTAdapter {
     const wavAb = new ArrayBuffer(wav.byteLength);
     new Uint8Array(wavAb).set(wav);
     formData.append("file", new Blob([wavAb], { type: "audio/wav" }), "audio.wav");
-    formData.append("model", this.model);
+    // saaras:v3-realtime is our UI label; the actual API model name is saaras:v3
+    const batchModel = this.model === "saaras:v3-realtime" ? "saaras:v3" : this.model;
+    formData.append("model", batchModel);
     formData.append("language_code", this.langCode);
 
     const resp = await fetch("https://api.sarvam.ai/speech-to-text", {
