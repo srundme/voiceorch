@@ -9,10 +9,12 @@ interface ImpersonationSession {
   targetUserId: string;
 }
 
-// Cache by (clerkUserId → session | null), 30 s TTL.
+// Cache by (clerkUserId → session | null), 5 s TTL.
 // Invalidated immediately on session end via invalidateImpersonationCache().
+// 5 s (down from 30 s) narrows the window for stale "active" sessions on
+// replicas that didn't receive the invalidation call when a session ends.
 const cache = new Map<string, { session: ImpersonationSession | null; expiresAt: number }>();
-const CACHE_TTL_MS = 30_000;
+const CACHE_TTL_MS = 5_000;
 
 async function lookupImpersonationSession(clerkUserId: string): Promise<ImpersonationSession | null> {
   const now = Date.now();
@@ -114,6 +116,18 @@ export async function detectImpersonation(req: Request, res: Response, next: Nex
   if (!clerkUserId) { next(); return; }
 
   const session = await lookupImpersonationSession(clerkUserId);
+
+  logger.debug(
+    {
+      adminId: session?.adminId ?? null,
+      effectiveUserId: clerkUserId,
+      impersonated: !!session,
+      route: req.path,
+      method: req.method,
+    },
+    "[impersonation] identity resolved",
+  );
+
   if (session) {
     (req as unknown as { impersonationSession: ImpersonationSession }).impersonationSession = session;
 

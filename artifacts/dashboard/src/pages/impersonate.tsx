@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { SnapServeLoader } from "@/components/logo";
 
 export default function ImpersonatePage() {
   const { signIn } = useAuth();
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -30,6 +32,7 @@ export default function ImpersonatePage() {
               email: impEmail ? decodeURIComponent(impEmail) : null,
             }),
           );
+          queryClient.clear();
           navigate("/app");
         })
         .catch(() => navigate("/"));

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ImpersonationData {
   sessionToken: string;
@@ -19,6 +20,7 @@ function getImpersonation(): ImpersonationData | null {
 export function ImpersonationBanner() {
   const [imp, setImp] = useState<ImpersonationData | null>(null);
   const [exiting, setExiting] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setImp(getImpersonation());
@@ -40,6 +42,7 @@ export function ImpersonationBanner() {
     } finally {
       localStorage.removeItem("voiceorch:impersonation");
       localStorage.removeItem("voiceorch:session");
+      queryClient.clear();
       window.location.href = window.location.origin + "/admin";
     }
   }
