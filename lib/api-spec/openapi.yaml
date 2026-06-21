@@ -6145,7 +6145,7 @@ components:
                 type: ["string", "null"]
         llmProvider:
           type: string
-          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox"
         llmModel:
           type: ["string", "null"]
         ttsProvider:
@@ -6345,7 +6345,7 @@ components:
                 type: ["string", "null"]
         llmProvider:
           type: string
-          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox"
         llmModel:
           type: string
         ttsProvider:
@@ -6489,7 +6489,7 @@ components:
                 type: ["string", "null"]
         llmProvider:
           type: string
-          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen"
+          description: "LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox"
         llmModel:
           type: string
         ttsProvider:

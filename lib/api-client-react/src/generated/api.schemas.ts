@@ -409,7 +409,7 @@ export interface Agent {
      * @nullable
      */
   asrFallbackProviders?: AgentAsrFallbackProvidersItem[] | null;
-  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
+  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox */
   llmProvider: string;
   /** @nullable */
   llmModel?: string | null;
@@ -670,7 +670,7 @@ export interface AgentInput {
   asrAutoFallback?: boolean;
   /** Ordered list of backup STT providers tried when the primary fails */
   asrFallbackProviders?: AgentInputAsrFallbackProvidersItem[];
-  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
+  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox */
   llmProvider: string;
   llmModel?: string;
   ttsProvider: string;
@@ -792,7 +792,7 @@ export interface AgentUpdate {
   asrAutoFallback?: boolean;
   /** Ordered list of backup STT providers tried when the primary fails */
   asrFallbackProviders?: AgentUpdateAsrFallbackProvidersItem[];
-  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen */
+  /** LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox */
   llmProvider?: string;
   llmModel?: string;
   ttsProvider?: string;

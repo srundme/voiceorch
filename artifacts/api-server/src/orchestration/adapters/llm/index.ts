@@ -8,12 +8,15 @@ import { DeepSeekLLM } from "./deepseek.js";
 import { AnthropicLLM } from "./anthropic.js";
 import { MistralLLM } from "./mistral.js";
 import { CohereLLM } from "./cohere.js";
+import { UltravoxLLM } from "./ultravox.js";
 import { STUB_PROVIDERS_ENABLED, createStubLLM } from "../stubs.js";
 
 export function createLLMAdapter(
   provider: string,
   apiKey: string,
-  model: string | null
+  model: string | null,
+  /** Optional override for the provider's base URL (e.g. self-hosted vLLM endpoint). */
+  baseUrl?: string
 ): LLMAdapter {
   if (STUB_PROVIDERS_ENABLED) return createStubLLM();
   switch (provider.toLowerCase()) {
@@ -38,6 +41,8 @@ export function createLLMAdapter(
       return new CohereLLM(apiKey, model);
     case "qwen":
       return new QwenLLM(apiKey, model);
+    case "ultravox":
+      return new UltravoxLLM(apiKey, model, baseUrl);
     default:
       throw new Error(`Unknown LLM provider: ${provider}`);
   }

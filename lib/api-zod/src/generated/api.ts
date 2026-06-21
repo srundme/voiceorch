@@ -40,7 +40,7 @@ export const ListAgentsResponseItem = zod.object({
   "provider": zod.string().optional(),
   "model": zod.string().nullish()
 })).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),
@@ -151,7 +151,7 @@ export const CreateAgentBody = zod.object({
   "provider": zod.string().optional(),
   "model": zod.string().nullish()
 })).optional().describe('Ordered list of backup STT providers tried when the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox'),
   "llmModel": zod.string().optional(),
   "ttsProvider": zod.string(),
   "ttsVoice": zod.string().optional(),
@@ -242,7 +242,7 @@ export const GetAgentResponse = zod.object({
   "provider": zod.string().optional(),
   "model": zod.string().nullish()
 })).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),
@@ -356,7 +356,7 @@ export const UpdateAgentBody = zod.object({
   "provider": zod.string().optional(),
   "model": zod.string().nullish()
 })).optional().describe('Ordered list of backup STT providers tried when the primary fails'),
-  "llmProvider": zod.string().optional().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
+  "llmProvider": zod.string().optional().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox'),
   "llmModel": zod.string().optional(),
   "ttsProvider": zod.string().optional(),
   "ttsVoice": zod.string().optional(),
@@ -452,7 +452,7 @@ export const UpdateAgentResponse = zod.object({
   "provider": zod.string().optional(),
   "model": zod.string().nullish()
 })).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),
@@ -571,7 +571,7 @@ export const ToggleAgentResponse = zod.object({
   "provider": zod.string().optional(),
   "model": zod.string().nullish()
 })).nullish().describe('Ordered list of backup STT providers tried when the primary fails'),
-  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen'),
+  "llmProvider": zod.string().describe('LLM provider: openai, deepseek, anthropic, mistral, cohere, qwen, groq, sarvam, ultravox'),
   "llmModel": zod.string().nullish(),
   "ttsProvider": zod.string().describe('TTS provider: elevenlabs, openai, aws_polly, azure, cartesia, deepgram'),
   "ttsVoice": zod.string().nullish(),

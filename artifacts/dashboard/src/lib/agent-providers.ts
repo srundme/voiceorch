@@ -13,6 +13,7 @@ export const LLM_PROVIDERS = [
   { value: "google",    label: "Google Gemini" },
   { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
+  { value: "ultravox",  label: "Ultravox (Fixie.ai)" },
   { value: "sarvam",    label: "Sarvam" },
   { value: "deepseek",  label: "DeepSeek" },
   { value: "mistral",   label: "Mistral" },
@@ -51,6 +52,10 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
   deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
   mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
+  ultravox:  [
+    { value: "ultravox-v0.6-gemma3-27b",      label: "Ultravox v0.6 Gemma3 27B (best quality, multilingual)" },
+    { value: "ultravox-v0.4_1-llama-3_1-8b",  label: "Ultravox v0.4 Llama 3.1 8B (fast, lighter)" },
+  ],
 };
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
