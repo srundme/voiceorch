@@ -370,6 +370,17 @@ export function injectEnhancedMemory(
   // These directives are HIGH PRIORITY and must override any "introduce
   // yourself" / scripted-intro behaviour in the agent's base prompt below.
   lines.push("");
+  // Identity contamination guard: the stored name may be from a previous caller
+  // who used the same phone number. If this caller states their own name at any
+  // point during the call, that self-stated name is authoritative and overrides
+  // whatever is stored in memory above. Never keep calling the caller by the
+  // stored name after they have told you a different name.
+  lines.push(
+    "⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call " +
+    "(e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name " +
+    "and use it exclusively for the rest of the call. The caller's self-stated name takes absolute " +
+    "priority over the stored name shown above, which may belong to a previous caller on the same number.",
+  );
   if (isRecentDrop) {
     lines.push(
       "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
@@ -741,8 +752,15 @@ export async function updateCallerProfile(opts: {
   callId: number;
   wasDropped?: boolean;
   durationSeconds?: number;
+  /**
+   * Name that was latched mid-call via real-time name detection (latchCallerName).
+   * When non-null and the LLM extraction produces a conflicting name, this takes
+   * priority — the caller's self-stated name is more reliable than LLM inference
+   * from a transcript where the agent may have already used the wrong (stored) name.
+   */
+  callerNameInCall?: string | null;
 }): Promise<void> {
-  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds } = opts;
+  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall } = opts;
 
   if (history.length < 1) return;
 
@@ -897,6 +915,22 @@ export async function updateCallerProfile(opts: {
   }
 
   // ── Phase 3c: update profile summary (L1 backward compat) ────────────────
+  // Identity contamination guard: if a name was latched during this call (via
+  // latchCallerName — the caller explicitly stated "my name is X") and the LLM
+  // extraction disagrees, trust the latched name. The transcript may have the
+  // agent using an incorrect stored name from a previous caller, which the LLM
+  // could then pick up and re-confirm. The self-stated name is the ground truth.
+  if (
+    callerNameInCall &&
+    extracted.name &&
+    extracted.name.toLowerCase() !== callerNameInCall.toLowerCase()
+  ) {
+    logger.warn(
+      { agentId, phoneNumber, callId, latchedName: callerNameInCall, extractedName: extracted.name },
+      "Caller memory: LLM-extracted name conflicts with mid-call latched name — keeping latched name to prevent identity contamination",
+    );
+    extracted.name = callerNameInCall;
+  }
   const newName    = extracted.name    || existing?.name    || null;
   const newSummary = extracted.summary || existing?.summary || null;
 

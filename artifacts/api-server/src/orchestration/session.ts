@@ -57,7 +57,9 @@ interface ActiveSession {
   // Dropped-call detection: true when pipeline triggered the end (phrase/timeout/tool)
   // false means WS just closed — i.e. call was likely dropped mid-conversation
   naturalEndTriggered: boolean;
-
+  /** Name latched mid-call via latchCallerName (caller said "my name is X").
+   *  Used to guard against LLM-extraction contamination at call-end. */
+  callerNameLatchedThisCall: string | null;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -279,6 +281,9 @@ export async function createSession(params: {
   const callerPhone = humanPhone(params.fromNumber, params.toNumber);
   let callerProfileSnapshot: CallerProfile | null = null;
   let latchedFactsMap = new Map<string, string>();
+  // Tracks the name latched THIS call via latchCallerName (caller said "my name is X").
+  // Kept separate from callerProfileSnapshot.name so we can detect contamination at call-end.
+  let callerNameLatchedThisCall: string | null = null;
 
   const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
@@ -574,6 +579,7 @@ export async function createSession(params: {
           if (latched && callerProfileSnapshot) {
             callerProfileSnapshot = { ...callerProfileSnapshot, name: latched };
           }
+          if (latched) callerNameLatchedThisCall = latched;
         });
         // Real-time structured fact latch — pattern-based detection, fire-and-forget
         void latchCallerFact({
@@ -721,8 +727,9 @@ export async function createSession(params: {
     get wasTransferred() { return wasTransferred; },
     get transferredTo() { return transferredTo; },
     get naturalEndTriggered() { return naturalEndTriggered; },
+    get callerProfileSnapshot() { return callerProfileSnapshot; },
+    get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
     callerPhone,
-    callerProfileSnapshot,
     agentUserId:      agent.userId ?? null,
     agentLlmProvider: agent.llmProvider,
     agentLlmModel:    agent.llmModel ?? "",
@@ -1290,13 +1297,14 @@ export async function endSession(sessionId: string): Promise<void> {
                 const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
                 const history = session.pipeline.getHistory();
                 await updateCallerProfile({
-                  agentId:     call.agentId,
-                  phoneNumber: session.callerPhone!,
+                  agentId:           call.agentId,
+                  phoneNumber:       session.callerPhone!,
                   history,
-                  llm:         memLlm,
-                  existing:    session.callerProfileSnapshot,
-                  callId:      session.callId,
+                  llm:               memLlm,
+                  existing:          session.callerProfileSnapshot,
+                  callId:            session.callId,
                   wasDropped,
+                  callerNameInCall:  session.callerNameLatchedThisCall,
                 });
                 if (!wasDropped) {
                   await detectCallbackRequest({

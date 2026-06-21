@@ -364,8 +364,12 @@ export async function executeNativeBooking(
     if (preferredRaw) {
       logger.info({ callId, preferredRaw, searchStart, minSlotStart, isExactTime }, "Native booking: preferred date resolved");
     }
+    const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    // Use formatInTimeZone so offset-aware datetimes like "2026-06-22T14:00:00+05:30"
+    // produce the correct calendar-local date string (not the UTC-local date string
+    // which would be wrong when the offset crosses midnight: e.g. 00:00+05:30 → "prev day" in UTC).
+    let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     if (slots.length === 0) {
@@ -636,8 +640,9 @@ export async function executeNativeCheckAvailability(
     const { searchStart, minSlotStart, timeFilter } = preferredRaw
       ? parsePreferredDate(preferredRaw, calendar.timezone)
       : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
+    const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
 
@@ -859,8 +864,9 @@ export async function executeNativeReschedule(
         "Native reschedule: preferred date resolved",
       );
     }
+    const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-    let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
+    let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
     const filteredSlots = slots.filter((s) => s.slotStart.getTime() !== existing.slotStart.getTime());

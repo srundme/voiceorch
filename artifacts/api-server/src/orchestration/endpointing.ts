@@ -87,8 +87,11 @@ function envInt(name: string, def: number): number {
  *  below carrier drop. Override with env FORCE_FINALIZE_MS. */
 export const FORCE_FINALIZE_MS  = envInt("FORCE_FINALIZE_MS", 1800);
 /** Loose backstop: no usable transcript at all since we entered "Listening…" →
- *  recovery reprompt (not a hangup). Override with env STALL_BACKSTOP_MS. */
-export const STALL_BACKSTOP_MS  = envInt("STALL_BACKSTOP_MS", 15000);
+ *  recovery reprompt (not a hangup). Override with env STALL_BACKSTOP_MS.
+ *  Default lowered from 15 000 ms to 10 000 ms so the first reprompt fires
+ *  after ~10 s of silence, giving the caller two clear chances (at ~10 s and
+ *  ~20 s) before the call ends. */
+export const STALL_BACKSTOP_MS  = envInt("STALL_BACKSTOP_MS", 10000);
 /** Max consecutive stall reprompts before ending the call. Override with env
  *  STALL_MAX_REPROMPTS. */
 export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);

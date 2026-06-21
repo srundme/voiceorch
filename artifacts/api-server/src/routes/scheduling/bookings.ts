@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, or, gte, lte, sql } from "drizzle-orm";
+import { formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
 import {
@@ -83,11 +84,14 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
   let booking: typeof bookingsTable.$inferSelect | undefined;
   let lockConflict = false;
 
-  // Validate that the requested slot appears in the computed availability windows
+  // Validate that the requested slot appears in the computed availability windows.
+  // Use formatInTimeZone so that offset-aware datetimes (e.g. IST +05:30) are
+  // resolved to the correct calendar-local date rather than the server/UTC date.
+  const slotTz = calendar.timezone || "UTC";
   const availableSlots = await getAvailableSlots(
     eventType.id,
-    format(slotStart, "yyyy-MM-dd"),
-    format(slotStart, "yyyy-MM-dd"),
+    formatInTimeZone(slotStart, slotTz, "yyyy-MM-dd"),
+    formatInTimeZone(slotStart, slotTz, "yyyy-MM-dd"),
   );
   const slotIsAvailable = availableSlots.some(
     (s) => s.slotStart.getTime() === slotStart.getTime(),
@@ -267,11 +271,12 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
     const newSlotEnd = addMinutes(newSlotStart, eventType?.durationMinutes ?? 30);
     const lockKey = buildSlotLockKey(existing.calendarId, newSlotStart);
 
-    // Validate new slot against computed availability windows
+    // Validate new slot against computed availability windows (timezone-safe).
+    const reschedTz = calendar?.timezone || "UTC";
     const availableSlots = await getAvailableSlots(
       existing.eventTypeId,
-      format(newSlotStart, "yyyy-MM-dd"),
-      format(newSlotStart, "yyyy-MM-dd"),
+      formatInTimeZone(newSlotStart, reschedTz, "yyyy-MM-dd"),
+      formatInTimeZone(newSlotStart, reschedTz, "yyyy-MM-dd"),
     );
     const slotIsAvailable = availableSlots.some(
       (s) => s.slotStart.getTime() === newSlotStart.getTime(),

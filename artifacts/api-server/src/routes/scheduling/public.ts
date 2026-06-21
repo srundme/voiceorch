@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { format, addMinutes } from "date-fns";
+import { addMinutes } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { eq, and, or, sql } from "drizzle-orm";
 import { db, eventTypesTable, schedulingCalendarsTable, bookingsTable } from "@workspace/db";
 import { getAvailableSlots } from "../../services/scheduling/slot-engine.js";
@@ -130,11 +131,15 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   let booking: typeof bookingsTable.$inferSelect | undefined;
   let lockConflict = false;
 
-  // Validate the requested slot against computed availability windows
+  // Validate the requested slot against computed availability windows.
+  // Use formatInTimeZone so that a slot like "2026-06-22T14:00:00+05:30" resolves
+  // to "2026-06-22" in IST — not the UTC-local date ("2026-06-22T08:30:00Z" → same
+  // day here, but near-midnight IST slots would cross to the wrong day without this).
+  const slotTz = calendar.timezone || "UTC";
   const availableSlots = await getAvailableSlots(
     eventType.id,
-    format(slotStart, "yyyy-MM-dd"),
-    format(slotStart, "yyyy-MM-dd"),
+    formatInTimeZone(slotStart, slotTz, "yyyy-MM-dd"),
+    formatInTimeZone(slotStart, slotTz, "yyyy-MM-dd"),
   );
   const slotIsAvailable = availableSlots.some(
     (s) => s.slotStart.getTime() === slotStart.getTime(),
@@ -447,11 +452,12 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   const newSlotEnd = addMinutes(newSlotStart, eventType.durationMinutes);
   const lockKey = buildSlotLockKey(booking.calendarId, newSlotStart);
 
-  // Validate new slot against availability
+  // Validate new slot against availability (timezone-safe date boundary).
+  const reschedTz = calendar.timezone || "UTC";
   const availableSlots = await getAvailableSlots(
     booking.eventTypeId,
-    format(newSlotStart, "yyyy-MM-dd"),
-    format(newSlotStart, "yyyy-MM-dd"),
+    formatInTimeZone(newSlotStart, reschedTz, "yyyy-MM-dd"),
+    formatInTimeZone(newSlotStart, reschedTz, "yyyy-MM-dd"),
   );
   const slotIsAvailable = availableSlots.some(
     (s) => s.slotStart.getTime() === newSlotStart.getTime(),

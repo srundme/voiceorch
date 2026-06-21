@@ -647,6 +647,8 @@ export async function handleWebCallWebSocket(
   }).catch(() => ({ ids: [] as number[], block: null }));
 
   let webcallProfile: import("../callerMemory.js").CallerProfile | null = null;
+  // Tracks the name latched THIS call via latchCallerName (caller said "my name is X").
+  let webcallNameLatchedThisCall: string | null = null;
   let webcallLatchedFacts = new Map<string, string>();
   let systemPrompt = agent.generatedPrompt ?? agent.systemPrompt ?? "";
 
@@ -1084,6 +1086,7 @@ export async function handleWebCallWebSocket(
       if (webcallIdentifier) {
         void latchCallerName({ agentId, phoneNumber: webcallIdentifier, transcript: userText, existingName: webcallProfile?.name ?? null, callId }).then((latched) => {
           if (latched && webcallProfile) webcallProfile = { ...webcallProfile, name: latched };
+          if (latched) webcallNameLatchedThisCall = latched;
         });
         void latchCallerFact({ agentId, phoneNumber: webcallIdentifier, transcript: userText, callId, existingFacts: webcallLatchedFacts }).then((updated) => { webcallLatchedFacts = updated; });
       }
@@ -2977,12 +2980,13 @@ export async function handleWebCallWebSocket(
     if (webcallIdentifier && history.length >= 2) {
       void updateCallerProfile({
         agentId,
-        phoneNumber: webcallIdentifier,
+        phoneNumber:      webcallIdentifier,
         history,
         llm,
-        existing: webcallProfile,
+        existing:         webcallProfile,
         callId,
-        wasDropped: false,
+        wasDropped:       false,
+        callerNameInCall: webcallNameLatchedThisCall,
       }).catch((memErr) => {
         logger.warn({ callId, memErr }, "Post-call webcall memory update failed");
       });
