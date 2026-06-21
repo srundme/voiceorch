@@ -116,6 +116,22 @@ export async function handleVobizWebSocket(
 
         logger.info({ agentId, streamId, callId, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
+        // ── Silence keepalive during session init ───────────────────────────
+        // VoBiz drops the call if the audio bridge receives no data for ~2 s
+        // even with keepCallAlive="true". This happens when createSession is
+        // slow due to DB pool latency or cold connections. Sending 20 ms
+        // silence frames (PCM zeros) keeps the VoBiz bridge alive until the
+        // first real pipeline audio arrives via onAudioOut.
+        const SILENCE_MS      = 20;
+        const SILENCE_SAMPLES = (8000 * SILENCE_MS) / 1000;           // 160 @ 8 kHz
+        const silenceFrame    = Buffer.alloc(SILENCE_SAMPLES * 2, 0);  // 16-bit LE PCM
+        let silenceTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+          if (ws.readyState === ws.OPEN) sendAudioToVobiz(silenceFrame);
+        }, SILENCE_MS);
+        const stopSilence = (): void => {
+          if (silenceTimer) { clearInterval(silenceTimer); silenceTimer = null; }
+        };
+
         try {
           const { sessionId: sid } = await createSession({
             agentId,
@@ -126,21 +142,26 @@ export async function handleVobizWebSocket(
             platformTelephony,
             customParameters: params,
             campaignLeadId,
-            onAudioOut: sendAudioToVobiz,
-            onCallEnd: () => ws.close(),
+            onAudioOut: (audio: Buffer) => {
+              stopSilence();            // first real audio → drop silence immediately
+              sendAudioToVobiz(audio);
+            },
+            onCallEnd: () => { stopSilence(); ws.close(); },
             onBargeIn: sendBargeIn,
           });
+          stopSilence();                // safety-net: session ready with no audio yet
           sessionId = sid;
           if (sessionEndedBeforeReady) {
-            // VoBiz sent stop/closed the socket while createSession was still setting
-            // up (e.g. 2-second timeout with no audio).  sessionId was null then so
-            // endSession was skipped — call it now so the record is not stuck in_progress.
+            // VoBiz sent stop/closed the socket while createSession was still
+            // setting up.  sessionId was null then so endSession was skipped —
+            // call it now so the record is not stuck in_progress.
             logger.warn({ sessionId, agentId }, "Vobiz session ended before setup completed — ending immediately");
             await endSession(sessionId);
           } else {
             logger.info({ sessionId, agentId, fromNumber, toNumber, streamId }, "Vobiz session started");
           }
         } catch (err) {
+          stopSilence();
           logger.error({ err, agentId }, "Failed to create Vobiz session");
           ws.close();
         }
