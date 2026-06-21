@@ -21,6 +21,11 @@ export const LLM_PROVIDERS = [
 
 export const TTS_PROVIDERS = [
   { value: "cartesia", label: "Cartesia (Sonic)" },
+  { value: "sarvam",   label: "Sarvam (Bulbul) — Indian languages" },
+  { value: "elevenlabs", label: "ElevenLabs" },
+  { value: "openai",   label: "OpenAI TTS" },
+  { value: "azure",    label: "Azure TTS" },
+  { value: "deepgram", label: "Deepgram Aura" },
 ];
 
 export const TELEPHONY_PROVIDERS = [
@@ -64,6 +69,10 @@ export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "sonic-3",     label: "Sonic 3" },
     { value: "sonic-2",     label: "Sonic 2 (stable)" },
     { value: "sonic-turbo", label: "Sonic Turbo (fast, low-latency)" },
+  ],
+  sarvam: [
+    { value: "bulbul:v2", label: "Bulbul v2 — streaming, Indian languages (recommended)" },
+    { value: "bulbul:v1", label: "Bulbul v1" },
   ],
 };
 
