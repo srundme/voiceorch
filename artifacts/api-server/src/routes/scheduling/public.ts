@@ -40,10 +40,11 @@ import {
 
 const router: IRouter = Router();
 
+import { getSelfBaseUrl } from "../../lib/app-domain.js";
+
 function getBaseUrl(): string {
   if (process.env["APP_BASE_URL"]) return process.env["APP_BASE_URL"];
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
-  return domain ? `https://${domain}` : "http://localhost:80";
+  return getSelfBaseUrl();
 }
 
 function formatBooking(b: typeof bookingsTable.$inferSelect) {

@@ -15,6 +15,7 @@ import { eq, asc, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
+import { getSelfBaseUrl } from "../../lib/app-domain.js";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
@@ -29,11 +30,8 @@ function callbackUrl(): string {
   if (process.env["GOOGLE_REDIRECT_URI"]) {
     return process.env["GOOGLE_REDIRECT_URI"];
   }
-  // Auto-detect from REPLIT_DOMAINS (works in dev; may differ in production)
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
-  return domain
-    ? `https://${domain}/api/scheduling/google/callback`
-    : "http://localhost:80/api/scheduling/google/callback";
+  // Auto-detect from APP_DOMAIN (set in .env for local dev, in Railway for production)
+  return `${getSelfBaseUrl()}/api/scheduling/google/callback`;
 }
 
 /**

@@ -32,13 +32,10 @@ function platformConfigured(): boolean {
   return !!(process.env["VOBIZ_AUTH_ID"] && process.env["VOBIZ_AUTH_TOKEN"]);
 }
 
+import { getSelfBaseUrl } from "../lib/app-domain.js";
+
 function publicBaseUrl(): string {
-  const domains = process.env["REPLIT_DOMAINS"];
-  if (domains) {
-    const first = domains.split(",")[0]?.trim();
-    if (first) return `https://${first}`;
-  }
-  return "https://localhost";
+  return getSelfBaseUrl();
 }
 
 function clientIp(req: Request): string {

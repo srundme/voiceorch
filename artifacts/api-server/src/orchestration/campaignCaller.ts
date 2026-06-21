@@ -19,10 +19,10 @@ import { isOnDnc } from "../lib/dnc-check.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { scheduleRetry } from "../services/retryEngine.js";
 
+import { getSelfBaseUrl } from "../lib/app-domain.js";
+
 function resolveBaseUrl(): string {
-  const domains = process.env["REPLIT_DOMAINS"];
-  if (domains) return `https://${domains.split(",")[0]!.trim()}`;
-  return `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  return getSelfBaseUrl();
 }
 
 /**

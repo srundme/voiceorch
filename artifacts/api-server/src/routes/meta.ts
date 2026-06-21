@@ -23,10 +23,10 @@ const router: IRouter = Router();
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
+import { getSelfBaseUrl } from "../lib/app-domain.js";
+
 function resolveBaseUrl(): string {
-  const domains = process.env["REPLIT_DOMAINS"];
-  if (domains) return `https://${domains.split(",")[0]!.trim()}`;
-  return `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  return getSelfBaseUrl();
 }
 
 function normalizePhone(raw: string): string {

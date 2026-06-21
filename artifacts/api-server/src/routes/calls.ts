@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, isNull, inArray } from "drizzle-orm";
 import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
@@ -83,8 +84,8 @@ function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], 
   // would otherwise produce a Replit dev URL that VoBiz can't WebSocket back to).
   const webhookBaseUrl = process.env["WEBHOOK_BASE_URL"];
   if (webhookBaseUrl) return webhookBaseUrl.replace(/\/$/, "");
-  const domains = process.env["REPLIT_DOMAINS"];
-  if (domains) return `https://${domains.split(",")[0]}`;
+  const appBase = getSelfBaseUrl();
+  if (appBase !== `http://localhost:${process.env["PORT"] ?? "8080"}`) return appBase;
   const host = req.headers["x-forwarded-host"] ?? req.hostname;
   const proto = (req.headers["x-forwarded-proto"] ?? "https") as string;
   return `${proto}://${host}`;

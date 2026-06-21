@@ -1,4 +1,5 @@
 import { createHmac } from "crypto";
+import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, executionLogsTable } from "@workspace/db";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
@@ -621,8 +622,7 @@ export async function createSession(params: {
           }
           const baseUrl = (
             process.env["WEBHOOK_BASE_URL"] ??
-            (process.env["REPLIT_DOMAINS"] ? `https://${process.env["REPLIT_DOMAINS"].split(",")[0]!.trim()}` : null) ??
-            `http://localhost:${process.env["PORT"] ?? "8080"}`
+            getSelfBaseUrl()
           ).replace(/\/$/, "");
 
           // ── For warm_summary mode: persist summary + get transferId for whisper URL ──

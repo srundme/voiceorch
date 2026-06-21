@@ -205,14 +205,14 @@ if (!process.env["GMAIL_USER"] || !process.env["GMAIL_APP_PASSWORD"]) {
 // are immediately visible in logs without having to trigger the flow first.
 if (process.env["GOOGLE_REDIRECT_URI"]) {
   logger.info({ uri: process.env["GOOGLE_REDIRECT_URI"] }, "Google Calendar OAuth: GOOGLE_REDIRECT_URI set");
-} else if (process.env["REPLIT_DOMAINS"]) {
+} else if (process.env["APP_DOMAIN"] ?? process.env["REPLIT_DOMAINS"]) {
   logger.info(
-    { domains: process.env["REPLIT_DOMAINS"] },
-    "Google Calendar OAuth: GOOGLE_REDIRECT_URI not set — using dynamic redirect URI derivation from REPLIT_DOMAINS / forwarded host",
+    { domain: process.env["APP_DOMAIN"] ?? process.env["REPLIT_DOMAINS"] },
+    "Google Calendar OAuth: GOOGLE_REDIRECT_URI not set — using dynamic redirect URI derivation from APP_DOMAIN / forwarded host",
   );
 } else {
   logger.warn(
-    "Google Calendar OAuth: neither GOOGLE_REDIRECT_URI nor REPLIT_DOMAINS is set — OAuth flow will likely fail",
+    "Google Calendar OAuth: neither GOOGLE_REDIRECT_URI nor APP_DOMAIN is set — OAuth flow will likely fail",
   );
 }
 

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
@@ -466,10 +467,7 @@ router.get("/webhooks/twilio/warm-transfer-xml", (req, res): void => {
       .send("<Response><Say>Warm transfer parameters missing.</Say><Hangup/></Response>");
     return;
   }
-  const domains = process.env["REPLIT_DOMAINS"];
-  const baseUrl = domains
-    ? `https://${domains.split(",")[0]!.trim()}`
-    : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  const baseUrl = getSelfBaseUrl();
   const whisperUrl = `${baseUrl}/api/webhooks/twilio/warm-briefing-xml?transferId=${transferId}`;
   res.set("Content-Type", "text/xml").send(buildTwilioWarmTransferTwiML(target, whisperUrl));
 });
@@ -482,10 +480,7 @@ router.get("/webhooks/plivo/warm-transfer-xml", (req, res): void => {
       .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
     return;
   }
-  const domains = process.env["REPLIT_DOMAINS"];
-  const baseUrl = domains
-    ? `https://${domains.split(",")[0]!.trim()}`
-    : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  const baseUrl = getSelfBaseUrl();
   const whisperUrl = `${baseUrl}/api/webhooks/plivo/warm-briefing-xml?transferId=${transferId}`;
   res.set("Content-Type", "text/xml").send(buildPlivoWarmTransferXml(target, whisperUrl));
 });
@@ -498,10 +493,7 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
       .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
     return;
   }
-  const domains = process.env["REPLIT_DOMAINS"];
-  const baseUrl = domains
-    ? `https://${domains.split(",")[0]!.trim()}`
-    : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+  const baseUrl = getSelfBaseUrl();
   const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${transferId}`;
   res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl));
 });

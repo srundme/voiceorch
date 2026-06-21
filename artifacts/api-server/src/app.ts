@@ -33,16 +33,13 @@ app.use(
   }),
 );
 
+import { getAppOrigins } from "./lib/app-domain.js";
+
 // In production restrict CORS to known dashboard origins; in dev allow all.
 const corsOrigin: string | string[] | boolean = (() => {
   if (process.env["NODE_ENV"] !== "production") return true;
-  const allowed: string[] = ["https://app.snapserve.ai"];
-  const domains = process.env["REPLIT_DOMAINS"] ?? "";
-  for (const d of domains.split(",")) {
-    const trimmed = d.trim();
-    if (trimmed) allowed.push(`https://${trimmed}`);
-  }
-  return allowed;
+  const allowed: string[] = ["https://app.snapserve.ai", ...getAppOrigins()];
+  return [...new Set(allowed)];
 })();
 app.use(cors({ credentials: true, origin: corsOrigin }));
 app.use(cookieParser());

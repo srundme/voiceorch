@@ -9,6 +9,7 @@ import {
   listConnectionCalendars,
 } from "../../services/scheduling/google-calendar.js";
 import { logger } from "../../lib/logger.js";
+import { getAppDomain, getAppOrigins, getSelfBaseUrl } from "../../lib/app-domain.js";
 
 const router: IRouter = Router();
 
@@ -16,8 +17,7 @@ const DASHBOARD_BASE = () => {
   if (process.env["APP_BASE_URL"]) {
     return process.env["APP_BASE_URL"].replace(/\/$/, "");
   }
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
-  return domain ? `https://${domain}` : "http://localhost:80";
+  return getSelfBaseUrl();
 };
 
 /**
@@ -41,10 +41,10 @@ function isTrustedOrigin(origin: string): boolean {
         // ignore malformed APP_BASE_URL
       }
     }
-    // Production domains explicitly registered
-    const registered = (process.env["REPLIT_DOMAINS"] ?? "").split(",").map(d => d.trim()).filter(Boolean);
-    if (registered.includes(host)) return true;
-    // Replit dev preview domains
+    const trustedHosts = getAppOrigins().map((o) => {
+      try { return new URL(o).hostname; } catch { return ""; }
+    }).filter(Boolean);
+    if (trustedHosts.includes(host)) return true;
     if (/^[a-z0-9-]+-\d{2}-[a-z0-9]+\.sisko\.replit\.dev$/.test(host)) return true;
     if (/^[a-z0-9-]+\.replit\.dev$/.test(host)) return true;
     return false;
@@ -85,11 +85,7 @@ function deriveRedirectUri(req: Request): string {
     return `${forwardedProto}://${host}/api/scheduling/google/callback`;
   }
 
-  // Auto-detect from REPLIT_DOMAINS
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
-  return domain
-    ? `https://${domain}/api/scheduling/google/callback`
-    : "http://localhost:80/api/scheduling/google/callback";
+  return `${getSelfBaseUrl()}/api/scheduling/google/callback`;
 }
 
 // ── List connected Google accounts ───────────────────────────────────────────
@@ -143,7 +139,7 @@ router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
   // Warn when using dynamic derivation in an environment where no fixed URI
   // is registered — Google will reject the flow if this URI isn't in the
   // Cloud Console's authorised redirect list.
-  if (!process.env["GOOGLE_REDIRECT_URI"] && !process.env["REPLIT_DOMAINS"]) {
+  if (!process.env["GOOGLE_REDIRECT_URI"] && !process.env["APP_DOMAIN"] && !process.env["REPLIT_DOMAINS"]) {
     logger.warn({ redirectUri }, "Google Calendar connect-url: GOOGLE_REDIRECT_URI not set — derived URI may not match Google Cloud Console registration");
   }
   const url = getAuthUrl(

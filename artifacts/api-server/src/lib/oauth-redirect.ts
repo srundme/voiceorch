@@ -7,6 +7,7 @@
  * (Google requires an exact redirect-URI match).
  */
 import type { Request } from "express";
+import { getAppDomain, getAppOrigins } from "./app-domain.js";
 
 /**
  * Origin the dashboard is served from (used as a fallback redirect target).
@@ -32,8 +33,10 @@ export function dashboardBase(req?: Request): string {
       return `${forwardedProto}://${host}`;
     }
   }
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
-  return domain ? `https://${domain}` : "http://localhost:80";
+  const domain = getAppDomain();
+  if (!domain) return "http://localhost:80";
+  const isLocal = domain.startsWith("localhost") || domain.startsWith("127.");
+  return isLocal ? `http://${domain}` : `https://${domain}`;
 }
 
 /**
@@ -56,11 +59,10 @@ export function isTrustedOrigin(origin: string): boolean {
         // ignore malformed APP_BASE_URL
       }
     }
-    const registered = (process.env["REPLIT_DOMAINS"] ?? "")
-      .split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
-    if (registered.includes(host)) return true;
+    const trustedHosts = getAppOrigins().map((o) => {
+      try { return new URL(o).hostname; } catch { return ""; }
+    }).filter(Boolean);
+    if (trustedHosts.includes(host)) return true;
     if (/^[a-z0-9-]+-\d{2}-[a-z0-9]+\.sisko\.replit\.dev$/.test(host)) return true;
     if (/^[a-z0-9-]+\.replit\.dev$/.test(host)) return true;
     return false;
@@ -106,6 +108,8 @@ export function deriveRedirectUri(req: Request, callbackPath: string): string {
     return `${forwardedProto}://${host}${callbackPath}`;
   }
 
-  const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0];
-  return domain ? `https://${domain}${callbackPath}` : `http://localhost:80${callbackPath}`;
+  const domain = getAppDomain();
+  if (!domain) return `http://localhost:80${callbackPath}`;
+  const isLocal = domain.startsWith("localhost") || domain.startsWith("127.");
+  return isLocal ? `http://${domain}${callbackPath}` : `https://${domain}${callbackPath}`;
 }

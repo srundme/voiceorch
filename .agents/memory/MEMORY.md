@@ -31,6 +31,7 @@
 - [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard
 - [Webcall echo-grace re-arm](webcall-echo-grace-rearm.md) — webcall START echo-grace must re-arm per sentence (echoGraceUntil), not anchor to one speakingStartedAt, or long replies clip mid-sentence; pipeline already does this via bargeInHoldUntil
 - [DPDP non-blocking wrapper](dpdp-non-blocking.md) — DPDP compliance is pre/post-only (disclosure, post-call PII scan, retention, erasure); NEVER add to dial/pipeline path, never gates dialing
+- [APP_DOMAIN replaces REPLIT_DOMAINS](app-domain-utility.md) — all public-URL derivation now goes through lib/app-domain.ts; set APP_DOMAIN in .env (local) or Railway; REPLIT_DOMAINS kept as backward-compat fallback
 - [Agent language vs ASR language conflict](agent-language-asr-conflict.md) — session.ts must use asrLanguage??language for the language rule; using language alone injects "English only" when asrLanguage=ta-IN but language=en-US (default)
 - [Emotion tags in greeting not stripped](greeting-emotion-strip.md) — pipeline.ts and webcall.ts greeting paths only stripped think tags; emotion/break tags leaked into transcript and TTS; must strip all markup at the same post-LLM step
 - [VoBiz session race condition](vobiz-session-race.md) — sessionEndedBeforeReady flag: if stop/close fires while createSession is awaiting, call endSession after createSession returns
