@@ -341,6 +341,9 @@ export async function createCalendarEvent(params: {
     const event = await calendar.events.insert({
       calendarId: "primary",
       conferenceDataVersion: 1,
+      // sendUpdates: "all" causes Google Calendar to email invitations to every
+      // attendee (and organizer). Without it Google silently skips the emails.
+      sendUpdates: "all",
       requestBody: {
         summary: params.summary,
         description: params.description,
@@ -444,6 +447,7 @@ export async function updateCalendarEvent(params: {
       calendarId: "primary",
       eventId: params.eventId,
       conferenceDataVersion: 1,
+      sendUpdates: "all",
       requestBody,
     });
     const meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;

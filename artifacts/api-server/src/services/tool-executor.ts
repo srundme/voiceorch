@@ -10,6 +10,7 @@ import {
   leadTransfersTable,
   leadTimelineTable,
   callExecutionsTable,
+  executionLogsTable,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
@@ -29,6 +30,36 @@ import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
+
+// ── Booking diagnostic log helper ────────────────────────────────────────────
+
+/**
+ * Append a structured booking step entry to the execution_logs table so it
+ * surfaces in the Call Log detail view under the "Booking" component.
+ * Fire-and-forget — never throws; logging failures must not block the booking.
+ */
+async function appendBookingLog(
+  callId: number,
+  agentId: number,
+  step: string,
+  data: Record<string, unknown>,
+  status: "info" | "success" | "error" = "info",
+): Promise<void> {
+  try {
+    await db.insert(executionLogsTable).values({
+      callId,
+      agentId,
+      component: "Booking",
+      direction: "system",
+      status,
+      provider: "VoiceOrch",
+      requestPayload: { step },
+      responsePayload: data,
+    });
+  } catch (err) {
+    logger.warn({ callId, step, err }, "appendBookingLog: failed to write execution log row");
+  }
+}
 
 // ── Tool name sanitization ────────────────────────────────────────────────────
 
@@ -377,9 +408,23 @@ export async function executeNativeBooking(
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
     if (minSlotStart) slots = slots.filter((s) => s.slotStart >= minSlotStart);
     if (timeFilter) slots = slots.filter(timeFilter);
+    void appendBookingLog(callId, agentId, "Booking Request", {
+      attendeeName,
+      attendeeEmail,
+      preferredRaw: preferredRaw ?? "(earliest available)",
+      eventTypeName: eventType.name,
+      calendarTimezone: calendar.timezone,
+      availableSlotsFound: slots.length,
+    });
+
     if (slots.length === 0) {
       const rangeDesc = preferredRaw ? `on or after "${preferredRaw}"` : "in the next 7 days";
       logger.info({ callId, eventTypeId: eventType.id }, `Native booking: no available slots ${rangeDesc}`);
+      void appendBookingLog(callId, agentId, "Availability Applied", {
+        result: "no_slots",
+        rangeDesc,
+        eventTypeId: eventType.id,
+      }, "error");
       return `error: no available slots ${rangeDesc}`;
     }
 
@@ -487,6 +532,10 @@ export async function executeNativeBooking(
 
     if (lockConflict || !booking) {
       logger.warn({ callId }, "Native booking: slot conflict");
+      void appendBookingLog(callId, agentId, "Availability Applied", {
+        result: "slot_conflict",
+        slotStart: slotStart.toISOString(),
+      }, "error");
       return "error: slot was just taken — no booking created";
     }
     const confirmedBooking = booking;
@@ -506,6 +555,15 @@ export async function executeNativeBooking(
       },
       "Native booking created",
     );
+    void appendBookingLog(callId, agentId, "Availability Applied", {
+      bookingId: confirmedBooking.id,
+      slotStart: slotStart.toISOString(),
+      slotEnd: slotEnd.toISOString(),
+      slotFormatted: dateStr,
+      status: confirmedBooking.status,
+      attendeeEmail,
+      attendeeName,
+    }, "success");
 
     // Create Google Calendar event with Meet link (best-effort, non-blocking)
     let meetLink: string | null = null;
@@ -522,6 +580,11 @@ export async function executeNativeBooking(
         logger.info({ callId, bookingId: confirmedBooking.id, connectionId }, "Native booking: creating Google Calendar event");
       } else {
         logger.warn({ callId, bookingId: confirmedBooking.id }, "Native booking: no Google Calendar connection configured — GCal event creation skipped");
+        void appendBookingLog(callId, agentId, "Calendar Event Created", {
+          result: "skipped",
+          reason: "no_google_connection",
+          bookingId: confirmedBooking.id,
+        }, "info");
       }
 
       const gcalResult = connectionId
@@ -546,9 +609,45 @@ export async function executeNativeBooking(
             sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${confirmedBooking.id}`,
           );
         }
+        void appendBookingLog(callId, agentId, "Calendar Event Created", {
+          googleEventId,
+          connectionId,
+          bookingId: confirmedBooking.id,
+          hasMeetLink: !!meetLink,
+        }, "success");
+        if (meetLink) {
+          void appendBookingLog(callId, agentId, "Meet Link Generated", {
+            meetLink,
+            googleEventId,
+            bookingId: confirmedBooking.id,
+          }, "success");
+        } else {
+          logger.warn(
+            { callId, bookingId: confirmedBooking.id, googleEventId, connectionId },
+            "Native booking: Google Calendar event created but no Meet link returned — check conferenceData in API response",
+          );
+          void appendBookingLog(callId, agentId, "Meet Link Generated", {
+            result: "missing",
+            googleEventId,
+            connectionId,
+            bookingId: confirmedBooking.id,
+            note: "conferenceData was absent in the events.insert response",
+          }, "error");
+        }
+      } else if (connectionId) {
+        void appendBookingLog(callId, agentId, "Calendar Event Created", {
+          result: "failed",
+          connectionId,
+          bookingId: confirmedBooking.id,
+        }, "error");
       }
     } catch (err) {
       logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: Google Calendar event creation failed");
+      void appendBookingLog(callId, agentId, "Calendar Event Created", {
+        result: "exception",
+        error: String(err),
+        bookingId: confirmedBooking.id,
+      }, "error");
     }
 
     sendBookingCreatedEmail({
@@ -563,7 +662,22 @@ export async function executeNativeBooking(
       bookingId: confirmedBooking.id,
       notes: confirmedBooking.attendeeNotes,
       meetLink,
-    }).catch((err) => logger.error({ callId, bookingId: confirmedBooking.id, err }, "Native booking: email send failed"));
+    }).then(() => {
+      void appendBookingLog(callId, agentId, "Invitation Sent", {
+        attendeeEmail,
+        hostEmail: calendar.hostEmail ?? null,
+        bookingId: confirmedBooking.id,
+        meetLink: meetLink ?? null,
+      }, "success");
+    }).catch((err) => {
+      logger.error({ callId, bookingId: confirmedBooking.id, err }, "Native booking: email send failed");
+      void appendBookingLog(callId, agentId, "Invitation Sent", {
+        result: "failed",
+        error: String(err),
+        attendeeEmail,
+        bookingId: confirmedBooking.id,
+      }, "error");
+    });
     dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
       booking: {
         ...confirmedBooking,
@@ -577,7 +691,18 @@ export async function executeNativeBooking(
       },
     }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: webhook dispatch failed"));
 
-    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"`;
+    void appendBookingLog(callId, agentId, "Booking Confirmed", {
+      bookingId: confirmedBooking.id,
+      eventTypeName: eventType.name,
+      slot: dateStr,
+      attendeeName,
+      attendeeEmail,
+      status: confirmedBooking.status,
+      meetLink: meetLink ?? null,
+      googleEventId: googleEventId ?? null,
+    }, "success");
+
+    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"${meetLink ? `, meet_link="${meetLink}"` : ""}`;
   } catch (err) {
     logger.error({ callId, err }, "Native booking tool execution failed");
     return "error: booking failed due to a technical issue";

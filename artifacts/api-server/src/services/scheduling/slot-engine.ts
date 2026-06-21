@@ -49,11 +49,11 @@ export async function getAvailableSlots(
   const bufferBefore = eventType.bufferBeforeMins;
   const bufferAfter = eventType.bufferAfterMins;
 
-  const rangeStartLocal = parseISO(`${startDateStr}T00:00:00`);
-  const rangeEndLocal = parseISO(`${endDateStr}T23:59:59`);
-
-  const rangeStartUTC = fromZonedTime(rangeStartLocal, tz);
-  const rangeEndUTC = fromZonedTime(rangeEndLocal, tz);
+  // Construct range boundaries in the calendar's timezone directly from the
+  // date strings — do NOT use parseISO (parses in JS runtime local tz) or
+  // setHours (writes hours in JS runtime local tz) before calling fromZonedTime.
+  const rangeStartUTC = fromZonedTime(`${startDateStr}T00:00:00`, tz);
+  const rangeEndUTC   = fromZonedTime(`${endDateStr}T23:59:59`, tz);
 
   const schedules = await db
     .select()
@@ -102,7 +102,10 @@ export async function getAvailableSlots(
     : [];
   const etBufferMap = new Map(bookingEventTypes.map((et) => [et.id, et]));
 
-  const days = eachDayOfInterval({ start: rangeStartLocal, end: rangeEndLocal });
+  // Iterate over calendar-local date strings. parseISO here is safe — we only
+  // use the resulting Date for day-of-week and yyyy-MM-dd formatting (both
+  // runtime-tz agnostic for plain date strings without a time component).
+  const days = eachDayOfInterval({ start: parseISO(startDateStr), end: parseISO(endDateStr) });
   const slots: TimeSlot[] = [];
 
   for (const day of days) {
@@ -123,16 +126,13 @@ export async function getAvailableSlots(
     }
 
     for (const window of windows) {
-      const [startHour, startMin] = window.startTime.split(":").map(Number);
-      const [endHour, endMin] = window.endTime.split(":").map(Number);
-
-      const windowStartLocal = new Date(day);
-      windowStartLocal.setHours(startHour!, startMin!, 0, 0);
-      const windowEndLocal = new Date(day);
-      windowEndLocal.setHours(endHour!, endMin!, 0, 0);
-
-      const windowStartUTC = fromZonedTime(windowStartLocal, tz);
-      const windowEndUTC = fromZonedTime(windowEndLocal, tz);
+      // Build window boundaries anchored to the calendar's IANA timezone.
+      // NEVER use new Date() + setHours() — setHours writes hours in the JS
+      // runtime's local timezone (UTC on Railway), so fromZonedTime would then
+      // re-interpret those UTC hours as calendar-local hours, producing a
+      // doubly-shifted (wrong) UTC instant. Pass the ISO string directly.
+      const windowStartUTC = fromZonedTime(`${dateStr}T${window.startTime}:00`, tz);
+      const windowEndUTC   = fromZonedTime(`${dateStr}T${window.endTime}:00`, tz);
 
       let cursor = windowStartUTC;
       while (true) {
