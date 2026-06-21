@@ -59,6 +59,10 @@ export async function handleVobizWebSocket(
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
+  // True when VoBiz sent "stop" or closed the socket while createSession was still
+  // awaiting.  In that case sessionId was null at the time, so endSession was
+  // skipped.  We detect this and call endSession immediately once sessionId is set.
+  let sessionEndedBeforeReady = false;
 
   /**
    * Send audio to Vobiz caller via the playAudio WebSocket event.
@@ -127,7 +131,15 @@ export async function handleVobizWebSocket(
             onBargeIn: sendBargeIn,
           });
           sessionId = sid;
-          logger.info({ sessionId, agentId, fromNumber, toNumber, streamId }, "Vobiz session started");
+          if (sessionEndedBeforeReady) {
+            // VoBiz sent stop/closed the socket while createSession was still setting
+            // up (e.g. 2-second timeout with no audio).  sessionId was null then so
+            // endSession was skipped — call it now so the record is not stuck in_progress.
+            logger.warn({ sessionId, agentId }, "Vobiz session ended before setup completed — ending immediately");
+            await endSession(sessionId);
+          } else {
+            logger.info({ sessionId, agentId, fromNumber, toNumber, streamId }, "Vobiz session started");
+          }
         } catch (err) {
           logger.error({ err, agentId }, "Failed to create Vobiz session");
           ws.close();
@@ -149,19 +161,31 @@ export async function handleVobizWebSocket(
 
       case "stop":
         logger.info({ sessionId }, "Vobiz stream stopped");
-        if (sessionId) await endSession(sessionId);
+        if (sessionId) {
+          await endSession(sessionId);
+        } else {
+          sessionEndedBeforeReady = true;
+        }
         break;
     }
   });
 
   ws.on("close", async () => {
     logger.info({ sessionId }, "Vobiz WS closed");
-    if (sessionId) await endSession(sessionId);
+    if (sessionId) {
+      await endSession(sessionId);
+    } else {
+      sessionEndedBeforeReady = true;
+    }
   });
 
   ws.on("error", async (err: unknown) => {
     logger.error({ sessionId, err }, "Vobiz WS error");
-    if (sessionId) await failSession(sessionId, toReadableError(err, "Telephony error"));
+    if (sessionId) {
+      await failSession(sessionId, toReadableError(err, "Telephony error"));
+    } else {
+      sessionEndedBeforeReady = true;
+    }
   });
 }
 

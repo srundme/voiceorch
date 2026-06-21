@@ -3,7 +3,7 @@ import { db, agentsTable, callsTable, providersTable, platformSettingsTable, cam
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
@@ -452,19 +452,43 @@ export async function createSession(params: {
     }
   }
 
-  const [callRecord] = await db.insert(callsTable).values({
-    agentId: params.agentId,
-    userId: agent.userId ?? null,
-    status: "in_progress",
-    toNumber: params.toNumber,
-    fromNumber: params.fromNumber,
-    metadata: JSON.stringify({
-      ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
-      ...(params.platformTelephony ? { platformTelephony: true } : {}),
-    }) || null,
-  }).returning();
-
-  if (!callRecord) throw new Error("Failed to create call record");
+  // For outbound VoBiz calls the HTTP route already created an "exec_*" record.
+  // Reuse it here (matched by providerCallId in its metadata) so there is only
+  // one DB row per call rather than two orphan in_progress records.
+  const callRecord = await (async (): Promise<typeof callsTable.$inferSelect> => {
+    if (params.externalCallId) {
+      const [existing] = await db.select().from(callsTable)
+        .where(and(
+          sql`${callsTable.metadata}::jsonb->>'providerCallId' = ${params.externalCallId}`,
+          eq(callsTable.status, "in_progress"),
+        ))
+        .limit(1);
+      if (existing) {
+        await db.update(callsTable).set({
+          metadata: JSON.stringify({
+            providerCallId: params.externalCallId,
+            externalCallId: params.externalCallId,
+            ...(params.platformTelephony ? { platformTelephony: true } : {}),
+          }),
+        }).where(eq(callsTable.id, existing.id));
+        logger.info({ callId: existing.id, externalCallId: params.externalCallId }, "Reusing existing exec_* call record");
+        return existing;
+      }
+    }
+    const [inserted] = await db.insert(callsTable).values({
+      agentId: params.agentId,
+      userId: agent.userId ?? null,
+      status: "in_progress",
+      toNumber: params.toNumber,
+      fromNumber: params.fromNumber,
+      metadata: JSON.stringify({
+        ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
+        ...(params.platformTelephony ? { platformTelephony: true } : {}),
+      }) || null,
+    }).returning();
+    if (!inserted) throw new Error("Failed to create call record");
+    return inserted;
+  })();
 
   // ── Seed execution log (enables Logs tab for telephony calls) ─────────────────
   void db.insert(executionLogsTable).values({
@@ -558,10 +582,11 @@ export async function createSession(params: {
             logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
             return;
           }
-          const domains = process.env["REPLIT_DOMAINS"];
-          const baseUrl = domains
-            ? `https://${domains.split(",")[0]!.trim()}`
-            : `http://localhost:${process.env["PORT"] ?? "8080"}`;
+          const baseUrl = (
+            process.env["WEBHOOK_BASE_URL"] ??
+            (process.env["REPLIT_DOMAINS"] ? `https://${process.env["REPLIT_DOMAINS"].split(",")[0]!.trim()}` : null) ??
+            `http://localhost:${process.env["PORT"] ?? "8080"}`
+          ).replace(/\/$/, "");
 
           // ── For warm_summary mode: persist summary + get transferId for whisper URL ──
           let transferId: number | undefined;

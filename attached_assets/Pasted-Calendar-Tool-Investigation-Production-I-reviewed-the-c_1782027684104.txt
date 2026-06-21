@@ -1,0 +1,87 @@
+Calendar Tool Investigation - Production
+
+I reviewed the call logs and found that the calendar tools are executing successfully during web calls.
+
+Evidence:
+
+* list_bookings executed successfully
+* book_appointment executed successfully
+* booking_confirmed returned successfully
+* attendee_email was passed correctly
+* booking status returned as confirmed
+
+However, I did not receive any Gmail confirmation or calendar invitation.
+
+Please investigate the following:
+
+1. Email Confirmation Flow
+
+After a successful book_appointment call:
+
+* Is a Google Calendar event actually being created?
+* Is an attendee invite being sent?
+* Is Gmail API being triggered?
+* Is SMTP/Resend/SendGrid/Nodemailer configured in production?
+* Are email sending failures being logged?
+
+Please provide the exact execution path after booking_confirmed is returned.
+
+2. Web Call vs Telephony
+
+Please verify that:
+
+* book_appointment
+* check_availability
+* list_bookings
+* reschedule_booking
+* cancel_booking
+
+use the exact same backend execution pipeline for both:
+
+* Web Calls
+* Phone Calls
+
+There should be no functionality differences.
+
+3. Google Calendar Integration
+
+Please confirm:
+
+* Calendar ID being used
+* Event creation status
+* Attendee invitation status
+* Whether attendee emails are disabled anywhere in the flow
+
+4. Timezone Verification
+
+The caller requested:
+
+"Tomorrow at 10:00 AM"
+
+Tool payload:
+
+2026-06-22T10:00:00+05:30
+
+But the booking confirmation returned:
+
+Monday, June 22nd at 9:00 AM UTC
+
+Please verify whether the booking was actually created for:
+
+* 10:00 AM IST
+  or
+* 9:00 AM UTC
+
+and provide the actual start/end timestamps stored in Google Calendar.
+
+5. Logging Improvements
+
+Please add explicit logs for:
+
+* Calendar event created
+* Calendar event ID
+* Attendee invite sent
+* Gmail send status
+* Email delivery success/failure
+
+Currently the logs stop at booking_confirmed, making it impossible to determine whether notification delivery occurred.
