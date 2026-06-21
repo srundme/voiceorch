@@ -765,6 +765,16 @@ export async function handleWebCallWebSocket(
     });
   }
 
+  // ── TTS output rules — injected here (webcall builds its own prompt outside
+  //    session.ts, so session.ts rules don't reach this path automatically).
+  systemPrompt +=
+    `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:` +
+    `\n- NEVER use XML or SSML markup tags. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally.` +
+    `\n- Never use abbreviated place names with periods (write "T Nagar" not "T. Nagar").` +
+    `\n- Never use ALL-CAPS words or acronyms — write them in lowercase or spell them out.` +
+    `\n- Never use markdown (no asterisks, hashes, bullet points, or underscores).` +
+    `\n- Use only plain conversational sentences suitable for speech.`;
+
   // ── Agent config (agentConfig JSONB) ─────────────────────────────────────
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
 
@@ -2585,17 +2595,17 @@ export async function handleWebCallWebSocket(
         let greetSystemPrompt = `${buildDatetimeInjection(agentTimezone)}\n\n${systemPrompt}`;
         // Inject the same language guard that per-turn responses use, so the
         // LLM generates the greeting in the configured language (not English).
-        if (currentLangWc) {
-          const GREET_LANG_NAMES: Record<string, string> = {
-            "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
-            "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
-            "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
-            "en-IN": "English", "en-US": "English", "en-GB": "English",
-            "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
-            "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
-            "ar-EG": "Arabic", "ru-RU": "Russian",
-          };
-          const greetLangName = GREET_LANG_NAMES[currentLangWc] ?? currentLangWc;
+        const GREET_LANG_NAMES: Record<string, string> = {
+          "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+          "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+          "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+          "en-IN": "English", "en-US": "English", "en-GB": "English",
+          "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+          "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+          "ar-EG": "Arabic", "ru-RU": "Russian",
+        };
+        const greetLangName = currentLangWc ? (GREET_LANG_NAMES[currentLangWc] ?? currentLangWc) : null;
+        if (currentLangWc && greetLangName) {
           const greetLangGuard =
             `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${greetLangName}. ` +
             `This applies to EVERY reply without exception — including the opening greeting. ` +
@@ -2616,11 +2626,13 @@ export async function handleWebCallWebSocket(
               .replace(/\s*\{caller_salutation\}\s*/g, " ");
           }
         }
+        // Include language hint in the trigger so the model doesn't default to English.
+        const langHint = (greetLangName && greetLangName !== "English") ? ` — respond ONLY in ${greetLangName}` : "";
         const triggerContent = callbackId
-          ? "[callback connected — please open the conversation with your greeting now]"
+          ? `[callback connected — please open the conversation with your greeting now${langHint}]`
           : isReturningCaller
-            ? "[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself]"
-            : "[call connected — please greet the user and open the conversation now]";
+            ? `[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself${langHint}]`
+            : `[call connected — please greet the user and open the conversation now${langHint}]`;
         const triggerHistory: import("../types.js").ConversationTurn[] = [
           { role: "user", content: triggerContent },
         ];
@@ -2630,7 +2642,14 @@ export async function handleWebCallWebSocket(
           (token) => { greetingText += token; },
           (full)  => { greetingText = full; },
         );
-        greetingText = greetingText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        // Strip <think> blocks and any <emotion>/<break> markup that some models
+        // emit — TTS must receive plain text, and the transcript must be clean.
+        greetingText = greetingText
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .replace(/<\/?emotion[^>]*>/gi, "")
+          .replace(/<break[^>]*\/?>/gi, "")
+          .replace(/[^\S\r\n]{2,}/g, " ")
+          .trim();
       }
 
       if (greetingText && !closed) {

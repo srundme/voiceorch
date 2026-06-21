@@ -777,8 +777,14 @@ export class OrchestrationPipeline {
           this.config.onFatalError?.(reason);
           return;
         }
-        // Strip any <think>…</think> reasoning blocks that reasoning models emit
-        greeting = greeting.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        // Strip <think> reasoning blocks and any <emotion>/<break> markup tags
+        // that some models emit — TTS must receive plain text only.
+        greeting = greeting
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .replace(/<\/?emotion[^>]*>/gi, "")
+          .replace(/<break[^>]*\/?>/gi, "")
+          .replace(/[^\S\r\n]{2,}/g, " ")
+          .trim();
       }
 
       if (!greeting.trim() || this.closed) return;

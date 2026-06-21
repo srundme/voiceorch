@@ -135,9 +135,16 @@ export async function createSession(params: {
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
   effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
-  if (agent.language) {
-    const langName = LANG_NAMES[agent.language] ?? agent.language;
-    effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses.`;
+  {
+    // Prefer asrLanguage (the language the caller actually speaks) over the
+    // agent's generic language field for enforcement. This prevents the
+    // "en-US" default in agent.language from overriding an explicitly-
+    // configured Tamil/Hindi ASR language with an "English only" rule.
+    const agentLang = agent.asrLanguage ?? agent.language;
+    if (agentLang) {
+      const langName = LANG_NAMES[agentLang] ?? agentLang;
+      effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses.`;
+    }
   }
 
   // Auto-switch to English: when enabled, allow the agent to move to English mid-call on request.
@@ -151,6 +158,7 @@ export async function createSession(params: {
 - Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
 - Never use ALL-CAPS words or acronyms (AMD, STT, LLM etc.) — write them in lowercase or spell them out naturally.
 - Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
+- NEVER use XML or SSML markup tags of any kind. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally as "less-than emotion greater-than".
 - Use only plain conversational sentences suitable for speech.`;
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
