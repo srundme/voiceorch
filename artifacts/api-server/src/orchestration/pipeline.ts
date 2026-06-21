@@ -1596,6 +1596,7 @@ export class OrchestrationPipeline {
     const filterThinkToken = makeThinkFilter();
     const filterFnTag = makeFunctionTagFilter();
     const filterMarkup = makeMarkupTagFilter();
+    const filterBrackets = makeBracketFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -1916,7 +1917,9 @@ export class OrchestrationPipeline {
           if (!afterFn) return;
           const filtered = filterMarkup(afterFn);  // strip <emotion>/<break> markup from TTS
           if (!filtered) return;
-          pendingText += filtered;
+          const afterBrackets = filterBrackets(filtered); // drop long [instruction…] leaks
+          if (!afterBrackets) return;
+          pendingText += afterBrackets;
           const { sentences, remainder } = extractSentences(pendingText);
           for (const s of sentences) enqueue(s);
           pendingText = remainder;
@@ -1981,7 +1984,9 @@ export class OrchestrationPipeline {
               if (!afterFn) return;
               const filtered = filterMarkup(afterFn);
               if (!filtered) return;
-              pendingText += filtered;
+              const afterBrackets = filterBrackets(filtered);
+              if (!afterBrackets) return;
+              pendingText += afterBrackets;
               const { sentences, remainder } = extractSentences(pendingText);
               for (const s of sentences) enqueue(s);
               pendingText = remainder;
@@ -2058,7 +2063,7 @@ export class OrchestrationPipeline {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, ""))).trim();
+    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")))).trim();
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
@@ -2358,6 +2363,7 @@ export class OrchestrationPipeline {
     const filterThinkToken = makeThinkFilter();
     const filterFnTag = makeFunctionTagFilter();
     const filterMarkup = makeMarkupTagFilter();
+    const filterBrackets = makeBracketFilter();
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -2444,7 +2450,9 @@ export class OrchestrationPipeline {
           if (!afterFn) return;
           const filtered = filterMarkup(afterFn);
           if (!filtered) return;
-          pendingText += filtered;
+          const afterBrackets = filterBrackets(filtered);
+          if (!afterBrackets) return;
+          pendingText += afterBrackets;
           const { sentences, remainder } = extractSentences(pendingText);
           for (const s of sentences) enqueue(s);
           pendingText = remainder;
@@ -2481,7 +2489,7 @@ export class OrchestrationPipeline {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, ""))).trim();
+    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")))).trim();
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
@@ -2899,6 +2907,72 @@ function makeMarkupTagFilter(): (token: string) => string {
     }
     return out;
   };
+}
+
+/** Characters of bracket-block content above which the block is treated as an
+ *  instruction-leak and silently dropped from the TTS stream. */
+const BRACKET_DISCARD_LEN = 120;
+
+/**
+ * Stateful per-turn filter that drops long `[…]` bracket blocks from the LLM
+ * token stream before text reaches TTS.  Prevents system-prompt instructions
+ * from being read aloud when the LLM wraps them in square brackets (e.g.
+ * "[Varsha's persona instructions: …]").  Short spans such as "[WHO]" or
+ * "[TamilNadu]" (< BRACKET_DISCARD_LEN chars) are kept intact.
+ * Call once per turn; the returned closure is stateful across tokens.
+ */
+function makeBracketFilter(): (token: string) => string {
+  let inBlock = false;
+  let outerBuf = "";
+  let blockContent = "";
+
+  return function filterBracketToken(token: string): string {
+    outerBuf += token;
+    let out = "";
+
+    while (outerBuf.length > 0) {
+      if (inBlock) {
+        const closeIdx = outerBuf.indexOf("]");
+        if (closeIdx !== -1) {
+          blockContent += outerBuf.slice(0, closeIdx);
+          outerBuf = outerBuf.slice(closeIdx + 1);
+          inBlock = false;
+          if (blockContent.length < BRACKET_DISCARD_LEN) out += "[" + blockContent + "]";
+          blockContent = "";
+        } else {
+          blockContent += outerBuf;
+          outerBuf = "";
+          // Memory guard: once the block is clearly too long, keep only a short
+          // tail (still needed to detect the eventual closing "]").
+          if (blockContent.length > 800) blockContent = blockContent.slice(-20);
+          break;
+        }
+      } else {
+        const openIdx = outerBuf.indexOf("[");
+        if (openIdx !== -1) {
+          out += outerBuf.slice(0, openIdx);
+          outerBuf = outerBuf.slice(openIdx + 1);
+          inBlock = true;
+          blockContent = "";
+        } else {
+          out += outerBuf;
+          outerBuf = "";
+          break;
+        }
+      }
+    }
+    return out;
+  };
+}
+
+/**
+ * Whole-string variant of makeBracketFilter.  Strips `[…]` blocks whose
+ * content is ≥ BRACKET_DISCARD_LEN chars from an already-buffered string.
+ * Used for post-processing the full LLM response (cleanResponse / cleanForFlush)
+ * before TTS enqueue and history storage.
+ */
+function stripBracketedInstructions(text: string): string {
+  return text.replace(/\[[\s\S]{120,}?\]/g, "").replace(/[^\S\r\n]{2,}/g, " ");
 }
 
 function makeThinkFilter(): (token: string) => string {

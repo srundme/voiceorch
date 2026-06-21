@@ -1249,6 +1249,46 @@ export async function handleWebCallWebSocket(
         }
         return out;
       }
+      // ── Bracket filter: drops long [instruction…] blocks from TTS ────────
+      // Mirrors makeBracketFilter() in pipeline.ts but inlined for webcall.
+      // Prevents the LLM from leaking system-prompt instructions verbatim when
+      // it wraps them in square brackets (e.g. "[Varsha's persona instructions: …]").
+      // Short spans (< 120 chars) like "[WHO]" or "[TamilNadu]" are kept intact.
+      const BRACKET_DISCARD_LEN_WC = 120;
+      let inBracketBlock = false;
+      let bracketOuterBuf = "";
+      let bracketContent = "";
+
+      function filterBracketToken(token: string): string {
+        bracketOuterBuf += token;
+        let out = "";
+        while (bracketOuterBuf.length > 0) {
+          if (inBracketBlock) {
+            const closeIdx = bracketOuterBuf.indexOf("]");
+            if (closeIdx !== -1) {
+              bracketContent += bracketOuterBuf.slice(0, closeIdx);
+              bracketOuterBuf = bracketOuterBuf.slice(closeIdx + 1);
+              inBracketBlock = false;
+              if (bracketContent.length < BRACKET_DISCARD_LEN_WC) out += "[" + bracketContent + "]";
+              bracketContent = "";
+            } else {
+              bracketContent += bracketOuterBuf; bracketOuterBuf = "";
+              if (bracketContent.length > 800) bracketContent = bracketContent.slice(-20);
+              break;
+            }
+          } else {
+            const openIdx = bracketOuterBuf.indexOf("[");
+            if (openIdx !== -1) {
+              out += bracketOuterBuf.slice(0, openIdx);
+              bracketOuterBuf = bracketOuterBuf.slice(openIdx + 1);
+              inBracketBlock = true; bracketContent = "";
+            } else {
+              out += bracketOuterBuf; bracketOuterBuf = ""; break;
+            }
+          }
+        }
+        return out;
+      }
       // ──────────────────────────────────────────────────────────────────────
       /**
        * Normalize LLM text for TTS so abbreviations are not spelled letter-by-letter.
@@ -1614,8 +1654,10 @@ export async function handleWebCallWebSocket(
           if (!afterFn) return;
           const filtered = filterMarkupToken(afterFn); // strip <emotion>/<break> markup from TTS
           if (!filtered) return;
-          tokenBuf += filtered;
-          send({ type: "token", text: filtered });
+          const afterBrackets = filterBracketToken(filtered); // drop long [instruction…] leaks
+          if (!afterBrackets) return;
+          tokenBuf += afterBrackets;
+          send({ type: "token", text: afterBrackets });
           const [sentences, rest] = extractSentences(tokenBuf, ttsMinSentenceChars);
           for (const s of sentences) {
             queueSentence(s);
@@ -1648,6 +1690,7 @@ export async function handleWebCallWebSocket(
             inThinkBlock = false; thinkBuf = "";
             inFnTag = false; fnBuf = "";
             markupBuf = ""; markupPrevSpace = false;
+            inBracketBlock = false; bracketOuterBuf = ""; bracketContent = "";
             try {
               const fallbackLlm = createLLMAdapter(fallbackProvider, fallbackKey, fallbackModel ?? null);
               await fallbackLlm.chat(
@@ -1662,8 +1705,10 @@ export async function handleWebCallWebSocket(
                   if (!afterFn) return;
                   const filtered = filterMarkupToken(afterFn);
                   if (!filtered) return;
-                  tokenBuf += filtered;
-                  send({ type: "token", text: filtered });
+                  const afterBrackets = filterBracketToken(filtered);
+                  if (!afterBrackets) return;
+                  tokenBuf += afterBrackets;
+                  send({ type: "token", text: afterBrackets });
                   const [sentences, remainder] = extractSentences(tokenBuf, ttsMinSentenceChars);
                   for (const s of sentences) {
                     queueSentence(s);
@@ -1734,6 +1779,7 @@ export async function handleWebCallWebSocket(
           .replace(/<function=\w+[^>]*>/g, "")
           .replace(/<\/?emotion[^>]*>/gi, "")
           .replace(/<break[^>]*\/?>/gi, "")
+          .replace(/\[[\s\S]{120,}?\]/g, "")
           .replace(/[^\S\r\n]{2,}/g, " ")
           .trim();
         const [allSentences, trueRemainder] = extractSentences(cleanForFlush, ttsMinSentenceChars);
@@ -1774,6 +1820,7 @@ export async function handleWebCallWebSocket(
           .replace(/<function=\w+[^>]*>/g, "")
           .replace(/<\/?emotion[^>]*>/gi, "")
           .replace(/<break[^>]*\/?>/gi, "")
+          .replace(/\[[\s\S]{120,}?\]/g, "")
           .replace(/[^\S\r\n]{2,}/g, " ")
           .trim()
           || `[calling tool: ${triggeredToolName}]`;
@@ -1927,6 +1974,7 @@ export async function handleWebCallWebSocket(
         .replace(/<function=\w+[^>]*>/g, "")
         .replace(/<\/?emotion[^>]*>/gi, "")
         .replace(/<break[^>]*\/?>/gi, "")
+        .replace(/\[[\s\S]{120,}?\]/g, "")
         .replace(/[^\S\r\n]{2,}/g, " ")
         .trim();
 
