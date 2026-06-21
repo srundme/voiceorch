@@ -1,0 +1,160 @@
+# Feature Request: Admin Impersonation (View User Workspace)
+
+## Objective
+
+Do NOT build a separate admin version of the user portal.
+
+Instead, implement a secure Admin Impersonation feature that allows administrators to access a user's workspace using the exact same UI, routes, components, permissions, and functionality that the user sees after login.
+
+---
+
+## Current Problem
+
+Currently:
+
+User Portal:
+- /app/*
+- Full user experience
+- Agents
+- Knowledge Base
+- Scheduling
+- Memory / CRM
+- Call Logs
+- Providers
+- Voices
+- Phone Numbers
+- Verification
+- API Keys
+- Usage
+- Wallet
+- Settings
+
+Admin Portal:
+- /admin-ui/*
+- Separate editor
+- Separate agent management screens
+- Different UX
+
+This creates duplication, inconsistency, and maintenance overhead.
+
+The admin UI should not attempt to recreate or duplicate the user portal.
+
+---
+
+## Required Behavior
+
+When an admin navigates to:
+
+/admin-ui/users
+
+and selects a user such as:
+
+staymatesolutions25@gmail.com
+
+the admin should be able to click:
+
+"Open Workspace"
+
+or
+
+"Login As User"
+
+without knowing or entering the user's password.
+
+The system should then:
+
+1. Create a secure impersonation session.
+2. Load the actual user workspace.
+3. Open the existing user portal.
+4. Use the selected user's data, settings, agents, credits, tools, knowledge bases, and configuration.
+5. Allow the admin to perform all actions available to the user.
+6. Clearly indicate that the admin is operating in impersonation mode.
+
+---
+
+## Example Flow
+
+Admin
+→ Users
+→ Select User
+→ Open Workspace
+
+Result:
+
+Admin is redirected into the user's actual workspace.
+
+Instead of seeing a custom admin editor, the admin sees:
+
+/app/*
+
+exactly as the user would.
+
+---
+
+## UI Requirement
+
+Display a persistent banner at the top of the screen:
+
+----------------------------------------
+ADMIN IMPERSONATION MODE
+Viewing account:
+staymatesolutions25@gmail.com
+[Exit Impersonation]
+----------------------------------------
+
+The admin must always know they are operating as another user.
+
+---
+
+## Technical Requirements
+
+Create an impersonation session mechanism.
+
+Suggested approaches:
+
+Option A:
+- Create short-lived impersonation JWT
+- Include:
+  - adminId
+  - impersonatedUserId
+  - impersonation=true
+
+Option B:
+- Server-side impersonation session
+- Store mapping:
+  adminId → userId
+
+Either approach is acceptable.
+
+---
+
+## Security Requirements
+
+Only Super Admins can impersonate users.
+
+All actions performed during impersonation must be audit logged.
+
+Example:
+
+- Admin viewed workspace
+- Admin edited agent
+- Admin deleted knowledge base
+- Admin changed phone number
+
+Audit fields:
+
+- Admin ID
+- User ID
+- Timestamp
+- Action
+- IP Address
+
+---
+
+## Development Goal
+
+The admin should have 100% visibility and control over a user's account without requiring the user's password and without building duplicate versions of the user-facing UI.
+
+The user portal should remain the single source of truth.
+
+Admins should simply be able to securely enter and operate within that workspace via impersonation mode.
