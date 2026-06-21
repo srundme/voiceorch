@@ -156,7 +156,7 @@ export default function UserDetail() {
         const base = window.location.origin;
         const name = encodeURIComponent(result.userName || "");
         const email = encodeURIComponent(result.userEmail || "");
-        const url = `${base}/impersonate?session=${result.userSessionJwt}&imp_token=${result.sessionToken}&imp_name=${name}&imp_email=${email}`;
+        const url = `${base}/impersonate?code=${result.exchangeCode}&imp_token=${result.sessionToken}&imp_name=${name}&imp_email=${email}`;
         window.open(url, "_blank");
         toast({ title: "Impersonation session started", description: "Dashboard opened in a new tab" });
       },

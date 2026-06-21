@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import { existsSync } from "fs";
 import { attachSession } from "./middlewares/session.js";
+import { detectImpersonation } from "./middlewares/detectImpersonation.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { ipRateLimit, authRateLimit, isRateLimitExempt } from "./lib/rate-limit.js";
@@ -60,6 +61,9 @@ app.use((req, res, next) => {
 // Validate the platform session token (Bearer or ?token=) and populate
 // req.clerkUserId / req.sessionPayload before rate limiting + routing.
 app.use(attachSession);
+
+// Detect active admin impersonation sessions and register per-action audit hooks.
+app.use(detectImpersonation);
 
 // Auth-based rate limiting (inner shield, after session is attached) — skip exempt paths
 app.use((req, res, next) => {

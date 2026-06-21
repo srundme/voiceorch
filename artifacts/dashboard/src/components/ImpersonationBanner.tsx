@@ -40,7 +40,7 @@ export function ImpersonationBanner() {
     } finally {
       localStorage.removeItem("voiceorch:impersonation");
       localStorage.removeItem("voiceorch:session");
-      window.location.href = "/sign-in";
+      window.location.href = window.location.origin + "/admin";
     }
   }
 

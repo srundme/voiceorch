@@ -9,22 +9,30 @@ export default function ImpersonatePage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const session = params.get("session");
+    const code = params.get("code");
     const impToken = params.get("imp_token");
     const impName = params.get("imp_name");
     const impEmail = params.get("imp_email");
 
-    if (session && impToken) {
-      signIn(session);
-      localStorage.setItem(
-        "voiceorch:impersonation",
-        JSON.stringify({
-          sessionToken: impToken,
-          name: impName ? decodeURIComponent(impName) : null,
-          email: impEmail ? decodeURIComponent(impEmail) : null,
-        }),
-      );
-      navigate("/app");
+    if (code && impToken) {
+      fetch(`/api/impersonate/exchange?code=${encodeURIComponent(code)}`)
+        .then((r) => {
+          if (!r.ok) throw new Error("Exchange failed");
+          return r.json() as Promise<{ sessionJwt: string }>;
+        })
+        .then(({ sessionJwt }) => {
+          signIn(sessionJwt);
+          localStorage.setItem(
+            "voiceorch:impersonation",
+            JSON.stringify({
+              sessionToken: impToken,
+              name: impName ? decodeURIComponent(impName) : null,
+              email: impEmail ? decodeURIComponent(impEmail) : null,
+            }),
+          );
+          navigate("/app");
+        })
+        .catch(() => navigate("/"));
     } else {
       navigate("/");
     }

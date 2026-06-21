@@ -10,6 +10,8 @@ export const adminImpersonationSessionsTable = pgTable("admin_impersonation_sess
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
+  exchangeCode: text("exchange_code").unique(),
+  exchangeCodeExpiresAt: timestamp("exchange_code_expires_at", { withTimezone: true }),
 });
 
 export type AdminImpersonationSession = typeof adminImpersonationSessionsTable.$inferSelect;

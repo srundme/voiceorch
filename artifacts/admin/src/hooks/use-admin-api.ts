@@ -220,7 +220,7 @@ export function useAdminEditAgent(clerkId: string) {
 export function useImpersonateUser() {
   return useMutation({
     mutationFn: (clerkId: string) =>
-      adminFetch<{ sessionToken: string; userSessionJwt: string; userName: string | null; userEmail: string | null }>(
+      adminFetch<{ sessionToken: string; exchangeCode: string; userName: string | null; userEmail: string | null }>(
         `/impersonate/${clerkId}`,
         { method: "POST" },
       ),

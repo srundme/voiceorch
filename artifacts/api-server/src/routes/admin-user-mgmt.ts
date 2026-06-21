@@ -10,12 +10,55 @@ import {
   adminImpersonationSessionsTable,
 } from "@workspace/db";
 import { eq, desc, and, sql, gt, isNull } from "drizzle-orm";
+import { invalidateImpersonationCache } from "../middlewares/detectImpersonation.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
 import { randomBytes } from "node:crypto";
 
 const router = Router();
+
+// ─── Exchange Codes (public, no admin auth) ────────────────────────────────────
+// Short-lived opaque codes (60 s TTL, single-use) stored in the DB alongside the
+// impersonation session row. The actual user JWT never appears in any URL.
+
+router.get("/impersonate/exchange", async (req, res): Promise<void> => {
+  const code = req.query["code"] as string | undefined;
+  if (!code) { res.status(400).json({ error: "code is required" }); return; }
+
+  try {
+    const now = new Date();
+    // Atomic single-statement: match code + validity constraints, clear it, return row.
+    // If 0 rows returned: code was already used, expired, or session ended.
+    const [redeemed] = await db
+      .update(adminImpersonationSessionsTable)
+      .set({ exchangeCode: null, exchangeCodeExpiresAt: null })
+      .where(
+        and(
+          eq(adminImpersonationSessionsTable.exchangeCode, code),
+          gt(adminImpersonationSessionsTable.exchangeCodeExpiresAt, now),
+          isNull(adminImpersonationSessionsTable.endedAt),
+          gt(adminImpersonationSessionsTable.expiresAt, now),
+        ),
+      )
+      .returning();
+
+    if (!redeemed) {
+      res.status(404).json({ error: "Invalid or expired exchange code" }); return;
+    }
+
+    const sessionJwt = createSessionToken(
+      { sub: redeemed.targetUserId, email: redeemed.targetUserEmail ?? null, name: redeemed.targetUserName ?? null },
+      2 * 60 * 60,
+    );
+
+    res.json({ sessionJwt });
+  } catch (err) {
+    req.log.error({ err }, "impersonate/exchange failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.use("/admin", requireAdmin);
 
 // ─── Audit Log Helper ─────────────────────────────────────────────────────────
@@ -500,10 +543,14 @@ router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
       expiresAt,
     });
 
-    const userSessionJwt = createSessionToken(
-      { sub: user.clerkId, email: user.email, name: user.name },
-      2 * 60 * 60, // 2 hour TTL for impersonation sessions
-    );
+    // Store a short-lived opaque exchange code in the session row.
+    // The JWT never appears in a URL — the dashboard exchanges the code for the JWT.
+    const exchangeCode = randomBytes(24).toString("hex");
+    const exchangeCodeExpiresAt = new Date(Date.now() + 60_000); // 60 s TTL
+    await db
+      .update(adminImpersonationSessionsTable)
+      .set({ exchangeCode, exchangeCodeExpiresAt })
+      .where(eq(adminImpersonationSessionsTable.sessionToken, sessionToken));
 
     await logAdminAction(req, {
       targetUserId: clerkId,
@@ -515,7 +562,7 @@ router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
 
     res.json({
       sessionToken,
-      userSessionJwt,
+      exchangeCode,
       userName: user.name,
       userEmail: user.email,
     });
@@ -546,6 +593,10 @@ router.delete("/admin/impersonate/sessions/:sessionToken", async (req, res): Pro
       action: "end_impersonation",
       beforeValue: { sessionToken: sessionToken!.slice(0, 8) + "..." },
     });
+
+    // Invalidate the in-process impersonation cache so detectImpersonation
+    // stops attributing subsequent requests to this session immediately.
+    invalidateImpersonationCache(session.targetUserId);
 
     res.json({ ok: true });
   } catch (err) {
