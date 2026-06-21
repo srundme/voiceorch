@@ -53,9 +53,10 @@
   --color-chart-4:  hsl(var(--chart-4));
   --color-chart-5:  hsl(var(--chart-5));
 
-  --font-sans:  var(--app-font-sans);
-  --font-serif: var(--app-font-serif);
-  --font-mono:  var(--app-font-mono);
+  --font-sans:    var(--app-font-sans);
+  --font-display: var(--app-font-display);
+  --font-serif:   var(--app-font-serif);
+  --font-mono:    var(--app-font-mono);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -110,9 +111,10 @@
   --chart-4: 220 9% 70%;
   --chart-5: 220 9% 84%;
 
-  --app-font-sans:  'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono:  'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  --app-font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --app-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --app-font-serif:   Georgia, serif;
+  --app-font-mono:    'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
   --radius: 0.625rem;
 
   --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04);
@@ -128,64 +130,77 @@
   --accent-border:        rgba(0,0,0,0.06);
   --destructive-border:   rgba(160,40,40,0.3);
   --opaque-button-border-intensity: 8;
+
+  /* ── SnapServe brand tokens ─────────────────────────────────────────────── */
+  --color-brand-saffron:  #ff9933;
+  --color-brand-teal:     #14b8a6;
+  --color-brand-indigo:   #6366f1;
+  --gradient-brand:       linear-gradient(135deg, #ff9933 0%, #14b8a6 50%, #6366f1 100%);
+  --gradient-brand-text:  linear-gradient(135deg, #ff9933, #14b8a6, #6366f1);
+
+  /* ── SnapServe glow shadows ─────────────────────────────────────────────── */
+  --shadow-glow-brand:       0 0 24px rgba(255,153,51,0.2), 0 0 48px rgba(20,184,166,0.12);
+  --shadow-glow-brand-hover: 0 0 32px rgba(255,153,51,0.35), 0 0 60px rgba(20,184,166,0.2);
+  --shadow-glow-teal:        0 0 0 1px rgba(20,184,166,0.3), 0 0 16px rgba(20,184,166,0.15);
 }
 
-/* ── Design tokens — dark mode (Monochrome Obsidian) ─────────────────────── */
+/* ── Design tokens — dark mode (SnapServe CRM) ───────────────────────────── */
 .dark {
-  /* #0B0D12 */ --background:         222 24% 6%;
-  /* #F3F4F6 */ --foreground:         220 14% 96%;
-  /* ~rgba(255,255,255,0.05) blended */ --border: 220 18% 13%;
+  /* SnapServe CRM bg: #0b0f14 */ --background:         215 31% 6%;
+  /* SnapServe text-primary: #fafafa */ --foreground:   0 0% 98%;
+  /* SnapServe CRM border: #1e2a3a */ --border:         215 32% 17%;
 
-  /* #12161F */ --card:               222 22% 10%;
-                --card-foreground:    220 14% 96%;
+  /* SnapServe CRM card: #111820 */ --card:             215 31% 9%;
+  --card-foreground:    0 0% 98%;
 
-  /* #171C26 */ --elevated:           222 22% 12%;
+  /* SnapServe elevated: #141820 */ --elevated:         215 28% 10%;
 
-  --popover:            222 22% 9%;
-  --popover-foreground: 220 14% 96%;
+  /* SnapServe CRM surface: #0d1219 */ --popover:       215 33% 7%;
+  --popover-foreground: 0 0% 98%;
 
-  /* near-white, no chroma */ --primary: 220 9% 93%;
-  --primary-foreground: 222 24% 6%;
+  /* Teal primary: #14b8a6 → hsl(173 79% 40%) */
+  --primary:            173 79% 40%;
+  --primary-foreground: 0 0% 4%;
 
-  --secondary:          222 20% 13%;
-  --secondary-foreground: 220 14% 90%;
+  --secondary:          215 28% 13%;
+  --secondary-foreground: 0 0% 90%;
 
-  /* #9CA3AF-based muted */ --muted: 222 20% 11%;
-  --muted-foreground:   220 9% 65%;
+  /* SnapServe CRM muted: #1a2535 */ --muted:           215 31% 15%;
+  /* SnapServe text-secondary: #a1a1aa */ --muted-foreground: 240 4% 64%;
 
-  /* hover surface */ --accent: 222 20% 14%;
-  --accent-foreground:  220 14% 96%;
+  /* hover teal wash */ --accent:           173 60% 12%;
+  --accent-foreground:  0 0% 98%;
 
-  --destructive:        0 40% 44%;
+  --destructive:        0 65% 54%;
   --destructive-foreground: 0 0% 98%;
 
-  --input:              222 18% 14%;
-  --ring:               220 9% 50%;
+  /* input bg: slightly lighter than card */ --input:   215 28% 12%;
+  /* teal ring */ --ring:                               173 79% 40%;
 
-  /* #0E1117 */ --sidebar:            222 22% 8%;
-  --sidebar-foreground:   220 14% 86%;
-  --sidebar-border:       220 18% 11%;
-  --sidebar-primary:      220 9% 92%;
-  --sidebar-primary-foreground: 222 24% 6%;
-  --sidebar-accent:       222 20% 13%;
-  --sidebar-accent-foreground: 220 14% 96%;
-  --sidebar-ring:         220 9% 55%;
+  /* SnapServe CRM surface: #0d1219 */ --sidebar:       215 33% 7%;
+  --sidebar-foreground:   0 0% 86%;
+  --sidebar-border:       215 32% 14%;
+  /* teal sidebar primary */ --sidebar-primary:         173 79% 40%;
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent:       215 28% 13%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring:         173 79% 40%;
 
-  /* Monochrome chart palette — white-opacity steps */
-  --chart-1: 220 9% 80%;
-  --chart-2: 220 9% 60%;
-  --chart-3: 220 9% 44%;
-  --chart-4: 220 9% 30%;
-  --chart-5: 220 9% 20%;
+  /* Teal-to-indigo chart steps */
+  --chart-1: 173 79% 55%;
+  --chart-2: 206 80% 56%;
+  --chart-3: 239 68% 67%;
+  --chart-4: 37 100% 60%;
+  --chart-5: 215 32% 30%;
 
-  --primary-border:     rgba(255,255,255,0.12);
+  --primary-border:     rgba(20,184,166,0.25);
   --secondary-border:   rgba(255,255,255,0.06);
-  --muted-border:       rgba(255,255,255,0.06);
-  --accent-border:      rgba(255,255,255,0.06);
+  --muted-border:       rgba(255,255,255,0.05);
+  --accent-border:      rgba(20,184,166,0.12);
   --destructive-border: rgba(200,70,70,0.30);
 
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
-  --shadow-card-hover: 0 4px 16px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-card:        0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(30,42,58,0.8);
+  --shadow-card-hover:  0 4px 20px rgba(0,0,0,0.7), 0 0 0 1px rgba(20,184,166,0.15);
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
@@ -204,7 +219,8 @@
   }
 
   ::selection {
-    background: hsl(var(--foreground) / 0.14);
+    background: var(--color-brand-teal);
+    color: #0a0a0a;
   }
 
   /* ── Global Card ──────────────────────────────────────────────────────── */
@@ -252,8 +268,8 @@
   }
   [data-slot="input"]:focus,
   [data-slot="input"]:focus-within {
-    border-color: hsl(var(--muted-foreground) / 0.5) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
+    border-color: hsl(var(--ring) / 0.6) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
     outline: none !important;
   }
   [data-slot="input"]::placeholder {
@@ -263,8 +279,8 @@
 
   input:focus-visible,
   textarea:focus-visible {
-    border-color: hsl(var(--muted-foreground) / 0.5) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
+    border-color: hsl(var(--ring) / 0.6) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
     outline: none !important;
   }
 
@@ -278,8 +294,8 @@
   }
   [data-slot="select-trigger"]:focus,
   [data-slot="select-trigger"][data-state="open"] {
-    border-color: hsl(var(--muted-foreground) / 0.5) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
+    border-color: hsl(var(--ring) / 0.6) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
     outline: none !important;
   }
 
@@ -352,10 +368,61 @@
     box-shadow: var(--shadow-card);
   }
 
-  /* Monochrome status dot */
-  .status-dot-active { background: rgba(255,255,255,0.22); }
+  /* ── SnapServe status dots ────────────────────────────────────────────── */
+  .status-dot-active   { background: #22c55e; }
   .status-dot-inactive { background: rgba(255,255,255,0.08); }
-  .status-dot-live { background: rgba(255,255,255,0.18); animation: pulse 2s ease-in-out infinite; }
+  .status-dot-live     { background: #14b8a6; animation: pulse 2s ease-in-out infinite; }
+
+  /* ── SnapServe gradient text ──────────────────────────────────────────── */
+  .gradient-text {
+    background: var(--gradient-brand-text);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ── SnapServe dot-grid background ───────────────────────────────────── */
+  .dot-bg {
+    background-color: #080808;
+    background-image: radial-gradient(circle, #1f1f1f 0.8px, transparent 0.8px);
+    background-size: 18px 18px;
+  }
+
+  /* ── SnapServe glow button wrap ───────────────────────────────────────── */
+  .btn-glow-wrap {
+    display: inline-flex;
+    border-radius: 9999px;
+    padding: 1.5px;
+    background: var(--gradient-brand);
+    background-size: 200% 200%;
+    box-shadow: var(--shadow-glow-brand);
+    transition: box-shadow 0.2s ease;
+  }
+  .btn-glow-wrap:hover {
+    box-shadow: var(--shadow-glow-brand-hover);
+  }
+  .btn-glow-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 9999px;
+    background: #000;
+    padding: 10px 22px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #fafafa;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* ── SnapServe teal focus ring helper ─────────────────────────────────── */
+  .ring-teal:focus-within,
+  .ring-teal:focus {
+    box-shadow: var(--shadow-glow-teal) !important;
+    border-color: rgba(20,184,166,0.4) !important;
+    outline: none !important;
+  }
 }
 
 /* ── Animations ──────────────────────────────────────────────────────────── */
