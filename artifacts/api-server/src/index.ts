@@ -192,6 +192,15 @@ if (agnostApiKey) {
   agnost.init(agnostApiKey, { debug: process.env["NODE_ENV"] !== "production" });
 }
 
+// Warn at startup if email notification env vars are absent — the first booking
+// would otherwise silently skip email with only a buried warn inside an async call.
+if (!process.env["GMAIL_USER"] || !process.env["GMAIL_APP_PASSWORD"]) {
+  logger.warn(
+    { hasGmailUser: !!process.env["GMAIL_USER"], hasGmailPassword: !!process.env["GMAIL_APP_PASSWORD"] },
+    "GMAIL_USER or GMAIL_APP_PASSWORD not set — booking email notifications will be skipped",
+  );
+}
+
 // Log which redirect URI will be used for Google Calendar OAuth so mismatches
 // are immediately visible in logs without having to trigger the flow first.
 if (process.env["GOOGLE_REDIRECT_URI"]) {

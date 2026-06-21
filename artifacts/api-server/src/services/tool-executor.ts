@@ -358,11 +358,11 @@ export async function executeNativeBooking(
       return "error: the appointment type is unavailable";
     }
 
-    const { searchStart, minSlotStart, timeFilter } = preferredRaw
+    const { searchStart, minSlotStart, timeFilter, isExactTime } = preferredRaw
       ? parsePreferredDate(preferredRaw, calendar.timezone)
-      : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
+      : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined, isExactTime: false };
     if (preferredRaw) {
-      logger.info({ callId, preferredRaw, searchStart, minSlotStart }, "Native booking: preferred date resolved");
+      logger.info({ callId, preferredRaw, searchStart, minSlotStart, isExactTime }, "Native booking: preferred date resolved");
     }
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, format(searchStart, "yyyy-MM-dd"), format(searchEnd, "yyyy-MM-dd"));
@@ -374,9 +374,42 @@ export async function executeNativeBooking(
       return `error: no available slots ${rangeDesc}`;
     }
 
-    const slot = slots[0]!;
-    const slotStart = slot.slotStart;
-    const slotEnd = slot.slotEnd;
+    // ── Exact-time enforcement ──────────────────────────────────────────────
+    // When the caller supplied a specific clock time (isExactTime=true) we MUST
+    // land on that exact slot.  Auto-picking the first available slot when the
+    // requested time is unavailable causes silent, wrong bookings.
+    let chosenSlot: TimeSlot;
+    if (isExactTime && minSlotStart) {
+      const EXACT_TOLERANCE_MS = 60_000; // 1-minute window to absorb rounding
+      const exactMatch = slots.find(
+        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
+      );
+
+      const tz = calendar.timezone || "UTC";
+      const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEEE, MMMM do 'at' h:mm a");
+
+      logger.info(
+        { callId, requestedLabel, exactMatch: !!exactMatch, availableCount: slots.length },
+        "Native booking: exact-time slot check",
+      );
+
+      if (!exactMatch) {
+        const alternatives = slots
+          .slice(0, 5)
+          .map((s) => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a"))
+          .join("; ");
+        const altMsg = alternatives ? ` Available nearby slots: ${alternatives}` : " No nearby slots available.";
+        return `error: requested slot "${requestedLabel}" is not available.${altMsg}`;
+      }
+
+      logger.info({ callId, confirmedSlot: exactMatch.slotStart }, "Native booking: exact slot confirmed");
+      chosenSlot = exactMatch;
+    } else {
+      chosenSlot = slots[0]!;
+    }
+
+    const slotStart = chosenSlot.slotStart;
+    const slotEnd = chosenSlot.slotEnd;
     const lockKey = buildSlotLockKey(calendar.id, slotStart);
 
     let booking: typeof bookingsTable.$inferSelect | undefined;
@@ -447,13 +480,14 @@ export async function executeNativeBooking(
       logger.warn({ callId }, "Native booking: slot conflict");
       return "error: slot was just taken — no booking created";
     }
+    const confirmedBooking = booking;
 
     const tz = calendar.timezone || "UTC";
     const dateStr = formatInTimeZone(slotStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
     logger.info(
       {
         callId,
-        bookingId: booking.id,
+        bookingId: confirmedBooking.id,
         attendeeEmail,
         requested_datetime: preferredRaw,
         requested_timezone: tz,
@@ -475,15 +509,21 @@ export async function executeNativeBooking(
         ?.google_calendar_connection_id ?? null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
+      if (connectionId) {
+        logger.info({ callId, bookingId: confirmedBooking.id, connectionId }, "Native booking: creating Google Calendar event");
+      } else {
+        logger.warn({ callId, bookingId: confirmedBooking.id }, "Native booking: no Google Calendar connection configured — GCal event creation skipped");
+      }
+
       const gcalResult = connectionId
         ? await createCalendarEvent({
             connectionId,
-            summary: `${eventType.name} — ${booking.attendeeName}`,
-            description: booking.attendeeNotes ?? undefined,
-            startTime: booking.slotStart,
-            endTime: booking.slotEnd,
-            attendeeEmail: booking.attendeeEmail,
-            attendeeName: booking.attendeeName,
+            summary: `${eventType.name} — ${confirmedBooking.attendeeName}`,
+            description: confirmedBooking.attendeeNotes ?? undefined,
+            startTime: confirmedBooking.slotStart,
+            endTime: confirmedBooking.slotEnd,
+            attendeeEmail: confirmedBooking.attendeeEmail,
+            attendeeName: confirmedBooking.attendeeName,
             timezone: calendar.timezone,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
@@ -494,41 +534,41 @@ export async function executeNativeBooking(
         googleEventId = gcalResult.eventId;
         if (meetLink || googleEventId) {
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`,
+            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${confirmedBooking.id}`,
           );
         }
       }
     } catch (err) {
-      logger.warn({ callId, bookingId: booking.id, err }, "Native booking: Google Calendar event creation failed");
+      logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: Google Calendar event creation failed");
     }
 
-    void sendBookingCreatedEmail({
-      attendeeName: booking.attendeeName,
-      attendeeEmail: booking.attendeeEmail,
+    sendBookingCreatedEmail({
+      attendeeName: confirmedBooking.attendeeName,
+      attendeeEmail: confirmedBooking.attendeeEmail,
       eventTypeName: eventType.name,
-      slotStart: booking.slotStart,
-      slotEnd: booking.slotEnd,
+      slotStart: confirmedBooking.slotStart,
+      slotEnd: confirmedBooking.slotEnd,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      bookingId: booking.id,
-      notes: booking.attendeeNotes,
+      bookingId: confirmedBooking.id,
+      notes: confirmedBooking.attendeeNotes,
       meetLink,
-    });
-    void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
+    }).catch((err) => logger.error({ callId, bookingId: confirmedBooking.id, err }, "Native booking: email send failed"));
+    dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
       booking: {
-        ...booking,
-        slotStart: booking.slotStart.toISOString(),
-        slotEnd: booking.slotEnd.toISOString(),
-        cancelledAt: booking.cancelledAt?.toISOString() ?? null,
-        createdAt: booking.createdAt.toISOString(),
-        updatedAt: booking.updatedAt.toISOString(),
+        ...confirmedBooking,
+        slotStart: confirmedBooking.slotStart.toISOString(),
+        slotEnd: confirmedBooking.slotEnd.toISOString(),
+        cancelledAt: confirmedBooking.cancelledAt?.toISOString() ?? null,
+        createdAt: confirmedBooking.createdAt.toISOString(),
+        updatedAt: confirmedBooking.updatedAt.toISOString(),
         meetLink,
         googleEventId,
       },
-    });
+    }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: webhook dispatch failed"));
 
-    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${booking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${booking.status}"`;
+    return `booking_confirmed: event="${eventType.name}", slot="${dateStr}", booking_id=${confirmedBooking.id}, attendee="${attendeeName}", email="${attendeeEmail}", status="${confirmedBooking.status}"`;
   } catch (err) {
     logger.error({ callId, err }, "Native booking tool execution failed");
     return "error: booking failed due to a technical issue";
@@ -938,6 +978,7 @@ export async function executeNativeReschedule(
     if (lockConflict || !newBooking) {
       return "error: slot was just taken — reschedule failed";
     }
+    const confirmedNewBooking = newBooking;
 
     const tz = calendar.timezone || "UTC";
     const dateStr = formatInTimeZone(newStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
@@ -948,7 +989,7 @@ export async function executeNativeReschedule(
       {
         callId,
         oldBookingId: bookingId,
-        newBookingId: newBooking.id,
+        newBookingId: confirmedNewBooking.id,
         requested_datetime: preferredRaw,
         requested_timezone: tz,
         stored_datetime: newStart.toISOString(),
@@ -979,31 +1020,39 @@ export async function executeNativeReschedule(
 
       if (connectionId) {
         logger.info(
-          { callId, bookingId, existingGoogleEventId, connectionId },
+          { callId, bookingId: confirmedNewBooking.id, oldBookingId: bookingId, existingGoogleEventId, connectionId },
           "Agent reschedule: syncing Google Calendar event",
         );
+      } else {
+        logger.warn(
+          { callId, bookingId: confirmedNewBooking.id, oldBookingId: bookingId },
+          "Native reschedule: no Google Calendar connection configured — GCal event sync skipped",
+        );
+      }
+
+      if (connectionId) {
         const gcalResult = existingGoogleEventId
           ? await updateCalendarEvent({
               connectionId,
               eventId: existingGoogleEventId,
-              summary: `${eventType.name} — ${newBooking.attendeeName}`,
-              description: newBooking.attendeeNotes ?? undefined,
-              startTime: newBooking.slotStart,
-              endTime: newBooking.slotEnd,
-              attendeeEmail: newBooking.attendeeEmail,
-              attendeeName: newBooking.attendeeName,
+              summary: `${eventType.name} — ${confirmedNewBooking.attendeeName}`,
+              description: confirmedNewBooking.attendeeNotes ?? undefined,
+              startTime: confirmedNewBooking.slotStart,
+              endTime: confirmedNewBooking.slotEnd,
+              attendeeEmail: confirmedNewBooking.attendeeEmail,
+              attendeeName: confirmedNewBooking.attendeeName,
               timezone: calendar.timezone,
               hostEmail: calendar.hostEmail,
               additionalHosts: calendar.additionalHosts,
             })
           : await createCalendarEvent({
               connectionId,
-              summary: `${eventType.name} — ${newBooking.attendeeName}`,
-              description: newBooking.attendeeNotes ?? undefined,
-              startTime: newBooking.slotStart,
-              endTime: newBooking.slotEnd,
-              attendeeEmail: newBooking.attendeeEmail,
-              attendeeName: newBooking.attendeeName,
+              summary: `${eventType.name} — ${confirmedNewBooking.attendeeName}`,
+              description: confirmedNewBooking.attendeeNotes ?? undefined,
+              startTime: confirmedNewBooking.slotStart,
+              endTime: confirmedNewBooking.slotEnd,
+              attendeeEmail: confirmedNewBooking.attendeeEmail,
+              attendeeName: confirmedNewBooking.attendeeName,
               timezone: calendar.timezone,
               hostEmail: calendar.hostEmail,
               additionalHosts: calendar.additionalHosts,
@@ -1011,40 +1060,40 @@ export async function executeNativeReschedule(
         if (gcalResult) {
           meetLink = gcalResult.meetLink;
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`,
+            sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${confirmedNewBooking.id}`,
           );
         }
       }
     } catch (err) {
-      logger.warn({ callId, bookingId: newBooking.id, err }, "Native reschedule: Google Calendar sync failed");
+      logger.warn({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: Google Calendar sync failed");
     }
 
-    void sendBookingRescheduledEmail({
-      attendeeName: newBooking.attendeeName,
-      attendeeEmail: newBooking.attendeeEmail,
+    sendBookingRescheduledEmail({
+      attendeeName: confirmedNewBooking.attendeeName,
+      attendeeEmail: confirmedNewBooking.attendeeEmail,
       eventTypeName: eventType.name,
-      slotStart: newBooking.slotStart,
-      slotEnd: newBooking.slotEnd,
+      slotStart: confirmedNewBooking.slotStart,
+      slotEnd: confirmedNewBooking.slotEnd,
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      bookingId: newBooking.id,
-      notes: newBooking.attendeeNotes,
+      bookingId: confirmedNewBooking.id,
+      notes: confirmedNewBooking.attendeeNotes,
       meetLink,
       oldSlotStart: existing.slotStart,
-    });
-    void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
+    }).catch((err) => logger.error({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: email send failed"));
+    dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.rescheduled", {
       booking: {
-        ...newBooking,
-        slotStart: newBooking.slotStart.toISOString(),
-        slotEnd: newBooking.slotEnd.toISOString(),
-        cancelledAt: newBooking.cancelledAt?.toISOString() ?? null,
-        createdAt: newBooking.createdAt.toISOString(),
-        updatedAt: newBooking.updatedAt.toISOString(),
+        ...confirmedNewBooking,
+        slotStart: confirmedNewBooking.slotStart.toISOString(),
+        slotEnd: confirmedNewBooking.slotEnd.toISOString(),
+        cancelledAt: confirmedNewBooking.cancelledAt?.toISOString() ?? null,
+        createdAt: confirmedNewBooking.createdAt.toISOString(),
+        updatedAt: confirmedNewBooking.updatedAt.toISOString(),
       },
-    });
+    }).catch((err) => logger.warn({ callId, bookingId: confirmedNewBooking.id, err }, "Native reschedule: webhook dispatch failed"));
 
-    return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${newBooking.id}, new_slot="${dateStr}", status="${newBooking.status}"`;
+    return `reschedule_confirmed: old_booking_id=${bookingId}, new_booking_id=${confirmedNewBooking.id}, new_slot="${dateStr}", status="${confirmedNewBooking.status}"`;
   } catch (err) {
     logger.error({ callId, err }, "Native reschedule tool execution failed");
     return "error: reschedule failed due to a technical issue";
@@ -1144,7 +1193,7 @@ export async function executeNativeCancel(
         }
       })();
 
-      void sendBookingCancelledEmail({
+      sendBookingCancelledEmail({
         attendeeName: existing.attendeeName,
         attendeeEmail: existing.attendeeEmail,
         eventTypeName: eventType.name,
@@ -1155,8 +1204,8 @@ export async function executeNativeCancel(
         additionalHosts: calendar.additionalHosts,
         bookingId: existing.id,
         notes: existing.attendeeNotes,
-      });
-      void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.cancelled", {
+      }).catch((err) => logger.error({ callId, bookingId: existing.id, err }, "Native cancel: email send failed"));
+      dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.cancelled", {
         booking: {
           ...existing,
           status: "cancelled",
@@ -1166,7 +1215,7 @@ export async function executeNativeCancel(
           createdAt: existing.createdAt.toISOString(),
           updatedAt: existing.updatedAt.toISOString(),
         },
-      });
+      }).catch((err) => logger.warn({ callId, bookingId: existing.id, err }, "Native cancel: webhook dispatch failed"));
     }
 
     return `cancellation_confirmed: booking_id=${bookingId}`;
