@@ -16,12 +16,12 @@ import { logger } from "../../../lib/logger.js";
 
 const VALID_SARVAM_STT_MODELS = new Set([
   "saarika:v2.5", "saarika:v2", "saarika:v1", "saarika:flash",
-  "saaras:v3", "saaras:v3-realtime",
+  "saaras:v2.5", "saaras:v3", "saaras:v3-realtime",
 ]);
 const DEFAULT_SARVAM_STT_MODEL = "saaras:v3";
 
 /** Only these models support Sarvam's real-time WebSocket API. */
-const STREAMING_MODELS = new Set(["saaras:v3", "saaras:v3-realtime"]);
+const STREAMING_MODELS = new Set(["saaras:v2.5", "saaras:v3", "saaras:v3-realtime"]);
 
 /** All language codes Sarvam accepts (BCP 47 with -IN suffix). */
 const VALID_SARVAM_LANG = new Set([
@@ -130,7 +130,7 @@ export class SarvamSTT implements STTAdapter {
     onClose?: () => void,
   ): StreamSTT {
     // saaras:v3-realtime is our UI label; the actual API model name is saaras:v3
-    const apiModel = "saaras:v3";
+    const apiModel = this.model === "saaras:v3-realtime" ? "saaras:v3" : this.model;
 
     const params = new URLSearchParams({
       language_code: this.langCode,
