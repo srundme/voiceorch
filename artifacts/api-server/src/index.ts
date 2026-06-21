@@ -96,6 +96,8 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const platformTelephony = url.includes("pt=1");
   const qs                = new URLSearchParams(url.split("?")[1] ?? "");
   const campaignLeadId    = qs.has("campaignLeadId") ? parseInt(qs.get("campaignLeadId")!, 10) : undefined;
+  const vobizFrom         = qs.get("from") ?? undefined;
+  const vobizTo           = qs.get("to")   ?? undefined;
   // callerId: Clerk userId of the dashboard user initiating the webcall.
   // Passed as ?callerId=<clerkId> so the callback poller can ring the right browser tab.
   const callerId          = qs.get("callerId") ?? undefined;
@@ -136,7 +138,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                                      break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                                       break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId);                                    break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo);              break;
       case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId, callbackId, promptVariables);                              break;
     }
   });

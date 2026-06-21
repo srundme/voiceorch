@@ -894,6 +894,15 @@ export class OrchestrationPipeline {
               ? this.ambientStream.mixIntoMulaw(chunk)
               : chunk;
             this.config.onAudioOut(outChunk);
+            // Re-arm echo grace with every chunk so the suppression window tracks
+            // real-time playback position.  Without this, a sentence longer than
+            // BARGE_IN_ECHO_GRACE_MS (600 ms) lets the grace expire mid-playback;
+            // the echoed tail then looks like real caller speech → false barge-in
+            // → clearAudio → last words clipped.
+            this.bargeInHoldUntil = Math.max(
+              this.bargeInHoldUntil,
+              Date.now() + this.bargeInEchoGraceMs,
+            );
             const delay = Math.max(0, nextTick - Date.now());
             nextTick += 20;
             // Prevent large accumulated debt (e.g. after a long pause or barge-in)
@@ -1018,6 +1027,10 @@ export class OrchestrationPipeline {
           if (this.closed || this.bargeInRequested) break;
           if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
           this.config.onAudioOut(ttsPcm8k.slice(i, i + PCM_CHUNK));
+          this.bargeInHoldUntil = Math.max(
+            this.bargeInHoldUntil,
+            Date.now() + this.bargeInEchoGraceMs,
+          );
           await new Promise<void>((r) => setTimeout(r, 20));
         }
       } else {

@@ -53,7 +53,9 @@ export async function handleVobizWebSocket(
   ws: WebSocket,
   agentId: number,
   platformTelephony = false,
-  campaignLeadId?: number
+  campaignLeadId?: number,
+  urlFrom?: string,
+  urlTo?: string,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -104,8 +106,9 @@ export async function handleVobizWebSocket(
         const callId = msg.start?.callId ?? null;
 
         const params = msg.start?.customParameters ?? {};
-        const fromNumber = msg.start?.from ?? params["From"] ?? "+10000000000";
-        const toNumber   = msg.start?.to   ?? params["To"]   ?? "+10000000001";
+        // Priority: URL query params (most reliable) → start.from/to → customParameters → fallback
+        const fromNumber = urlFrom ?? msg.start?.from ?? params["From"] ?? "+10000000000";
+        const toNumber   = urlTo   ?? msg.start?.to   ?? params["To"]   ?? "+10000000001";
 
         logger.info({ agentId, streamId, callId, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
@@ -176,6 +179,12 @@ export function getVobizAnswerXML(
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
   if (opts.campaignLeadId) qsParts.push(`campaignLeadId=${opts.campaignLeadId}`);
+  // Embed From/To in the WebSocket URL query string — the most reliable way to
+  // pass caller/callee numbers.  VoBiz POSTs them to the answer URL, we encode
+  // them here, and our WS handler reads them from the URL before the start event
+  // arrives (VoBiz's start.from/to and customParameters support is inconsistent).
+  if (opts.from) qsParts.push(`from=${encodeURIComponent(opts.from)}`);
+  if (opts.to)   qsParts.push(`to=${encodeURIComponent(opts.to)}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
   // contentType="audio/x-l16;rate=8000" explicitly negotiates LINEAR16 8kHz for
@@ -184,14 +193,8 @@ export function getVobizAnswerXML(
   // playAudio payload — producing the "tractor/glitch" audio artifact on the
   // caller side.  Per Vobiz docs the playAudio contentType must match the
   // stream-negotiated format, so locking it here fixes the outbound path.
-  //
-  // From/To are embedded as <Parameter> child elements (Twilio-compatible syntax
-  // that Vobiz echoes back in customParameters of the start event) so the session
-  // can store the real caller/callee numbers instead of +10000000000 fallbacks.
-  const fromParam = opts.from ? `\n  <Parameter name="From" value="${opts.from.replace(/"/g, "&quot;")}"/>` : "";
-  const toParam   = opts.to   ? `\n  <Parameter name="To"   value="${opts.to.replace(/"/g, "&quot;")}"/>` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrl}${fromParam}${toParam}</Stream>
+  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrl}</Stream>
 </Response>`;
 }
