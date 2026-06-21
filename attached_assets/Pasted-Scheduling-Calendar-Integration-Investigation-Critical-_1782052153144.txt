@@ -1,0 +1,92 @@
+Scheduling & Calendar Integration Investigation
+
+Critical production issues detected.
+
+Issue #1 – Availability Rules Ignored
+
+Configured availability:
+
+Monday–Saturday
+09:00 AM → 05:00 PM
+
+However the booking flow returned and booked:
+
+Mon Jun 22 at 8:30 PM
+
+which is outside configured working hours.
+
+Please verify:
+
+1. Is check_availability applying scheduling availability rules?
+2. Is Google FreeBusy data being filtered against working hours?
+3. Is timezone conversion causing slots outside configured hours?
+4. Is the scheduling availability configuration being loaded correctly?
+
+Expected:
+
+Only slots between 09:00 AM and 05:00 PM should ever be returned.
+
+--------------------------------------------------
+
+Issue #2 – No Confirmation Emails
+
+book_appointment returns:
+
+status=confirmed
+
+but neither attendee nor organizer receives a calendar invitation.
+
+Please verify:
+
+1. Is a Google Calendar event actually being created?
+2. Are attendees being added to the event?
+3. Is sendUpdates="all" being used?
+4. Are organizer and attendee emails attached correctly?
+5. Are Gmail invitations being generated?
+
+Need logging for:
+
+- Event Created
+- Invitation Sent
+- Invitation Failed
+- Gmail Response
+
+--------------------------------------------------
+
+Issue #3 – Google Meet Link Missing
+
+If conferencing is enabled:
+
+Expected flow:
+
+Create Event
+↓
+Generate Google Meet Link
+↓
+Attach Meet URL
+↓
+Send invitation email
+
+Verify:
+
+1. conferenceData is included in event creation.
+2. conferenceDataVersion=1 is passed.
+3. Meet link generation succeeds.
+4. Meet URL is stored in booking record.
+5. Meet URL is included in confirmation emails.
+6. Meet URL is included in agent confirmation response.
+
+--------------------------------------------------
+
+Additional Requirement
+
+Add detailed booking logs:
+
+Booking Request
+Availability Applied
+Calendar Event Created
+Meet Link Generated
+Invitation Sent
+Booking Confirmed
+
+so production issues can be diagnosed directly from Call Logs without checking backend logs.
