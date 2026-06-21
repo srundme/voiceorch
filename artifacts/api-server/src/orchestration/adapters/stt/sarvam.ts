@@ -9,19 +9,21 @@ import { logger } from "../../../lib/logger.js";
  * Batch:     POST https://api.sarvam.ai/speech-to-text
  * Streaming: wss://api.sarvam.ai/speech-to-text/ws
  *
- * Streaming is enabled automatically when model is saaras:v3 or saaras:v3-realtime.
- * Audio is sent as raw PCM16-LE binary frames (input_audio_codec=pcm_s16le, 16 kHz).
- * Response envelope: { type: "data"|"error"|"events", data: { transcript, ... } }
+ * Streaming models: saaras:v3, saaras:v3-realtime (UI alias), saaras:v2.5
+ * Batch models:     saarika:v2.5 (and other saarika variants), saaras:v3
+ * Note: saaras:v2.5 is streaming-only; batch fallback remaps it to saarika:v2.5.
+ * Note: mode param (codemix/transcribe/etc.) is saaras:v3-only.
  */
 
 const VALID_SARVAM_STT_MODELS = new Set([
   "saarika:v2.5", "saarika:v2", "saarika:v1", "saarika:flash",
+  "saaras:v2.5",
   "saaras:v3", "saaras:v3-realtime",
 ]);
-const DEFAULT_SARVAM_STT_MODEL = "saaras:v3";
+const DEFAULT_SARVAM_STT_MODEL = "saaras:v2.5";
 
 /** Only these models support Sarvam's real-time WebSocket API. */
-const STREAMING_MODELS = new Set(["saaras:v3", "saaras:v3-realtime"]);
+const STREAMING_MODELS = new Set(["saaras:v2.5", "saaras:v3", "saaras:v3-realtime"]);
 
 /** All language codes Sarvam accepts (BCP 47 with -IN suffix). */
 const VALID_SARVAM_LANG = new Set([
@@ -113,8 +115,12 @@ export class SarvamSTT implements STTAdapter {
     const wavAb = new ArrayBuffer(wav.byteLength);
     new Uint8Array(wavAb).set(wav);
     formData.append("file", new Blob([wavAb], { type: "audio/wav" }), "audio.wav");
-    // saaras:v3-realtime is our UI label; the actual API model name is saaras:v3
-    const batchModel = this.model === "saaras:v3-realtime" ? "saaras:v3" : this.model;
+    // saaras:v3-realtime → saaras:v3 (UI alias)
+    // saaras:v2.5 is streaming-only; fall back to saarika:v2.5 for batch
+    const batchModel =
+      this.model === "saaras:v3-realtime" ? "saaras:v3" :
+      this.model === "saaras:v2.5"        ? "saarika:v2.5" :
+      this.model;
     formData.append("model", batchModel);
     formData.append("language_code", this.langCode);
 
@@ -139,16 +145,14 @@ export class SarvamSTT implements STTAdapter {
     onTranscript: (text: string, isFinal: boolean) => void,
     onClose?: () => void,
   ): StreamSTT {
-    // saaras:v3-realtime is our UI label; the actual API model name is saaras:v3
+    // saaras:v3-realtime is our UI alias; actual API model name is saaras:v3
     const apiModel = this.model === "saaras:v3-realtime" ? "saaras:v3" : this.model;
+    // mode param is saaras:v3-only — do NOT send for saaras:v2.5 or it causes a 400
+    const isV3 = apiModel === "saaras:v3";
 
     const params = new URLSearchParams({
       language_code: this.langCode,
       model: apiModel,
-      // codemix handles mixed-language speech (e.g. Tamil + English) naturally.
-      // transcribe would misfire on code-switched words; codemix is the right mode
-      // for Indian callers who mix their native language with English terms.
-      mode: "codemix",
       input_audio_codec: "pcm_s16le",
       sample_rate: "16000",
       // high_vad_sensitivity: 0.5s silence threshold vs default 1s — snappier turns
@@ -162,6 +166,8 @@ export class SarvamSTT implements STTAdapter {
       // headers during the WebSocket upgrade handshake, causing 403.
       "api-subscription-key": this.key,
     });
+    // codemix handles Tamil+English mixed speech — v3-only param
+    if (isV3) params.set("mode", "codemix");
 
     const wsUrl = `wss://api.sarvam.ai/speech-to-text/ws?${params.toString()}`;
 
@@ -169,11 +175,11 @@ export class SarvamSTT implements STTAdapter {
     const safeParams = new URLSearchParams({
       language_code: this.langCode,
       model: apiModel,
-      mode: "codemix",
       input_audio_codec: "pcm_s16le",
       sample_rate: "16000",
       high_vad_sensitivity: "true",
       vad_signals: "true",
+      ...(isV3 ? { mode: "codemix" } : {}),
     });
     logger.info(
       { langCode: this.langCode, model: apiModel, wsUrl: `wss://api.sarvam.ai/speech-to-text/ws?${safeParams.toString()}` },
