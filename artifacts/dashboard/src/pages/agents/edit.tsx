@@ -506,9 +506,7 @@ export default function AgentEdit() {
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       backchannelPhrases:       agent.backchannelPhrases ?? "",
-      webhookUrl:               agent.webhookUrl ?? "",
-      // Note: legacy http:// values are kept so the user can see and correct them;
-      // an inline error is set below after reset.
+      webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
       webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
@@ -537,12 +535,6 @@ export default function AgentEdit() {
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
     });
-    if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
-      form.setError("webhookUrl", {
-        type: "server",
-        message: "This URL must be updated to https:// before saving.",
-      });
-    }
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
@@ -879,12 +871,18 @@ export default function AgentEdit() {
                       const val = field.value ?? "";
                       const isEmail = val.includes("@") && !val.startsWith("http");
                       const isHttp  = val.length > 0 && val.startsWith("http://");
+                      const wasCleared = !!(agent.webhookUrl && !agent.webhookUrl.startsWith("https://"));
                       return (
                         <FormItem>
                           <FormLabel>Post-Call Webhook URL</FormLabel>
                           <FormControl>
                             <Input placeholder="https://your-server.com/webhook/calls" {...field} />
                           </FormControl>
+                          {wasCleared && (
+                            <p className="text-xs text-amber-500 flex items-center gap-1">
+                              ⚠ A previously saved URL was cleared because it didn't start with https://. Please re-enter a valid URL.
+                            </p>
+                          )}
                           {isEmail && (
                             <p className="text-xs text-destructive flex items-center gap-1">
                               ⚠ That looks like an email address, not a URL. Enter an <code>https://</code> endpoint.
