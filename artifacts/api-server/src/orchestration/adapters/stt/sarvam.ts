@@ -63,6 +63,8 @@ function normaliseSarvamLang(code: string | null): string {
 
 interface SarvamStreamMsg {
   type?: string;
+  // transcript may be top-level (raw WS) or nested under data (SDK wrapper)
+  transcript?: string;
   data?: {
     transcript?: string;
     message?: string;
@@ -269,13 +271,21 @@ export class SarvamSTT implements STTAdapter {
         return;
       }
 
+      // Debug log — shows raw type/shape from Sarvam so we can verify the format
+      logger.debug({ msgType: msg.type, keys: Object.keys(msg) }, "Sarvam STT raw WS message");
+
+      // ── Error ────────────────────────────────────────────────────────────────
       if (msg.type === "error") {
         logger.warn({ err: msg.data?.message }, "Sarvam streaming STT error event");
         return;
       }
 
-      if (msg.type === "data") {
-        const transcript = msg.data?.transcript?.trim();
+      // ── Transcript ───────────────────────────────────────────────────────────
+      // Raw WS docs say type="transcript"; SDK wraps it as type="data".
+      // Both may carry the text in data.transcript OR top-level transcript.
+      const isTranscriptMsg = msg.type === "transcript" || msg.type === "data";
+      if (isTranscriptMsg) {
+        const transcript = (msg.data?.transcript ?? msg.transcript ?? "").trim();
         if (transcript) {
           // Grace-window fallback: if speech_start was missed but enough time
           // has passed since the last emit, treat this as a new utterance.
@@ -286,7 +296,7 @@ export class SarvamSTT implements STTAdapter {
           }
 
           latestTranscript = transcript;
-          logger.info({ text: transcript.slice(0, 80) }, "Sarvam streaming STT → partial");
+          logger.info({ text: transcript.slice(0, 80) }, "Sarvam streaming STT → transcript");
 
           // Lazy-arm safety timer in case speech_start event was not received.
           if (!safetyTimer && !hasEmitted) {
@@ -300,20 +310,27 @@ export class SarvamSTT implements STTAdapter {
         return;
       }
 
-      if (msg.type === "events") {
-        // Raw WS uses event:"speech_start"/"speech_end"
-        // SDK / vad_signals=true uses signal_type:"START_SPEECH"/"END_SPEECH"
-        const event = msg.data?.event;
-        const signal = msg.data?.signal_type;
-        const isSpeechStart = event === "speech_start" || signal === "START_SPEECH";
-        const isSpeechEnd   = event === "speech_end"   || signal === "END_SPEECH";
-        if (isSpeechStart) {
-          // Canonical utterance boundary — reset all state for the new segment.
-          onSpeechStart();
-        } else if (isSpeechEnd) {
-          // Sarvam VAD confirms end of utterance — emit immediately.
-          emitFinal("speech_end");
-        }
+      // ── VAD Events ───────────────────────────────────────────────────────────
+      // Raw WS: type="speech_start" / type="speech_end" (no data wrapper needed)
+      // SDK (vad_signals=true): type="events", data.signal_type="START_SPEECH"/"END_SPEECH"
+      // Legacy raw: type="events", data.event="speech_start"/"speech_end"
+      const isSpeechStart =
+        msg.type === "speech_start" ||
+        (msg.type === "events" && (
+          msg.data?.event === "speech_start" ||
+          msg.data?.signal_type === "START_SPEECH"
+        ));
+      const isSpeechEnd =
+        msg.type === "speech_end" ||
+        (msg.type === "events" && (
+          msg.data?.event === "speech_end" ||
+          msg.data?.signal_type === "END_SPEECH"
+        ));
+
+      if (isSpeechStart) {
+        onSpeechStart();
+      } else if (isSpeechEnd) {
+        emitFinal("speech_end");
       }
     });
 
