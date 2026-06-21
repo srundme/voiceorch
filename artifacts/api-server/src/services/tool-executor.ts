@@ -153,6 +153,10 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
                 description:
                   "Optional preferred date or time of day for the appointment, e.g. 'next Tuesday', '2025-06-10', 'morning', or 'afternoon'. The system will find the first available slot on or after this date/time. If you ran check_availability first, pass the ISO 8601 string returned there (e.g. '2026-06-06T20:30:00+05:30') verbatim — do NOT convert or reformat it.",
               },
+              timezone: {
+                type: "string",
+                description: "IANA timezone of the caller, e.g. 'America/New_York' or 'Asia/Kolkata'. Used to format the confirmation time in the caller's local timezone. Pass the same timezone you used in check_availability.",
+              },
               meeting_type: {
                 type: "string",
                 enum: ["google_meet", "in_person"],
@@ -552,7 +556,7 @@ export async function executeNativeBooking(
     }
     const confirmedBooking = booking;
 
-    const tz = calendar.timezone || "UTC";
+    const tz = (args["timezone"] as string | undefined) || calendar.timezone || "UTC";
     const dateStr = formatInTimeZone(slotStart, tz, "EEEE, MMMM do 'at' h:mm a zzz");
     logger.info(
       {
@@ -811,12 +815,22 @@ export async function executeNativeCheckAvailability(
       if (exactMatch) {
         return `requested_slot_available: slot="${formatInTimeZone(exactMatch.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")}", label="${formatInTimeZone(exactMatch.slotStart, tz, "EEE MMM d 'at' h:mm a")}", event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}"`;
       }
-      const alternatives = slots
+      // Filter alternatives to only those within the calendar's configured working hours
+      // before slicing — prevents out-of-hours slots from appearing when calendar timezone is wrong
+      const windowTz = calendar.timezone || "Asia/Kolkata";
+      const windowChecks = await Promise.all(
+        slots.slice(0, 15).map(async (s) => ({
+          slot: s,
+          ok: await isSlotWithinAvailabilityWindow(calendar.id, s.slotStart, windowTz),
+        })),
+      );
+      const alternatives = windowChecks
+        .filter((x) => x.ok)
         .slice(0, 5)
-        .map(slotLabel)
+        .map((x) => slotLabel(x.slot))
         .join("; ");
       const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEE MMM d 'at' h:mm a");
-      return `requested_slot_unavailable: requested="${requestedLabel}", alternatives="${alternatives}"`;
+      return `requested_slot_unavailable: requested="${requestedLabel}", alternatives="${alternatives || "none available"}"`; 
     }
 
     const preview = slots

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2, AlertTriangle } from "lucide-react";
 import {
@@ -91,8 +91,16 @@ type FormState = {
   isActive: boolean;
 };
 
+function getBrowserTimezone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && TIMEZONES.includes(tz)) return tz;
+  } catch { /* ignore */ }
+  return "Asia/Kolkata";
+}
+
 function defaultForm(): FormState {
-  return { agentId: "", name: "My Calendar", timezone: "Asia/Kolkata", hostEmail: "", additionalHosts: [], isActive: true };
+  return { agentId: "", name: "My Calendar", timezone: getBrowserTimezone(), hostEmail: "", additionalHosts: [], isActive: true };
 }
 
 function CalendarFormDialog({
@@ -119,16 +127,20 @@ function CalendarFormDialog({
       : defaultForm()
   );
   const [agentError, setAgentError] = useState<string | null>(null);
+  // Tracks whether the user has manually edited hostEmail so we never stomp their input
+  const hostEmailTouched = useRef(false);
 
-  // Pre-populate hostEmail with the session user's email when creating a new calendar
+  // Pre-populate hostEmail with the session user's email when creating a new calendar.
+  // Uses a ref guard so this only fires once (when user loads) and never overwrites a value the user typed.
   useEffect(() => {
-    if (!editing && !form.hostEmail && user?.email) {
-      setForm(f => ({ ...f, hostEmail: user.email! }));
+    if (!editing && !hostEmailTouched.current && user?.email) {
+      setForm(f => ({ ...f, hostEmail: f.hostEmail || user.email! }));
     }
   }, [user?.email, editing]);
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     if (k === "agentId") setAgentError(null);
+    if (k === "hostEmail") hostEmailTouched.current = true;
     setForm(f => ({ ...f, [k]: v }));
   }
 
@@ -199,6 +211,24 @@ function CalendarFormDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-1">
+          {/* Amber callout for calendars with UTC timezone or missing hostEmail */}
+          {editing && (editing.timezone === "UTC" || !editing.hostEmail) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-3 py-2.5 space-y-1">
+              {editing.timezone === "UTC" && (
+                <p className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span><strong>Timezone is set to UTC.</strong> Availability windows and slot times are currently interpreted in UTC — set your real timezone so callers see correct hours.</span>
+                </p>
+              )}
+              {!editing.hostEmail && (
+                <p className="text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span><strong>Host email is missing.</strong> Google Calendar invitations will have no organizer and host notification emails will be skipped.</span>
+                </p>
+              )}
+            </div>
+          )}
+
           {!editing && (
             <div className="space-y-1.5">
               <Label>Agent <span className="text-foreground">*</span></Label>
@@ -405,6 +435,30 @@ function CalendarCard({
                 Created {formatDistanceToNow(new Date(calendar.createdAt), { addSuffix: true })}
               </span>
             </div>
+
+            {/* Warning badges for UTC timezone or missing hostEmail */}
+            {(calendar.timezone === "UTC" || !calendar.hostEmail) && (
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {calendar.timezone === "UTC" && (
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+                  >
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    Timezone not set — edit to fix
+                  </button>
+                )}
+                {!calendar.hostEmail && (
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+                  >
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    Host email missing — edit to fix
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Google account assignment */}
             <div className="flex items-start gap-2 mt-2">
