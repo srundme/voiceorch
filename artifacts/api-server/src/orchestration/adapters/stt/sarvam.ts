@@ -236,9 +236,14 @@ export class SarvamSTT implements STTAdapter {
       safetyTimer = setTimeout(() => emitFinal("safety"), SAFETY_MS);
     }
 
-    /** Encode a PCM Buffer into the JSON text frame Sarvam requires. */
+    /** Encode a PCM Buffer into the JSON text frame Sarvam requires.
+     *  All three fields (audio, encoding, sample_rate) are required by the API. */
     function sendAudioFrame(chunk: Buffer): void {
-      ws.send(JSON.stringify({ audio_chunk: chunk.toString("base64") }));
+      ws.send(JSON.stringify({
+        audio: chunk.toString("base64"),
+        encoding: "pcm_s16le",
+        sample_rate: 16000,
+      }));
     }
 
     const ws = new WebSocket(wsUrl, {

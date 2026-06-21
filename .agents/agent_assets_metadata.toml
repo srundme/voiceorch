@@ -120,3 +120,9 @@ id = "VjZOr-OU4WP5rgkmhK87H"
 uri = "file://.local/outputs/Bolna-Orchestrator.pptx"
 type = "slides"
 title = "Bolna Orchestrator.pptx"
+
+[[outputs]]
+id = "sUZ0-p3Svfx9GVgE0ky3L"
+uri = "file://.local/marketing/snapserve-marketing-playbook.md"
+type = "text"
+title = "SnapServe AI — Marketing Playbook"

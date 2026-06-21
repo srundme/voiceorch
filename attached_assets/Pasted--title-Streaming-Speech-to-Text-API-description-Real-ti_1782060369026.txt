@@ -1,0 +1,784 @@
+---
+title: Streaming Speech-to-Text API
+description: >-
+  Real-time audio transcription and translation with WebSocket connections.
+  Low-latency streaming for live applications with instant results and
+  interactive features.
+icon: wave-pulse
+canonical-url: 'https://docs.sarvam.ai/api-reference-docs/speech-to-text/apis/streaming'
+'og:title': Streaming Speech-to-Text API - Real-time WebSocket Transcription by Sarvam AI
+'og:description': >-
+  Real-time audio transcription with Sarvam AI's streaming speech-to-text API.
+  WebSocket connections for live transcription, translation, and interactive
+  applications.
+'og:type': article
+'og:site_name': Sarvam AI Developer Documentation
+'og:image':
+  type: url
+  value: >-
+    https://res.cloudinary.com/dvcb20x9a/image/upload/v1743510800/image_3_rpnrug.png
+'og:image:width': 1200
+'og:image:height': 630
+'twitter:card': summary_large_image
+'twitter:title': Streaming Speech-to-Text API - Real-time WebSocket Transcription by Sarvam AI
+'twitter:description': >-
+  Real-time audio transcription with Sarvam AI's streaming speech-to-text API.
+  WebSocket connections for live transcription, translation, and interactive
+  applications.
+'twitter:image':
+  type: url
+  value: >-
+    https://res.cloudinary.com/dvcb20x9a/image/upload/v1743510800/image_3_rpnrug.png
+'twitter:site': '@SarvamAI'
+---
+
+## Overview
+
+Transform audio into text in real-time with our WebSocket-based streaming API. Built for applications requiring immediate speech processing with minimal delay.
+
+<Info>
+For complete API reference documentation, see the [Speech-to-Text API Reference](https://docs.sarvam.ai/api-reference-docs/speech-to-text/apis/streaming) section.
+</Info>
+
+<Note>
+  **Model Availability:** The Streaming API supports **Saaras v3** (recommended) with multiple output modes via the `mode` parameter. Legacy models **Saarika v2.5** and **Saaras v2.5** are also available but we recommend switching to **Saaras v3** for the best accuracy and features.
+</Note>
+
+### Supported Modes (Saaras v3)
+
+| Mode | Description | Output |
+|------|-------------|--------|
+| `transcribe` | Standard transcription in the original language | Text in source language |
+| `translate` | Transcribe and translate to English | English text |
+| `verbatim` | Word-for-word transcription including filler words and repetitions | Verbatim text in source language |
+| `translit` | Transcribe and transliterate to Roman script | Romanized text |
+| `codemix` | Transcribe code-mixed speech (e.g., Hindi-English) naturally | Code-mixed text |
+
+### Key Benefits
+
+<CardGroup cols={3}>
+  <Card title="Ultra-Low Latency" icon="zap">
+    Get transcription results in milliseconds, not seconds. Process speech as it happens with near-instantaneous responses.
+  </Card>
+  
+  <Card title="Multi-Language Support" icon="language">
+    Support for 10+ Indian languages plus English with high accuracy transcription and translation capabilities.
+  </Card>
+
+  <Card title="Advanced Voice Detection" icon="microphone">
+    Smart Voice Activity Detection (VAD) with customizable sensitivity for optimal speech boundary detection.
+  </Card>
+</CardGroup>
+
+### Common Use Cases
+
+- **Live Transcription**: Real-time captions for meetings, webinars, and broadcasts
+- **Voice Assistants**: Interactive voice applications with immediate responses  
+- **Call Centers**: Live call transcription and analysis
+- **Accessibility**: Real-time captioning for hearing-impaired users
+
+<Note>
+  **Audio Format Support**: Streaming APIs only support **two audio formats**: 
+  - **WAV** (`wav`)
+  - **Raw PCM** (`pcm_s16le`, `pcm_l16`, `pcm_raw`)
+  
+  Other formats like MP3, AAC, OGG, etc. are not supported for WebSocket streaming. Find sample audio files in our [GitHub cookbook](https://github.com/sarvamai/sarvam-ai-cookbook/tree/main/sample_data/stt).
+</Note>
+
+## Getting Started
+
+Get up and running with streaming in minutes. Simply change the `mode` parameter to switch between transcription, translation, and other output formats.
+
+### Choosing a Mode
+
+<Tabs>
+  <Tab title="Transcribe">
+    Transcribe audio in the original language.
+
+<CodeGroup>
+<CodeBlock title="Python" active>
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="transcribe",              # Standard transcription
+    language_code="en-IN",
+    high_vad_sensitivity=True
+) as ws:
+    await ws.transcribe(audio=audio_data)
+    response = await ws.recv()
+    print(f"Transcription: {response}")
+```
+
+</CodeBlock>
+<CodeBlock title="JavaScript">
+
+```javascript
+const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "transcribe",              // Standard transcription
+    "language-code": "en-IN",
+    high_vad_sensitivity: "true"
+});
+```
+
+</CodeBlock>
+</CodeGroup>
+  </Tab>
+
+  <Tab title="Translate">
+    Transcribe and translate audio to English.
+
+<CodeGroup>
+<CodeBlock title="Python" active>
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="translate",               # Translate to English
+    language_code="hi-IN",
+    high_vad_sensitivity=True
+) as ws:
+    await ws.transcribe(audio=audio_data)
+    response = await ws.recv()
+    print(f"Translation: {response}")
+```
+
+</CodeBlock>
+<CodeBlock title="JavaScript">
+
+```javascript
+const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "translate",               // Translate to English
+    "language-code": "hi-IN",
+    high_vad_sensitivity: "true"
+});
+```
+
+</CodeBlock>
+</CodeGroup>
+  </Tab>
+
+  <Tab title="Verbatim">
+    Word-for-word transcription including filler words and repetitions.
+
+<CodeGroup>
+<CodeBlock title="Python" active>
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="verbatim",                # Include fillers & repetitions
+    language_code="hi-IN",
+    high_vad_sensitivity=True
+) as ws:
+    await ws.transcribe(audio=audio_data)
+    response = await ws.recv()
+    print(f"Verbatim: {response}")
+```
+
+</CodeBlock>
+<CodeBlock title="JavaScript">
+
+```javascript
+const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "verbatim",                // Include fillers & repetitions
+    "language-code": "hi-IN",
+    high_vad_sensitivity: "true"
+});
+```
+
+</CodeBlock>
+</CodeGroup>
+  </Tab>
+
+  <Tab title="Translit">
+    Transcribe and transliterate to Roman script.
+
+<CodeGroup>
+<CodeBlock title="Python" active>
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="translit",                # Romanized output
+    language_code="hi-IN",
+    high_vad_sensitivity=True
+) as ws:
+    await ws.transcribe(audio=audio_data)
+    response = await ws.recv()
+    print(f"Transliteration: {response}")
+```
+
+</CodeBlock>
+<CodeBlock title="JavaScript">
+
+```javascript
+const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "translit",                // Romanized output
+    "language-code": "hi-IN",
+    high_vad_sensitivity: "true"
+});
+```
+
+</CodeBlock>
+</CodeGroup>
+  </Tab>
+
+  <Tab title="Codemix">
+    Transcribe code-mixed speech (e.g., Hindi-English) naturally.
+
+<CodeGroup>
+<CodeBlock title="Python" active>
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="codemix",                 # Handle mixed-language speech
+    language_code="hi-IN",
+    high_vad_sensitivity=True
+) as ws:
+    await ws.transcribe(audio=audio_data)
+    response = await ws.recv()
+    print(f"Codemix: {response}")
+```
+
+</CodeBlock>
+<CodeBlock title="JavaScript">
+
+```javascript
+const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "codemix",                 // Handle mixed-language speech
+    "language-code": "hi-IN",
+    high_vad_sensitivity: "true"
+});
+```
+
+</CodeBlock>
+</CodeGroup>
+  </Tab>
+</Tabs>
+
+### Full Example
+
+Here's a complete working example. Change the `mode` parameter to switch between any of the supported modes:
+
+<CodeGroup>
+  <CodeBlock title="Python" active>
+
+```python
+
+from sarvamai import AsyncSarvamAI
+
+# Load your audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def basic_transcription():
+    # Initialize client with your API key
+    client = AsyncSarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+    # Connect and transcribe — change mode as needed
+    async with client.speech_to_text_streaming.connect(
+        model="saaras:v3",
+        mode="transcribe",
+        language_code="en-IN",
+        high_vad_sensitivity=True
+    ) as ws:
+        await ws.transcribe(audio=audio_data)
+        response = await ws.recv()
+        print(f"Result: {response}")
+
+asyncio.run(basic_transcription())
+```
+
+  </CodeBlock>
+  <CodeBlock title="JavaScript">
+
+```javascript
+
+function audioFileToBase64(filePath) {
+  return fs.readFileSync(filePath).toString("base64");
+}
+
+async function basicTranscription() {
+  const audioData = audioFileToBase64("path/to/your/audio.wav");
+
+  const client = new SarvamAIClient({
+    apiSubscriptionKey: "YOUR_SARVAM_API_KEY"
+  });
+
+  // Connect — change mode as needed
+  const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "transcribe",
+    "language-code": "en-IN",
+    high_vad_sensitivity: "true"
+  });
+
+  socket.on("open", () => {
+    socket.transcribe({
+      audio: audioData,
+      sample_rate: 16000,
+      encoding: "audio/wav",
+    });
+  });
+
+  socket.on("message", (response) => {
+    console.log("Result:", response);
+  });
+
+  await socket.waitForOpen();
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  socket.close();
+}
+
+basicTranscription();
+```
+
+  </CodeBlock>
+</CodeGroup>
+
+### Enhanced Processing with Voice Detection
+
+Add smart voice activity detection for better accuracy and control:
+
+<CodeGroup>
+  <CodeBlock title="Python" active>
+
+```python
+
+from sarvamai import AsyncSarvamAI
+
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def enhanced_transcription():
+    client = AsyncSarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+    async with client.speech_to_text_streaming.connect(
+        model="saaras:v3",
+        mode="transcribe",              # Change mode as needed
+        language_code="hi-IN",
+        high_vad_sensitivity=True,       # Better voice detection
+        vad_signals=True                # Get speech start/end signals
+    ) as ws:
+        await ws.transcribe(
+            audio=audio_data,
+            encoding="audio/wav",
+            sample_rate=16000
+        )
+        
+        async for message in ws:
+            if message.type == "events":
+                # VAD signals arrive as events (signal_type is START_SPEECH / END_SPEECH)
+                print(f"Voice activity: {message.data.signal_type}")
+            elif message.type == "data":
+                print(f"Result: {message.data.transcript}")
+                break
+
+asyncio.run(enhanced_transcription())
+```
+
+  </CodeBlock>
+  <CodeBlock title="JavaScript">
+
+```javascript
+
+function audioFileToBase64(filePath) {
+  return fs.readFileSync(filePath).toString("base64");
+}
+
+async function enhancedTranscription() {
+  const audioData = audioFileToBase64("path/to/your/audio.wav");
+
+  const client = new SarvamAIClient({
+    apiSubscriptionKey: "YOUR_SARVAM_API_KEY"
+  });
+
+  const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "transcribe",              // Change mode as needed
+    "language-code": "hi-IN",
+    high_vad_sensitivity: "true",
+    vad_signals: "true"
+  });
+
+  socket.on("open", () => {
+    socket.transcribe({
+      audio: audioData,
+      sample_rate: 16000,
+      encoding: "audio/wav",
+    });
+  });
+
+  socket.on("message", (message) => {
+    if (message.type === "events") {
+      // VAD signals: signal_type is START_SPEECH / END_SPEECH
+      console.log(`Voice activity: ${message.data.signal_type}`);
+    } else if (message.type === "data") {
+      console.log(`Result: ${message.data.transcript}`);
+    }
+  });
+
+  await socket.waitForOpen();
+  await new Promise(resolve => setTimeout(resolve, 10000));
+  socket.close();
+}
+
+enhancedTranscription();
+```
+
+  </CodeBlock>
+</CodeGroup>
+
+### Instant Processing with Flush Signals
+
+Force immediate processing without waiting for silence detection:
+
+<CodeGroup>
+  <CodeBlock title="Python" active>
+
+```python
+
+from sarvamai import AsyncSarvamAI
+
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def instant_processing():
+    client = AsyncSarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+    async with client.speech_to_text_streaming.connect(
+        model="saaras:v3",
+        mode="transcribe",              # Change mode as needed
+        language_code="en-IN",
+        flush_signal=True               # Enable manual control
+    ) as ws:
+        await ws.transcribe(
+            audio=audio_data,
+            encoding="audio/wav",
+            sample_rate=16000
+        )
+        
+        # Force immediate processing
+        await ws.flush()
+
+        async for message in ws:
+            print(f"Result: {message}")
+            break
+
+asyncio.run(instant_processing())
+```
+
+  </CodeBlock>
+  <CodeBlock title="JavaScript">
+
+```javascript
+
+function audioFileToBase64(filePath) {
+  return fs.readFileSync(filePath).toString("base64");
+}
+
+async function instantProcessing() {
+  const audioData = audioFileToBase64("path/to/your/audio.wav");
+
+  const client = new SarvamAIClient({
+    apiSubscriptionKey: "YOUR_SARVAM_API_KEY"
+  });
+
+  const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "transcribe",              // Change mode as needed
+    "language-code": "en-IN",
+    flush_signal: "true"             // Enable manual control
+  });
+
+  socket.on("open", () => {
+    socket.transcribe({
+      audio: audioData,
+      sample_rate: 16000,
+      encoding: "audio/wav",
+    });
+    
+    // Force processing after 2 seconds
+    setTimeout(() => socket.flush(), 2000);
+  });
+
+  socket.on("message", (message) => {
+    console.log(`Result: ${JSON.stringify(message)}`);
+  });
+
+  await socket.waitForOpen();
+  await new Promise(resolve => setTimeout(resolve, 10000));
+  socket.close();
+}
+
+instantProcessing();
+```
+
+  </CodeBlock>
+</CodeGroup>
+
+### Custom Audio Configuration
+
+Optimize for your specific audio setup (e.g., 8kHz telephony audio):
+
+<CodeGroup>
+  <CodeBlock title="Python" active>
+
+```python
+
+from sarvamai import AsyncSarvamAI
+
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def custom_audio_config():
+    client = AsyncSarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+    async with client.speech_to_text_streaming.connect(
+        model="saaras:v3",
+        mode="transcribe",              # Change mode as needed
+        language_code="kn-IN",
+        sample_rate=8000,               # Match your audio
+        input_audio_codec="pcm_s16le",  # Specify codec
+        high_vad_sensitivity=True
+    ) as ws:
+        await ws.transcribe(
+            audio=audio_data,
+            encoding="audio/wav",
+            sample_rate=8000             # Must match connection setting
+        )
+        
+        response = await ws.recv()
+        print(f"Result: {response}")
+
+asyncio.run(custom_audio_config())
+```
+
+  </CodeBlock>
+  <CodeBlock title="JavaScript">
+
+```javascript
+
+function audioFileToBase64(filePath) {
+  return fs.readFileSync(filePath).toString("base64");
+}
+
+async function customAudioConfig() {
+  const audioData = audioFileToBase64("path/to/your/audio.wav");
+
+  const client = new SarvamAIClient({
+    apiSubscriptionKey: "YOUR_SARVAM_API_KEY"
+  });
+
+  const socket = await client.speechToTextStreaming.connect({
+    model: "saaras:v3",
+    mode: "transcribe",                  // Change mode as needed
+    "language-code": "kn-IN",
+    sample_rate: 8000,                  // Match your audio
+    input_audio_codec: "pcm_s16le",     // Specify codec
+    high_vad_sensitivity: "true"
+  });
+
+  socket.on("open", () => {
+    socket.transcribe({
+      audio: audioData,
+      sample_rate: 8000,                // Must match connection setting
+      encoding: "audio/wav",
+    });
+  });
+
+  socket.on("message", (message) => {
+    console.log(`Result: ${JSON.stringify(message)}`);
+  });
+
+  await socket.waitForOpen();
+  await new Promise(resolve => setTimeout(resolve, 10000));
+  socket.close();
+}
+
+customAudioConfig();
+```
+
+  </CodeBlock>
+</CodeGroup>
+
+<Warning>
+  **Important: Sample Rate Configuration for 8kHz Audio**
+  
+  When working with 8kHz audio, you **must** set the `sample_rate` parameter in **both** places:
+  
+  1. **When connecting to the WebSocket** (connection parameter)
+  2. **When sending audio data** (transcribe parameter)
+  
+  Both values must match your audio's actual sample rate. Mismatched sample rates will result in poor transcription quality or errors.
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="transcribe",
+    language_code="en-IN",
+    sample_rate=8000        # Must match your audio
+) as ws:
+    await ws.transcribe(
+        audio=audio_data,
+        sample_rate=8000    # Must match connection setting
+    )
+```
+</Warning>
+
+<Note>
+  For detailed endpoint documentation, see:
+  [Speech-to-Text WebSocket](/api-reference-docs/speech-to-text/transcribe/ws) | 
+  [Speech-to-Text Translate WebSocket](/api-reference-docs/speech-to-text-translate/translate/ws)
+</Note>
+
+## Handling Disconnects
+
+Long-lived sockets will occasionally drop (network blips, idle timeouts, server restarts). Inspect the WebSocket close code and reconnect with backoff.
+
+| Close code | Meaning | What to do |
+|---|---|---|
+| `1000` | Normal closure | You called `close()` — nothing to do |
+| `1001` | Going away | Server or client shutting down — reconnect |
+| `1006` | Abnormal closure (no close frame) | Network drop — reconnect with backoff |
+| `1011` | Server error | Retry with backoff; if persistent, check [status](https://status.sarvam.ai/) |
+| `4xxx` | Application-specific | Read the close reason for details (e.g. auth or quota); fix before reconnecting |
+
+<Note>
+  Codes `1000`–`1015` are standard WebSocket codes. Any `4000`–`4999` code is application-specific — always read the accompanying close reason string rather than assuming a fixed meaning.
+</Note>
+
+**Reconnect with exponential backoff** (pseudocode — applies to both SDKs):
+
+```text
+attempt = 0
+while not connected and attempt < MAX_ATTEMPTS:
+    try:
+        open WebSocket and resume streaming
+        attempt = 0                      # reset on success
+    except (close 1006 / 1011 / network error):
+        delay = min(BASE * 2 ** attempt, MAX_DELAY)   # e.g. 0.5s, 1s, 2s, 4s ... capped
+        sleep(delay + small random jitter)
+        attempt += 1
+    on close 4xxx (auth/quota): stop and surface the error  # do not blind-retry
+```
+
+Do not auto-retry on `4xxx` auth/quota closes — fix the underlying issue first (see [Errors & Troubleshooting](/api-reference-docs/errors-troubleshooting)).
+
+## Voice-Agent Barge-In
+
+In a voice agent, the user may start speaking while your TTS reply is still playing ("barge-in"). Use `vad_signals=true` and treat the `START_SPEECH` event as the cue to **stop playback immediately** and let the user take the turn.
+
+```python
+async with client.speech_to_text_streaming.connect(
+    model="saaras:v3",
+    mode="transcribe",
+    language_code="hi-IN",
+    high_vad_sensitivity=True,   # 0.5s silence boundary — snappier for conversation
+    vad_signals=True,            # emit START_SPEECH / END_SPEECH events
+) as ws:
+    await ws.transcribe(audio=mic_chunk, encoding="audio/wav", sample_rate=16000)
+
+    async for message in ws:
+        if message.type == "events" and message.data.signal_type == "START_SPEECH":
+            tts_player.stop()          # barge-in: cut off the agent's current reply
+        elif message.type == "data":
+            handle_user_turn(message.data.transcript)
+```
+
+For conversational use, prefer `high_vad_sensitivity=True` (0.5s silence boundary) so the agent reacts quickly. See the LiveKit and Pipecat voice-agent integration guides for full agent setups, and [Credits & Rate Limits](/api-reference-docs/ratelimits) for concurrency limits on streaming connections.
+
+## API Reference
+
+### Connection Parameters
+
+Configure your WebSocket connection with these parameters:
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `language_code` | string | Language for speech recognition (STT only) | `"en-IN"`, `"hi-IN"`, `"kn-IN"` |
+| `model` | string | Model version to use | `"saaras:v3"` (recommended), `"saarika:v2.5"` (legacy), `"saaras:v2.5"` (legacy) |
+| `mode` | string | Output mode (**saaras:v3 only**): transcribe, translate, verbatim, translit, codemix | `"transcribe"` |
+| `sample_rate` | integer | Audio sample rate in Hz | `8000`, `16000` |
+| `input_audio_codec` | string | Audio codec format. Only `wav` and raw PCM formats (`pcm_s16le`, `pcm_l16`, `pcm_raw`) are supported | `"wav"`, `"pcm_s16le"` |
+| `high_vad_sensitivity` | boolean | Enhanced voice activity detection | `true`, `false` |
+| `vad_signals` | boolean | Receive speech start/end events | `true`, `false` |
+| `flush_signal` | boolean | Enable manual buffer flushing | `true`, `false` |
+
+### Fine VAD Tuning Parameters
+
+For finer control than the `high_vad_sensitivity` preset, both the STT and STT-Translate WebSockets accept these optional parameters. Any value you pass overrides the server default (and the `high_vad_sensitivity` preset, where they overlap):
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `positive_speech_threshold` | float | VAD probability (0.0–1.0) above which a frame counts as speech | `0.7` |
+| `negative_speech_threshold` | float | VAD probability (0.0–1.0) below which a frame counts as silence | `0.45` |
+| `min_speech_frames` | integer | Consecutive speech frames required to start a speech segment | `2` |
+| `first_turn_min_speech_frames` | integer | Speech frames required specifically for the first user turn | `8` |
+| `negative_frames_count` | integer | Silence frames within the window needed to end a speech segment | `18` |
+| `negative_frames_window` | integer | Sliding window size (in frames) over which silence frames are counted | `24` |
+| `start_speech_volume_threshold` | float | Volume (dB) below which audio is treated as too quiet to be speech | None (no volume filtering) |
+| `interrupt_min_speech_frames` | integer | Speech frames required to register a barge-in / interruption | `2` |
+| `pre_speech_pad_frames` | integer | Audio frames prepended before the detected speech onset so the start isn't clipped | `9` |
+| `num_initial_ignored_frames` | integer | Leading audio frames skipped at connection start (e.g. setup noise) | `0` |
+
+<Note>
+  One frame is **512 audio samples** — 32 ms at 16 kHz, 64 ms at 8 kHz. All fine VAD parameters are optional; if you only need quicker end-of-speech detection, start with `high_vad_sensitivity=true` before reaching for these.
+</Note>
+
+### Audio Data Parameters
+
+When sending audio data to the streaming endpoint:
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `audio` | string | Base64-encoded audio data | ✅ |
+| `encoding` | string | Audio format | ✅ |
+| `sample_rate` | integer | Audio sample rate (16000 Hz recommended). Must match the connection parameter | ✅ |
+
+### Response Types
+
+When `vad_signals=true`, you'll receive different message types:
+
+**For STT:**
+- **`speech_start`**: Voice activity detected
+- **`speech_end`**: Voice activity stopped  
+- **`transcript`**: Final transcription result
+
+**For STTT:**
+- **`speech_start`**: Voice activity detected
+- **`speech_end`**: Voice activity stopped  
+- **`translation`**: Final translation result
+
+### Key Differences: STT vs STTT
+
+| Aspect | STT | STTT |
+|--------|-----|------|
+| Model | `saaras:v3` (recommended), `saarika:v2.5` (legacy) | `saaras:v3` (recommended), `saaras:v2.5` (legacy) |
+| Method | `transcribe()` | `translate()` |
+| Mode | `transcribe`, `verbatim`, `translit`, `codemix` (saaras:v3 only) | `translate` (saaras:v3 only) |
+| Language Code | Required | Not required (auto-detected) |
+| Output Language | Same as input | English only |
+
+### Best Practices
+
+- **Audio Quality & Sample Rate**: 
+  - Use 16kHz sample rate for best results
+  - For 8kHz audio, **always set `sample_rate=8000` in both connection and transcribe/translate calls**
+  - Ensure both sample rate parameters match your actual audio sample rate
+- **Silence Handling**: 
+  - Use 1 second silence when `high_vad_sensitivity=false`
+  - Use 0.5 seconds silence when `high_vad_sensitivity=true`
+- **Continuous Streaming**: Send audio data continuously for real-time results
+- **Error Handling**: Always implement proper WebSocket error handling
+- **Model Selection**: 
+  - Use Saaras (`saaras:v3`) with `mode` parameter for the best transcription quality and flexible output modes
+  - Use Saarika (`saarika:v2.5`) for transcription in the original language (legacy)
+  - Use Saaras (`saaras:v2.5`) for direct translation to English (legacy)
