@@ -9,21 +9,23 @@ import { logger } from "../../../lib/logger.js";
  * Batch:     POST https://api.sarvam.ai/speech-to-text
  * Streaming: wss://api.sarvam.ai/speech-to-text/ws
  *
- * Streaming models: saaras:v3, saaras:v3-realtime (UI alias), saaras:v2.5
- * Batch models:     saarika:v2.5 (and other saarika variants), saaras:v3
- * Note: saaras:v2.5 is streaming-only; batch fallback remaps it to saarika:v2.5.
- * Note: mode param (codemix/transcribe/etc.) is saaras:v3-only.
+ * Valid streaming models (confirmed via live API): saarika:v2.5, saaras:v3
+ * Batch models: saarika:v2.5, saarika:v1, saarika:flash, saaras:v3
+ * NOTE: saaras:v2.5 is REJECTED by the streaming WS (close 4000).
+ * NOTE: mode param (codemix/transcribe/etc.) is saaras:v3-only.
+ * NOTE: Audio per-chunk must be WAV-wrapped (pcmToWav) in AudioContent envelope:
+ *       { audio: { data: base64wav, encoding: "audio/wav", sample_rate: 16000 } }
+ *       The API enum only accepts "audio/wav" — raw PCM strings cause validation errors.
  */
 
 const VALID_SARVAM_STT_MODELS = new Set([
   "saarika:v2.5", "saarika:v2", "saarika:v1", "saarika:flash",
-  "saaras:v2.5",
   "saaras:v3", "saaras:v3-realtime",
 ]);
-const DEFAULT_SARVAM_STT_MODEL = "saaras:v2.5";
+const DEFAULT_SARVAM_STT_MODEL = "saarika:v2.5";
 
-/** Only these models support Sarvam's real-time WebSocket API. */
-const STREAMING_MODELS = new Set(["saaras:v2.5", "saaras:v3", "saaras:v3-realtime"]);
+/** Only these models support Sarvam's real-time WebSocket API (confirmed live). */
+const STREAMING_MODELS = new Set(["saarika:v2.5", "saaras:v3", "saaras:v3-realtime"]);
 
 /** All language codes Sarvam accepts (BCP 47 with -IN suffix). */
 const VALID_SARVAM_LANG = new Set([
@@ -115,12 +117,9 @@ export class SarvamSTT implements STTAdapter {
     const wavAb = new ArrayBuffer(wav.byteLength);
     new Uint8Array(wavAb).set(wav);
     formData.append("file", new Blob([wavAb], { type: "audio/wav" }), "audio.wav");
-    // saaras:v3-realtime → saaras:v3 (UI alias)
-    // saaras:v2.5 is streaming-only; fall back to saarika:v2.5 for batch
-    const batchModel =
-      this.model === "saaras:v3-realtime" ? "saaras:v3" :
-      this.model === "saaras:v2.5"        ? "saarika:v2.5" :
-      this.model;
+    // saaras:v3-realtime is a UI alias; actual API model name is saaras:v3
+    // saarika:v2.5 is valid for both batch and streaming — no remapping needed
+    const batchModel = this.model === "saaras:v3-realtime" ? "saaras:v3" : this.model;
     formData.append("model", batchModel);
     formData.append("language_code", this.langCode);
 
@@ -246,13 +245,20 @@ export class SarvamSTT implements STTAdapter {
       safetyTimer = setTimeout(() => emitFinal("safety"), SAFETY_MS);
     }
 
-    /** Encode a PCM Buffer into the JSON text frame Sarvam requires.
-     *  All three fields (audio, encoding, sample_rate) are required by the API. */
+    /** Wrap each PCM chunk in a WAV container and send as AudioContent.
+     *  Sarvam's streaming WS requires AudioContent envelope where:
+     *  - audio.data = base64-encoded WAV (not raw PCM)
+     *  - audio.encoding = "audio/wav" (enum — only value accepted)
+     *  - audio.sample_rate = 16000
+     *  Sending raw PCM or using field "audio_chunk" causes validation errors. */
     function sendAudioFrame(chunk: Buffer): void {
+      const wav = pcmToWav(chunk, 16000);
       ws.send(JSON.stringify({
-        audio: chunk.toString("base64"),
-        encoding: "pcm_s16le",
-        sample_rate: 16000,
+        audio: {
+          data: wav.toString("base64"),
+          encoding: "audio/wav",
+          sample_rate: 16000,
+        },
       }));
     }
 

@@ -1,4 +1,5 @@
 - [Sarvam TTS API quirks](sarvam-tts-api.md) — bulbul:v1 gone; v2 has 7 voices, v3 has 38; streaming endpoint 404s; speaker sets are model-specific
+- [Sarvam STT WebSocket protocol](sarvam-stt-ws-protocol.md) — valid streaming models: saarika:v2.5 + saaras:v3 only; audio must be WAV-wrapped in AudioContent {data,encoding:"audio/wav",sample_rate}
 - [Gender service startup](gender-service-startup.md) — lazy-import librosa; top-level import blocks uvicorn port binding in production
 - [KB FTS Architecture](kb-fts-architecture.md) — AI Knowledge uses PostgreSQL FTS only; no embeddings/pgvector; knowledge_sources + knowledge_entries tables with GIN index
 - [Webcall vs pipeline audio paths](webcall-pipeline-split.md) — webcall handler is fully separate from pipeline.ts; any feature added to pipeline must be duplicated in webcall.ts
