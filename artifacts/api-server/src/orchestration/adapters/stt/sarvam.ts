@@ -63,7 +63,13 @@ function normaliseSarvamLang(code: string | null): string {
 
 interface SarvamStreamMsg {
   type?: string;
-  data?: { transcript?: string; message?: string; event?: string };
+  data?: {
+    transcript?: string;
+    message?: string;
+    // VAD event formats — raw WS uses "event", SDK uses "signal_type"
+    event?: string;
+    signal_type?: string;
+  };
 }
 
 /**
@@ -135,8 +141,19 @@ export class SarvamSTT implements STTAdapter {
     const params = new URLSearchParams({
       language_code: this.langCode,
       model: apiModel,
+      // codemix handles mixed-language speech (e.g. Tamil + English) naturally.
+      // transcribe would misfire on code-switched words; codemix is the right mode
+      // for Indian callers who mix their native language with English terms.
+      mode: "codemix",
       input_audio_codec: "pcm_s16le",
       sample_rate: "16000",
+      // high_vad_sensitivity: 0.5s silence threshold vs default 1s — snappier turns
+      high_vad_sensitivity: "true",
+      // Request speech_start / speech_end VAD events so we emit on END_SPEECH
+      // rather than relying solely on the local 200ms silence timer
+      vad_signals: "true",
+      // Enable flush — lets us force-flush on WS close without a reconnect penalty
+      flush_signal: "true",
       // Pass key as query param too — some reverse-proxy setups strip custom
       // headers during the WebSocket upgrade handshake, causing 403.
       "api-subscription-key": this.key,
@@ -148,8 +165,11 @@ export class SarvamSTT implements STTAdapter {
     const safeParams = new URLSearchParams({
       language_code: this.langCode,
       model: apiModel,
+      mode: "codemix",
       input_audio_codec: "pcm_s16le",
       sample_rate: "16000",
+      high_vad_sensitivity: "true",
+      vad_signals: "true",
     });
     logger.info(
       { langCode: this.langCode, model: apiModel, wsUrl: `wss://api.sarvam.ai/speech-to-text/ws?${safeParams.toString()}` },
@@ -274,11 +294,16 @@ export class SarvamSTT implements STTAdapter {
       }
 
       if (msg.type === "events") {
+        // Raw WS uses event:"speech_start"/"speech_end"
+        // SDK / vad_signals=true uses signal_type:"START_SPEECH"/"END_SPEECH"
         const event = msg.data?.event;
-        if (event === "speech_start") {
+        const signal = msg.data?.signal_type;
+        const isSpeechStart = event === "speech_start" || signal === "START_SPEECH";
+        const isSpeechEnd   = event === "speech_end"   || signal === "END_SPEECH";
+        if (isSpeechStart) {
           // Canonical utterance boundary — reset all state for the new segment.
           onSpeechStart();
-        } else if (event === "speech_end") {
+        } else if (isSpeechEnd) {
           // Sarvam VAD confirms end of utterance — emit immediately.
           emitFinal("speech_end");
         }
