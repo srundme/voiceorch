@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   useListEventTypes,
@@ -70,7 +70,9 @@ function QuickCreateDialog({
   const [duration, setDuration]       = useState(30);
   const [calendarId, setCalendarId]   = useState<number | null>(defaultCalendarId);
 
-  if (calendarId === null && defaultCalendarId !== null) setCalendarId(defaultCalendarId);
+  useEffect(() => {
+    if (calendarId === null && defaultCalendarId !== null) setCalendarId(defaultCalendarId);
+  }, [defaultCalendarId]);
 
   function handleNameChange(v: string) {
     setName(v);
