@@ -126,3 +126,9 @@ id = "sUZ0-p3Svfx9GVgE0ky3L"
 uri = "file://.local/marketing/snapserve-marketing-playbook.md"
 type = "text"
 title = "SnapServe AI — Marketing Playbook"
+
+[[outputs]]
+id = "s3SB8yWIa9_4qleNaz8vi"
+uri = "file://snapserve-landing-content.md"
+type = "text"
+title = "SnapServe Landing Page Content"
