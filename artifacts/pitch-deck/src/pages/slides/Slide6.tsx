@@ -1,55 +1,55 @@
 export default function Slide6() {
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
-      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
-        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
-        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>How — Reducing Human Effort</div>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
+        <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
+        <div style={{ fontSize: "0.9vw", fontWeight: 400, color: "#888888", fontFamily: "'DM Mono', monospace" }}>05 — Why Now</div>
       </div>
-      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>06</div>
-      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
-        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5.5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>80% of calls handled. No human required.</h2>
-        <div style={{ display: "flex", gap: "5vw", marginBottom: "4.5vh" }}>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.85vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh", fontFamily: "'DM Mono', monospace" }}>Automation Rate</div>
-            <div style={{ fontSize: "5vw", fontWeight: 700, lineHeight: 1, letterSpacing: "-0.03em" }}>80%</div>
-            <div style={{ fontSize: "1.1vw", color: "#4A4A4A", marginTop: "1vh", lineHeight: 1.4 }}>Routine calls resolved end-to-end without any human intervention.</div>
+      <div style={{ position: "absolute", top: "28vh", right: "4vw", fontSize: "22vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 1, zIndex: 0, userSelect: "none", letterSpacing: "-0.06em" }}>06</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "5vh" }}>
+        <h2 style={{ fontSize: "3.4vw", fontWeight: 700, margin: "0 0 1.5vh 0", lineHeight: 1.1, letterSpacing: "-0.025em", maxWidth: "70vw" }}>Four structural shifts made 2026 the right year to build this.</h2>
+        <p style={{ fontSize: "1.2vw", color: "#4A4A4A", maxWidth: "60vw", lineHeight: 1.6, marginBottom: "4vh" }}>This is not a "coming soon" market. It is an open infrastructure race that closes in the next 18–24 months. The player who captures enterprise trust now becomes the default layer.</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2.2vh" }}>
+          <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "12vw", paddingTop: "0.2vh" }}>LLM cost − 90%</div>
+            <div style={{ flex: 1, fontSize: "1.1vw", color: "#1C1C1C", lineHeight: 1.5 }}>Gemini Flash and Groq Llama brought per-call LLM cost from $0.12 in 2023 to $0.008 today. Voice AI is now economically viable at ₹3/min.</div>
           </div>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.85vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh", fontFamily: "'DM Mono', monospace" }}>Throughput Multiplier</div>
-            <div style={{ fontSize: "5vw", fontWeight: 700, lineHeight: 1, letterSpacing: "-0.03em" }}>40×</div>
-            <div style={{ fontSize: "1.1vw", color: "#4A4A4A", marginTop: "1vh", lineHeight: 1.4 }}>One SnapServe agent runs 40 simultaneous conversations — 24 hours a day.</div>
+          <div style={{ width: "84vw", marginLeft: "-8vw", height: "0.05vh", backgroundColor: "#F0F0F0" }} />
+          <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "12vw", paddingTop: "0.2vh" }}>Indic ASR — solved</div>
+            <div style={{ flex: 1, fontSize: "1.1vw", color: "#1C1C1C", lineHeight: 1.5 }}>Sarvam AI's Saarika model crossed 94% WER on Hindi, Tamil, and Telugu in 2024. The language barrier for 600M Indian callers no longer exists.</div>
           </div>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.85vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh", fontFamily: "'DM Mono', monospace" }}>Cost vs. Human Agent</div>
-            <div style={{ fontSize: "5vw", fontWeight: 700, lineHeight: 1, letterSpacing: "-0.03em" }}>75%</div>
-            <div style={{ fontSize: "1.1vw", color: "#4A4A4A", marginTop: "1vh", lineHeight: 1.4 }}>Lower fully-loaded cost per call vs. a human agent team at equivalent coverage.</div>
+          <div style={{ width: "84vw", marginLeft: "-8vw", height: "0.05vh", backgroundColor: "#F0F0F0" }} />
+          <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "12vw", paddingTop: "0.2vh" }}>Category validated</div>
+            <div style={{ flex: 1, fontSize: "1.1vw", color: "#1C1C1C", lineHeight: 1.5 }}>Vapi AI crossed $15M ARR. Bolna AI raised a seed round. The market has confirmed demand for voice AI infrastructure — but neither serves India well.</div>
           </div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "2vh", maxWidth: "72vw" }}>
-          <div style={{ display: "flex", gap: "3vw" }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1vw", color: "#888888", minWidth: "16vw" }}>Human agent team</div>
-            <div style={{ fontSize: "1.1vw", color: "#4A4A4A" }}>Hire 6–8 weeks · Train 4 weeks · ₹25K/mo each · Max 1 call at a time · 5 days/week, 8 hrs/day</div>
-          </div>
-          <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
-          <div style={{ display: "flex", gap: "3vw" }}>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1vw", color: "#1C1C1C", minWidth: "16vw", fontWeight: 500 }}>SnapServe agent</div>
-            <div style={{ fontSize: "1.1vw", color: "#1C1C1C" }}>Deploy in 48 hrs · No training · ₹3/min · Unlimited concurrent · 24/7/365 · Every language</div>
+          <div style={{ width: "84vw", marginLeft: "-8vw", height: "0.05vh", backgroundColor: "#F0F0F0" }} />
+          <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "12vw", paddingTop: "0.2vh" }}>Window before big tech</div>
+            <div style={{ flex: 1, fontSize: "1.1vw", color: "#1C1C1C", lineHeight: 1.5 }}>AWS Connect and Twilio AI are US-first and 18–24 months behind on Indian telephony and Indic languages. The window to own India's orchestration layer is now.</div>
           </div>
         </div>
       </div>
-      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
-        <div>
-          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
-          <div>June 2026</div>
+      <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", borderTop: "0.1vh solid #E0E0E0", paddingTop: "2.5vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div style={{ display: "flex", gap: "5vw" }}>
+          <div>
+            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Date</div>
+            <div>June 2026</div>
+          </div>
+          <div>
+            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Prepared By</div>
+            <div>SnapServe</div>
+          </div>
+          <div>
+            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Stage</div>
+            <div>Pre-Seed</div>
+          </div>
         </div>
-        <div>
-          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
-          <div>SnapServe Team</div>
-        </div>
-        <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
-          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>06</div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
+          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>06 / 12</div>
         </div>
       </div>
     </div>
