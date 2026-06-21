@@ -563,6 +563,9 @@ export class OrchestrationPipeline {
       this.isPlaying = false;
       this.armTailEchoGrace();
     }
+    // Drain the carrier's jitter buffer so the reprompt's final word plays out
+    // before we re-enter Listening and arm the stall backstop again.
+    await this.drainPlaybackTail();
     // Reset turn state and re-enter Listening.
     this.audioBuffer = [];
     this.pendingTranscript = null;
@@ -791,9 +794,12 @@ export class OrchestrationPipeline {
       } finally {
         this.isPlaying = false;
         this.armTailEchoGrace();
-        // First entry into Listening — arm the stall backstop.
-        if (!this.closed) this.safetyNet.beginListening();
       }
+      // Drain the carrier's jitter buffer so the greeting's final word plays out
+      // fully before we arm the stall backstop and enter Listening.
+      await this.drainPlaybackTail();
+      // First entry into Listening — arm the stall backstop.
+      if (!this.closed) this.safetyNet.beginListening();
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Greeting error");
     } finally {

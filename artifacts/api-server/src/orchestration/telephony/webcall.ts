@@ -2679,12 +2679,23 @@ export async function handleWebCallWebSocket(
         history.push({ role: "assistant", content: greetingText });
 
         if (!closed) {
+          // Extend echo-grace through the tail drain + echo-decay margin so the
+          // greeting's own echo can't trigger a false barge-in after we flip to
+          // listening (mirrors the main-turn tail drain at end of speak loop).
+          echoGraceUntil = Math.max(
+            echoGraceUntil,
+            Date.now() + AUDIO_TAIL_SILENCE_MS + WEB_TAIL_ECHO_MARGIN_MS,
+          );
+          // Send real PCM silence frames (not a passive wait) so the client's
+          // AudioContext timeline is physically extended past the greeting's final
+          // word — matching the 300 ms tail drain used by every normal turn.
+          const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
           const drainFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
-          for (let j = 0; j < drainFrames; j++) {
-            if (closed) break;
+          for (let j = 0; j < drainFrames && !closed; j++) {
+            sendAudio(silenceChunk);
             await new Promise<void>(r => setTimeout(r, 40));
           }
-          sendStatus("listening");
+          if (!closed) sendStatus("listening");
         }
       } else if (!closed) {
         sendStatus("listening");

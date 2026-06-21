@@ -29,7 +29,10 @@ tail handling, so they each have to replicate it.
    need the drain too, not only teardown: the telephony `playTask` must
    `await drainPlaybackTail()` right after `isPlaying=false`/`armTailEchoGrace()`
    (covers BOTH the processTurn and continueWithToolResult playTask copies), or
-   the carrier clips the final word before the next listen. On web the parity is
+   the carrier clips the final word before the next listen. The drain is also
+   required on the GREETING path and STALL-REPROMPT path in pipeline.ts — both
+   call `safetyNet.beginListening()` immediately after `armTailEchoGrace()` and
+   need `drainPlaybackTail()` inserted between them. On web the parity is
    extending `echoGraceUntil` through the whole tail-silence drain + an
    echo-decay margin (the agent's own final-word echo returns via the mic LATER
    than the server sent it — client AudioContext buffering lag + round-trip — so
@@ -37,6 +40,9 @@ tail handling, so they each have to replicate it.
    add a client-side guard (webcall-panel.tsx): on `interrupted`, only
    `stopAllAudio()` if scheduled audio remaining (`nextPlayRef - currentTime`)
    exceeds a threshold, else a late self-echo interrupt flushes the last word.
+   Webcall greeting drain must send real PCM silence frames (not a passive
+   `setTimeout` loop) to physically extend the client's AudioContext timeline,
+   matching the 300 ms real-frames drain the main speaking loop uses.
 2. Echo grace protects the START of playback by default. It must ALSO be re-armed
    at EVERY playback exit (every place that flips the speaking flag off —
    including short direct branches like garbled-transcript clarification,
