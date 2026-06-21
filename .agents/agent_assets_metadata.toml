@@ -132,3 +132,9 @@ id = "s3SB8yWIa9_4qleNaz8vi"
 uri = "file://snapserve-landing-content.md"
 type = "text"
 title = "SnapServe Landing Page Content"
+
+[[outputs]]
+id = "YQffqw0pP5pqmnffbpTQE"
+uri = "file://.local/design-tokens.md"
+type = "text"
+title = "Dashboard Design Tokens — Current State"
