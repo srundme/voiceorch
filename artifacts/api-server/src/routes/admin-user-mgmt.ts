@@ -54,8 +54,11 @@ router.get("/impersonate/exchange", async (req, res): Promise<void> => {
 
     res.json({ sessionJwt });
   } catch (err) {
-    req.log.error({ err }, "impersonate/exchange failed");
-    res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, errMessage: String(err) }, "impersonate/exchange failed");
+    res.status(500).json({
+      error: "Internal server error",
+      detail: process.env["NODE_ENV"] !== "production" ? String(err) : undefined,
+    });
   }
 });
 
@@ -523,7 +526,11 @@ router.get("/admin/users/:clerkId/wallet/transactions", async (req, res): Promis
 router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
   try {
     const { clerkId } = req.params;
+    req.log.info({ clerkId }, "admin impersonate: request received");
+
     const user = await findUserByClerkId(clerkId!);
+    req.log.info({ clerkId, userFound: !!user, userStatus: user?.status ?? null }, "admin impersonate: user lookup complete");
+
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
     if (user.status === "deleted") {
@@ -534,6 +541,12 @@ router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
     const sessionToken = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
 
+    // Generate exchange code upfront and include it in the initial INSERT.
+    // Requires migration 0012_impersonation_exchange_code to be applied
+    // (adds exchange_code + exchange_code_expires_at columns to admin_impersonation_sessions).
+    const exchangeCode = randomBytes(24).toString("hex");
+    const exchangeCodeExpiresAt = new Date(Date.now() + 60_000); // 60 s TTL
+
     await db.insert(adminImpersonationSessionsTable).values({
       sessionToken,
       adminId: "admin",
@@ -541,16 +554,10 @@ router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
       targetUserEmail: user.email,
       targetUserName: user.name,
       expiresAt,
+      exchangeCode,
+      exchangeCodeExpiresAt,
     });
-
-    // Store a short-lived opaque exchange code in the session row.
-    // The JWT never appears in a URL — the dashboard exchanges the code for the JWT.
-    const exchangeCode = randomBytes(24).toString("hex");
-    const exchangeCodeExpiresAt = new Date(Date.now() + 60_000); // 60 s TTL
-    await db
-      .update(adminImpersonationSessionsTable)
-      .set({ exchangeCode, exchangeCodeExpiresAt })
-      .where(eq(adminImpersonationSessionsTable.sessionToken, sessionToken));
+    req.log.info({ clerkId, sessionTokenPrefix: sessionToken.slice(0, 8) }, "admin impersonate: session row inserted");
 
     await logAdminAction(req, {
       targetUserId: clerkId,
@@ -566,9 +573,13 @@ router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
       userName: user.name,
       userEmail: user.email,
     });
+    req.log.info({ clerkId }, "admin impersonate: response sent");
   } catch (err) {
-    req.log.error({ err }, "admin impersonate failed");
-    res.status(500).json({ error: "Internal server error" });
+    req.log.error({ err, errMessage: String(err) }, "admin impersonate failed");
+    res.status(500).json({
+      error: "Internal server error",
+      detail: process.env["NODE_ENV"] !== "production" ? String(err) : undefined,
+    });
   }
 });
 
