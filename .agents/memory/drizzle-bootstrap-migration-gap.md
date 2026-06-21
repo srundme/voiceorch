@@ -16,8 +16,20 @@ When adding new tables or columns, ALWAYS create a new migration file. After a m
 - Add the new migration's hash to KNOWN in `bootstrapMigrationJournal()` **only after** it has been successfully applied to all prod DBs
 
 ## Current KNOWN array covers
-Migrations 0000–0009 are seeded (as of commit d33bfe4). Next new migration (0012+) should be left out of KNOWN until applied, then added.
+Migrations 0000–0009 are seeded. Migrations 0010, 0011, 0012 are applied via `migrate()` (not bootstrapped). After 0012 is confirmed applied to all prod DBs, add its hash to KNOWN:
+- 0012_impersonation_exchange_code: `61096716f909fbf441e9d86d394610c34c609a61c5187d7b5ea44da8b6c155f9` (when: 1782450000000)
+
+## PG16 gotcha: ADD CONSTRAINT IF NOT EXISTS is invalid syntax
+`ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS` is NOT valid PostgreSQL syntax on PG 16 (and earlier). drizzle-kit generates this for unique constraints with IF NOT EXISTS — but it only works on PG 17+. Use a DO block with a pg_constraint pre-check instead:
+```sql
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'constraint_name') THEN
+    ALTER TABLE tbl ADD CONSTRAINT constraint_name UNIQUE(col);
+  END IF;
+END $$;
+```
 
 ## History
 - Migrations 0010 (admin user mgmt cols) and 0011 (password_reset_otps) never applied to Railway prod, causing 500 on every password-reset request. Fixed by seeding 0003-0009 hashes so migrate() only runs 0010 and 0011.
 - Also fixed 0011 journal `when` timestamp (was 1750300000000 / June 2025, corrected to 1782300000000 to maintain chronological order after 0010's 1782200000000).
+- Migration 0012 (exchange_code + exchange_code_expires_at on admin_impersonation_sessions) was already in journal/SQL file; fix was confirming it propagates to Railway prod on next redeploy via migrate().
