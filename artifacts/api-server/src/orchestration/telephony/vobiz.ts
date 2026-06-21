@@ -232,6 +232,12 @@ export function getVobizAnswerXML(
   if (opts.to)   qsParts.push(`to=${encodeURIComponent(opts.to)}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
+  // XML-escape the URL before embedding in the <Stream> text node.  Bare "&" in
+  // XML text content is a parse error; when the query string has multiple params
+  // (e.g. ?from=917971543255&to=916383653279) VoBiz's parser rejects the whole
+  // XML with HangupCauseCode 8011 "Invalid Answer XML" and drops the call before
+  // opening the WebSocket.  VoBiz decodes &amp; back to & when it reads the URL.
+  const wsUrlXml = wsUrl.replace(/&/g, "&amp;");
   // contentType="audio/x-l16;rate=8000" explicitly negotiates LINEAR16 8kHz for
   // both the inbound stream and the outbound playAudio events.  Without this,
   // Vobiz may default to µ-law, which causes it to mis-decode our LINEAR16
@@ -240,6 +246,6 @@ export function getVobizAnswerXML(
   // stream-negotiated format, so locking it here fixes the outbound path.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrl}</Stream>
+  <Stream bidirectional="true" keepCallAlive="true" contentType="audio/x-l16;rate=8000">${wsUrlXml}</Stream>
 </Response>`;
 }

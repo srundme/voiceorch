@@ -194,7 +194,10 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   const httpBase  = getHttpBaseUrl(req);
 
   let agentId = parseInt(String(req.query["agentId"] ?? "0"), 10);
-  let platformTelephony = false;
+  // ?pt=1 is appended by the outbound call handler (calls.ts) when the call is
+  // made through a platform-managed VoBiz number; parse it here so the WebSocket
+  // URL we return also carries pt=1 and the session uses managed provider keys.
+  let platformTelephony = req.query["pt"] === "1";
   type RoutingRule = {
     condition: "caller_prefix" | "time_range" | "always";
     value?: string; startHour?: number; endHour?: number; targetAgentId: number;
