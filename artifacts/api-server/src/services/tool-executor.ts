@@ -175,8 +175,13 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           name: t.name,
           description:
             t.description +
-            " The 'next' field in the response lists slots as ISO 8601 strings with timezone offsets (e.g. '2026-06-06T20:30:00+05:30') followed by a human-readable label in parentheses. When calling book_appointment after checking availability, pass the ISO string (e.g. '2026-06-06T20:30:00+05:30') verbatim as preferred_date — do NOT convert or reformat it." +
-            " This tool ONLY checks availability. It does NOT create a booking. After presenting slots, collect the caller's name and email, then call the booking tool to create the booking. Never confirm to the caller that an appointment is booked without first calling the booking tool and receiving a booking_confirmed result.",
+            " This tool ONLY checks availability — it does NOT create a booking." +
+            " The response has three possible formats:" +
+            " (1) requested_slot_available: the 'slot' field contains the ISO 8601 string for the exact time the caller requested — tell the caller that time is available, then immediately collect their full name and email and call book_appointment with that ISO string verbatim as preferred_date." +
+            " (2) requested_slot_unavailable: the requested time is not open — tell the caller and present the slots from the 'alternatives' field (each slot is shown as an ISO string followed by a human label in parentheses); once the caller chooses one, collect their name and email and call book_appointment with the chosen ISO string verbatim as preferred_date." +
+            " (3) available_slots: the 'next' field lists up to 5 slots, each formatted as an ISO 8601 string followed by a human-readable label in parentheses, e.g. '2026-06-22T15:00:00+05:30 (Sun Jun 22 at 3:00 PM)' — present these to the caller, then after they choose one collect name and email and call book_appointment with the ISO string verbatim." +
+            " Always pass ISO strings verbatim to book_appointment — do NOT convert or reformat them." +
+            " Never confirm to the caller that an appointment is booked without first calling the booking tool and receiving a booking_confirmed result.",
           parameters: {
             type: "object",
             properties: {
@@ -637,9 +642,9 @@ export async function executeNativeCheckAvailability(
       return "error: the appointment type is unavailable";
     }
 
-    const { searchStart, minSlotStart, timeFilter } = preferredRaw
+    const { searchStart, minSlotStart, timeFilter, isExactTime } = preferredRaw
       ? parsePreferredDate(preferredRaw, calendar.timezone)
-      : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined };
+      : { searchStart: new Date(), minSlotStart: undefined, timeFilter: undefined, isExactTime: false };
     const calTz = calendar.timezone || "UTC";
     const searchEnd = new Date(searchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     let slots = await getAvailableSlots(eventType.id, formatInTimeZone(searchStart, calTz, "yyyy-MM-dd"), formatInTimeZone(searchEnd, calTz, "yyyy-MM-dd"));
@@ -652,9 +657,30 @@ export async function executeNativeCheckAvailability(
     }
 
     const tz = tool.timezone || calendar.timezone || "UTC";
+
+    const slotLabel = (s: { slotStart: Date }) =>
+      `${formatInTimeZone(s.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")} (${formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a")})`;
+
+    // Exact-time branch: check whether the requested slot is available
+    if (isExactTime && minSlotStart) {
+      const EXACT_TOLERANCE_MS = 60_000;
+      const exactMatch = slots.find(
+        (s) => Math.abs(s.slotStart.getTime() - minSlotStart.getTime()) <= EXACT_TOLERANCE_MS,
+      );
+      if (exactMatch) {
+        return `requested_slot_available: slot="${formatInTimeZone(exactMatch.slotStart, tz, "yyyy-MM-dd'T'HH:mm:ssxxx")}", label="${formatInTimeZone(exactMatch.slotStart, tz, "EEE MMM d 'at' h:mm a")}", event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}"`;
+      }
+      const alternatives = slots
+        .slice(0, 5)
+        .map(slotLabel)
+        .join("; ");
+      const requestedLabel = formatInTimeZone(minSlotStart, tz, "EEE MMM d 'at' h:mm a");
+      return `requested_slot_unavailable: requested="${requestedLabel}", alternatives="${alternatives}"`;
+    }
+
     const preview = slots
       .slice(0, 5)
-      .map((s) => formatInTimeZone(s.slotStart, tz, "EEE MMM d 'at' h:mm a"))
+      .map(slotLabel)
       .join("; ");
     return `available_slots: count=${slots.length}, event="${eventType.name}", duration_mins=${eventType.durationMinutes}, timezone="${tz}", next="${preview}"`;
   } catch (err) {

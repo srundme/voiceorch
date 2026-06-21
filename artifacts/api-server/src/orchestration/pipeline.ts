@@ -1831,7 +1831,14 @@ export class OrchestrationPipeline {
         `CRITICAL: NEVER invent, guess, or assume any available slot times. You MUST call "${checkName}" before telling the caller any available times. Only relay times you received directly from a "${checkName}" tool result.`,
       ];
       if (hasCheckAvailabilityTool) {
-        lines.push(`"${checkName}" ONLY checks available slots — it does NOT create a booking.`);
+        lines.push(
+          `"${checkName}" ONLY checks available slots — it does NOT create a booking.`,
+          `"${checkName}" returns one of three result types:`,
+          `  • requested_slot_available — the exact time the caller asked for is open. Tell the caller the time is available, then immediately ask for their full name and email and call "${bookName}" with the ISO string from the 'slot' field verbatim as preferred_date.`,
+          `  • requested_slot_unavailable — the requested time is not open. Tell the caller and read out the slots from the 'alternatives' field. Once the caller picks one, collect their name and email and call "${bookName}" with the chosen ISO string verbatim as preferred_date.`,
+          `  • available_slots — a general list of upcoming slots. Each entry in 'next' is an ISO 8601 string followed by a human label in parentheses. Present them to the caller. After the caller picks one, collect name and email and call "${bookName}" with the ISO string verbatim as preferred_date.`,
+          `Always pass ISO strings to "${bookName}" exactly as returned — never reformat or convert them.`,
+        );
       }
       if (hasBookingTool) {
         lines.push(
