@@ -114,3 +114,9 @@ id = "cFy1DWOKIx0NPptnP0WnF"
 uri = "file://BOLNA-NOTES.md"
 type = "text"
 title = "Bolna → VoiceOrch: Design Notes & Gap Analysis"
+
+[[outputs]]
+id = "VjZOr-OU4WP5rgkmhK87H"
+uri = "file://.local/outputs/Bolna-Orchestrator.pptx"
+type = "slides"
+title = "Bolna Orchestrator.pptx"
