@@ -34,6 +34,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { formatDistanceToNow } from "date-fns";
+import { useAuth } from "@/lib/auth";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API  = `${BASE}/api`;
@@ -91,7 +92,7 @@ type FormState = {
 };
 
 function defaultForm(): FormState {
-  return { agentId: "", name: "My Calendar", timezone: "UTC", hostEmail: "", additionalHosts: [], isActive: true };
+  return { agentId: "", name: "My Calendar", timezone: "Asia/Kolkata", hostEmail: "", additionalHosts: [], isActive: true };
 }
 
 function CalendarFormDialog({
@@ -107,6 +108,7 @@ function CalendarFormDialog({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { data: agents } = useListAgents();
   const create = useCreateCalendar();
   const update = useUpdateCalendar();
@@ -117,6 +119,13 @@ function CalendarFormDialog({
       : defaultForm()
   );
   const [agentError, setAgentError] = useState<string | null>(null);
+
+  // Pre-populate hostEmail with the session user's email when creating a new calendar
+  useEffect(() => {
+    if (!editing && !form.hostEmail && user?.email) {
+      setForm(f => ({ ...f, hostEmail: user.email! }));
+    }
+  }, [user?.email, editing]);
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     if (k === "agentId") setAgentError(null);
@@ -145,6 +154,13 @@ function CalendarFormDialog({
     }
     if (!form.name.trim()) {
       toast({ title: "Name is required", variant: "destructive" }); return;
+    }
+    if (!form.hostEmail.trim()) {
+      toast({ title: "Host email is required", description: "Enter the organizer email address for booking invitations.", variant: "destructive" }); return;
+    }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(form.hostEmail.trim())) {
+      toast({ title: "Invalid host email", description: "Enter a valid email address.", variant: "destructive" }); return;
     }
     try {
       const hostEmail = form.hostEmail.trim() || null;
@@ -216,7 +232,7 @@ function CalendarFormDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Timezone</Label>
+            <Label>Timezone <span className="text-destructive">*</span></Label>
             <Select value={form.timezone} onValueChange={v => set("timezone", v)}>
               <SelectTrigger>
                 <Globe className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
@@ -229,20 +245,21 @@ function CalendarFormDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Availability windows and booking slots will use this timezone.
+              Required. Availability windows and booking slots will use this timezone.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Host / organizer email</Label>
+            <Label>Host / organizer email <span className="text-destructive">*</span></Label>
             <Input
               type="email"
               value={form.hostEmail}
               onChange={e => set("hostEmail", e.target.value)}
               placeholder="you@example.com"
+              required
             />
             <p className="text-xs text-muted-foreground">
-              When set, a separate notification email is sent to this address on every booking, cancellation, and reschedule.
+              Required. Used as the organizer on Google Calendar invitations and receives notification emails on every booking, cancellation, and reschedule.
             </p>
           </div>
 

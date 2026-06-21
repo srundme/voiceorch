@@ -1,10 +1,12 @@
 import { format, addMinutes } from "date-fns";
-import { toZonedTime, formatInTimeZone } from "date-fns-tz";
+import { toZonedTime, fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import {
   db,
   bookingsTable,
   eventTypesTable,
   schedulingCalendarsTable,
+  availabilitySchedulesTable,
+  availabilityOverridesTable,
   agentsTable,
   campaignLeadsTable,
   leadTransfersTable,
@@ -219,7 +221,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
               preferred_date: {
                 type: "string",
                 description:
-                  "Optional preferred date or time of day to check availability for, e.g. 'next Tuesday', '2025-06-10', 'tomorrow morning'. Defaults to the next 7 days.",
+                  "Optional preferred date or time of day to check availability for, e.g. 'next Tuesday', '2025-06-10', 'tomorrow morning'. When the caller names a specific time (e.g. '3 PM', '2:30 PM'), pass a full ISO 8601 datetime with timezone offset, e.g. '2026-06-22T15:00:00+05:30'. For vague preferences a plain string is fine. Defaults to the next 7 days.",
               },
               timezone: {
                 type: "string",
@@ -462,6 +464,16 @@ export async function executeNativeBooking(
       chosenSlot = slots[0]!;
     }
 
+    // Post-selection availability guard — verify the chosen slot falls within
+    // the calendar's configured working-hours window before committing.
+    const guardTz = calendar.timezone || "Asia/Kolkata";
+    const withinWindow = await isSlotWithinAvailabilityWindow(calendar.id, chosenSlot.slotStart, guardTz);
+    if (!withinWindow) {
+      const slotLabel = formatInTimeZone(chosenSlot.slotStart, guardTz, "EEEE, MMMM do 'at' h:mm a");
+      logger.warn({ callId, slotLabel, calendarId: calendar.id }, "Native booking: chosen slot outside availability window — rejected");
+      return `error: the requested slot "${slotLabel}" falls outside the calendar's configured availability hours`;
+    }
+
     const slotStart = chosenSlot.slotStart;
     const slotEnd = chosenSlot.slotEnd;
     const lockKey = buildSlotLockKey(calendar.id, slotStart);
@@ -575,6 +587,10 @@ export async function executeNativeBooking(
       const calendarConnectionId = (calRow.rows[0] as { google_calendar_connection_id?: string | null })
         ?.google_calendar_connection_id ?? null;
       const connectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
+
+      if (!calendar.hostEmail) {
+        logger.warn({ callId, bookingId: confirmedBooking.id, calendarId: calendar.id }, "Native booking: calendar.hostEmail is null — organizer will be missing from Google Calendar invitation and no host notification email will be sent; set host_email on the calendar to fix this");
+      }
 
       if (connectionId) {
         logger.info({ callId, bookingId: confirmedBooking.id, connectionId }, "Native booking: creating Google Calendar event");
@@ -1062,6 +1078,16 @@ export async function executeNativeReschedule(
       chosenSlot = filteredSlots[0]!;
     }
 
+    // Post-selection availability guard — verify the chosen slot falls within
+    // the calendar's configured working-hours window before committing.
+    const guardTz = calendar.timezone || "Asia/Kolkata";
+    const withinWindow = await isSlotWithinAvailabilityWindow(calendar.id, chosenSlot.slotStart, guardTz);
+    if (!withinWindow) {
+      const slotLabel = formatInTimeZone(chosenSlot.slotStart, guardTz, "EEEE, MMMM do 'at' h:mm a");
+      logger.warn({ callId, slotLabel, calendarId: calendar.id }, "Native reschedule: chosen slot outside availability window — rejected");
+      return `error: the requested slot "${slotLabel}" falls outside the calendar's configured availability hours`;
+    }
+
     const newStart = chosenSlot.slotStart;
     const newEnd = chosenSlot.slotEnd;
     const lockKey = buildSlotLockKey(calendar.id, newStart);
@@ -1495,8 +1521,15 @@ export function parsePreferredDate(
 
   const parsed = new Date(raw);
   if (!isNaN(parsed.getTime())) {
-    const effectiveStart = parsed > now ? parsed : now;
     const hasTimeComponent = raw.includes("T") || raw.includes(":");
+    // When the string carries an explicit UTC offset (Z or ±HH:mm / ±HHmm) JS
+    // new Date() honours it correctly.  A bare datetime like "2026-06-22T15:00:00"
+    // has no offset and new Date() treats it as UTC, which shifts 3 PM IST to
+    // 8:30 PM IST.  Re-anchor bare datetimes to the calendar's IANA timezone.
+    const hasExplicitOffset = /Z$|[+-]\d{2}:?\d{2}$/.test(raw.trim());
+    const anchoredDate =
+      hasTimeComponent && !hasExplicitOffset ? fromZonedTime(raw, tz) : new Date(raw);
+    const effectiveStart = anchoredDate > now ? anchoredDate : now;
     return {
       searchStart: effectiveStart,
       minSlotStart: hasTimeComponent ? effectiveStart : undefined,
@@ -1505,6 +1538,54 @@ export function parsePreferredDate(
   }
 
   return { searchStart: now };
+}
+
+/**
+ * Verifies that a UTC instant falls within the calendar's configured working-hours
+ * for the day (including override windows).  Used as a post-selection safety guard
+ * so a slot that somehow bypassed the slot-engine filter is caught before booking.
+ */
+async function isSlotWithinAvailabilityWindow(
+  calendarId: number,
+  slotStart: Date,
+  timezone: string,
+): Promise<boolean> {
+  const schedules = await db
+    .select()
+    .from(availabilitySchedulesTable)
+    .where(
+      and(
+        eq(availabilitySchedulesTable.calendarId, calendarId),
+        eq(availabilitySchedulesTable.isActive, true),
+      ),
+    );
+
+  if (schedules.length === 0) return false;
+
+  const localSlot = toZonedTime(slotStart, timezone);
+  const dayOfWeek = localSlot.getDay();
+  const slotTimeStr = format(localSlot, "HH:mm");
+  const dateStr = format(localSlot, "yyyy-MM-dd");
+
+  const overrides = await db
+    .select()
+    .from(availabilityOverridesTable)
+    .where(
+      and(
+        eq(availabilityOverridesTable.calendarId, calendarId),
+        eq(availabilityOverridesTable.date, dateStr),
+      ),
+    )
+    .limit(1);
+
+  const override = overrides[0];
+  if (override?.isBlocked) return false;
+  if (override?.startTime && override?.endTime) {
+    return slotTimeStr >= override.startTime && slotTimeStr < override.endTime;
+  }
+
+  const daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
+  return daySchedules.some((s) => slotTimeStr >= s.startTime && slotTimeStr < s.endTime);
 }
 
 // ── Transfer lead DB helper ───────────────────────────────────────────────────

@@ -20,7 +20,7 @@ export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   agentId: integer("agent_id").notNull().references(() => agentsTable.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
   name: text("name").notNull().default("My Calendar"),
-  timezone: text("timezone").notNull().default("UTC"),
+  timezone: text("timezone").notNull().default("Asia/Kolkata"),
   hostEmail: text("host_email"),
   additionalHosts: text("additional_hosts").array(),
   googleCalendarConnectionId: uuid("google_calendar_connection_id").references(() => googleCalendarConnectionsTable.id, { onDelete: "set null" }),
