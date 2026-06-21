@@ -78,6 +78,11 @@ async function checkUsageLimits(agent: typeof agentsTable.$inferSelect): Promise
 
 function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], override?: string): string {
   if (override) return override.replace(/\/$/, "");
+  // WEBHOOK_BASE_URL takes absolute priority — use this to pin Railway prod URL
+  // even when calls are initiated from the Replit dev dashboard (where REPLIT_DOMAINS
+  // would otherwise produce a Replit dev URL that VoBiz can't WebSocket back to).
+  const webhookBaseUrl = process.env["WEBHOOK_BASE_URL"];
+  if (webhookBaseUrl) return webhookBaseUrl.replace(/\/$/, "");
   const domains = process.env["REPLIT_DOMAINS"];
   if (domains) return `https://${domains.split(",")[0]}`;
   const host = req.headers["x-forwarded-host"] ?? req.hostname;

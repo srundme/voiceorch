@@ -42,6 +42,9 @@ async function getAgentProviderToken(agentId: number, provider: "twilio" | "pliv
 
 /** Resolve the public WebSocket base URL from the request */
 function getWsBaseUrl(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): string {
+  // WEBHOOK_BASE_URL pins us to the Railway prod host (avoids Replit dev mTLS block)
+  const fixed = process.env["WEBHOOK_BASE_URL"];
+  if (fixed) return fixed.replace(/^http/, "ws").replace(/\/$/, "");
   const host = req.headers["x-forwarded-host"] ?? req.hostname;
   const proto = req.headers["x-forwarded-proto"] ?? "https";
   const wsProto = proto === "https" ? "wss" : "ws";
@@ -168,6 +171,8 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
 
 /** Resolve HTTP base URL (for VoiceXML action / redirect attributes) */
 function getHttpBaseUrl(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): string {
+  const fixed = process.env["WEBHOOK_BASE_URL"];
+  if (fixed) return fixed.replace(/\/$/, "");
   const host  = req.headers["x-forwarded-host"] ?? req.hostname;
   const proto = (req.headers["x-forwarded-proto"] ?? "https") as string;
   return `${proto}://${host}`;

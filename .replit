@@ -64,6 +64,7 @@ packages = ["ffmpeg-full", "libsndfile"]
 [userenv]
 
 [userenv.shared]
+WEBHOOK_BASE_URL = "https://app.snapserve.ai"
 
 [userenv.production]
 APP_BASE_URL = "https://app.snapserve.ai"
