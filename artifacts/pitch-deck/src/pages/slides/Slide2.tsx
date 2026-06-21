@@ -1,31 +1,48 @@
 export default function Slide2() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg flex">
-      {/* Amber bar motif + slide counter */}
-      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">02 / 12</p>
-
-      {/* Left column */}
-      <div className="flex flex-col justify-center pl-[7vw] pr-[2vw] w-[50%] overflow-hidden" style={{ paddingTop: '13vh', paddingBottom: '8vh' }}>
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary mb-[2vh]">The Problem</p>
-        <p className="font-display font-black leading-none tracking-tighter text-primary" style={{ fontSize: '7.5vw' }}>500M</p>
-        <p className="font-body text-[3vw] text-text mt-[1.5vh]">vernacular voice users in India.</p>
-        <div className="h-[0.25vh] w-[6vw] bg-primary mt-[2.5vh] mb-[2.5vh]" />
-        <p className="font-body text-[2.8vw] text-muted">Zero platforms built for them.</p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>Why — The Problem</div>
       </div>
-
-      {/* Divider */}
-      <div className="absolute left-[50%] top-[13vh] bottom-[8vh] w-[0.15vw] bg-border-line" />
-
-      {/* Right column — 2 sections */}
-      <div className="flex flex-col justify-center pl-[4vw] pr-[7vw] w-[50%] overflow-hidden" style={{ paddingTop: '13vh', paddingBottom: '8vh', gap: '4vh' }}>
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>02</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
+        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>Voice operations are broken.</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2.8vh", maxWidth: "78vw" }}>
+          <div style={{ display: "flex", gap: "3vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.1vw", fontWeight: 500, color: "#1C1C1C", minWidth: "18vw" }}>600M+ callers</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 1.5, color: "#4A4A4A" }}>India has over 600 million active voice callers. Customer service calls number in the billions per day — banking, insurance, healthcare, logistics.</div>
+          </div>
+          <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+          <div style={{ display: "flex", gap: "3vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.1vw", fontWeight: 500, color: "#1C1C1C", minWidth: "18vw" }}>8-min hold time</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 1.5, color: "#4A4A4A" }}>78% of customers abandon a call after 2 minutes on hold. Average Indian call center hold time: 8 minutes. That is revenue walking out the door.</div>
+          </div>
+          <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+          <div style={{ display: "flex", gap: "3vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.1vw", fontWeight: 500, color: "#1C1C1C", minWidth: "18vw" }}>45% annual attrition</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 1.5, color: "#4A4A4A" }}>Call center agents churn at 45%/year. Businesses spend ₹30,000–₹50,000 to hire and train each replacement. The human model does not scale.</div>
+          </div>
+          <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+          <div style={{ display: "flex", gap: "3vw", alignItems: "flex-start" }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "1.1vw", fontWeight: 500, color: "#1C1C1C", minWidth: "18vw" }}>40% is repetitive</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 1.5, color: "#4A4A4A" }}>4 in 10 calls are balance checks, order status, appointment booking — tasks a trained AI handles in under 90 seconds with zero wait time.</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
         <div>
-          <p className="font-display font-bold text-[3.2vw] text-text leading-tight tracking-tight mb-[1.5vh]">Gender-inflected languages</p>
-          <p className="font-body text-[2.8vw] text-muted leading-relaxed">Tamil, Hindi, Telugu — gender shapes every greeting. English-first AI ignores this entirely.</p>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
         </div>
         <div>
-          <p className="font-display font-bold text-[3.2vw] text-text leading-tight tracking-tight mb-[1.5vh]">No memory, no identity</p>
-          <p className="font-body text-[2.8vw] text-muted leading-relaxed">Every call starts from zero. No platform knows who called or recognises them across numbers.</p>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
+        </div>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>02</div>
         </div>
       </div>
     </div>

@@ -1,30 +1,73 @@
 export default function Slide5() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg flex">
-      {/* Amber bar motif + slide counter */}
-      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">05 / 12</p>
-
-      {/* Left column */}
-      <div className="flex flex-col pl-[7vw] pr-[3vw] w-[50%] overflow-hidden" style={{ paddingTop: '11vh', paddingBottom: '8vh', gap: '2vh' }}>
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary">Intelligence Layer 01</p>
-        <h2 className="font-display font-black text-[4vw] leading-none tracking-tighter text-text">Voice Gender AI</h2>
-        <p className="font-display font-black leading-none tracking-tighter text-primary" style={{ fontSize: '11vw', marginTop: '2vh' }}>5s</p>
-        <p className="font-body text-[2.7vw] text-muted leading-snug">to detect caller gender from voice acoustics alone.</p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>How — The Aitel Pipeline</div>
       </div>
-
-      {/* Divider */}
-      <div className="absolute left-[50%] top-[11vh] bottom-[8vh] w-[0.15vw] bg-border-line" />
-
-      {/* Right column — 2 flex-1 cards */}
-      <div className="flex flex-col pl-[4vw] pr-[7vw] w-[50%] overflow-hidden" style={{ paddingTop: '12vh', paddingBottom: '8vh', gap: '4vh' }}>
-        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[3vh] flex-1 overflow-hidden" style={{ borderLeft: '0.4vw solid #F0A500' }}>
-          <p className="font-display font-bold text-[3vw] text-text leading-tight mb-[2vh]">Adapts language in real time</p>
-          <p className="font-body text-[2.5vw] text-muted leading-snug">Correct gender form, auto-applied, from word one.</p>
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>05</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
+        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>Four layers, sub-2-second response.</h2>
+        <div style={{ display: "flex", gap: "0", alignItems: "stretch", marginBottom: "4vh" }}>
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw", paddingRight: "2vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'DM Mono', monospace", marginBottom: "1vh" }}>Step 1</div>
+            <div style={{ fontSize: "1.4vw", fontWeight: 600, marginBottom: "0.8vh" }}>ASR</div>
+            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Caller speaks. Sarvam / Azure transcribes in real-time with Indic language support.</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0", margin: "0 1vw" }} />
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw", paddingRight: "2vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'DM Mono', monospace", marginBottom: "1vh" }}>Step 2</div>
+            <div style={{ fontSize: "1.4vw", fontWeight: 600, marginBottom: "0.8vh" }}>LLM</div>
+            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Google Gemini / Groq understands intent, queries memory, executes tools, forms a response.</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0", margin: "0 1vw" }} />
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw", paddingRight: "2vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'DM Mono', monospace", marginBottom: "1vh" }}>Step 3</div>
+            <div style={{ fontSize: "1.4vw", fontWeight: 600, marginBottom: "0.8vh" }}>TTS</div>
+            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Cartesia / ElevenLabs synthesises speech. Audio starts playing before the full response is generated.</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0", margin: "0 1vw" }} />
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'DM Mono', monospace", marginBottom: "1vh" }}>Step 4</div>
+            <div style={{ fontSize: "1.4vw", fontWeight: 600, marginBottom: "0.8vh" }}>Memory</div>
+            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Every call, every preference, every fact stored. The agent remembers the caller across all future interactions.</div>
+          </div>
         </div>
-        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[3vh] flex-1 overflow-hidden" style={{ borderLeft: '0.4vw solid #F0A500' }}>
-          <p className="font-display font-bold text-[3vw] text-text leading-tight mb-[2vh]">No competitor does this</p>
-          <p className="font-body text-[2.5vw] text-muted leading-snug">Bolna and Vapi ignore gender. In India it breaks caller trust.</p>
+        <div style={{ display: "flex", gap: "5vw", backgroundColor: "#FAFAFA", padding: "2.5vh 2.5vw", border: "0.1vh solid #E0E0E0" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "2.8vw", fontWeight: 700, letterSpacing: "-0.02em" }}>854ms</div>
+            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.5vh" }}>Avg LLM latency</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "2.8vw", fontWeight: 700, letterSpacing: "-0.02em" }}>452ms</div>
+            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.5vh" }}>TTS first audio</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "2.8vw", fontWeight: 700, letterSpacing: "-0.02em" }}>24/7</div>
+            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.5vh" }}>Availability</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "2.8vw", fontWeight: 700, letterSpacing: "-0.02em" }}>∞</div>
+            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.5vh" }}>Concurrent calls</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
+        </div>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
+        </div>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>05</div>
         </div>
       </div>
     </div>

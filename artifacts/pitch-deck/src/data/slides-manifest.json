@@ -3,72 +3,72 @@
     "id": "a1b2c3d4-0001-4000-8000-000000000001",
     "position": 1,
     "filepath": "src/pages/slides/Slide1.tsx",
-    "title": "Title — SnapServe AI",
-    "description": "Opening slide: voice AI platform for India's phone calls — gender-aware, caller memory + identity, BYOK",
+    "title": "SnapServe \u2014 Aitel",
+    "description": "Title slide: SnapServe AI Telecommunication platform",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0002-4000-8000-000000000002",
     "position": 2,
     "filepath": "src/pages/slides/Slide2.tsx",
-    "title": "The Problem",
-    "description": "500M vernacular voice users in India — gender-inflected languages and no persistent memory",
+    "title": "Why \u2014 The Problem",
+    "description": "600M callers, 8-min hold time, 45% attrition, 40% repetitive calls",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0003-4000-8000-000000000003",
     "position": 3,
     "filepath": "src/pages/slides/Slide3.tsx",
-    "title": "Three Blind Spots",
-    "description": "Gender-blind, memory-less, identity-less — what every voice platform gets wrong",
+    "title": "Why \u2014 The Hidden Cost",
+    "description": "Human agent cost breakdown vs SnapServe at Rs3/min",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0004-4000-8000-000000000004",
     "position": 4,
     "filepath": "src/pages/slides/Slide4.tsx",
-    "title": "The Platform",
-    "description": "BYOK orchestration layer — ASR, LLM, TTS, Telephony pipeline visual",
+    "title": "What \u2014 The Solution",
+    "description": "SnapServe deploys autonomous voice agents for every customer call",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0005-4000-8000-000000000005",
     "position": 5,
     "filepath": "src/pages/slides/Slide5.tsx",
-    "title": "Voice Gender AI",
-    "description": "5-second acoustic gender detection, Indic language adaptation",
+    "title": "How \u2014 The Aitel Pipeline",
+    "description": "ASR-LLM-TTS-Memory pipeline with live latency numbers",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0006-4000-8000-000000000006",
     "position": 6,
     "filepath": "src/pages/slides/Slide6.tsx",
-    "title": "Caller Memory",
-    "description": "Three-layer graph memory: L0 facts, L1 episodes, L2 semantic graph",
+    "title": "How \u2014 Human Effort Reduction",
+    "description": "80% automation, 40x throughput, 75% lower cost",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0007-4000-8000-000000000007",
     "position": 7,
     "filepath": "src/pages/slides/Slide7.tsx",
-    "title": "Voice Fingerprinting",
-    "description": "Azure Speaker Recognition — cross-number caller identity and biometric continuity",
+    "title": "Market Opportunity",
+    "description": "Global Aitel .5B\u2192.2B; India Conv AI 80M\u219220M; 2026 and 2027",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0008-4000-8000-000000000008",
     "position": 8,
     "filepath": "src/pages/slides/Slide8.tsx",
-    "title": "Market Opportunity",
-    "description": "India voice AI TAM/SAM/SOM — ₹40,000 Cr / ₹9,000 Cr / ₹450 Cr with SnapServe's wedge",
+    "title": "Why Now",
+    "description": "Four converging forces: LLM quality, Indic ASR, inference cost, India 4G growth",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0009-4000-8000-000000000009",
     "position": 9,
     "filepath": "src/pages/slides/Slide9.tsx",
-    "title": "Competitive Landscape",
-    "description": "SnapServe vs Sarvam AI vs Bolna vs Vapi — feature comparison table",
+    "title": "Why SnapServe",
+    "description": "India-first stack, caller memory moat, BYOK pricing, production-ready",
     "speakerNotes": ""
   },
   {
@@ -76,23 +76,23 @@
     "position": 10,
     "filepath": "src/pages/slides/Slide10.tsx",
     "title": "Business Model",
-    "description": "BYOK orchestration — per-agent pricing tiers and 60-80% lower cost than per-minute platforms",
+    "description": "Managed /nix/store/smkzrg2vvp3lng3hq7v9svfni5mnqjh2-bash-interactive-5.2p37/bin/bash.05/min vs BYOK /nix/store/smkzrg2vvp3lng3hq7v9svfni5mnqjh2-bash-interactive-5.2p37/bin/bash.035/min; path to 0K MRR",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0011-4000-8000-000000000011",
     "position": 11,
     "filepath": "src/pages/slides/Slide11.tsx",
-    "title": "The Ask",
-    "description": "Built & live + ₹1.3 Cr raise (₹7L/mo burn, ~18mo runway) + use-of-funds breakdown",
+    "title": "Traction",
+    "description": "Live on Railway, 4 telephony providers, full ASR/LLM/TTS matrix",
     "speakerNotes": ""
   },
   {
     "id": "a1b2c3d4-0012-4000-8000-000000000012",
     "position": 12,
     "filepath": "src/pages/slides/Slide12.tsx",
-    "title": "Closing",
-    "description": "SnapServe AI — Built for India's billion voices",
+    "title": "The Ask",
+    "description": "Rs1.3 Cr seed, 18-month runway, 50 customers, Rs50L ARR target",
     "speakerNotes": ""
   }
 ]

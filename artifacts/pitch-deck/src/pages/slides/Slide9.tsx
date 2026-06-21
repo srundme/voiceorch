@@ -1,75 +1,64 @@
 export default function Slide9() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg flex flex-col" style={{ paddingTop: '6vh', paddingBottom: '6vh', paddingLeft: '7vw', paddingRight: '7vw' }}>
-      {/* Amber bar motif + slide counter */}
-      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">09 / 12</p>
-
-      {/* Headline */}
-      <div style={{ paddingTop: '3.5vh', marginBottom: '3vh' }}>
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary mb-[1.5vh]">Competitive Landscape</p>
-        <h2 className="font-display font-black text-[4.5vw] leading-tight tracking-tight text-text">What sets us apart</h2>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>Why SnapServe</div>
       </div>
-
-      {/* Table */}
-      <div className="flex-1 flex flex-col justify-center">
-
-        {/* Header */}
-        <div className="grid gap-[1.4vw] mb-[1.5vh]" style={{ gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr' }}>
-          <p className="font-body font-medium text-[2vw] text-muted uppercase tracking-wider">Capability</p>
-          <p className="font-display font-bold text-[2.5vw] text-primary">SnapServe</p>
-          <p className="font-display font-bold text-[2.5vw] text-muted">Sarvam</p>
-          <p className="font-display font-bold text-[2.5vw] text-muted">Bolna</p>
-          <p className="font-display font-bold text-[2.5vw] text-muted">Vapi</p>
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>09</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
+        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5.5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>Built for India. Moated by memory.</h2>
+        <div style={{ display: "flex", gap: "5vw" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2.5vh" }}>
+            <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>01</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>India-first telephony stack</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Native VoBiz, Plivo, and Twilio support. Built for Indian dial patterns, STD codes, and local SIP trunks. Competitors are US-first and don't understand the Indian telecom layer.</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>02</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>Caller memory across calls</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Three-layer graph memory — facts, episodes, semantic graph. The agent remembers every caller across every conversation. No competitor offers this. This is our moat.</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>03</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>BYOK — 60% lower cost</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Businesses bring their own provider keys. We charge only orchestration fees. vs. Vapi ($0.05/min) and Amazon Connect ($0.08/min) — SnapServe BYOK: $0.035/min.</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div style={{ display: "flex", gap: "2.5vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>04</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>Production-ready today</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Deployed on Railway, handling live calls. Not a prototype. Not a waitlist. Customers can be onboarded this week.</div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="h-[0.15vh] w-full bg-border-line mb-[1vh]" />
-
-        <div className="grid gap-[1.4vw] py-[1.6vh]" style={{ gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">Voice Gender Detection</p>
-          <p className="font-display font-bold text-[2.4vw] text-primary">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-        </div>
-
-        <div className="grid gap-[1.4vw] py-[1.6vh]" style={{ gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">Persistent Caller Memory</p>
-          <p className="font-display font-bold text-[2.4vw] text-primary">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-        </div>
-
-        <div className="grid gap-[1.4vw] py-[1.6vh]" style={{ gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">Voice Fingerprinting</p>
-          <p className="font-display font-bold text-[2.4vw] text-primary">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-        </div>
-
-        <div className="grid gap-[1.4vw] py-[1.6vh]" style={{ gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">India Language Depth</p>
-          <p className="font-display font-bold text-[2.4vw] text-primary">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">Partial</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-        </div>
-
-        <div className="grid gap-[1.4vw] py-[1.6vh]" style={{ gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr' }}>
-          <p className="font-body text-[2.4vw] text-text">Bring Your Own Keys (BYOK)</p>
-          <p className="font-display font-bold text-[2.4vw] text-primary">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-          <p className="font-body text-[2.4vw] text-muted">Yes</p>
-          <p className="font-body text-[2.4vw] text-muted">No</p>
-        </div>
-
       </div>
-
-      {/* Edge caption */}
-      <p className="font-body text-[2vw] text-muted opacity-60 mt-[1vh]">
-        Sarvam ships India-native models; we are the orchestration layer that adds gender, memory &amp; identity on any provider.
-      </p>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
+        </div>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
+        </div>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>09</div>
+        </div>
+      </div>
     </div>
   );
 }

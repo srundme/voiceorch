@@ -1,56 +1,57 @@
 export default function Slide10() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg flex">
-      {/* Amber bar motif + slide counter */}
-      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">10 / 12</p>
-
-      {/* Left column */}
-      <div className="flex flex-col pl-[7vw] pr-[3vw] w-[52%] overflow-hidden" style={{ paddingTop: '10vh', paddingBottom: '7vh', gap: '2vh' }}>
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary">Business Model</p>
-        <h2 className="font-display font-black text-[3.8vw] leading-none tracking-tighter text-text">BYOK Orchestration</h2>
-        <p className="font-body text-[2.3vw] text-muted leading-snug">Businesses bring their own ASR / LLM / TTS keys and pay providers at cost. We charge a flat orchestration fee per active agent — never per minute.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4vh', marginTop: '0.5vh' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.3vw] text-text">Recurring SaaS revenue per active agent</p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>Business Model</div>
+      </div>
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>10</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
+        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5.5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>Usage-based. No seat fees. No contracts.</h2>
+        <div style={{ display: "flex", gap: "4vw", marginBottom: "4vh" }}>
+          <div style={{ flex: 1, border: "0.15vh solid #1C1C1C", padding: "3vh 2.5vw" }}>
+            <div style={{ fontSize: "0.8vw", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.1em", color: "#888888", marginBottom: "2vh" }}>Managed Plan</div>
+            <div style={{ fontSize: "3.5vw", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "1vh" }}>$0.05<span style={{ fontSize: "1.5vw", fontWeight: 400, color: "#666666" }}>/min</span></div>
+            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5, marginBottom: "2vh" }}>We supply all AI keys — ASR, LLM, TTS. Customer pays per minute. Simple, predictable billing.</div>
+            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace" }}>Best for: early-stage, SMBs, test deployments</div>
           </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.3vw] text-text">Zero markup on AI provider costs</p>
+          <div style={{ flex: 1, border: "0.15vh solid #1C1C1C", padding: "3vh 2.5vw", backgroundColor: "#FAFAFA" }}>
+            <div style={{ fontSize: "0.8vw", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.1em", color: "#888888", marginBottom: "2vh" }}>BYOK Plan</div>
+            <div style={{ fontSize: "3.5vw", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "1vh" }}>$0.035<span style={{ fontSize: "1.5vw", fontWeight: 400, color: "#666666" }}>/min</span></div>
+            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5, marginBottom: "2vh" }}>Customer brings their own provider keys. We charge orchestration only. 60% cheaper than competition.</div>
+            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace" }}>Best for: enterprises, high-volume, cost-sensitive</div>
           </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.3vw] text-text">Margin scales with agents, not call volume</p>
+        </div>
+        <div style={{ display: "flex", gap: "6vw", backgroundColor: "#FAFAFA", padding: "2.5vh 2.5vw", border: "0.1vh solid #E0E0E0" }}>
+          <div>
+            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.5vh" }}>Path to $70K MRR</div>
+            <div style={{ fontSize: "1.2vw", fontWeight: 600 }}>2,000 agents × 1,000 min/month</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
+          <div>
+            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.5vh" }}>Unit Economics</div>
+            <div style={{ fontSize: "1.2vw", fontWeight: 600 }}>~70% gross margin at scale</div>
+          </div>
+          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
+          <div>
+            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.5vh" }}>NRR Expectation</div>
+            <div style={{ fontSize: "1.2vw", fontWeight: 600 }}>120%+ (usage grows with call volume)</div>
           </div>
         </div>
       </div>
-
-      {/* Divider */}
-      <div className="absolute left-[52%] top-[10vh] bottom-[7vh] w-[0.15vw] bg-border-line" />
-
-      {/* Right column */}
-      <div className="flex flex-col pl-[4vw] pr-[7vw] w-[48%] overflow-hidden" style={{ paddingTop: '11vh', paddingBottom: '7vh', gap: '1.6vh' }}>
-        <p className="font-body font-medium text-[2.1vw] uppercase tracking-wider text-muted">Pricing · per agent / month</p>
-
-        <div className="flex justify-between items-baseline py-[1.4vh]" style={{ borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">Starter</p>
-          <p className="font-display font-bold text-[2.8vw] text-text">₹4,999</p>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
         </div>
-        <div className="flex justify-between items-baseline py-[1.4vh]" style={{ borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">Growth <span className="text-muted text-[1.9vw]">(5+ agents)</span></p>
-          <p className="font-display font-bold text-[2.8vw] text-text">₹3,999</p>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
         </div>
-        <div className="flex justify-between items-baseline py-[1.4vh]" style={{ borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.4vw] text-text">Enterprise</p>
-          <p className="font-display font-bold text-[2.8vw] text-text">Custom</p>
-        </div>
-
-        <div className="rounded-[1vw] px-[2.5vw] py-[2vh]" style={{ background: '#F0A500', marginTop: '0.8vh' }}>
-          <p className="font-display font-black leading-none text-bg" style={{ fontSize: '4.5vw' }}>
-            <span style={{ whiteSpace: 'nowrap' }}>60–80%</span>
-          </p>
-          <p className="font-body text-[2.2vw] text-bg mt-[1vh] opacity-80 leading-snug">lower total cost than per-minute platforms — clients pay providers directly, no AI markup.</p>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>10</div>
         </div>
       </div>
     </div>

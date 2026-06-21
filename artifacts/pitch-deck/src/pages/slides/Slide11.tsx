@@ -1,61 +1,79 @@
 export default function Slide11() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg flex">
-      {/* Amber bar motif + slide counter */}
-      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">11 / 12</p>
-
-      {/* Left column */}
-      <div className="flex flex-col pl-[7vw] pr-[3vw] w-[54%] overflow-hidden" style={{ paddingTop: '10vh', paddingBottom: '7vh', gap: '1.8vh' }}>
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary">The Ask</p>
-        <h2 className="font-display font-black text-[4.2vw] leading-none tracking-tighter text-text">Built &amp; live.</h2>
-        <p className="font-body text-[2.3vw] text-muted leading-snug">First raise. The full platform is built and running — we're funding runway to land our first paying cohort.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.3vh', marginTop: '0.4vh' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.2vw] text-text">Real-time pipeline — ASR · LLM · TTS · Telephony</p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>Traction — Built & Live</div>
+      </div>
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>11</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
+        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5.5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>Production-ready. Not a demo.</h2>
+        <div style={{ display: "flex", gap: "5vw", marginBottom: "4vh" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2.5vh" }}>
+            <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>✓</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>Platform deployed on Railway (production)</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A" }}>Live API, dashboard, admin panel — all serving real traffic at app.snapserve.ai</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>✓</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>4 telephony providers integrated</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A" }}>VoBiz, Twilio, Plivo, Vonage — inbound and outbound, SIP and cloud telephony.</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>✓</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>Full provider matrix live</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A" }}>ASR: Sarvam, Azure, Deepgram · LLM: Google, Groq, OpenAI, Anthropic · TTS: Cartesia, ElevenLabs, Azure, AWS Polly</div>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "2vw", marginTop: "0.3vh" }}>✓</div>
+              <div>
+                <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.4vh" }}>Caller memory, scheduling, and voice fingerprinting shipped</div>
+                <div style={{ fontSize: "1.05vw", color: "#4A4A4A" }}>Cross-call memory graph, slot-booking engine, ECAPA-TDNN speaker recognition — all in production.</div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.2vw] text-text">Gender AI + Caller Memory + Fingerprinting</p>
-          </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.2vw] text-text">Campaigns · Scheduling · Analytics shipped</p>
-          </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.2vw] text-text">Target sectors: BFSI, healthcare, D2C</p>
+          <div style={{ flex: 0.6, display: "flex", flexDirection: "column", justifyContent: "center", gap: "3vh", borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "2.5vw" }}>
+            <div>
+              <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.5vh" }}>Stage</div>
+              <div style={{ fontSize: "1.6vw", fontWeight: 700 }}>Live in Production</div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div>
+              <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.5vh" }}>Burn Rate</div>
+              <div style={{ fontSize: "1.6vw", fontWeight: 700 }}>₹7L / month</div>
+            </div>
+            <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+            <div>
+              <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.5vh" }}>Team</div>
+              <div style={{ fontSize: "1.3vw", fontWeight: 600, lineHeight: 1.4 }}>Karthikeyan</div>
+              <div style={{ fontSize: "1vw", color: "#4A4A4A" }}>Founder & CEO</div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Divider */}
-      <div className="absolute left-[54%] top-[10vh] bottom-[7vh] w-[0.15vw] bg-border-line" />
-
-      {/* Right column */}
-      <div className="flex flex-col pl-[5vw] pr-[7vw] w-[46%] overflow-hidden" style={{ paddingTop: '9.5vh', paddingBottom: '6vh', gap: '0.9vh' }}>
-        <p className="font-body font-medium text-[2.1vw] uppercase tracking-wider text-muted">Raising</p>
-        <p className="font-display font-black text-[5.2vw] text-primary leading-none tracking-tighter">₹1.3 Cr</p>
-        <p className="font-body text-[2.2vw] text-muted leading-snug">₹7L / month burn · ~18 months of runway.</p>
-
-        <p className="font-body font-medium text-[1.9vw] uppercase tracking-wider text-muted mt-[1vh]">Use of funds</p>
-        <div className="flex justify-between items-baseline py-[0.8vh]" style={{ borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.1vw] text-text">Product &amp; infra</p>
-          <p className="font-display font-bold text-[2.3vw] text-text">45%</p>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
         </div>
-        <div className="flex justify-between items-baseline py-[0.8vh]" style={{ borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.1vw] text-text">GTM &amp; sales</p>
-          <p className="font-display font-bold text-[2.3vw] text-text">35%</p>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
         </div>
-        <div className="flex justify-between items-baseline py-[0.8vh]" style={{ borderBottom: '1px solid #22223A' }}>
-          <p className="font-body text-[2.1vw] text-text">Compliance &amp; ops</p>
-          <p className="font-display font-bold text-[2.3vw] text-text">20%</p>
-        </div>
-
-        <div className="rounded-[1vw] px-[2.5vw] py-[1.3vh]" style={{ background: '#F0A500', marginTop: '0.6vh' }}>
-          <p className="font-body text-[1.8vw] text-bg opacity-70 mb-[0.3vh]">18-month goal (target)</p>
-          <p className="font-display font-black text-[2.2vw] text-bg leading-tight">First paying cohort · BFSI pilot live</p>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>11</div>
         </div>
       </div>
     </div>

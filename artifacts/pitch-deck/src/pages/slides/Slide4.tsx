@@ -1,69 +1,66 @@
 export default function Slide4() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg flex">
-      {/* Amber bar motif + slide counter */}
-      <div className="absolute top-[6vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[5.5vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">04 / 12</p>
-
-      {/* Left column */}
-      <div className="flex flex-col pl-[7vw] pr-[3vw] w-[52%] overflow-hidden" style={{ paddingTop: '11vh', paddingBottom: '8vh', gap: '2.5vh' }}>
-        <p className="font-body font-medium text-[2.2vw] uppercase tracking-[0.35em] text-primary">The Platform</p>
-        <h2 className="font-display font-black text-[4vw] leading-none tracking-tighter text-text">BYOK Orchestration</h2>
-        <p className="font-body text-[2.7vw] text-muted leading-snug">Your API keys, our orchestration layer — routing, memory, gender AI, and fingerprinting on every call.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.8vh' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.7vw] text-text">Mix and match any provider</p>
-          </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.7vw] text-text">Gender AI + Memory + Fingerprinting</p>
-          </div>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.45vw] h-[0.45vw] rounded-full bg-primary shrink-0" />
-            <p className="font-body text-[2.7vw] text-text">Live in production today</p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>What — The Solution</div>
+      </div>
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>04</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "7vh" }}>
+        <div style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", color: "#888888", fontFamily: "'DM Mono', monospace", marginBottom: "1.5vh" }}>Powered by Aitel — AI Telecommunication</div>
+        <h2 style={{ fontSize: "3.5vw", fontWeight: 700, margin: "0 0 5.5vh 0", lineHeight: 1.1, letterSpacing: "-0.02em" }}>SnapServe deploys autonomous voice agents for every customer call.</h2>
+        <div style={{ display: "flex", gap: "3vw" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "2.5vh" }}>
+              <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", marginTop: "0.3vh", minWidth: "2vw" }}>01</div>
+                <div>
+                  <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.5vh" }}>Inbound Call Handling</div>
+                  <div style={{ fontSize: "1.1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Answers every call, resolves queries, books appointments, checks balances — without a human agent in the loop.</div>
+                </div>
+              </div>
+              <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+              <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", marginTop: "0.3vh", minWidth: "2vw" }}>02</div>
+                <div>
+                  <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.5vh" }}>Outbound Campaigns</div>
+                  <div style={{ fontSize: "1.1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Runs payment reminders, surveys, lead qualification, and follow-up campaigns at unlimited scale.</div>
+                </div>
+              </div>
+              <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+              <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", marginTop: "0.3vh", minWidth: "2vw" }}>03</div>
+                <div>
+                  <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.5vh" }}>12+ Languages</div>
+                  <div style={{ fontSize: "1.1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Hindi, Tamil, Telugu, Kannada, Bengali, Hinglish, and English. Indic-language-first by design.</div>
+                </div>
+              </div>
+              <div style={{ width: "100%", height: "0.1vh", backgroundColor: "#E0E0E0" }} />
+              <div style={{ display: "flex", gap: "2vw", alignItems: "flex-start" }}>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", marginTop: "0.3vh", minWidth: "2vw" }}>04</div>
+                <div>
+                  <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.5vh" }}>Plug-in to Any Stack</div>
+                  <div style={{ fontSize: "1.1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Integrates with existing CRM, telephony (VoBiz, Twilio, Plivo), and business workflows. Live in 48 hours.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Right column — pipeline */}
-      <div className="flex flex-col pr-[7vw] pl-[3vw] w-[48%] overflow-hidden" style={{ paddingTop: '13vh', paddingBottom: '8vh', gap: '0' }}>
-
-        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[2.2vh] flex items-center justify-between" style={{ border: '1px solid #22223A' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.6vw] h-[0.6vw] rounded-full bg-primary shrink-0" />
-            <p className="font-display font-bold text-[3vw] text-text">ASR</p>
-          </div>
-          <p className="font-body text-[2.2vw] text-muted">Deepgram · Azure · Whisper</p>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
         </div>
-        <div className="self-center w-[0.15vw] bg-primary opacity-40" style={{ height: '3vh' }} />
-
-        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[2.2vh] flex items-center justify-between" style={{ border: '1px solid #22223A' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.6vw] h-[0.6vw] rounded-full bg-primary shrink-0" />
-            <p className="font-display font-bold text-[3vw] text-text">LLM</p>
-          </div>
-          <p className="font-body text-[2.2vw] text-muted">OpenAI · Qwen · Anthropic</p>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
         </div>
-        <div className="self-center w-[0.15vw] bg-primary opacity-40" style={{ height: '3vh' }} />
-
-        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[2.2vh] flex items-center justify-between" style={{ border: '1px solid #22223A' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.6vw] h-[0.6vw] rounded-full bg-primary shrink-0" />
-            <p className="font-display font-bold text-[3vw] text-text">TTS</p>
-          </div>
-          <p className="font-body text-[2.2vw] text-muted">Cartesia · ElevenLabs · Azure</p>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>04</div>
         </div>
-        <div className="self-center w-[0.15vw] bg-primary opacity-40" style={{ height: '3vh' }} />
-
-        <div className="bg-surface rounded-[1vw] px-[2.5vw] py-[2.2vh] flex items-center justify-between" style={{ border: '1px solid #22223A' }}>
-          <div className="flex items-center gap-[1.2vw]">
-            <div className="w-[0.6vw] h-[0.6vw] rounded-full bg-primary shrink-0" />
-            <p className="font-display font-bold text-[3vw] text-text">Telephony</p>
-          </div>
-          <p className="font-body text-[2.2vw] text-muted">Twilio · Plivo · Vobiz</p>
-        </div>
-
       </div>
     </div>
   );

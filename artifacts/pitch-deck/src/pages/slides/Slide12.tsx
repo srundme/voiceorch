@@ -1,31 +1,64 @@
 export default function Slide12() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg">
-      {/* Decorative rings */}
-      <div className="absolute top-[-12vh] right-[-6vw] w-[42vw] h-[42vw] rounded-full border border-primary opacity-[0.08]" />
-      <div className="absolute top-[-4vh] right-[4vw] w-[26vw] h-[26vw] rounded-full border border-primary opacity-[0.05]" />
-      <div className="absolute bottom-[-10vh] left-[-4vw] w-[30vw] h-[30vw] rounded-full border border-primary opacity-[0.05]" />
-
-      {/* Amber bar motif */}
-      <div className="absolute top-[6.5vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[6vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">12 / 12</p>
-
-      {/* Main content — centered */}
-      <div className="absolute left-[7vw] top-1/2 -translate-y-1/2">
-        <p className="font-body font-medium text-[2.2vw] tracking-[0.35em] uppercase text-primary mb-[2.5vh]">
-          Voice Intelligence Platform
-        </p>
-        <h1 className="font-display font-black leading-none tracking-tighter text-text" style={{ fontSize: '9.5vw' }}>
-          SnapServe<span className="text-primary"> AI</span>
-        </h1>
-        <div className="h-[0.3vh] w-[11vw] bg-primary mt-[3.5vh] mb-[4vh]" />
-        <p className="font-body text-[3.2vw] text-muted leading-relaxed" style={{ maxWidth: '42vw' }}>
-          Built for India's billion voices. Live today.
-        </p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>The Ask</div>
       </div>
-
-      {/* Bottom-right amber accent bar */}
-      <div className="absolute bottom-0 right-0 w-[18vw] h-[2vh] bg-primary opacity-60" />
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>12</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center", zIndex: 1, position: "relative", marginTop: "4vh" }}>
+        <h2 style={{ fontSize: "4vw", fontWeight: 700, margin: "0 0 2vh 0", lineHeight: 1.0, letterSpacing: "-0.03em" }}>Raising ₹1.3 Cr seed.</h2>
+        <p style={{ fontSize: "1.5vw", color: "#4A4A4A", maxWidth: "55vw", lineHeight: 1.5, marginBottom: "5vh" }}>18 months runway. 50 paying customers. ₹50L ARR by Q2 2027.</p>
+        <div style={{ display: "flex", gap: "4vw", marginBottom: "4vh" }}>
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Use of Funds</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 2, color: "#1C1C1C" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", maxWidth: "20vw" }}>
+                <span>Engineering &amp; product</span>
+                <span style={{ fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>40%</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", maxWidth: "20vw" }}>
+                <span>GTM &amp; sales</span>
+                <span style={{ fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>35%</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", maxWidth: "20vw" }}>
+                <span>Infrastructure</span>
+                <span style={{ fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>25%</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>18-Month Milestones</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 2, color: "#1C1C1C" }}>
+              <div>50 paying customers</div>
+              <div>₹50L ARR (Q2 2027)</div>
+              <div>Series A ready</div>
+            </div>
+          </div>
+          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
+            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Contact</div>
+            <div style={{ fontSize: "1.2vw", lineHeight: 2, color: "#1C1C1C" }}>
+              <div style={{ fontWeight: 600 }}>Karthikeyan</div>
+              <div style={{ color: "#4A4A4A" }}>app.snapserve.ai</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
+        </div>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
+        </div>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Page</div>
+          <div style={{ color: "#1C1C1C", fontWeight: 600 }}>12</div>
+        </div>
+      </div>
     </div>
   );
 }

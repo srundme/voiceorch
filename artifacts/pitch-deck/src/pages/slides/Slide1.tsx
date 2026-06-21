@@ -1,36 +1,31 @@
 export default function Slide1() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative bg-bg">
-      {/* Decorative rings top-right */}
-      <div className="absolute top-[-12vh] right-[-6vw] w-[42vw] h-[42vw] rounded-full border border-primary opacity-[0.08]" />
-      <div className="absolute top-[-4vh] right-[4vw] w-[26vw] h-[26vw] rounded-full border border-primary opacity-[0.05]" />
-
-      {/* Amber bar motif */}
-      <div className="absolute top-[6.5vh] left-[7vw] h-[0.3vh] w-[8vw] bg-primary" />
-      <p className="absolute top-[6vh] right-[7vw] font-body text-[2.2vw] text-muted opacity-40">01 / 12</p>
-
-      {/* Main content */}
-      <div className="absolute left-[7vw] top-1/2 -translate-y-1/2">
-        <p className="font-body font-medium text-[2.2vw] tracking-[0.35em] uppercase text-primary mb-[2.5vh]">
-          Voice AI Orchestration · India
-        </p>
-        <h1 className="font-display font-black leading-none tracking-tighter text-text" style={{ fontSize: '9.5vw' }}>
-          SnapServe<span className="text-primary"> AI</span>
-        </h1>
-        <div className="h-[0.3vh] w-[11vw] bg-primary mt-[3vh] mb-[3vh]" />
-        <p className="font-body text-[2.7vw] text-muted leading-snug" style={{ maxWidth: '46vw', textWrap: 'pretty' }}>
-          Voice AI for India's phone calls — gender-aware, with caller memory and
-          identity, on your own provider keys.
-        </p>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "8vh 8vw", boxSizing: "border-box" }}>
+      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "8vh", left: "8vw" }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh" }}>
+        <div style={{ fontSize: "1vw", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>snapserve.ai</div>
+        <div style={{ fontSize: "1vw", fontWeight: 400, color: "#666666" }}>Investor Memo — June 2026</div>
       </div>
-
-      {/* Bottom label */}
-      <p className="absolute bottom-[5.5vh] left-[7vw] font-body text-[2.2vw] text-muted opacity-30 tracking-widest uppercase">
-        Investor Presentation · 2026
-      </p>
-
-      {/* Bottom-right amber accent */}
-      <div className="absolute bottom-0 right-0 w-[18vw] h-[2vh] bg-primary opacity-60" />
+      <div style={{ position: "absolute", top: "32vh", left: "8vw", fontSize: "26vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 0.8, zIndex: 0, userSelect: "none", letterSpacing: "-0.05em" }}>01</div>
+      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center", zIndex: 1, position: "relative", marginTop: "8vh" }}>
+        <div style={{ fontSize: "0.9vw", fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", color: "#888888", fontFamily: "'DM Mono', monospace", marginBottom: "2vh" }}>Aitel — AI Telecommunication</div>
+        <h1 style={{ fontSize: "7.5vw", fontWeight: 700, margin: 0, lineHeight: 1.0, letterSpacing: "-0.03em" }}>SnapServe</h1>
+        <p style={{ fontSize: "1.9vw", fontWeight: 400, color: "#4A4A4A", marginTop: "3vh", maxWidth: "54vw", lineHeight: 1.5 }}>Your business phone that never sleeps, never misses, and never forgets a caller.</p>
+      </div>
+      <div style={{ display: "flex", flexDirection: "row", gap: "8vw", borderTop: "0.1vh solid #E0E0E0", paddingTop: "3vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.9vw", color: "#4A4A4A", zIndex: 1 }}>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Date</div>
+          <div>June 2026</div>
+        </div>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Prepared By</div>
+          <div>SnapServe Team</div>
+        </div>
+        <div>
+          <div style={{ color: "#888888", marginBottom: "0.5vh", textTransform: "uppercase", fontSize: "0.7vw" }}>Status</div>
+          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>Confidential</div>
+        </div>
+      </div>
     </div>
   );
 }

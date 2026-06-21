@@ -40,16 +40,16 @@
 }
 
 :root {
-  --slide-primary: #F0A500;
-  --slide-accent: #CEFF1A;
-  --slide-bg: #0B0B12;
-  --slide-text: #F0EEE8;
-  --slide-muted: #6B6B80;
-  --slide-surface: #13131E;
-  --slide-border: #22223A;
-  --font-display-family: "Syne", sans-serif;
-  --font-body-family: "DM Sans", sans-serif;
-  color-scheme: dark;
+  --slide-primary: #1C1C1C;
+  --slide-accent: #1C1C1C;
+  --slide-bg: #FFFFFF;
+  --slide-text: #1C1C1C;
+  --slide-muted: #666666;
+  --slide-surface: #F5F5F5;
+  --slide-border: #E0E0E0;
+  --font-display-family: "Inter", sans-serif;
+  --font-body-family: "Inter", sans-serif;
+  color-scheme: light;
 }
 
 html,
