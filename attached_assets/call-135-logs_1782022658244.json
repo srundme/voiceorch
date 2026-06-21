@@ -1,0 +1,43 @@
+[
+  {
+    "id": 1945,
+    "callId": 135,
+    "agentId": 5,
+    "ts": "2026-06-21T06:08:36.341Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "telephonyProvider": "vobiz",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "6798ac06-3a1f-4b6a-b0e4-efabd0c0c9c8"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 1946,
+    "callId": 135,
+    "agentId": 5,
+    "ts": "2026-06-21T06:09:32.247Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 854,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "durationSeconds": 55,
+      "turns": 3,
+      "avgSttMs": 0,
+      "avgLlmMs": 854,
+      "avgTtsMs": 452
+    }
+  }
+]
