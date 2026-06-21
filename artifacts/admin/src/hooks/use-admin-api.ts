@@ -183,13 +183,34 @@ export function useAdminDeleteAgent(clerkId: string) {
   });
 }
 
+export function useAdminGetAgent(agentId: number) {
+  return useQuery({
+    queryKey: ["admin", "agents", agentId],
+    queryFn: () => adminFetch<any>(`/agents/${agentId}`),
+    enabled: !!agentId,
+  });
+}
+
+export function useAdminCreateAgent(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      adminFetch<any>(`/users/${clerkId}/agents`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "agents"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+    },
+  });
+}
+
 export function useAdminEditAgent(clerkId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ agentId, data }: { agentId: number; data: Record<string, unknown> }) =>
       adminFetch<any>(`/agents/${agentId}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId, "agents"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "agents", variables.agentId] });
     },
   });
 }

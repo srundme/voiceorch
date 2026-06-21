@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import {
   useUserDetail,
   useSetConcurrentLimit,
@@ -14,6 +14,7 @@ import {
   useDebitWallet,
   useRefundWallet,
   useAdminDeleteAgent,
+  useAdminCreateAgent,
   useImpersonateUser,
   useUserAuditLogs,
 } from "@/hooks/use-admin-api";
@@ -32,7 +33,7 @@ import {
 } from "@/components/ui/table";
 import {
   ArrowLeft, Wallet, PhoneCall, Bot, Activity, Zap, ShieldAlert, LogIn,
-  ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle,
+  ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Pencil, Plus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -60,7 +61,9 @@ export default function UserDetail() {
   const debitWallet = useDebitWallet(clerkId || "");
   const refundWallet = useRefundWallet(clerkId || "");
   const deleteAgent = useAdminDeleteAgent(clerkId || "");
+  const createAgent = useAdminCreateAgent(clerkId || "");
   const impersonate = useImpersonateUser();
+  const [, setLocation] = useLocation();
 
   // Dialog states
   const [concurrentModal, setConcurrentModal] = useState(false);
@@ -294,57 +297,97 @@ export default function UserDetail() {
 
       {/* ── Agents Tab ───────────────────────────────────────────── */}
       {tab === "agents" && (
-        <div className="border border-border rounded-lg bg-card overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>ASR</TableHead>
-                <TableHead>LLM</TableHead>
-                <TableHead>TTS</TableHead>
-                <TableHead>Calls</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {agents.isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground animate-pulse">Loading…</TableCell></TableRow>
-              ) : (agents.data ?? []).length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground">No agents</TableCell></TableRow>
-              ) : (
-                (agents.data ?? []).map((agent: any) => (
-                  <TableRow key={agent.id}>
-                    <TableCell className="font-medium">{agent.name}</TableCell>
-                    <TableCell>
-                      <Badge variant={agent.status === "active" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.status || "inactive"}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{agent.asrProvider || "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{agent.llmProvider || "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{agent.ttsProvider || "—"}</TableCell>
-                    <TableCell className="text-xs font-mono">{agent.totalCalls ?? 0}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive h-7 px-2"
-                        disabled={deleteAgent.isPending}
-                        onClick={() => {
-                          if (!confirm(`Delete agent "${agent.name}"?`)) return;
-                          deleteAgent.mutate(agent.id, {
-                            onSuccess: () => toast({ title: "Agent deleted" }),
-                            onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
-                          });
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={createAgent.isPending}
+              onClick={() => {
+                createAgent.mutate({
+                  name: "New Agent",
+                  asrProvider: "azure",
+                  llmProvider: "openai",
+                  ttsProvider: "cartesia",
+                  telephonyProvider: "twilio",
+                  systemPrompt: "You are a helpful assistant.",
+                  status: "inactive",
+                }, {
+                  onSuccess: (newAgent: any) => {
+                    toast({ title: "Agent created" });
+                    setLocation(`/users/${clerkId}/agents/${newAgent.id}`);
+                  },
+                  onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
+                });
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {createAgent.isPending ? "Creating…" : "Create Agent"}
+            </Button>
+          </div>
+          <div className="border border-border rounded-lg bg-card overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>ASR</TableHead>
+                  <TableHead>LLM</TableHead>
+                  <TableHead>TTS</TableHead>
+                  <TableHead>Calls</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {agents.isLoading ? (
+                  <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground animate-pulse">Loading…</TableCell></TableRow>
+                ) : (agents.data ?? []).length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center h-20 text-muted-foreground">No agents</TableCell></TableRow>
+                ) : (
+                  (agents.data ?? []).map((agent: any) => (
+                    <TableRow key={agent.id}>
+                      <TableCell className="font-medium">{agent.name}</TableCell>
+                      <TableCell>
+                        <Badge variant={agent.status === "active" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.status || "inactive"}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{agent.asrProvider || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{agent.llmProvider || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{agent.ttsProvider || "—"}</TableCell>
+                      <TableCell className="text-xs font-mono">{agent.totalCalls ?? 0}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setLocation(`/users/${clerkId}/agents/${agent.id}`)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive h-7 px-2"
+                            disabled={deleteAgent.isPending}
+                            onClick={() => {
+                              if (!confirm(`Delete agent "${agent.name}"?`)) return;
+                              deleteAgent.mutate(agent.id, {
+                                onSuccess: () => toast({ title: "Agent deleted" }),
+                                onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
+                              });
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 

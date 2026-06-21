@@ -1,60 +1,56 @@
 export const ASR_PROVIDERS = [
-  { value: "deepgram",   label: "Deepgram Nova" },
-  { value: "azure",      label: "Azure Speech" },
-  { value: "assemblyai", label: "AssemblyAI" },
-  { value: "sarvam",     label: "Sarvam (Saarika)" },
-  { value: "cartesia",   label: "Cartesia" },
+  { value: "deepgram",  label: "Deepgram" },
+  { value: "assemblyai",label: "AssemblyAI" },
+  { value: "whisper",   label: "Whisper (OpenAI)" },
+  { value: "azure",     label: "Azure Speech" },
+  { value: "sarvam",    label: "Sarvam (Saarika)" },
+  { value: "cartesia",  label: "Cartesia" },
 ];
 
 export const LLM_PROVIDERS = [
   { value: "openai",    label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic Claude" },
+  { value: "anthropic", label: "Anthropic" },
   { value: "google",    label: "Google Gemini" },
-  { value: "deepseek",  label: "DeepSeek" },
-  { value: "mistral",   label: "Mistral AI" },
-  { value: "cohere",    label: "Cohere" },
   { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
   { value: "sarvam",    label: "Sarvam" },
+  { value: "deepseek",  label: "DeepSeek" },
+  { value: "mistral",   label: "Mistral" },
 ];
 
 export const TTS_PROVIDERS = [
-  { value: "elevenlabs",    label: "ElevenLabs" },
-  { value: "openai_tts",    label: "OpenAI TTS" },
-  { value: "cartesia",      label: "Cartesia (Sonic)" },
-  { value: "deepgram_aura", label: "Deepgram Aura" },
-  { value: "azure_tts",     label: "Azure TTS" },
-  { value: "sarvam",        label: "Sarvam (Bulbul)" },
+  { value: "cartesia", label: "Cartesia (Sonic)" },
 ];
 
 export const TELEPHONY_PROVIDERS = [
   { value: "twilio", label: "Twilio" },
   { value: "plivo",  label: "Plivo" },
+  { value: "vonage", label: "Vonage" },
   { value: "vobiz",  label: "Vobiz" },
 ];
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  deepgram:   [{ value: "nova-2", label: "Nova-2 (recommended)" }, { value: "nova-2-phonecall", label: "Nova-2 Phone Call" }, { value: "nova-2-meeting", label: "Nova-2 Meeting" }, { value: "whisper-large", label: "Whisper Large" }],
-  azure:      [{ value: "en-US-standard", label: "en-US-standard" }, { value: "en-US-enhanced", label: "en-US-enhanced" }, { value: "en-IN-standard", label: "en-IN-standard" }],
+  azure:      [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
-  sarvam:     [
+  sarvam: [
     { value: "saaras:v3",     label: "Saaras v3 — real-time streaming (recommended)" },
     { value: "saarika:v2.5",  label: "Saarika v2.5 — batch (accurate)" },
     { value: "saarika:flash", label: "Saarika Flash — batch (fast, deprecated)" },
   ],
-  cartesia:   [{ value: "sonic-english", label: "Sonic English" }, { value: "sonic-multilingual", label: "Sonic Multilingual" }],
+  cartesia: [{ value: "sonic-english", label: "Sonic English" }, { value: "sonic-multilingual", label: "Sonic Multilingual" }],
+  deepgram:  [{ value: "nova-2-general", label: "Nova 2 General" }, { value: "nova-2-phonecall", label: "Nova 2 Phone Call" }],
+  whisper:   [{ value: "whisper-1", label: "Whisper v1" }],
 };
 
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
-  anthropic: [{ value: "claude-opus-4-5", label: "Claude Opus 4 (best)" }, { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (fast)" }],
-  google:    [{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite (fast)" }, { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }],
-  deepseek:  [{ value: "deepseek-chat", label: "DeepSeek V3 (chat)" }, { value: "deepseek-reasoner", label: "DeepSeek R1 (reasoner)" }],
-  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large (best)" }, { value: "mistral-small-latest", label: "Mistral Small (fast)" }],
-  cohere:    [{ value: "command-r-plus-08-2024", label: "Command R+ (best)" }, { value: "command-r-08-2024", label: "Command R" }],
+  anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
+  google:    [{ value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (fastest)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (most capable)" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
+  deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
+  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
 };
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
@@ -67,27 +63,27 @@ export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 export const TTS_VOICES: Record<string, { value: string; label: string }[] | null> = {
-  elevenlabs:    null,
-  cartesia:      null,
-  azure_tts:     null,
-  openai_tts: [
-    { value: "alloy",   label: "Alloy (neutral)" },
-    { value: "ash",     label: "Ash (warm)" },
-    { value: "coral",   label: "Coral (friendly)" },
-    { value: "echo",    label: "Echo (deep)" },
-    { value: "fable",   label: "Fable (expressive)" },
-    { value: "onyx",    label: "Onyx (authoritative)" },
-    { value: "nova",    label: "Nova (energetic)" },
-    { value: "sage",    label: "Sage (calm)" },
-    { value: "shimmer", label: "Shimmer (clear)" },
+  cartesia: [
+    { value: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
+    { value: "79a125e8-cd45-4c13-8a67-188112f4dd22", label: "British Narration Lady" },
+    { value: "b7d50908-b17c-442d-ad8d-810c63997ed9", label: "Calm Lady" },
+    { value: "5c42302c-194b-4d0c-ba1a-8cb485c84ab9", label: "Reading Man" },
+    { value: "c45bc5ec-dc68-4feb-8829-6ac1e9f4f478", label: "Customer Support Lady" },
+    { value: "f9836c38-f195-45be-b41c-91b82a5d59c8", label: "Southern Man" },
+    { value: "e00d0e4c-a5c8-443c-8230-60ea3f5b45ff", label: "Friendly Australian Man" },
+    { value: "__custom__", label: "Paste custom Voice ID" },
   ],
-  deepgram_aura: [
-    { value: "aura-2-en",       label: "Aura 2 (default)" },
-    { value: "aura-asteria-en", label: "Asteria (warm female)" },
-    { value: "aura-luna-en",    label: "Luna (soft female)" },
-    { value: "aura-stella-en",  label: "Stella (bright female)" },
-    { value: "aura-zeus-en",    label: "Zeus (deep male)" },
-    { value: "aura-orion-en",   label: "Orion (male)" },
+  elevenlabs: [
+    { value: "21m00Tcm4TlvDq8ikWAM", label: "Rachel (Female)" },
+    { value: "AZnzlk1XvdvUeBnXmlld", label: "Domi (Female)" },
+    { value: "EXAVITQu4vr4xnSDxMaL", label: "Bella (Female)" },
+    { value: "MF3mGyEYCl7XYWbV9V6O", label: "Elli (Female)" },
+    { value: "ErXwobaYiN019PkySvjV", label: "Antoni (Male)" },
+    { value: "TxGEqnHWrfWFTfGW9XjX", label: "Josh (Male)" },
+    { value: "VR6AewLTigWG4xSOukaG", label: "Arnold (Male)" },
+    { value: "pNInz6obpgDQGcFmaJgB", label: "Adam (Male)" },
+    { value: "yoZ06aMxZJJ28mfd3POQ", label: "Sam (Male)" },
+    { value: "__custom__", label: "Paste custom Voice ID" },
   ],
   sarvam: [
     { value: "meera",    label: "Meera (female)" },
@@ -103,6 +99,14 @@ export const TTS_VOICES: Record<string, { value: string; label: string }[] | nul
   ],
 };
 
+/**
+ * Returns an inline error message if `model` is not in the known list for
+ * `provider`, or `null` when the combination is valid.
+ *
+ * Returns `null` for two safe cases:
+ *   - The provider has no predefined model list (e.g. ElevenLabs, Deepgram for TTS).
+ *   - The model field is empty / undefined (UI falls back to runtime defaults).
+ */
 export function getModelError(
   provider: string,
   model: string | undefined,
@@ -116,30 +120,38 @@ export function getModelError(
 }
 
 export const AGENT_TIMEZONES = [
-  { value: "Pacific/Honolulu",     label: "Pacific/Honolulu (UTC-10:00)" },
-  { value: "America/Los_Angeles",  label: "America/Los_Angeles (UTC-08:00)" },
-  { value: "America/Denver",       label: "America/Denver (UTC-07:00)" },
-  { value: "America/Chicago",      label: "America/Chicago (UTC-06:00)" },
-  { value: "America/New_York",     label: "America/New_York (UTC-05:00)" },
-  { value: "America/Sao_Paulo",    label: "America/Sao_Paulo (UTC-03:00)" },
-  { value: "UTC",                  label: "UTC (UTC+00:00)" },
-  { value: "Europe/London",        label: "Europe/London (UTC+00:00)" },
-  { value: "Europe/Paris",         label: "Europe/Paris (UTC+01:00)" },
-  { value: "Europe/Berlin",        label: "Europe/Berlin (UTC+01:00)" },
-  { value: "Africa/Cairo",         label: "Africa/Cairo (UTC+02:00)" },
-  { value: "Europe/Moscow",        label: "Europe/Moscow (UTC+03:00)" },
-  { value: "Europe/Istanbul",      label: "Europe/Istanbul (UTC+03:00)" },
-  { value: "Asia/Dubai",           label: "Asia/Dubai (UTC+04:00)" },
-  { value: "Asia/Karachi",         label: "Asia/Karachi (UTC+05:00)" },
-  { value: "Asia/Kolkata",         label: "Asia/Kolkata (UTC+05:30)" },
-  { value: "Asia/Colombo",         label: "Asia/Colombo (UTC+05:30)" },
-  { value: "Asia/Dhaka",           label: "Asia/Dhaka (UTC+06:00)" },
-  { value: "Asia/Bangkok",         label: "Asia/Bangkok (UTC+07:00)" },
-  { value: "Asia/Singapore",       label: "Asia/Singapore (UTC+08:00)" },
-  { value: "Asia/Shanghai",        label: "Asia/Shanghai (UTC+08:00)" },
-  { value: "Asia/Tokyo",           label: "Asia/Tokyo (UTC+09:00)" },
-  { value: "Asia/Seoul",           label: "Asia/Seoul (UTC+09:00)" },
-  { value: "Australia/Sydney",     label: "Australia/Sydney (UTC+11:00)" },
+  { value: "Pacific/Honolulu",    label: "Pacific/Honolulu (UTC-10:00)" },
+  { value: "America/Anchorage",   label: "America/Anchorage (UTC-09:00)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (UTC-08:00)" },
+  { value: "America/Denver",      label: "America/Denver (UTC-07:00)" },
+  { value: "America/Chicago",     label: "America/Chicago (UTC-06:00)" },
+  { value: "America/Mexico_City", label: "America/Mexico_City (UTC-06:00)" },
+  { value: "America/New_York",    label: "America/New_York (UTC-05:00)" },
+  { value: "America/Toronto",     label: "America/Toronto (UTC-05:00)" },
+  { value: "America/Sao_Paulo",   label: "America/Sao_Paulo (UTC-03:00)" },
+  { value: "America/Buenos_Aires", label: "America/Buenos_Aires (UTC-03:00)" },
+  { value: "UTC",                 label: "UTC (UTC+00:00)" },
+  { value: "Europe/London",       label: "Europe/London (UTC+00:00)" },
+  { value: "Europe/Paris",        label: "Europe/Paris (UTC+01:00)" },
+  { value: "Europe/Berlin",       label: "Europe/Berlin (UTC+01:00)" },
+  { value: "Europe/Amsterdam",    label: "Europe/Amsterdam (UTC+01:00)" },
+  { value: "Africa/Cairo",        label: "Africa/Cairo (UTC+02:00)" },
+  { value: "Africa/Johannesburg", label: "Africa/Johannesburg (UTC+02:00)" },
+  { value: "Europe/Moscow",       label: "Europe/Moscow (UTC+03:00)" },
+  { value: "Europe/Istanbul",     label: "Europe/Istanbul (UTC+03:00)" },
+  { value: "Asia/Dubai",          label: "Asia/Dubai (UTC+04:00)" },
+  { value: "Asia/Karachi",        label: "Asia/Karachi (UTC+05:00)" },
+  { value: "Asia/Kolkata",        label: "Asia/Kolkata (UTC+05:30)" },
+  { value: "Asia/Colombo",        label: "Asia/Colombo (UTC+05:30)" },
+  { value: "Asia/Dhaka",          label: "Asia/Dhaka (UTC+06:00)" },
+  { value: "Asia/Bangkok",        label: "Asia/Bangkok (UTC+07:00)" },
+  { value: "Asia/Singapore",      label: "Asia/Singapore (UTC+08:00)" },
+  { value: "Asia/Shanghai",       label: "Asia/Shanghai (UTC+08:00)" },
+  { value: "Asia/Tokyo",          label: "Asia/Tokyo (UTC+09:00)" },
+  { value: "Asia/Seoul",          label: "Asia/Seoul (UTC+09:00)" },
+  { value: "Australia/Perth",     label: "Australia/Perth (UTC+08:00)" },
+  { value: "Australia/Sydney",    label: "Australia/Sydney (UTC+11:00)" },
+  { value: "Pacific/Auckland",    label: "Pacific/Auckland (UTC+13:00)" },
 ];
 
 export const LANGUAGES = [
@@ -192,7 +204,6 @@ export const LANGUAGES = [
   { value: "bgc-IN", label: "Haryanvi (India)" },
   { value: "tcy-IN", label: "Tulu (India)" },
   { value: "mwr-IN", label: "Marwari (India)" },
-  { value: "wbq-IN", label: "Wadiyara Koli (India)" },
   { value: "lus-IN", label: "Mizo (India)" },
   { value: "kha-IN", label: "Khasi (India)" },
   { value: "gom-IN", label: "Goan Konkani (India)" },
@@ -341,8 +352,6 @@ export const LANGUAGES = [
   { value: "tn-ZA",  label: "Setswana (South Africa)" },
   { value: "nso-ZA", label: "Sepedi / Sesotho sa Leboa (South Africa)" },
   { value: "ln-CD",  label: "Lingala (DR Congo)" },
-  { value: "fr-SN",  label: "French (Senegal)" },
-  { value: "fr-CM",  label: "French (Cameroon)" },
 
   /* ── Americas ── */
   { value: "qu-PE",  label: "Quechua (Peru)" },

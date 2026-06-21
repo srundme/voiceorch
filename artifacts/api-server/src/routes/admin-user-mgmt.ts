@@ -240,6 +240,21 @@ router.post("/admin/users/:clerkId/agents", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/admin/agents/:agentId", async (req, res): Promise<void> => {
+  try {
+    const agentId = parseInt(req.params["agentId"]!, 10);
+    if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agentId" }); return; }
+
+    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+    res.json(agent);
+  } catch (err) {
+    req.log.error({ err }, "admin GET agent failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.patch("/admin/agents/:agentId", async (req, res): Promise<void> => {
   try {
     const agentId = parseInt(req.params["agentId"]!, 10);

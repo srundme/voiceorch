@@ -20,6 +20,7 @@ import PlatformSettings from "@/pages/settings";
 import DpdpPage from "@/pages/dpdp";
 import PromptTemplatePage from "@/pages/prompt-template";
 import AllAgentsPage from "@/pages/all-agents";
+import AdminAgentEdit from "@/pages/admin-agent-edit";
 import SchedulingPage from "@/pages/scheduling";
 import CallPricingPage from "@/pages/call-pricing";
 import HealthChecklistPage from "@/pages/health";
@@ -70,6 +71,7 @@ function Router() {
       <ProtectedRoute path="/" component={Overview} />
       <ProtectedRoute path="/users" component={UsersList} />
       <ProtectedRoute path="/users/:clerkId" component={UserDetail} />
+      <ProtectedRoute path="/users/:clerkId/agents/:agentId" component={AdminAgentEdit} />
       <ProtectedRoute path="/finance" component={Finance} />
       <ProtectedRoute path="/platform" component={Platform} />
       <ProtectedRoute path="/growth" component={Growth} />
