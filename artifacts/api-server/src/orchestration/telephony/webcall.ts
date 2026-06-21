@@ -1745,12 +1745,20 @@ export async function handleWebCallWebSocket(
         // tail-word drop confirmed in the call-62 log where the flush queued
         // "...பாக்குறீங்க" while the LLM text had "...பாக்குறீங்க சார்?".
         const lastFullSentence = allSentences.length > 0 ? allSentences[allSentences.length - 1]! : "";
-        const tokenBufIsPartial =
+        // Prefer the complete final sentence from cleanForFlush over the
+        // potentially-truncated tokenBuf whenever:
+        //   (a) tokenBuf is non-empty — something is still waiting to be sent
+        //   (b) the full sentence is at least as long as tokenBuf — so we never
+        //       truncate (if tokenBuf is somehow longer, fall through to it)
+        //   (c) the full sentence was not already queued in this turn
+        // This handles both the exact-prefix case (LLM adapter drops trailing "?"
+        // from onToken) and near-prefix cases where incremental filter transforms
+        // (spaces around <break> tags, etc.) cause a strict startsWith to miss.
+        const useLastFullSentence =
           trimmedTB.length > 0 &&
-          lastFullSentence.length > trimmedTB.length &&
-          lastFullSentence.startsWith(trimmedTB) &&
-          !sentenceTexts.includes(lastFullSentence); // don't re-queue something already sent
-        const flushText = tokenBufIsPartial
+          lastFullSentence.length >= trimmedTB.length &&
+          !sentenceTexts.includes(lastFullSentence);
+        const flushText = useLastFullSentence
           ? lastFullSentence
           : (trueRemainder.trim().length > trimmedTB.length ? trueRemainder : tokenBuf);
         if (flushText.trim()) queueSentence(flushText);

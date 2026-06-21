@@ -3,7 +3,7 @@ import { db, agentsTable, callsTable, providersTable, platformSettingsTable, cam
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
@@ -272,7 +272,7 @@ export async function createSession(params: {
   let callerProfileSnapshot: CallerProfile | null = null;
   let latchedFactsMap = new Map<string, string>();
 
-  const [callerCtxResult, campaignLeadResult, kbEntriesResult] = await Promise.all([
+  const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
       ? loadCallerContext(params.agentId, callerPhone).catch((memErr) => {
@@ -298,6 +298,16 @@ export async function createSession(params: {
           return null;
         })
       : Promise.resolve(null),
+
+    // 4. Provider API keys — independent of above, fetch in parallel
+    agent.userId
+      ? db.select().from(providersTable).where(
+          and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
+        ).catch((provErr) => {
+          logger.warn({ agentId: params.agentId, provErr }, "Failed to load provider keys — continuing without user keys");
+          return [] as Array<typeof providersTable.$inferSelect>;
+        })
+      : Promise.resolve([] as Array<typeof providersTable.$inferSelect>),
   ]);
 
   // Apply caller memory to system prompt
@@ -362,15 +372,10 @@ export async function createSession(params: {
     );
   }
 
-  // Scope provider keys to this agent's owner.
+  // Scope provider keys to this agent's owner (fetched in parallel above).
   // Managed agents (userId=null) rely entirely on platform managed keys below.
-  const providerRows = agent.userId
-    ? await db.select().from(providersTable).where(
-        and(eq(providersTable.isActive, true), eq(providersTable.userId, agent.userId))
-      )
-    : [];
   const providerKeys = new Map<string, string>();
-  for (const row of providerRows) {
+  for (const row of providerRowsResult) {
     providerKeys.set(row.providerName.toLowerCase(), decryptKey(row.apiKey));
     if (row.extraConfig) providerKeys.set(`${row.providerName.toLowerCase()}:extraConfig`, row.extraConfig);
   }
@@ -411,21 +416,42 @@ export async function createSession(params: {
 
   const isManaged = agent.agentMode === "managed";
 
+  // ── Bulk platform_settings fetch (one DB round-trip instead of N sequential) ─
+  // Collect every settings key needed, then do a single IN query.
+  // Managed-plan agents need the platform key for every provider; BYOP agents
+  // only need it as a fallback for providers the user hasn't configured.
+  const settingsKeysNeeded = new Set<string>();
   for (const providerName of requiredProviders) {
-    if (MANAGED[providerName]) {
-      // Managed agents: platform key is primary — always use it (ignore user key)
-      // BYOP agents: platform key is fallback — only if user has no key
-      if (isManaged || !providerKeys.has(providerName)) {
-        const managed = await getPlatformSetting(MANAGED[providerName]!);
-        if (managed) {
-          providerKeys.set(providerName, managed);
-          logger.info({ providerName, isManaged }, "Using platform managed key for provider");
-        }
+    if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
+      settingsKeysNeeded.add(MANAGED[providerName]!);
+    }
+    if (MANAGED_EXTRA[providerName] && (isManaged || !providerKeys.has(`${providerName}:extraConfig`))) {
+      settingsKeysNeeded.add(MANAGED_EXTRA[providerName]!);
+    }
+  }
+  if (!providerKeys.has("vobiz")) {
+    settingsKeysNeeded.add("managed_vobiz_auth_token");
+    settingsKeysNeeded.add("managed_vobiz_auth_id");
+  }
+
+  const settingsMap = new Map<string, string>();
+  if (settingsKeysNeeded.size > 0) {
+    const settingsRows = await db.select().from(platformSettingsTable)
+      .where(inArray(platformSettingsTable.key, [...settingsKeysNeeded]));
+    for (const r of settingsRows) settingsMap.set(r.key, r.value);
+  }
+
+  // Apply managed keys for required providers
+  for (const providerName of requiredProviders) {
+    if (MANAGED[providerName] && (isManaged || !providerKeys.has(providerName))) {
+      const managed = settingsMap.get(MANAGED[providerName]!);
+      if (managed) {
+        providerKeys.set(providerName, managed);
+        logger.info({ providerName, isManaged }, "Using platform managed key for provider");
       }
     }
-    // Extra config (e.g. Azure region) — stored as plain string, wrap into JSON blob
     if (MANAGED_EXTRA[providerName] && (isManaged || !providerKeys.has(`${providerName}:extraConfig`))) {
-      const region = await getPlatformSetting(MANAGED_EXTRA[providerName]!);
+      const region = settingsMap.get(MANAGED_EXTRA[providerName]!);
       if (region) {
         const existing = providerKeys.get(`${providerName}:extraConfig`);
         const cfg = existing ? JSON.parse(existing) as Record<string, string> : {};
@@ -435,15 +461,12 @@ export async function createSession(params: {
     }
   }
 
-  // Vobiz telephony managed fallback (authToken + authId stored separately)
+  // VoBiz telephony managed fallback (authToken + authId stored separately)
   if (!providerKeys.has("vobiz")) {
-    const [authToken, authId] = await Promise.all([
-      getPlatformSetting("managed_vobiz_auth_token"),
-      getPlatformSetting("managed_vobiz_auth_id"),
-    ]);
+    const authToken = settingsMap.get("managed_vobiz_auth_token");
+    const authId = settingsMap.get("managed_vobiz_auth_id");
     if (authToken && authId) {
       providerKeys.set("vobiz", authToken);
-      // Preserve any existing extraConfig (e.g. fromNumber) — set authId only
       const existing = providerKeys.get("vobiz:extraConfig");
       const cfg = existing ? JSON.parse(existing) as Record<string, string> : {};
       if (!cfg["authId"]) cfg["authId"] = authId;
