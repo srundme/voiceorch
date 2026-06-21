@@ -1,0 +1,164 @@
+# Production Issue: Admin Impersonation Works Partially in Production
+
+## Current Behavior
+
+Admin impersonation is working in Development.
+
+In Production:
+
+* Clicking "Login As User" successfully enters impersonation mode.
+* Orange banner appears:
+  "Admin Mode — Viewing as [User]"
+* User workspace loads successfully.
+* User data is visible.
+
+Therefore:
+
+✅ Impersonation token exchange is working
+
+✅ Session creation is working
+
+✅ Frontend routing is working
+
+However, some parts of the application are still not behaving correctly under impersonation.
+
+---
+
+## Investigation Required
+
+Please trace the entire impersonation flow in Production.
+
+Verify:
+
+### 1. Authentication Context
+
+After impersonation starts:
+
+* What identity is attached to every API request?
+* Is the backend receiving:
+
+```json
+{
+  "adminId": "...",
+  "impersonatedUserId": "...",
+  "mode": "impersonation"
+}
+```
+
+or is it still resolving the original admin user?
+
+Check middleware.
+
+Check auth context.
+
+Check request.user generation.
+
+---
+
+### 2. API Calls Inside User Workspace
+
+Inspect all API requests triggered after impersonation.
+
+Examples:
+
+* /api/agents
+* /api/providers
+* /api/calls
+* /api/scheduling
+* /api/calendar
+* /api/wallet
+* /api/crm
+
+Verify they are querying data using:
+
+impersonatedUserId
+
+and NOT
+
+adminUserId
+
+---
+
+### 3. Production vs Development Differences
+
+Compare:
+
+Development:
+
+* impersonation works
+
+Production:
+
+* partial behavior
+
+Check:
+
+* JWT secrets
+* session cookies
+* cookie domain
+* secure cookie settings
+* SameSite settings
+* Railway environment variables
+* reverse proxy headers
+
+Look for anything environment-specific.
+
+---
+
+### 4. Browser Network Inspection
+
+While impersonated:
+
+Inspect every failing request.
+
+For each request provide:
+
+* URL
+* Response status
+* Response body
+* Auth user resolved by backend
+* Tenant/User ID being used
+
+---
+
+### 5. Backend Logging
+
+Temporarily add logs:
+
+```ts
+console.log({
+  adminId,
+  impersonatedUserId,
+  effectiveUserId,
+  route
+});
+```
+
+for every authenticated request.
+
+We need to confirm:
+
+effectiveUserId === impersonatedUserId
+
+for all user-workspace APIs.
+
+---
+
+### 6. Production Audit
+
+Please provide a report showing:
+
+* Which APIs respect impersonation
+* Which APIs ignore impersonation
+* Which APIs still use the admin identity
+* Any production-only authentication issues
+
+---
+
+## Expected Result
+
+Once Admin clicks "Login As User":
+
+Every page, API, tool, provider, CRM record, agent, wallet, call log, scheduling operation, and calendar operation must behave exactly as if the actual user logged in themselves.
+
+The admin should see and operate the platform with 100% parity to the user's real workspace while maintaining audit logging.
