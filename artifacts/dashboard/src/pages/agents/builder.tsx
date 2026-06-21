@@ -3895,6 +3895,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       backchannelPhrases:       agent.backchannelPhrases ?? "",
       webhookUrl:               agent.webhookUrl ?? "",
+      // Note: legacy http:// values are kept so the user can see and correct them;
+      // an inline error is set below after reset so it surfaces on the Advanced tab.
       webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
@@ -3937,6 +3939,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       linearDelayMs:                   (agent as any).agentConfig?.incrementalDelay ?? 0,
     });
+    if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
+      form.setError("webhookUrl", {
+        type: "server",
+        message: "This URL must be updated to https:// before saving.",
+      });
+    }
   }, [agent]);
 
   const onSave = form.handleSubmit(
@@ -3954,11 +3962,38 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       }
     },
     (errors) => {
+      const fieldTabMap: Record<string, TabId> = {
+        webhookUrl:               "advanced",
+        webhookSecret:            "advanced",
+        noiseCancellationEnabled: "advanced",
+        ambientNoiseEnabled:      "advanced",
+        ambientNoiseTrack:        "advanced",
+        vadSilenceMs:             "advanced",
+        bargeInEnabled:           "advanced",
+        bargeInEnergyThreshold:   "advanced",
+        bargeInMinFrames:         "advanced",
+        timezone:                 "advanced",
+        machineDetectionMode:     "voicemail",
+        voicemailAction:          "voicemail",
+        voicemailMessage:         "voicemail",
+        systemPrompt:             "prompt",
+        temperature:              "prompt",
+        greetingMessage:          "overview",
+        name:                     "overview",
+        asrProvider:              "voice",
+        ttsProvider:              "voice",
+        llmProvider:              "overview",
+        tools:                    "tools",
+      };
+      const firstFieldName = Object.keys(errors)[0];
+      const targetTab = firstFieldName ? (fieldTabMap[firstFieldName] ?? null) : null;
+      if (targetTab) setActiveTab(targetTab);
       const firstError = Object.values(errors)[0];
       const msg = firstError && typeof firstError === "object" && "message" in firstError
         ? String((firstError as any).message)
         : "Please fix the highlighted fields before saving.";
-      toast({ title: "Validation error", description: msg, variant: "destructive" });
+      const tabLabel = targetTab ? ` (${targetTab.charAt(0).toUpperCase() + targetTab.slice(1)} tab)` : "";
+      toast({ title: "Validation error", description: `${msg}${tabLabel}`, variant: "destructive" });
     }
   );
 

@@ -507,6 +507,8 @@ export default function AgentEdit() {
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       backchannelPhrases:       agent.backchannelPhrases ?? "",
       webhookUrl:               agent.webhookUrl ?? "",
+      // Note: legacy http:// values are kept so the user can see and correct them;
+      // an inline error is set below after reset.
       webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
@@ -535,6 +537,12 @@ export default function AgentEdit() {
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
     });
+    if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
+      form.setError("webhookUrl", {
+        type: "server",
+        message: "This URL must be updated to https:// before saving.",
+      });
+    }
   }, [agent]);
 
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });

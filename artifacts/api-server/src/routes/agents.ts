@@ -131,6 +131,10 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Validation failed", issues });
     return;
   }
+  if (parsed.data.webhookUrl && !parsed.data.webhookUrl.startsWith("https://")) {
+    res.status(400).json({ error: "webhookUrl must be a valid https:// URL" });
+    return;
+  }
   // wizardInputs is an admin-managed pass-through (not in DB schema strict type)
   const rawBody = (req.body ?? {}) as Record<string, unknown>;
   const wizardInputs = (rawBody["wizardInputs"] ?? null) as WizardInputs | null;
@@ -243,6 +247,10 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   const parsed = UpdateAgentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
+    return;
+  }
+  if (parsed.data.webhookUrl && !parsed.data.webhookUrl.startsWith("https://")) {
+    res.status(400).json({ error: "webhookUrl must be a valid https:// URL" });
     return;
   }
   const updateData: Record<string, unknown> = { ...parsed.data };
