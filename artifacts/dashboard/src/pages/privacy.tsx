@@ -86,6 +86,55 @@ export default function PrivacyPage() {
               </div>
             </section>
 
+            {/* 3a. Google API Limited-Use Disclosure (required for OAuth verification) */}
+            <section className="rounded-lg border border-border bg-muted/30 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold text-foreground">Google API Limited Use Disclosure</h2>
+              </div>
+              <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+                <p>
+                  SnapServe AI's use of information received from Google APIs adheres to the{" "}
+                  <a
+                    href="https://developers.google.com/terms/api-services-user-data-policy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-foreground underline underline-offset-2 hover:text-foreground/80"
+                  >
+                    Google API Services User Data Policy
+                  </a>
+                  , including the Limited Use requirements.
+                </p>
+                <ul className="list-disc pl-5 space-y-1.5">
+                  <li>
+                    <strong>Scope used:</strong> We request the <code className="text-xs bg-muted px-1 py-0.5 rounded">https://www.googleapis.com/auth/calendar.events</code> scope
+                    solely to create and manage Google Calendar events on behalf of the authenticated user for meeting scheduling purposes.
+                  </li>
+                  <li>
+                    <strong>No advertising use:</strong> Data obtained through Google APIs is never used to serve advertisements and is not used for any advertising-related purpose.
+                  </li>
+                  <li>
+                    <strong>No data sales:</strong> We do not sell, rent, or transfer Google user data to any third party.
+                  </li>
+                  <li>
+                    <strong>No unauthorized sharing:</strong> We do not share Google user data with any third party except as necessary to provide the scheduling feature (e.g., writing the event back to Google Calendar on your behalf).
+                  </li>
+                  <li>
+                    <strong>Revoke access:</strong> You can revoke SnapServe AI's access to your Google Calendar at any time from your{" "}
+                    <a
+                      href="https://myaccount.google.com/permissions"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-foreground underline underline-offset-2 hover:text-foreground/80"
+                    >
+                      Google Account Permissions
+                    </a>{" "}
+                    page. Revoking access disables calendar-based scheduling features but does not delete your SnapServe account.
+                  </li>
+                </ul>
+              </div>
+            </section>
+
             {/* 4. How we store and protect data */}
             <section>
               <div className="flex items-center gap-2 mb-3">

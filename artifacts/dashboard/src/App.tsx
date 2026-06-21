@@ -58,6 +58,7 @@ import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
 import ImpersonatePage from "@/pages/impersonate";
+import LandingPage from "@/pages/landing";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 const queryClient = new QueryClient({
@@ -691,7 +692,8 @@ function SignInPage() {
 function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <SnapServeLoader />;
-  return <Redirect to={isSignedIn ? "/app" : "/sign-in"} />;
+  if (isSignedIn) return <Redirect to="/app" />;
+  return <LandingPage />;
 }
 
 function AppRoutes() {
@@ -780,6 +782,9 @@ function ProtectedApp() {
 }
 
 function Router() {
+  // Google Cloud Console OAuth app settings — enter these exact URLs:
+  //   Homepage URL:       https://<production-domain>/
+  //   Privacy policy URL: https://<production-domain>/privacy
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
