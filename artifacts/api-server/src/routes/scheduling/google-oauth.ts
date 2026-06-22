@@ -94,11 +94,19 @@ function deriveRedirectUri(req: Request): string {
 router.get("/scheduling/google/connections", requireAuth, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const connections = await listConnectionsForUser(clerkId);
-  res.json(connections.map(c => ({
-    id: c.id,
-    email: c.email,
-    connectedAt: c.createdAt,
-  })));
+  res.json(connections.map(c => {
+    // Only the full calendar scope supports conferenceDataVersion=1 (Meet links).
+    // calendar.events is insufficient, and legacy NULL connections predate scope capture
+    // so they are treated as scope-insufficient to prompt the user to reconnect.
+    const scopeValid = !!(c.grantedScopes && c.grantedScopes.split(/\s+/).includes("https://www.googleapis.com/auth/calendar"));
+    return {
+      id: c.id,
+      email: c.email,
+      connectedAt: c.createdAt,
+      grantedScopes: c.grantedScopes ?? null,
+      scopeValid,
+    };
+  }));
 });
 
 // ── OAuth connect — redirect to Google consent screen ───────────────────────
@@ -217,8 +225,12 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
       tokens.refreshToken,
       tokens.expiry,
       stateConnectionId,
+      tokens.grantedScopes,
     );
-    logger.info({ clerkId, email: tokens.email, updatedExistingId: stateConnectionId ?? null }, "Google Calendar connected");
+    logger.info(
+      { clerkId, email: tokens.email, updatedExistingId: stateConnectionId ?? null, grantedScopes: tokens.grantedScopes },
+      "Google Calendar connected",
+    );
     res.redirect(`${redirectBase}?gcal=connected&email=${encodeURIComponent(tokens.email)}`);
   } catch (err) {
     logger.warn({ err, clerkId }, "Failed to exchange Google OAuth code");

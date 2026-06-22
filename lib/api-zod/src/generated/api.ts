@@ -4447,6 +4447,8 @@ export const ListBookingsResponseItem = zod.object({
   "rescheduledFromId": zod.number().nullish(),
   "meetLink": zod.string().nullish(),
   "googleEventId": zod.string().nullish(),
+  "calendarSyncStatus": zod.union([zod.literal('synced'),zod.literal('sync_failed'),zod.literal('scope_insufficient'),zod.literal('skipped'),zod.literal(null)]).nullish().describe('GCal sync outcome: \'synced\' (event created), \'sync_failed\' (API error), \'scope_insufficient\' (token lacks calendar scope), \'skipped\' (no connection or Meet not enabled), null (pre-dates sync tracking)'),
+  "calendarSyncError": zod.string().nullish().describe('Error message when calendarSyncStatus is sync_failed or scope_insufficient'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -4493,6 +4495,8 @@ export const GetBookingResponse = zod.object({
   "rescheduledFromId": zod.number().nullish(),
   "meetLink": zod.string().nullish(),
   "googleEventId": zod.string().nullish(),
+  "calendarSyncStatus": zod.union([zod.literal('synced'),zod.literal('sync_failed'),zod.literal('scope_insufficient'),zod.literal('skipped'),zod.literal(null)]).nullish().describe('GCal sync outcome: \'synced\' (event created), \'sync_failed\' (API error), \'scope_insufficient\' (token lacks calendar scope), \'skipped\' (no connection or Meet not enabled), null (pre-dates sync tracking)'),
+  "calendarSyncError": zod.string().nullish().describe('Error message when calendarSyncStatus is sync_failed or scope_insufficient'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -4527,6 +4531,8 @@ export const UpdateBookingResponse = zod.object({
   "rescheduledFromId": zod.number().nullish(),
   "meetLink": zod.string().nullish(),
   "googleEventId": zod.string().nullish(),
+  "calendarSyncStatus": zod.union([zod.literal('synced'),zod.literal('sync_failed'),zod.literal('scope_insufficient'),zod.literal('skipped'),zod.literal(null)]).nullish().describe('GCal sync outcome: \'synced\' (event created), \'sync_failed\' (API error), \'scope_insufficient\' (token lacks calendar scope), \'skipped\' (no connection or Meet not enabled), null (pre-dates sync tracking)'),
+  "calendarSyncError": zod.string().nullish().describe('Error message when calendarSyncStatus is sync_failed or scope_insufficient'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -4645,6 +4651,8 @@ export const CancelPublicBookingByTokenResponse = zod.object({
   "rescheduledFromId": zod.number().nullish(),
   "meetLink": zod.string().nullish(),
   "googleEventId": zod.string().nullish(),
+  "calendarSyncStatus": zod.union([zod.literal('synced'),zod.literal('sync_failed'),zod.literal('scope_insufficient'),zod.literal('skipped'),zod.literal(null)]).nullish().describe('GCal sync outcome: \'synced\' (event created), \'sync_failed\' (API error), \'scope_insufficient\' (token lacks calendar scope), \'skipped\' (no connection or Meet not enabled), null (pre-dates sync tracking)'),
+  "calendarSyncError": zod.string().nullish().describe('Error message when calendarSyncStatus is sync_failed or scope_insufficient'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -4678,6 +4686,8 @@ export const ReschedulePublicBookingByTokenResponse = zod.object({
   "rescheduledFromId": zod.number().nullish(),
   "meetLink": zod.string().nullish(),
   "googleEventId": zod.string().nullish(),
+  "calendarSyncStatus": zod.union([zod.literal('synced'),zod.literal('sync_failed'),zod.literal('scope_insufficient'),zod.literal('skipped'),zod.literal(null)]).nullish().describe('GCal sync outcome: \'synced\' (event created), \'sync_failed\' (API error), \'scope_insufficient\' (token lacks calendar scope), \'skipped\' (no connection or Meet not enabled), null (pre-dates sync tracking)'),
+  "calendarSyncError": zod.string().nullish().describe('Error message when calendarSyncStatus is sync_failed or scope_insufficient'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

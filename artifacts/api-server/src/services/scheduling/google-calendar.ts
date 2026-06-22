@@ -17,10 +17,18 @@ import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 import { getSelfBaseUrl } from "../../lib/app-domain.js";
 
+// Full calendar scope is required for conferenceDataVersion=1 (Google Meet creation).
+// calendar.events alone returns 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT when creating
+// events with Meet links. The full `calendar` scope is a superset — it covers events,
+// Meet creation, and calendar listing.
 const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
+
+// Only the full calendar scope allows conferenceDataVersion=1 (Google Meet creation).
+// calendar.events is insufficient — it cannot attach Meet links to events.
+const FULL_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 
 // ── Platform-level OAuth client ──────────────────────────────────────────────
 
@@ -89,6 +97,7 @@ export async function exchangeCode(code: string, redirectUri?: string): Promise<
   refreshToken: string;
   expiry: Date;
   email: string;
+  grantedScopes: string;
 }> {
   const client = makePlatformOAuth2Client(redirectUri);
   const { tokens } = await client.getToken(code);
@@ -104,11 +113,22 @@ export async function exchangeCode(code: string, redirectUri?: string): Promise<
   const userInfo = await userInfoRes.json() as { email?: string };
   if (!userInfo.email) throw new Error("No email returned from Google");
 
+  // `tokens.scope` lists the scopes actually granted (space-separated).
+  // Store this so we can later detect scope-insufficient connections without
+  // making a live API call.
+  const grantedScopes = tokens.scope ?? "";
+
+  logger.info(
+    { email: userInfo.email, grantedScopes },
+    "Google OAuth code exchanged — granted scopes captured",
+  );
+
   return {
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token ?? "",
     expiry: tokens.expiry_date ? new Date(tokens.expiry_date) : new Date(Date.now() + 3600_000),
     email: userInfo.email,
+    grantedScopes,
   };
 }
 
@@ -120,6 +140,7 @@ export type GoogleConnection = {
   email: string;
   tokenExpiry: Date | null;
   createdAt: Date;
+  grantedScopes: string | null;
 };
 
 export async function listConnectionsForUser(userId: string): Promise<GoogleConnection[]> {
@@ -130,6 +151,7 @@ export async function listConnectionsForUser(userId: string): Promise<GoogleConn
       email: googleCalendarConnectionsTable.email,
       tokenExpiry: googleCalendarConnectionsTable.tokenExpiry,
       createdAt: googleCalendarConnectionsTable.createdAt,
+      grantedScopes: googleCalendarConnectionsTable.grantedScopes,
     })
     .from(googleCalendarConnectionsTable)
     .where(eq(googleCalendarConnectionsTable.userId, userId))
@@ -140,6 +162,7 @@ export async function listConnectionsForUser(userId: string): Promise<GoogleConn
     email: r.email,
     tokenExpiry: r.tokenExpiry,
     createdAt: r.createdAt,
+    grantedScopes: r.grantedScopes ?? null,
   }));
 }
 
@@ -150,6 +173,7 @@ export async function upsertConnection(
   refreshToken: string,
   expiry: Date,
   existingId?: string,
+  grantedScopes?: string,
 ): Promise<string> {
   const encAccess  = encryptKey(accessToken);
   const encRefresh = refreshToken ? encryptKey(refreshToken) : "";
@@ -168,6 +192,7 @@ export async function upsertConnection(
           ? encRefresh
           : sql`google_calendar_connections.refresh_token`,
         tokenExpiry: expiry,
+        ...(grantedScopes !== undefined ? { grantedScopes } : {}),
         updatedAt: new Date(),
       })
       .where(and(
@@ -184,7 +209,14 @@ export async function upsertConnection(
 
   const rows = await db
     .insert(googleCalendarConnectionsTable)
-    .values({ userId, email, accessToken: encAccess, refreshToken: encRefresh, tokenExpiry: expiry })
+    .values({
+      userId,
+      email,
+      accessToken: encAccess,
+      refreshToken: encRefresh,
+      tokenExpiry: expiry,
+      ...(grantedScopes !== undefined ? { grantedScopes } : {}),
+    })
     .onConflictDoUpdate({
       target: [googleCalendarConnectionsTable.userId, googleCalendarConnectionsTable.email],
       set: {
@@ -193,6 +225,7 @@ export async function upsertConnection(
         // always re-issue a refresh token on repeat consent flows)
         refreshToken: sql`CASE WHEN ${encRefresh} != '' THEN ${encRefresh} ELSE google_calendar_connections.refresh_token END`,
         tokenExpiry: expiry,
+        ...(grantedScopes !== undefined ? { grantedScopes } : {}),
         updatedAt: new Date(),
       },
     })
@@ -305,6 +338,38 @@ export async function revokeConnection(connectionId: string): Promise<void> {
     .where(eq(googleCalendarConnectionsTable.id, connectionId));
 }
 
+// ── Scope validation ─────────────────────────────────────────────────────────
+
+/**
+ * Check whether a connection has the full calendar scope required to create
+ * Google Calendar events with Meet links (conferenceDataVersion=1).
+ *
+ * Only `https://www.googleapis.com/auth/calendar` is accepted.
+ * `calendar.events` is insufficient for Meet creation and is treated as invalid.
+ * Legacy connections with NULL granted_scopes are treated as false (scope unknown /
+ * potentially narrow) so they are flagged and the user is prompted to reconnect
+ * rather than risking a 403 from Google at runtime.
+ *
+ * Returns true only if the full calendar scope is present.
+ * Returns false for all other cases (insufficient scopes, missing row, NULL/unknown).
+ */
+export async function hasRequiredCalendarScopes(connectionId: string): Promise<boolean> {
+  const rows = await db
+    .select({ grantedScopes: googleCalendarConnectionsTable.grantedScopes })
+    .from(googleCalendarConnectionsTable)
+    .where(eq(googleCalendarConnectionsTable.id, connectionId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return false;
+  if (!row.grantedScopes) {
+    // NULL granted_scopes = legacy connection predating scope capture.
+    // Treat as scope-insufficient so the user is prompted to reconnect.
+    return false;
+  }
+  const granted = row.grantedScopes.split(/\s+/);
+  return granted.includes(FULL_CALENDAR_SCOPE);
+}
+
 // ── Calendar listing ─────────────────────────────────────────────────────────
 
 /**
@@ -383,6 +448,23 @@ export async function createCalendarEvent(params: {
   additionalHosts?: string[] | null;
   onError?: (detail: { errorCode: string; status?: number; googleError?: string; googleErrorDescription?: string; message?: string }) => void;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
+  // ── Scope gate ──────────────────────────────────────────────────────────────
+  // Require the full calendar scope before making any API call.
+  // calendar.events is insufficient for conferenceDataVersion=1 (Meet links).
+  // Legacy connections (NULL granted_scopes) also return false — prompt reconnect.
+  const scopeCheck = await hasRequiredCalendarScopes(params.connectionId);
+  if (!scopeCheck) {
+    logger.warn(
+      { connectionId: params.connectionId, attendeeEmail: params.attendeeEmail },
+      "createCalendarEvent: connection lacks the full calendar scope (required for Meet links) — returning null without API call",
+    );
+    params.onError?.({
+      errorCode: "scope_insufficient",
+      message: "This Google Calendar connection was authorized with insufficient scopes. Re-authorize via Settings → Conferencing → Reconnect to grant full calendar access.",
+    });
+    return null;
+  }
+
   const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) {
     params.onError?.({
@@ -391,6 +473,19 @@ export async function createCalendarEvent(params: {
     });
     return null;
   }
+
+  logger.info(
+    {
+      connectionId: params.connectionId,
+      attendeeEmail: params.attendeeEmail,
+      summary: params.summary,
+      startTime: params.startTime.toISOString(),
+      endTime: params.endTime.toISOString(),
+      timezone: params.timezone,
+      scopeCheckResult: scopeCheck,
+    },
+    "createCalendarEvent: initiating Google Calendar API call",
+  );
 
   const client = makePlatformOAuth2Client();
   client.setCredentials({ access_token: tokens.accessToken });
@@ -447,7 +542,6 @@ export async function createCalendarEvent(params: {
         const fetched = await calendar.events.get({
           calendarId: "primary",
           eventId,
-          conferenceDataVersion: 1,
         });
         const retryLink = fetched.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
         if (retryLink) meetLink = retryLink;

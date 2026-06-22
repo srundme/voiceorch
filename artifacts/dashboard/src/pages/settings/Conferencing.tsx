@@ -13,6 +13,8 @@ type GoogleConnection = {
   id: string;
   email: string;
   connectedAt: string;
+  grantedScopes?: string | null;
+  scopeValid?: boolean | null;
   needsReconnect?: boolean;
   reconnectReason?: string | null;
 };
@@ -291,6 +293,28 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
                           </Button>
                         </div>
                       </div>
+                      {/* Scope-insufficient warning — amber; also shown for legacy connections
+                          (scopeValid===null) since they predate the scope upgrade and may be insufficient */}
+                      {conn.scopeValid !== true && !conn.needsReconnect && ts !== "failed" && (
+                        <div className="flex items-center justify-between gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-2.5 py-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-xs text-amber-700 dark:text-amber-400">
+                              This connection may not have calendar event permission. Reconnect to fix.
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={connecting}
+                            onClick={() => handleConnect(conn.id)}
+                            className="h-7 px-2 text-xs shrink-0 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                          >
+                            {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Reconnect"}
+                          </Button>
+                        </div>
+                      )}
+                      {/* Auth-expired warning — red, shown after test failure */}
                       {(conn.needsReconnect || ts === "failed") && (
                         <div className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-2">
                           <div className="flex items-start gap-2 min-w-0">

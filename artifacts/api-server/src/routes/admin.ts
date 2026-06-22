@@ -1373,4 +1373,48 @@ router.get("/admin/github-sync", async (req, res): Promise<void> => {
   }
 });
 
+// ── Google Calendar Connections diagnostic ────────────────────────────────────
+
+router.get("/admin/gcal-connections", async (req, res): Promise<void> => {
+  try {
+    const rows = await db.execute(
+      sql`
+        SELECT
+          gcc.id,
+          gcc.email AS connected_email,
+          gcc.granted_scopes,
+          gcc.token_expiry,
+          gcc.updated_at,
+          u.email AS user_email
+        FROM google_calendar_connections gcc
+        LEFT JOIN users u ON u.clerk_id = gcc.user_id
+        ORDER BY gcc.updated_at DESC
+        LIMIT 1000
+      `
+    );
+
+    // Only the full calendar scope supports conferenceDataVersion=1 (Meet link creation).
+    // calendar.events is insufficient; legacy NULL connections are also treated as invalid.
+    const FULL_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
+
+    const data = (rows.rows as any[]).map((r: any) => {
+      const scopeValid = !!(r.granted_scopes && (r.granted_scopes as string).split(/\s+/).includes(FULL_CALENDAR_SCOPE));
+      return {
+        id: r.id,
+        userEmail: r.user_email ?? null,
+        connectedEmail: r.connected_email,
+        grantedScopes: r.granted_scopes ?? null,
+        scopeValid,
+        tokenExpiry: r.token_expiry ? new Date(r.token_expiry).toISOString() : null,
+        updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+      };
+    });
+
+    res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "admin/gcal-connections failed");
+    res.status(500).json({ error: "Failed to load Google Calendar connections" });
+  }
+});
+
 export default router;

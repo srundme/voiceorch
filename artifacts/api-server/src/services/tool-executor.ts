@@ -578,6 +578,18 @@ export async function executeNativeBooking(
     let googleEventId: string | null = null;
     let gcalConnectionId: string | null = null;
     let gcalFailed = false;
+    let calendarSyncStatus: string | null = null;
+    let calendarSyncError: string | null = null;
+
+    if (!eventType.enableGoogleMeet) {
+      // Google Meet not enabled on this event type — skip GCal entirely
+      calendarSyncStatus = "skipped";
+      await db.execute(
+        sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${confirmedBooking.id}`,
+      );
+      logger.info({ callId, bookingId: confirmedBooking.id }, "Native booking: GCal skipped — enableGoogleMeet=false on event type");
+    }
+    if (eventType.enableGoogleMeet) {
     try {
       const calRow = await db.execute(
         sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`,
@@ -593,6 +605,10 @@ export async function executeNativeBooking(
       if (gcalConnectionId) {
         logger.info({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: creating Google Calendar event");
       } else {
+        calendarSyncStatus = "skipped";
+        await db.execute(
+          sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${confirmedBooking.id}`,
+        );
         logger.warn({ callId, bookingId: confirmedBooking.id }, "Native booking: no Google Calendar connection configured — GCal event creation skipped");
         void appendBookingLog(callId, agentId, "Calendar Event Created", {
           result: "skipped",
@@ -601,7 +617,8 @@ export async function executeNativeBooking(
         }, "info");
       }
 
-      let gcalErrorDetail: object | null = null;
+      let gcalErrCode: string | null = null;
+      let gcalErrMsg: string | null = null;
       const gcalResult = gcalConnectionId
         ? await createCalendarEvent({
             connectionId: gcalConnectionId,
@@ -617,15 +634,20 @@ export async function executeNativeBooking(
             timezone: tz,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
-            onError: (detail) => { gcalErrorDetail = detail; },
+            onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
           })
         : null;
       if (gcalResult) {
         meetLink = gcalResult.meetLink;
         googleEventId = gcalResult.eventId;
+        calendarSyncStatus = "synced";
         if (meetLink || googleEventId) {
           await db.execute(
-            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${confirmedBooking.id}`,
+            sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId}, calendar_sync_status = 'synced' WHERE id = ${confirmedBooking.id}`,
+          );
+        } else {
+          await db.execute(
+            sql`UPDATE bookings SET calendar_sync_status = 'synced' WHERE id = ${confirmedBooking.id}`,
           );
         }
         void appendBookingLog(callId, agentId, "Calendar Event Created", {
@@ -633,6 +655,7 @@ export async function executeNativeBooking(
           connectionId: gcalConnectionId,
           bookingId: confirmedBooking.id,
           hasMeetLink: !!meetLink,
+          calendarSyncStatus: "synced",
         }, "success");
         if (meetLink) {
           void appendBookingLog(callId, agentId, "Meet Link Generated", {
@@ -655,16 +678,33 @@ export async function executeNativeBooking(
         }
       } else if (gcalConnectionId) {
         gcalFailed = true;
-        logger.error({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: createCalendarEvent returned null — booking will be downgraded to pending");
+        calendarSyncStatus = gcalErrCode === "scope_insufficient" ? "scope_insufficient" : "sync_failed";
+        calendarSyncError = gcalErrMsg;
+        await db.execute(
+          sql`UPDATE bookings SET calendar_sync_status = ${calendarSyncStatus}, calendar_sync_error = ${calendarSyncError} WHERE id = ${confirmedBooking.id}`,
+        );
+        logger.error(
+          { callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId, calendarSyncStatus, gcalErrCode, gcalErrMsg },
+          "Native booking: createCalendarEvent returned null — booking will be downgraded to pending",
+        );
         void appendBookingLog(callId, agentId, "Calendar Event Created", {
           result: "failed",
           connectionId: gcalConnectionId,
           bookingId: confirmedBooking.id,
-          ...(gcalErrorDetail ? { gcalError: gcalErrorDetail } : {}),
+          calendarSyncStatus,
+          gcalErrCode,
+          gcalErrMsg,
         }, "error");
       }
     } catch (err) {
-      if (gcalConnectionId) gcalFailed = true;
+      if (gcalConnectionId) {
+        gcalFailed = true;
+        calendarSyncStatus = "sync_failed";
+        calendarSyncError = String((err as any)?.message ?? err);
+        await db.execute(
+          sql`UPDATE bookings SET calendar_sync_status = 'sync_failed', calendar_sync_error = ${calendarSyncError} WHERE id = ${confirmedBooking.id}`,
+        ).catch(() => {});
+      }
       logger.error(
         { callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId, err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, errDetails: (err as any)?.errors },
         "Native booking: Google Calendar event creation failed",
@@ -673,8 +713,10 @@ export async function executeNativeBooking(
         result: "exception",
         error: String(err),
         bookingId: confirmedBooking.id,
+        calendarSyncStatus: "sync_failed",
       }, "error");
     }
+    } // end if (eventType.enableGoogleMeet)
 
     // If GCal was configured but failed, only downgrade to pending for manual-confirmation
     // event types. Instant (auto-confirm) events stay confirmed — GCal is supplementary.

@@ -11,6 +11,7 @@ export const googleCalendarConnectionsTable = pgTable("google_calendar_connectio
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull().default(""),
   tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
+  grantedScopes: text("granted_scopes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [unique("google_calendar_connections_user_email_unique").on(t.userId, t.email)]);
@@ -83,6 +84,8 @@ export const bookingsTable = pgTable("bookings", {
   rescheduledFromId: integer("rescheduled_from_id"),
   googleEventId: text("google_event_id"),
   meetLink: text("meet_link"),
+  calendarSyncStatus: text("calendar_sync_status"),
+  calendarSyncError: text("calendar_sync_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -219,6 +219,16 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   let googleEventId: string | null = null;
   let gcalConnectionId: string | null = null;
   let gcalFailed = false;
+  let calendarSyncStatus: string | null = null;
+  let calendarSyncError: string | null = null;
+
+  if (!eventType.enableGoogleMeet) {
+    // Google Meet not enabled on this event type — skip GCal entirely
+    calendarSyncStatus = "skipped";
+    await db.execute(
+      sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${booking.id}`
+    );
+  } else {
   try {
     const calRow = await db.execute(
       sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`
@@ -227,6 +237,10 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     gcalConnectionId = calendarConnectionId ?? (await getFirstConnectionForUser(calendar.userId))?.id ?? null;
 
     if (!gcalConnectionId) {
+      calendarSyncStatus = "skipped";
+      await db.execute(
+        sql`UPDATE bookings SET calendar_sync_status = 'skipped' WHERE id = ${booking.id}`
+      );
       logger.warn(
         { calendarId: calendar.id, calendarConnectionId, bookingId: booking.id },
         "No Google connection found — skipping calendar event",
@@ -238,7 +252,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       );
     }
 
-    let gcalErrorDetail: object | null = null;
+    let gcalErrCode: string | null = null;
+    let gcalErrMsg: string | null = null;
     const gcalResult = gcalConnectionId ? await createCalendarEvent({
       connectionId: gcalConnectionId,
       summary: `${eventType.name} — ${booking.attendeeName}`,
@@ -250,31 +265,43 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      onError: (detail) => { gcalErrorDetail = detail; },
+      onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
     }) : null;
     if (gcalConnectionId && !gcalResult) {
       gcalFailed = true;
+      calendarSyncStatus = gcalErrCode === "scope_insufficient" ? "scope_insufficient" : "sync_failed";
+      calendarSyncError = gcalErrMsg;
+      await db.execute(
+        sql`UPDATE bookings SET calendar_sync_status = ${calendarSyncStatus}, calendar_sync_error = ${calendarSyncError} WHERE id = ${booking.id}`
+      );
       logger.error(
-        { connectionId: gcalConnectionId, bookingId: booking.id, gcalError: gcalErrorDetail },
+        { connectionId: gcalConnectionId, bookingId: booking.id, gcalErrCode, gcalErrMsg, calendarSyncStatus },
         "createCalendarEvent returned null — Google Calendar event not created; booking will be downgraded to pending",
       );
     }
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
-      if (meetLink || googleEventId) {
-        await db.execute(
-          sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId} WHERE id = ${booking.id}`
-        );
-      }
+      calendarSyncStatus = "synced";
+      await db.execute(
+        sql`UPDATE bookings SET meet_link = ${meetLink}, google_event_id = ${googleEventId}, calendar_sync_status = 'synced' WHERE id = ${booking.id}`
+      );
     }
   } catch (err) {
-    if (gcalConnectionId) gcalFailed = true;
+    if (gcalConnectionId) {
+      gcalFailed = true;
+      calendarSyncStatus = "sync_failed";
+      calendarSyncError = String((err as any)?.message ?? err);
+      await db.execute(
+        sql`UPDATE bookings SET calendar_sync_status = 'sync_failed', calendar_sync_error = ${calendarSyncError} WHERE id = ${booking.id}`
+      ).catch(() => {});
+    }
     logger.error(
       { err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, errDetails: (err as any)?.errors, bookingId: booking.id, connectionId: gcalConnectionId },
       "Google Calendar event creation failed",
     );
   }
+  } // end if (eventType.enableGoogleMeet)
 
   // Only downgrade to pending on GCal failure for manual-confirmation event types.
   // Instant (auto-confirm) events stay confirmed — GCal is supplementary.

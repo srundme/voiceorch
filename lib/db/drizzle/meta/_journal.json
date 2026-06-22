@@ -99,6 +99,13 @@
       "when": 1750512000000,
       "tag": "0013_fix_calendar_timezone_default",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782600000000,
+      "tag": "0014_gcal_scope_and_booking_sync_status",
+      "breakpoints": true
     }
   ]
 }

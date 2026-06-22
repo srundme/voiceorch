@@ -43,6 +43,8 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
     updatedAt: b.updatedAt.toISOString(),
     meetLink: b.meetLink ?? null,
     googleEventId: b.googleEventId ?? null,
+    calendarSyncStatus: b.calendarSyncStatus ?? null,
+    calendarSyncError: b.calendarSyncError ?? null,
   };
 }
 
@@ -175,6 +177,16 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
   let googleEventId: string | null = null;
   let gcalConnectionId: string | null = null;
   let gcalFailed = false;
+  let calendarSyncStatus: string | null = null;
+  let calendarSyncError: string | null = null;
+
+  if (!eventType.enableGoogleMeet) {
+    // Google Meet not enabled on this event type — skip GCal entirely
+    calendarSyncStatus = "skipped";
+    await db.update(bookingsTable)
+      .set({ calendarSyncStatus: "skipped" })
+      .where(eq(bookingsTable.id, booking.id));
+  } else {
   try {
     // Resolve which Google connection to use: calendar-specific mapping, or fall back to first user connection
     const calRow = await db.execute(
@@ -184,6 +196,10 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
     gcalConnectionId = calendarConnectionId ?? (await getFirstConnectionForUser(clerkId))?.id ?? null;
 
     if (!gcalConnectionId) {
+      calendarSyncStatus = "skipped";
+      await db.update(bookingsTable)
+        .set({ calendarSyncStatus: "skipped" })
+        .where(eq(bookingsTable.id, booking.id));
       req.log.warn(
         { calendarId: calendar.id, calendarConnectionId, bookingId: booking.id },
         "No Google connection found — skipping calendar event",
@@ -195,7 +211,8 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       );
     }
 
-    let gcalErrorDetail: object | null = null;
+    let gcalErrCode: string | null = null;
+    let gcalErrMsg: string | null = null;
     const gcalResult = gcalConnectionId ? await createCalendarEvent({
       connectionId: gcalConnectionId,
       summary: `${eventType.name} — ${booking.attendeeName}`,
@@ -207,31 +224,44 @@ router.post("/scheduling/bookings", requireAuth, async (req, res): Promise<void>
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
-      onError: (detail) => { gcalErrorDetail = detail; },
+      onError: (detail) => { gcalErrCode = detail.errorCode; gcalErrMsg = detail.message ?? null; },
     }) : null;
     if (gcalConnectionId && !gcalResult) {
       gcalFailed = true;
+      calendarSyncStatus = gcalErrCode === "scope_insufficient" ? "scope_insufficient" : "sync_failed";
+      calendarSyncError = gcalErrMsg;
+      await db.update(bookingsTable)
+        .set({ calendarSyncStatus, calendarSyncError })
+        .where(eq(bookingsTable.id, booking.id));
       req.log.error(
-        { connectionId: gcalConnectionId, bookingId: booking.id, gcalError: gcalErrorDetail },
+        { connectionId: gcalConnectionId, bookingId: booking.id, gcalErrCode, gcalErrMsg, calendarSyncStatus },
         "createCalendarEvent returned null — Google Calendar event not created; booking will be downgraded to pending",
       );
     }
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
       googleEventId = gcalResult.eventId;
-      if (meetLink || googleEventId) {
-        await db.update(bookingsTable)
-          .set({ meetLink, googleEventId })
-          .where(eq(bookingsTable.id, booking.id));
-      }
+      calendarSyncStatus = "synced";
+      await db.update(bookingsTable)
+        .set({ meetLink, googleEventId, calendarSyncStatus: "synced" })
+        .where(eq(bookingsTable.id, booking.id));
     }
   } catch (err) {
-    if (gcalConnectionId) gcalFailed = true;
+    if (gcalConnectionId) {
+      gcalFailed = true;
+      calendarSyncStatus = "sync_failed";
+      calendarSyncError = String((err as any)?.message ?? err);
+      await db.update(bookingsTable)
+        .set({ calendarSyncStatus: "sync_failed", calendarSyncError })
+        .where(eq(bookingsTable.id, booking.id))
+        .catch(() => {});
+    }
     req.log.error(
       { err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, errDetails: (err as any)?.errors, bookingId: booking.id, connectionId: gcalConnectionId },
       "Google Calendar event creation failed",
     );
   }
+  } // end if (eventType.enableGoogleMeet)
 
   // Only downgrade to pending on GCal failure for manual-confirmation event types.
   // Instant (auto-confirm) events stay confirmed — GCal is supplementary.

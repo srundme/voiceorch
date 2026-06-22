@@ -2617,6 +2617,20 @@ export const BookingBookedVia = {
   api: 'api',
 } as const;
 
+/**
+ * GCal sync outcome: 'synced' (event created), 'sync_failed' (API error), 'scope_insufficient' (token lacks calendar scope), 'skipped' (no connection or Meet not enabled), null (pre-dates sync tracking)
+ * @nullable
+ */
+export type BookingCalendarSyncStatus = typeof BookingCalendarSyncStatus[keyof typeof BookingCalendarSyncStatus] | null;
+
+
+export const BookingCalendarSyncStatus = {
+  synced: 'synced',
+  sync_failed: 'sync_failed',
+  scope_insufficient: 'scope_insufficient',
+  skipped: 'skipped',
+} as const;
+
 export interface Booking {
   id: number;
   eventTypeId: number;
@@ -2640,6 +2654,16 @@ export interface Booking {
   meetLink?: string | null;
   /** @nullable */
   googleEventId?: string | null;
+  /**
+     * GCal sync outcome: 'synced' (event created), 'sync_failed' (API error), 'scope_insufficient' (token lacks calendar scope), 'skipped' (no connection or Meet not enabled), null (pre-dates sync tracking)
+     * @nullable
+     */
+  calendarSyncStatus?: BookingCalendarSyncStatus;
+  /**
+     * Error message when calendarSyncStatus is sync_failed or scope_insufficient
+     * @nullable
+     */
+  calendarSyncError?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -22,6 +22,7 @@ import PromptTemplatePage from "@/pages/prompt-template";
 import AllAgentsPage from "@/pages/all-agents";
 import AdminAgentEdit from "@/pages/admin-agent-edit";
 import SchedulingPage from "@/pages/scheduling";
+import GcalConnectionsPage from "@/pages/gcal-connections";
 import CallPricingPage from "@/pages/call-pricing";
 import HealthChecklistPage from "@/pages/health";
 import AmbientSoundsPage from "@/pages/ambient-sounds";
@@ -93,6 +94,7 @@ function Router() {
       <ProtectedRoute path="/prompt-template" component={PromptTemplatePage} />
       <ProtectedRoute path="/all-agents" component={AllAgentsPage} />
       <ProtectedRoute path="/scheduling" component={SchedulingPage} />
+      <ProtectedRoute path="/gcal-connections" component={GcalConnectionsPage} />
       <ProtectedRoute path="/call-pricing" component={CallPricingPage} />
       <ProtectedRoute path="/health" component={HealthChecklistPage} />
       <ProtectedRoute path="/ambient-sounds" component={AmbientSoundsPage} />
