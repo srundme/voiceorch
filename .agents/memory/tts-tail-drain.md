@@ -43,6 +43,14 @@ tail handling, so they each have to replicate it.
    Webcall greeting drain must send real PCM silence frames (not a passive
    `setTimeout` loop) to physically extend the client's AudioContext timeline,
    matching the 300 ms real-frames drain the main speaking loop uses.
+1b. The SHORT direct branches that return to listening (not hangup) — telephony
+   garbled-transcript clarification and guardrail canned-response — must ALSO
+   drain: they bypass playTask's drain, so they need their own
+   `await drainPlaybackTail()` after `isPlaying=false`/`armTailEchoGrace()`, and
+   the web garbled-clarification branch needs the full real-PCM-silence-frame
+   drain + echoGraceUntil hold-through (Math.max(…, now + AUDIO_TAIL_SILENCE_MS +
+   WEB_TAIL_ECHO_MARGIN_MS)) like the main loop. Re-arming echo grace alone is
+   NOT enough on these branches — they clip the close without the drain.
 2. Echo grace protects the START of playback by default. It must ALSO be re-armed
    at EVERY playback exit (every place that flips the speaking flag off —
    including short direct branches like garbled-transcript clarification,

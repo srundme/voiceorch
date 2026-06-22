@@ -1072,16 +1072,41 @@ export async function handleWebCallWebSocket(
           history.push({ role: "assistant", content: clarification });
           send({ type: "transcript", speaker: "agent", text: clarification });
           try {
-            const { audio } = await tts.synthesize(clarification);
+            const { audio: rawAudio } = await tts.synthesize(clarification);
             if (!closed) {
+              // Pad with trailing PCM silence (same as the main per-sentence and
+              // terminal-utterance paths) so the client's AudioContext has samples
+              // queued past the final word.
+              const audio = withTailSilence(rawAudio);
               sendStatus("speaking");
               speaking = true;
               speakingStartedAt = Date.now();
-              echoGraceUntil = Date.now() + echoGraceMs;
-              for (let _ci = 0; _ci < audio.length; _ci += 3200) {
+              {
+                const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+                echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
+              }
+              for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
                 if (closed || interrupted) break;
-                sendSpeechAudio(audio.slice(_ci, _ci + 3200));
-                await new Promise<void>((r) => setTimeout(r, 20));
+                sendSpeechAudio(audio.slice(j, j + AUDIO_CHUNK_BYTES));
+                await new Promise<void>((r) => setTimeout(r, 40));
+              }
+              // Tail-silence drain — physically extend the client's scheduled
+              // audio timeline past the final word so the clarification isn't
+              // clipped on return to listening (a passive wait does NOT help on
+              // web), and hold echo grace through the whole drain + echo-decay
+              // margin so the agent's own trailing echo can't trip a false
+              // barge-in. Mirrors the main per-sentence playback tail.
+              if (!interrupted && !closed) {
+                echoGraceUntil = Math.max(
+                  echoGraceUntil,
+                  Date.now() + AUDIO_TAIL_SILENCE_MS + WEB_TAIL_ECHO_MARGIN_MS,
+                );
+                const silenceChunk = Buffer.alloc(AUDIO_CHUNK_BYTES, 0);
+                const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
+                for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
+                  sendAudio(silenceChunk);
+                  await new Promise<void>((r) => setTimeout(r, 40));
+                }
               }
               speaking = false;
               speakingEndedAt = Date.now();

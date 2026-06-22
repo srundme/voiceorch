@@ -1581,6 +1581,10 @@ export class OrchestrationPipeline {
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try { await this.playSentence(clarification); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
+      // Drain the carrier's jitter buffer before returning to listening so the
+      // last word of the clarification isn't clipped. This short branch bypasses
+      // playTask's drain, so it must replicate it (see drainPlaybackTail).
+      await this.drainPlaybackTail();
       return;
     }
 
@@ -1593,6 +1597,10 @@ export class OrchestrationPipeline {
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try { await this.playSentence(guardrailResponse); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
+      // Drain the carrier's jitter buffer before returning to listening so the
+      // last word of the canned response isn't clipped. This short branch
+      // bypasses playTask's drain, so it must replicate it (see drainPlaybackTail).
+      await this.drainPlaybackTail();
       return;
     }
 
