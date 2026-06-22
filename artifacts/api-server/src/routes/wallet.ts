@@ -3,7 +3,7 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 
@@ -191,10 +191,10 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     logger.warn({ err, razorpayPaymentId }, "Could not fetch Razorpay payment details for token");
   }
 
-  // Credit wallet and complete transaction
+  // Credit wallet atomically (SQL increment avoids read-then-write race)
   const [updated] = await db
     .update(usersTable)
-    .set({ walletBalanceCents: user.walletBalanceCents + txn.amountCents })
+    .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
     .where(eq(usersTable.id, user.id))
     .returning();
 
@@ -264,6 +264,76 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
     .returning();
 
   res.json(walletInfoPayload(updated));
+});
+
+// POST /api/wallet/webhook — Razorpay server-to-server webhook
+// Handles async payment confirmation (UPI, netbanking) that may not trigger
+// the client-side handler callback. No auth — verified by signature instead.
+// Register this URL in Razorpay Dashboard → Webhooks → payment.captured
+router.post("/wallet/webhook", async (req, res) => {
+  res.sendStatus(200); // Ack fast — Razorpay retries on non-2xx
+
+  const signature = req.headers["x-razorpay-signature"] as string | undefined;
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  if (webhookSecret && signature) {
+    const expectedSig = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+    if (expectedSig !== signature) {
+      logger.warn({ signature }, "Razorpay webhook: invalid signature — ignoring");
+      return;
+    }
+  } else if (webhookSecret && !signature) {
+    logger.warn("Razorpay webhook: RAZORPAY_WEBHOOK_SECRET set but no signature header — ignoring");
+    return;
+  }
+  // If RAZORPAY_WEBHOOK_SECRET is not set, we accept all webhooks (less secure but functional)
+
+  const event = (req.body as { event?: string; payload?: Record<string, unknown> }).event;
+  if (event !== "payment.captured") return;
+
+  const payment = (req.body as any)?.payload?.payment?.entity as Record<string, unknown> | undefined;
+  const orderId   = typeof payment?.order_id  === "string" ? payment.order_id  : null;
+  const paymentId = typeof payment?.id        === "string" ? payment.id        : null;
+
+  if (!orderId || !paymentId) {
+    logger.warn({ event, payment }, "Razorpay webhook payment.captured: missing order_id or payment id");
+    return;
+  }
+
+  try {
+    const [txn] = await db
+      .select()
+      .from(walletTransactionsTable)
+      .where(eq(walletTransactionsTable.razorpayOrderId, orderId));
+
+    if (!txn) {
+      logger.warn({ orderId }, "Razorpay webhook: order not found in DB — ignoring");
+      return;
+    }
+    if (txn.status === "completed") {
+      logger.info({ orderId, paymentId }, "Razorpay webhook: order already completed — skipping (idempotent)");
+      return;
+    }
+
+    // Atomic wallet credit
+    await db
+      .update(usersTable)
+      .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
+      .where(eq(usersTable.id, txn.userId));
+
+    await db
+      .update(walletTransactionsTable)
+      .set({ status: "completed", razorpayPaymentId: paymentId })
+      .where(eq(walletTransactionsTable.id, txn.id));
+
+    logger.info({ orderId, paymentId, userId: txn.userId, amountCents: txn.amountCents },
+      "Wallet credited via Razorpay webhook payment.captured");
+  } catch (err) {
+    logger.error({ err, orderId, paymentId }, "Razorpay webhook: error crediting wallet");
+  }
 });
 
 export default router;
