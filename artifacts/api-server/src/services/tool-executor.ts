@@ -12,7 +12,6 @@ import {
   leadTransfersTable,
   leadTimelineTable,
   callExecutionsTable,
-  executionLogsTable,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
@@ -31,6 +30,7 @@ import {
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
 import type { AgentTool, ToolDefinition } from "../orchestration/types.js";
 import { logger } from "../lib/logger.js";
+import { writeExecutionLog } from "./execution-log.js";
 import type { TimeSlot } from "./scheduling/slot-engine.js";
 
 // ── Booking diagnostic log helper ────────────────────────────────────────────
@@ -47,20 +47,12 @@ async function appendBookingLog(
   data: Record<string, unknown>,
   status: "info" | "success" | "error" = "info",
 ): Promise<void> {
-  try {
-    await db.insert(executionLogsTable).values({
-      callId,
-      agentId,
-      component: "Booking",
-      direction: "system",
-      status,
-      provider: "VoiceOrch",
-      requestPayload: { step },
-      responsePayload: data,
-    });
-  } catch (err) {
-    logger.warn({ callId, step, err }, "appendBookingLog: failed to write execution log row");
-  }
+  writeExecutionLog(callId, agentId, "Booking", "system", {
+    provider: "VoiceOrch",
+    status,
+    requestPayload: { step },
+    responsePayload: data,
+  });
 }
 
 // ── Tool name sanitization ────────────────────────────────────────────────────

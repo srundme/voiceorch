@@ -7,7 +7,7 @@ import {
 } from "../endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "../transcriptQuality.js";
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, callEventsTable, executionLogsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
+import { db, agentsTable, callsTable, callEventsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -42,6 +42,7 @@ import {
   executeWebhookTool,
 } from "../../services/tool-executor.js";
 import { disposeCall } from "../../services/disposition.js";
+import { createExecutionLogger } from "../../services/execution-log.js";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -460,29 +461,7 @@ export async function handleWebCallWebSocket(
   });
 
   // ── Per-call execution logger (fire-and-forget, never blocks the call) ────
-  function logExecution(
-    component: string,
-    direction: "request" | "response" | "system",
-    opts: {
-      provider?: string;
-      status?: "success" | "error" | "info";
-      latencyMs?: number;
-      requestPayload?: Record<string, unknown>;
-      responsePayload?: Record<string, unknown>;
-      metadata?: Record<string, unknown>;
-    } = {}
-  ) {
-    void db.insert(executionLogsTable).values({
-      callId, agentId,
-      component, direction,
-      provider: opts.provider ?? null,
-      status: opts.status ?? "info",
-      latencyMs: opts.latencyMs ?? null,
-      requestPayload: opts.requestPayload ?? null,
-      responsePayload: opts.responsePayload ?? null,
-      metadata: opts.metadata ?? null,
-    }).catch(() => {});
-  }
+  const logExecution = createExecutionLogger(callId, agentId);
 
   logExecution("Agent", "system", {
     requestPayload: {

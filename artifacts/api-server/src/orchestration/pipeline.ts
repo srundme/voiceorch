@@ -36,6 +36,7 @@ import type { TimeSlot } from "../services/scheduling/slot-engine.js";
 import { buildSlotLockKey } from "../services/scheduling/lock.js";
 import { sendBookingCreatedEmail, sendBookingCancelledEmail, sendBookingRescheduledEmail } from "../services/scheduling/notifications.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
+import { writeExecutionLog, type ExecDirection, type ExecLogOpts } from "../services/execution-log.js";
 import {
   buildToolDefs,
   matchToolByName,
@@ -893,6 +894,15 @@ export class OrchestrationPipeline {
 
   // ── TTS playback ─────────────────────────────────────────────────────────────
 
+  /**
+   * Write a per-call execution-log row (fire-and-forget). Mirrors the web-call
+   * path's `logExecution` so the Call Log "Logs" tab shows an identical,
+   * chronological timeline for live (telephony) calls. Never throws.
+   */
+  private logExec(component: string, direction: ExecDirection, opts: ExecLogOpts = {}): void {
+    writeExecutionLog(this.config.callId, this.agent.id, component, direction, opts);
+  }
+
   private async playSentence(text: string): Promise<void> {
     if (this.bargeInRequested) return;
 
@@ -901,6 +911,16 @@ export class OrchestrationPipeline {
     // completes.  Counting here ensures barge-in aborts and stream timeouts
     // don't under-report usage even though the provider already billed.
     this.ttsCharactersTotal += text.length;
+
+    // Per-sentence TTS execution log (request now, response on synthesis done).
+    const _ttsReqStart = Date.now();
+    let _ttsTotalBytes = 0;
+    let _ttsFirstByteMs: number | null = null;
+    this.logExec("TTS", "request", {
+      provider: this.agent.ttsProvider,
+      status: "info",
+      requestPayload: { text },
+    });
 
     if (this.tts.synthesizeStream) {
       // Producer-consumer pacing: the TTS stream callback pushes mulaw chunks
@@ -1027,6 +1047,8 @@ export class OrchestrationPipeline {
           (chunk) => {
             if (this.closed || this.bargeInRequested) return;
             if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
+            if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
+            _ttsTotalBytes += chunk.length;
             // Reset the timeout every time a chunk arrives — the connection is alive.
             clearTimeout(ttsTimerId);
             accum.push(chunk);
@@ -1049,8 +1071,21 @@ export class OrchestrationPipeline {
 
       ttsDone = true;
       await drainPromise;
+      this.logExec("TTS", "response", {
+        provider: this.agent.ttsProvider,
+        status: "success",
+        latencyMs: Date.now() - _ttsReqStart,
+        responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
+      });
     } else {
       const { audio: ttsPcm16k } = await this.tts.synthesize(text);
+      _ttsTotalBytes = ttsPcm16k.length;
+      this.logExec("TTS", "response", {
+        provider: this.agent.ttsProvider,
+        status: "success",
+        latencyMs: Date.now() - _ttsReqStart,
+        responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length },
+      });
       if (this.bargeInRequested) return;
       const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
@@ -1082,7 +1117,39 @@ export class OrchestrationPipeline {
 
   // ── Tool execution ───────────────────────────────────────────────────────────
 
+  /**
+   * Public tool dispatcher: writes Tool request/response execution-log rows
+   * around the actual dispatch so the Call Log timeline shows every tool call
+   * (mirrors the web-call path). Errors are logged with their real reason, then
+   * re-thrown to preserve existing control flow.
+   */
   private async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
+    const _toolStart = Date.now();
+    this.logExec("Tool", "request", {
+      status: "info",
+      requestPayload: { tool: toolName, args },
+    });
+    try {
+      const result = await this.handleToolCallInner(toolName, args);
+      this.logExec("Tool", "response", {
+        status: "success",
+        latencyMs: Date.now() - _toolStart,
+        requestPayload: { tool: toolName },
+        responsePayload: { result: (result ?? "unavailable").substring(0, 800) },
+      });
+      return result;
+    } catch (err) {
+      this.logExec("Tool", "response", {
+        status: "error",
+        latencyMs: Date.now() - _toolStart,
+        requestPayload: { tool: toolName },
+        responsePayload: { error: toReadableError(err, "Tool error") },
+      });
+      throw err;
+    }
+  }
+
+  private async handleToolCallInner(toolName: string, args: Record<string, unknown>): Promise<string | undefined> {
     const tool = matchToolByName(this.agent.tools, toolName);
     if (!tool) {
       // Built-in end_call: always available even if not explicitly in agent tools
@@ -1540,6 +1607,14 @@ export class OrchestrationPipeline {
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
 
+    // STT execution-log row — the recognized caller utterance for this turn.
+    this.logExec("STT", "response", {
+      provider: this.agent.asrProvider,
+      status: "success",
+      latencyMs: Math.round(sttLatencyMs),
+      responsePayload: { transcript },
+    });
+
     // P1-I: Start Speaking Plan — content-based delay before triggering LLM response
     if (this.agent.startSpeakingPlan) {
       const plan = this.agent.startSpeakingPlan;
@@ -1630,6 +1705,9 @@ export class OrchestrationPipeline {
     let allEnqueued  = false;
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
+    // Per-turn token usage (for the LLM execution-log row metadata).
+    let turnInputTokens = 0;
+    let turnOutputTokens = 0;
 
     // ── Think-block + function-tag filters (streaming) ──────────────────────
     // Strips <think>…</think> blocks (DeepSeek-R1) and <function=…>…</function>
@@ -1977,6 +2055,17 @@ export class OrchestrationPipeline {
       },
     });
 
+    this.logExec("LLM", "request", {
+      provider: this.agent.llmProvider,
+      status: "info",
+      requestPayload: {
+        model: this.agent.llmModel ?? "",
+        systemPromptPreview: systemPromptForTurn.substring(0, 800),
+        historyLength: historyForLlm.length,
+        tools: toolDefs.length > 0 ? toolDefs.map((t) => (t as any).function?.name ?? (t as any).name).filter(Boolean) : [],
+      },
+    });
+
     try {
       await this.llm.chat(
         historyForLlm,
@@ -2014,6 +2103,8 @@ export class OrchestrationPipeline {
                 this.hasRealLlmUsage = true;
                 this.llmInputTokensTotal += usage.inputTokens;
                 this.llmOutputTokensTotal += usage.outputTokens;
+                turnInputTokens += usage.inputTokens;
+                turnOutputTokens += usage.outputTokens;
                 // Accumulate baseline estimate for savings calculation
                 if (fullHistoryLen > sentHistoryLen && sentHistoryLen > 0) {
                   this.baselineInputTokensEstimate += Math.round(usage.inputTokens * fullHistoryLen / sentHistoryLen);
@@ -2028,6 +2119,8 @@ export class OrchestrationPipeline {
                 this.hasRealLlmUsage = true;
                 this.llmInputTokensTotal += usage.inputTokens;
                 this.llmOutputTokensTotal += usage.outputTokens;
+                turnInputTokens += usage.inputTokens;
+                turnOutputTokens += usage.outputTokens;
                 if (fullHistoryLen > sentHistoryLen && sentHistoryLen > 0) {
                   this.baselineInputTokensEstimate += Math.round(usage.inputTokens * fullHistoryLen / sentHistoryLen);
                 } else {
@@ -2074,6 +2167,8 @@ export class OrchestrationPipeline {
                 this.hasRealLlmUsage = true;
                 this.llmInputTokensTotal += usage.inputTokens;
                 this.llmOutputTokensTotal += usage.outputTokens;
+                turnInputTokens += usage.inputTokens;
+                turnOutputTokens += usage.outputTokens;
               },
             },
           );
@@ -2081,6 +2176,12 @@ export class OrchestrationPipeline {
         } catch (fallbackErr) {
           const reason = toReadableError(fallbackErr, "Fallback LLM error");
           logger.error({ callId: this.config.callId, err: fallbackErr }, reason);
+          this.logExec("LLM", "response", {
+            provider: this.agent.fallbackLlmProvider ?? this.agent.llmProvider,
+            status: "error",
+            latencyMs: Date.now() - llmStart,
+            metadata: { error: reason },
+          });
           this.config.onFatalError?.(reason);
           allEnqueued = true;
           const w = wakePlayer as (() => void) | null; wakePlayer = null;
@@ -2091,6 +2192,12 @@ export class OrchestrationPipeline {
       } else {
         const reason = toReadableError(llmErr, "LLM error");
         logger.error({ callId: this.config.callId, err: llmErr }, reason);
+        this.logExec("LLM", "response", {
+          provider: this.agent.llmProvider,
+          status: "error",
+          latencyMs: Date.now() - llmStart,
+          metadata: { error: reason },
+        });
         this.config.onFatalError?.(reason);
         allEnqueued = true;
         const w = wakePlayer as (() => void) | null; wakePlayer = null;
@@ -2102,6 +2209,22 @@ export class OrchestrationPipeline {
     // Safety net: clear filler timer if LLM completed without streaming any tokens
     // (e.g. pure tool-call response that never invokes onToken)
     if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+
+    // LLM response execution-log row — logged before tool handling so the
+    // timeline reads LLM request → LLM response → Tool request → Tool response
+    // (identical ordering to the web-call path).
+    {
+      const _llmLogText = stripBracketedInstructions(
+        stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")))
+      ).trim();
+      this.logExec("LLM", "response", {
+        provider: this.agent.llmProvider,
+        status: "success",
+        latencyMs: llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart,
+        responsePayload: { text: _llmLogText || (triggeredToolName ? `[calling tool: ${triggeredToolName}]` : "") },
+        metadata: { inputTokens: turnInputTokens, outputTokens: turnOutputTokens, model: this.agent.llmModel ?? "" },
+      });
+    }
 
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {

@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, executionLogsTable } from "@workspace/db";
+import { createExecutionLogger } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
@@ -542,6 +543,41 @@ export async function createSession(params: {
       ttsVoice:          agent.ttsVoice ?? null,
     },
   }).catch(() => {});
+
+  // ── Setup-time execution-log rows (mirror the web-call timeline) ─────────────
+  // Memory / VariableResolver / Knowledge are computed BEFORE the call record
+  // exists (above, in the parallel pre-fetch), so they are logged here once
+  // callRecord.id is available, preserving chronological order after Agent init.
+  const logExec = createExecutionLogger(callRecord.id, params.agentId);
+
+  if (callerCtxResult && (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0)) {
+    logExec("Memory", "response", {
+      status: "success",
+      responsePayload: {
+        profile: callerProfileSnapshot ? { name: callerProfileSnapshot.name, callCount: callerProfileSnapshot.callCount } : null,
+        factCount: callerCtxResult.facts.length,
+        facts: Object.fromEntries(callerCtxResult.facts.map((f) => [f.key, f.value])),
+        recentCallsCount: callerCtxResult.recentCalls.length,
+      },
+    });
+  }
+
+  logExec("VariableResolver", "system", {
+    status: "info",
+    requestPayload: { variables: dynVars },
+    responsePayload: { resolvedPromptPreview: agentConfig.systemPrompt.substring(0, 600) },
+  });
+
+  if (kbEntriesResult) {
+    logExec("Knowledge", "response", {
+      status: "success",
+      responsePayload: {
+        sourceIds: agentConfig.knowledgeSourceIds,
+        injected: true,
+        preview: kbEntriesResult.substring(0, 400),
+      },
+    });
+  }
 
   const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
   let wasTransferred = false;
@@ -1304,6 +1340,10 @@ export async function endSession(sessionId: string): Promise<void> {
                   callId:            session.callId,
                   wasDropped,
                   callerNameInCall:  session.callerNameLatchedThisCall,
+                });
+                createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
+                  status: "success",
+                  metadata: { updated: true, wasDropped },
                 });
                 if (!wasDropped) {
                   await detectCallbackRequest({
