@@ -75,11 +75,12 @@ const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after pl
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
                                          // loud frame can't cut the agent off, even when a Stop
                                          // Speaking Plan configures very low sensitivity.
-const TELEPHONY_TAIL_DRAIN_MS = 600;    // After the final utterance fully streams, wait this long
-                                         // before tearing the call down so the carrier's jitter
-                                         // buffer plays out the last words (mirrors the web path's
-                                         // AUDIO_TAIL_SILENCE_MS) — prevents clipped goodbyes.
-                                         // 600 ms is empirically safer for long VoBiz responses.
+const TELEPHONY_TAIL_DRAIN_MS = 800;    // After the final utterance fully streams, send silence
+                                         // frames for this long before the next listen / teardown
+                                         // so the carrier's jitter buffer plays out the last words.
+                                         // Sending real silence (not just sleeping) is critical for
+                                         // Vobiz — a passive sleep lets Vobiz detect "no audio" and
+                                         // close its playout window early, clipping the last words.
 const KB_CONTEXT_RACE_MS      = 200;    // Max time the turn waits for KB-context retrieval before
                                          // starting the LLM. If the prefetch is slower than this, the
                                          // turn proceeds with whatever context resolved (possibly none)
@@ -2687,7 +2688,25 @@ export class OrchestrationPipeline {
    */
   private async drainPlaybackTail(): Promise<void> {
     if (this.closed || this.bargeInRequested) return;
-    await new Promise<void>((r) => setTimeout(r, TELEPHONY_TAIL_DRAIN_MS));
+    // Send real silence frames during the drain window.  A passive sleep alone
+    // is not sufficient for Vobiz: when audio stops arriving, Vobiz can close
+    // its internal playout window and clip the last words before we even call
+    // onCallEnd().  Sending 20 ms silence frames at real-time rate keeps
+    // Vobiz's playout buffer ticking until the window is fully drained.
+    // For Twilio / Plivo (mulaw) the same frames extend their jitter buffer.
+    const FRAME_MS      = 20;
+    const FRAME_BYTES   = this.config.rawPcmOutput
+      ? FRAME_MS * 8 * 2   // 20 ms × 8000 Hz × 2 bytes  = 320 B (16-bit PCM)
+      : FRAME_MS * 8;      // 20 ms × 8000 Hz × 1 byte   = 160 B (µ-law)
+    const silenceFrame  = Buffer.alloc(FRAME_BYTES, 0);
+    const frames        = Math.ceil(TELEPHONY_TAIL_DRAIN_MS / FRAME_MS);
+    let nextTick        = Date.now() + FRAME_MS;
+    for (let i = 0; i < frames && !this.closed && !this.bargeInRequested; i++) {
+      this.config.onAudioOut(silenceFrame);
+      const delay = Math.max(0, nextTick - Date.now());
+      nextTick += FRAME_MS;
+      await new Promise<void>((r) => setTimeout(r, delay));
+    }
   }
 
   /**
