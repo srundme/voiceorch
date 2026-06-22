@@ -292,14 +292,14 @@ router.post("/wallet/webhook", async (req, res) => {
   // If RAZORPAY_WEBHOOK_SECRET is not set, we accept all webhooks (less secure but functional)
 
   const event = (req.body as { event?: string; payload?: Record<string, unknown> }).event;
-  if (event !== "payment.captured") return;
+  if (event !== "payment.captured" && event !== "payment.failed") return;
 
   const payment = (req.body as any)?.payload?.payment?.entity as Record<string, unknown> | undefined;
   const orderId   = typeof payment?.order_id  === "string" ? payment.order_id  : null;
   const paymentId = typeof payment?.id        === "string" ? payment.id        : null;
 
-  if (!orderId || !paymentId) {
-    logger.warn({ event, payment }, "Razorpay webhook payment.captured: missing order_id or payment id");
+  if (!orderId) {
+    logger.warn({ event, payment }, "Razorpay webhook: missing order_id — ignoring");
     return;
   }
 
@@ -310,7 +310,26 @@ router.post("/wallet/webhook", async (req, res) => {
       .where(eq(walletTransactionsTable.razorpayOrderId, orderId));
 
     if (!txn) {
-      logger.warn({ orderId }, "Razorpay webhook: order not found in DB — ignoring");
+      logger.warn({ orderId, event }, "Razorpay webhook: order not found in DB — ignoring");
+      return;
+    }
+
+    if (event === "payment.failed") {
+      if (txn.status === "failed") {
+        logger.info({ orderId }, "Razorpay webhook: order already marked failed — skipping");
+        return;
+      }
+      await db
+        .update(walletTransactionsTable)
+        .set({ status: "failed", razorpayPaymentId: paymentId ?? undefined })
+        .where(eq(walletTransactionsTable.id, txn.id));
+      logger.info({ orderId, paymentId, userId: txn.userId }, "Wallet topup marked failed via Razorpay webhook");
+      return;
+    }
+
+    // payment.captured
+    if (!paymentId) {
+      logger.warn({ event, payment }, "Razorpay webhook payment.captured: missing payment id");
       return;
     }
     if (txn.status === "completed") {
@@ -332,7 +351,7 @@ router.post("/wallet/webhook", async (req, res) => {
     logger.info({ orderId, paymentId, userId: txn.userId, amountCents: txn.amountCents },
       "Wallet credited via Razorpay webhook payment.captured");
   } catch (err) {
-    logger.error({ err, orderId, paymentId }, "Razorpay webhook: error crediting wallet");
+    logger.error({ err, orderId, paymentId, event }, "Razorpay webhook: error processing event");
   }
 });
 
