@@ -38,6 +38,14 @@ function publicBaseUrl(): string {
   return getSelfBaseUrl();
 }
 
+/** Base URL for the dashboard frontend (user-facing redirects after KYC). */
+function dashboardBaseUrl(): string {
+  const appBase = process.env["APP_BASE_URL"]?.replace(/\/$/, "");
+  if (appBase) return appBase;
+  // Fallback: same domain as API (works in Replit single-service dev)
+  return getSelfBaseUrl();
+}
+
 function clientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string") return forwarded.split(",")[0]?.trim() ?? "";
@@ -401,7 +409,7 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
   const { session_id, status, auth_id } = req.query as Record<string, string>;
   const ip = clientIp(req);
 
-  if (!session_id) { res.redirect("/?kyc=error"); return; }
+  if (!session_id) { res.redirect(`${dashboardBaseUrl()}/app/kyc?kyc=error`); return; }
 
   try {
     const [session] = await db
@@ -443,7 +451,7 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
   }
 
   const outcome = status === "kyc_completed" ? "completed" : (status ?? "pending");
-  res.redirect(`/app/kyc?kyc=${outcome}`);
+  res.redirect(`${dashboardBaseUrl()}/app/kyc?kyc=${outcome}`);
 });
 
 /* ── POST /kyc/webhook ───────────────────────────────────────────────────── */
