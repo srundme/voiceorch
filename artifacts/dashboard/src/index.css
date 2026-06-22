@@ -53,10 +53,8 @@
   --color-chart-4:  hsl(var(--chart-4));
   --color-chart-5:  hsl(var(--chart-5));
 
-  /* Landing text tiers */
   --color-text-faint:   hsl(var(--text-faint));
   --color-text-meta:    hsl(var(--text-meta));
-  --color-crm-border:   hsl(var(--crm-border));
 
   --font-sans:    var(--app-font-sans);
   --font-display: var(--app-font-display);
@@ -83,8 +81,7 @@
   --popover:            0 0% 100%;
   --popover-foreground: 220 14% 10%;
 
-  /* Teal primary in light mode too */
-  --primary:            173 79% 40%;
+  --primary:            220 14% 12%;
   --primary-foreground: 0 0% 100%;
 
   --secondary:          220 14% 93%;
@@ -100,26 +97,25 @@
   --destructive-foreground: 0 0% 98%;
 
   --input:              220 14% 88%;
-  --ring:               173 79% 40%;
+  --ring:               220 9% 55%;
 
   --sidebar:              220 20% 98%;
   --sidebar-foreground:   220 14% 10%;
   --sidebar-border:       220 14% 88%;
-  --sidebar-primary:      173 79% 40%;
+  --sidebar-primary:      220 14% 12%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent:       220 14% 91%;
   --sidebar-accent-foreground: 220 14% 10%;
-  --sidebar-ring:         173 79% 40%;
+  --sidebar-ring:         220 9% 55%;
 
-  --chart-1: 173 79% 45%;
-  --chart-2: 206 80% 50%;
-  --chart-3: 239 68% 60%;
-  --chart-4: 33 100% 50%;
-  --chart-5: 220 9% 70%;
+  --chart-1: 220 14% 18%;
+  --chart-2: 220 9% 38%;
+  --chart-3: 220 9% 55%;
+  --chart-4: 220 9% 70%;
+  --chart-5: 220 9% 84%;
 
   --text-faint: 220 9% 50%;
   --text-meta:  220 9% 38%;
-  --crm-border: 220 14% 80%;
 
   --app-font-sans:    'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   --app-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
@@ -128,97 +124,96 @@
   --radius: 1rem;
 
   --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04);
-  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.06);
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
   --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
 
   --button-outline:       rgba(0,0,0,0.10);
   --badge-outline:        rgba(0,0,0,0.06);
-  --primary-border:       rgba(20,184,166,0.35);
+  --primary-border:       rgba(0,0,0,0.14);
   --secondary-border:     rgba(0,0,0,0.06);
   --muted-border:         rgba(0,0,0,0.06);
   --accent-border:        rgba(0,0,0,0.06);
   --destructive-border:   rgba(239,68,68,0.35);
   --opaque-button-border-intensity: 8;
 
-  /* ── SnapServe brand tokens ─────────────────────────────────────────────── */
+  /* ── Brand tokens — for marketing sections only, not app chrome ─────────── */
   --color-brand-saffron:  #ff9933;
   --color-brand-teal:     #14b8a6;
   --color-brand-indigo:   #6366f1;
   --gradient-brand:       linear-gradient(135deg, #ff9933 0%, #14b8a6 50%, #6366f1 100%);
   --gradient-brand-text:  linear-gradient(135deg, #ff9933, #14b8a6, #6366f1);
 
-  /* ── SnapServe glow shadows ─────────────────────────────────────────────── */
   --shadow-glow-brand:       0 0 24px rgba(255,153,51,0.2), 0 0 48px rgba(20,184,166,0.12);
   --shadow-glow-brand-hover: 0 0 32px rgba(255,153,51,0.35), 0 0 60px rgba(20,184,166,0.2);
-  --shadow-glow-teal:        0 0 0 1px rgba(20,184,166,0.35), 0 0 20px rgba(20,184,166,0.12), 0 0 40px rgba(20,184,166,0.06);
+  --shadow-glow-teal:        0 0 0 1px rgba(20,184,166,0.35), 0 0 20px rgba(20,184,166,0.12);
 }
 
-/* ── Design tokens — dark mode (SnapServe CRM — landing parity) ──────────── */
+/* ── Dark mode — pure black / white / zinc ───────────────────────────────── */
 .dark {
-  /* Surfaces — landing dual-surface system */
-  /* Shell black: #0a0a0a */   --background:         0 0% 4%;
-  /* Landing text: #fafafa */  --foreground:         0 0% 98%;
-  /* Zinc border: #27272a */   --border:             240 4% 16%;
+  /* ── Surfaces ─────────────────────── */
+  --background:         0 0% 4%;          /* #0a0a0a */
+  --foreground:         0 0% 98%;         /* #fafafa */
+  --border:             240 4% 16%;       /* #27272a */
 
-  /* CRM card: #111820 */      --card:               215 31% 9%;
-                               --card-foreground:    0 0% 98%;
+  --card:               0 0% 7%;          /* #111111 */
+  --card-foreground:    0 0% 98%;
 
-  /* Neutral lift: #141414 */  --elevated:           0 0% 8%;
+  --elevated:           0 0% 9%;          /* #171717 */
 
-  /* CRM surface: #0d1219 */   --popover:            215 33% 7%;
-                               --popover-foreground: 0 0% 98%;
+  --popover:            0 0% 5%;          /* #0d0d0d */
+  --popover-foreground: 0 0% 98%;
 
-  /* Teal primary: #14b8a6 */  --primary:            173 79% 40%;
-                               --primary-foreground: 0 0% 4%;
+  /* White primary — buttons, active states */
+  --primary:            0 0% 98%;         /* #fafafa */
+  --primary-foreground: 0 0% 4%;          /* #0a0a0a */
 
-  /* Landing raised: #111111 */ --secondary:          0 0% 7%;
-                               --secondary-foreground: 0 0% 90%;
+  --secondary:          0 0% 11%;         /* #1c1c1c */
+  --secondary-foreground: 0 0% 90%;       /* #e5e5e5 */
 
-  /* CRM muted: #1a2535 */     --muted:              215 31% 15%;
-  /* Text-2: #a1a1aa */        --muted-foreground:   240 4% 64%;
+  --muted:              0 0% 13%;         /* #222222 */
+  --muted-foreground:   240 4% 55%;       /* #888890 */
 
-  /* Teal tint hover wash */   --accent:             173 79% 40%;
-                               --accent-foreground:  0 0% 98%;
+  --accent:             0 0% 12%;         /* #1f1f1f */
+  --accent-foreground:  0 0% 98%;
 
-                               --destructive:        0 84% 60%;
-                               --destructive-foreground: 0 0% 98%;
+  --destructive:        0 84% 60%;        /* #ef4444 */
+  --destructive-foreground: 0 0% 98%;
 
-  /* Input bg */               --input:              215 28% 12%;
-  /* Teal ring */              --ring:               173 79% 40%;
+  --input:              0 0% 10%;         /* #1a1a1a */
+  --ring:               0 0% 55%;         /* #8c8c8c */
 
-  /* Sidebar — black chrome like landing */
-                               --sidebar:            0 0% 4%;
-                               --sidebar-foreground: 240 4% 64%;
-                               --sidebar-border:     240 4% 16%;
-                               --sidebar-primary:    173 79% 40%;
-  /* Teal active text */       --sidebar-primary-foreground: 173 79% 40%;
-                               --sidebar-accent:     173 79% 40%;
-                               --sidebar-accent-foreground: 0 0% 98%;
-                               --sidebar-ring:       173 79% 40%;
+  /* ── Sidebar ──────────────────────── */
+  --sidebar:            0 0% 3%;          /* #080808 */
+  --sidebar-foreground: 240 4% 60%;       /* #999 */
+  --sidebar-border:     240 4% 14%;       /* #242427 */
+  --sidebar-primary:    0 0% 98%;         /* white — active bg */
+  --sidebar-primary-foreground: 0 0% 4%; /* black text on white */
+  --sidebar-accent:     0 0% 11%;         /* #1c1c1c */
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-ring:       0 0% 55%;
 
-  /* Charts — brand aligned */
-                               --chart-1: 173 79% 55%;
-                               --chart-2: 206 80% 56%;
-                               --chart-3: 239 68% 67%;
-                               --chart-4: 33 100% 60%;
-                               --chart-5: 240 4% 35%;
+  /* ── Charts — greyscale ──────────── */
+  --chart-1: 0 0% 80%;    /* #cccccc */
+  --chart-2: 0 0% 60%;    /* #999999 */
+  --chart-3: 0 0% 42%;    /* #6b6b6b */
+  --chart-4: 0 0% 28%;    /* #474747 */
+  --chart-5: 0 0% 16%;    /* #292929 */
 
-  /* Custom landing text tiers */
-                               --text-faint: 240 4% 46%;
-                               --text-meta:  240 4% 35%;
-  /* CRM-specific border */    --crm-border: 215 32% 17%;
+  /* ── Text tiers ─────────────────── */
+  --text-faint: 240 4% 46%;  /* #71717a */
+  --text-meta:  240 4% 35%;  /* #52525b */
 
-  --primary-border:     rgba(20,184,166,0.25);
+  /* ── Borders ─────────────────────── */
+  --primary-border:     rgba(255,255,255,0.18);
   --secondary-border:   rgba(63,63,70,0.8);
   --muted-border:       rgba(255,255,255,0.05);
-  --accent-border:      rgba(20,184,166,0.20);
+  --accent-border:      rgba(255,255,255,0.08);
   --destructive-border: rgba(239,68,68,0.35);
 
+  /* ── Shadows ─────────────────────── */
   --shadow-card:        0 1px 3px rgba(0,0,0,0.85), 0 0 0 1px rgba(39,39,42,0.95);
-  --shadow-card-hover:  0 4px 24px rgba(0,0,0,0.65), 0 0 0 1px rgba(20,184,166,0.22), 0 0 32px rgba(20,184,166,0.06);
-
-  --shadow-glow-teal:   0 0 0 1px rgba(20,184,166,0.35), 0 0 20px rgba(20,184,166,0.12), 0 0 40px rgba(20,184,166,0.06);
+  --shadow-card-hover:  0 4px 24px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.08);
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
@@ -238,8 +233,8 @@
   }
 
   ::selection {
-    background: var(--color-brand-teal);
-    color: #0a0a0a;
+    background: rgba(255,255,255,0.15);
+    color: #fafafa;
   }
 
   /* ── Global Card ──────────────────────────────────────────────────────── */
@@ -251,7 +246,7 @@
     transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
   }
   [data-slot="card"]:hover {
-    border-color: hsl(var(--muted-foreground) / 0.2);
+    border-color: hsl(var(--muted-foreground) / 0.25);
     box-shadow: var(--shadow-card-hover);
     transform: translateY(-1px);
   }
@@ -264,12 +259,12 @@
   [data-slot="context-menu-content"],
   [data-slot="select-content"],
   [data-slot="command"] {
-    background: hsl(var(--popover) / 0.96) !important;
+    background: hsl(var(--popover) / 0.97) !important;
     border-color: hsl(var(--border)) !important;
     color: hsl(var(--popover-foreground)) !important;
     box-shadow:
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 0 1px rgba(255,255,255,0.04) !important;
+      0 8px 32px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.05) !important;
     backdrop-filter: blur(20px) saturate(120%);
     -webkit-backdrop-filter: blur(20px) saturate(120%);
     border-radius: 12px !important;
@@ -278,7 +273,7 @@
   /* ── Global Input ─────────────────────────────────────────────────────── */
   [data-slot="input"] {
     height: 2.5rem !important;
-    background: hsl(var(--card)) !important;
+    background: hsl(var(--input)) !important;
     border-color: hsl(var(--border)) !important;
     color: hsl(var(--foreground)) !important;
     border-radius: 10px !important;
@@ -287,8 +282,8 @@
   }
   [data-slot="input"]:focus,
   [data-slot="input"]:focus-within {
-    border-color: hsl(var(--ring) / 0.6) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
+    border-color: hsl(var(--ring) / 0.7) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
     outline: none !important;
   }
   [data-slot="input"]::placeholder {
@@ -298,14 +293,14 @@
 
   input:focus-visible,
   textarea:focus-visible {
-    border-color: hsl(var(--ring) / 0.6) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
+    border-color: hsl(var(--ring) / 0.7) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
     outline: none !important;
   }
 
   /* ── Select ───────────────────────────────────────────────────────────── */
   [data-slot="select-trigger"] {
-    background: hsl(var(--card)) !important;
+    background: hsl(var(--input)) !important;
     border-color: hsl(var(--border)) !important;
     border-radius: 10px !important;
     font-size: 13px !important;
@@ -313,8 +308,8 @@
   }
   [data-slot="select-trigger"]:focus,
   [data-slot="select-trigger"][data-state="open"] {
-    border-color: hsl(var(--ring) / 0.6) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
+    border-color: hsl(var(--ring) / 0.7) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
     outline: none !important;
   }
 
@@ -326,14 +321,14 @@
     letter-spacing: 0.05em !important;
     text-transform: uppercase !important;
     border-bottom-color: hsl(var(--border)) !important;
-    background: hsl(var(--elevated) / 0.6);
+    background: hsl(var(--elevated) / 0.7);
   }
   [data-slot="table-row"] {
     border-bottom-color: hsl(var(--border)) !important;
     transition: background 120ms ease !important;
   }
   [data-slot="table-row"]:hover {
-    background: hsl(var(--accent) / 0.06) !important;
+    background: hsl(var(--accent) / 0.8) !important;
   }
 
   /* ── Badge ────────────────────────────────────────────────────────────── */
@@ -356,16 +351,16 @@
     border-radius: 10px !important;
   }
 
-  /* ── Active sidebar item — teal text on teal wash (landing nav pattern) ── */
+  /* ── Active sidebar item — white text, subtle white wash ──────────────── */
   .dark [data-active="true"] {
-    background-color: rgba(20, 184, 166, 0.08) !important;
-    color: #14b8a6 !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #fafafa !important;
   }
 
-  /* ── Accent hover — landing row wash ─────────────────────────────────── */
+  /* ── Highlighted items (dropdowns, menus) ─────────────────────────────── */
   .dark [data-highlighted],
   .dark [data-state="highlighted"] {
-    background-color: rgba(20, 184, 166, 0.06) !important;
+    background-color: rgba(255, 255, 255, 0.06) !important;
   }
 }
 
@@ -383,7 +378,7 @@
   .input-glow:focus {
     outline: none;
     border-color: hsl(var(--ring) / 0.6) !important;
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15) !important;
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12) !important;
   }
 
   .stat-icon-bg {
@@ -399,12 +394,12 @@
     box-shadow: var(--shadow-card);
   }
 
-  /* ── SnapServe status dots ────────────────────────────────────────────── */
+  /* ── Status dots ──────────────────────────────────────────────────────── */
   .status-dot-active   { background: #22c55e; }
-  .status-dot-inactive { background: rgba(255,255,255,0.08); }
-  .status-dot-live     { background: #14b8a6; animation: pulse 2s ease-in-out infinite; }
+  .status-dot-inactive { background: rgba(255,255,255,0.15); }
+  .status-dot-live     { background: #a1a1aa; animation: pulse 2s ease-in-out infinite; }
 
-  /* ── SnapServe gradient text ──────────────────────────────────────────── */
+  /* ── Gradient text — marketing only ──────────────────────────────────── */
   .gradient-text {
     background: var(--gradient-brand-text);
     background-size: 200% auto;
@@ -413,14 +408,14 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* ── SnapServe dot-grid background ───────────────────────────────────── */
+  /* ── Dot-grid background — auth / marketing routes ────────────────────── */
   .dot-bg {
     background-color: #080808;
     background-image: radial-gradient(circle, #1f1f1f 0.8px, transparent 0.8px);
     background-size: 18px 18px;
   }
 
-  /* ── SnapServe glow button wrap ───────────────────────────────────────── */
+  /* ── Glow button — marketing CTAs only ───────────────────────────────── */
   .btn-glow-wrap {
     display: inline-flex;
     border-radius: 9999px;
@@ -447,7 +442,7 @@
     cursor: pointer;
   }
 
-  /* ── Landing outline button ───────────────────────────────────────────── */
+  /* ── Outline button ───────────────────────────────────────────────────── */
   .outline-btn {
     display: inline-flex;
     align-items: center;
@@ -463,25 +458,17 @@
     transition: border-color 150ms ease, background 150ms ease;
   }
   .outline-btn:hover {
-    border-color: #14b8a6;
-    background: rgba(20, 184, 166, 0.06);
+    border-color: #a1a1aa;
+    background: rgba(255,255,255,0.05);
   }
 
-  /* ── Section label (landing .label style) ─────────────────────────────── */
+  /* ── Section label ────────────────────────────────────────────────────── */
   .label {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: hsl(var(--text-faint));
-  }
-
-  /* ── SnapServe teal focus ring helper ─────────────────────────────────── */
-  .ring-teal:focus-within,
-  .ring-teal:focus {
-    box-shadow: var(--shadow-glow-teal) !important;
-    border-color: rgba(20,184,166,0.4) !important;
-    outline: none !important;
   }
 }
 
