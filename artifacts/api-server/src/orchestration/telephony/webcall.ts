@@ -28,6 +28,7 @@ import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER } from "../conversationDiscipline.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
   buildToolDefs,
@@ -782,6 +783,11 @@ export async function handleWebCallWebSocket(
     `\n- Never use ALL-CAPS words or acronyms — write them in lowercase or spell them out.` +
     `\n- Never use markdown (no asterisks, hashes, bullet points, or underscores).` +
     `\n- Use only plain conversational sentences suitable for speech.`;
+
+  // ── Conversation discipline — mirrors session.ts (webcall builds its own
+  //    prompt outside session.ts). Forces one-step-at-a-time delivery, turn
+  //    yielding on "wait for response" markers, and resume-after-objection.
+  systemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
 
   // ── Agent config (agentConfig JSONB) ─────────────────────────────────────
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
@@ -1680,6 +1686,19 @@ export async function handleWebCallWebSocket(
           historyForLlm = [
             ...history.slice(0, -1),
             { ...lastTurn, content: `${lastTurn.content}\n\n[Reminder: reply in ${langName} only]` },
+          ];
+        }
+      }
+      // Per-turn conversation-discipline reminder — mirrors pipeline.ts. Appended
+      // to the last user turn (highest LLM attention, just before generation) so
+      // one-step delivery / wait-for-response / resume-after-objection survive
+      // long prompts. Only on the first tool iteration so it isn't re-stacked.
+      if (toolIterations === 0 && historyForLlm.length > 0) {
+        const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+        if (lastTurn.role === "user") {
+          historyForLlm = [
+            ...historyForLlm.slice(0, -1),
+            { ...lastTurn, content: `${lastTurn.content}\n\n${CONVERSATION_DISCIPLINE_TURN_REMINDER}` },
           ];
         }
       }

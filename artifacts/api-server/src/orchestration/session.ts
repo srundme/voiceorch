@@ -6,6 +6,7 @@ import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
+import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -163,6 +164,10 @@ export async function createSession(params: {
 - Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
 - NEVER use XML or SSML markup tags of any kind. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally as "less-than emotion greater-than".
 - Use only plain conversational sentences suitable for speech.`;
+
+  // Conversation discipline — force one-step-at-a-time delivery, turn yielding
+  // on "wait for response" markers, and resume-after-objection place-keeping.
+  effectiveSystemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; hipaa?: boolean; trai?: boolean } | undefined;

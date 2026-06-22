@@ -3,6 +3,7 @@ import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER } from "./conversationDiscipline.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -1905,12 +1906,31 @@ export class OrchestrationPipeline {
       }
     }
 
+    // Per-turn conversation-discipline reminder: appended to the last user turn so
+    // it sits at the highest-attention point (just before generation) and survives
+    // both long prompts and the staged-prompt override below (which replaces the
+    // system prompt but not the history). Enforces one-step delivery, wait-for-
+    // response turn yielding, and resume-after-objection place-keeping.
+    if (historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${CONVERSATION_DISCIPLINE_TURN_REMINDER}` },
+        ];
+      }
+    }
+
     // Layer 4: Staged Prompt — override system prompt with active stage block
     if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
       const stage = this.agent.stagedPromptStages[this.currentStageIndex];
       if (stage) {
         const core = this.agent.stagedPromptCoreIdentity?.trim() ?? "";
         systemPromptForTurn = core ? `${core}\n\n${stage.content}` : stage.content;
+        // The staged block fully replaces the base system prompt (and its
+        // discipline block), so re-append the discipline rules to keep one-step
+        // delivery / wait-for-response / resume-after-objection active per turn.
+        systemPromptForTurn += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
         logger.debug({ callId: this.config.callId, stage: stage.name, idx: this.currentStageIndex }, "Staged prompt active");
       }
     }
