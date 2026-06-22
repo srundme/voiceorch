@@ -276,12 +276,12 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     );
   }
 
-  // If GCal was configured but failed, downgrade booking from confirmed → pending
-  // so the attendee is not left with a "confirmed" booking that has no calendar event.
-  if (gcalFailed && booking.status === "confirmed") {
+  // Only downgrade to pending on GCal failure for manual-confirmation event types.
+  // Instant (auto-confirm) events stay confirmed — GCal is supplementary.
+  if (gcalFailed && eventType.confirmationMode !== "instant" && booking.status === "confirmed") {
     await db.execute(sql`UPDATE bookings SET status = 'pending' WHERE id = ${booking.id}`);
     booking = { ...booking, status: "pending" };
-    logger.warn({ bookingId: booking.id, connectionId: gcalConnectionId }, "Booking downgraded to pending — Google Calendar event creation failed; confirmation email suppressed");
+    logger.warn({ bookingId: booking.id, connectionId: gcalConnectionId }, "Booking downgraded to pending — Google Calendar event creation failed (manual-confirm event)");
   }
 
   // Issue self-service tokens for this booking
@@ -291,8 +291,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   const cancelLink = `${baseUrl}/book/cancel?token=${encodeURIComponent(cancelTok)}`;
   const rescheduleLink = `${baseUrl}/book/reschedule?token=${encodeURIComponent(rescheduleTok)}`;
 
-  // Only send confirmation email when the booking is confirmed (i.e., GCal succeeded or was not configured)
-  if (!gcalFailed) {
+  // Send confirmation email for confirmed bookings (instant-confirm sends even if GCal failed)
+  if (!gcalFailed || eventType.confirmationMode === "instant") {
     void sendBookingCreatedEmail({
       attendeeName: booking.attendeeName,
       attendeeEmail: booking.attendeeEmail,

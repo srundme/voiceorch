@@ -684,34 +684,41 @@ export async function executeNativeBooking(
       }, "error");
     }
 
-    // If GCal was configured but failed, downgrade booking from confirmed → pending
-    if (gcalFailed && confirmedBooking.status === "confirmed") {
-      await db.execute(
-        sql`UPDATE bookings SET status = 'pending' WHERE id = ${confirmedBooking.id}`,
-      );
-      (confirmedBooking as any).status = "pending";
-      logger.warn({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: downgraded to pending — Google Calendar event creation failed; confirmation email suppressed");
-      void appendBookingLog(callId, agentId, "Booking Status", {
-        status: "pending",
-        reason: "gcal_failed",
-        bookingId: confirmedBooking.id,
-      }, "error");
-    }
-
+    // If GCal was configured but failed, only downgrade to pending for manual-confirmation
+    // event types. Instant (auto-confirm) events stay confirmed — GCal is supplementary.
     if (gcalFailed) {
-      dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
-        booking: {
-          ...confirmedBooking,
-          slotStart: confirmedBooking.slotStart.toISOString(),
-          slotEnd: confirmedBooking.slotEnd.toISOString(),
-          cancelledAt: confirmedBooking.cancelledAt?.toISOString() ?? null,
-          createdAt: confirmedBooking.createdAt.toISOString(),
-          updatedAt: confirmedBooking.updatedAt.toISOString(),
-          meetLink,
-          googleEventId,
-        },
-      }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: webhook dispatch failed"));
-      return `booking_pending: booking_id=${confirmedBooking.id}, slot="${dateStr}", status="pending", note="Google Calendar event creation failed — booking requires manual confirmation"`;
+      if (eventType.confirmationMode !== "instant" && confirmedBooking.status === "confirmed") {
+        await db.execute(
+          sql`UPDATE bookings SET status = 'pending' WHERE id = ${confirmedBooking.id}`,
+        );
+        (confirmedBooking as any).status = "pending";
+        logger.warn({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: downgraded to pending — Google Calendar event creation failed (manual-confirm event)");
+        void appendBookingLog(callId, agentId, "Booking Status", {
+          status: "pending",
+          reason: "gcal_failed",
+          bookingId: confirmedBooking.id,
+        }, "error");
+        dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
+          booking: {
+            ...confirmedBooking,
+            slotStart: confirmedBooking.slotStart.toISOString(),
+            slotEnd: confirmedBooking.slotEnd.toISOString(),
+            cancelledAt: confirmedBooking.cancelledAt?.toISOString() ?? null,
+            createdAt: confirmedBooking.createdAt.toISOString(),
+            updatedAt: confirmedBooking.updatedAt.toISOString(),
+            meetLink,
+            googleEventId,
+          },
+        }).catch((err) => logger.warn({ callId, bookingId: confirmedBooking.id, err }, "Native booking: webhook dispatch failed"));
+        return `booking_pending: booking_id=${confirmedBooking.id}, slot="${dateStr}", status="pending", note="Google Calendar event creation failed — booking requires manual confirmation"`;
+      }
+      // Instant-confirm: GCal failure is non-blocking — booking stays confirmed
+      logger.warn({ callId, bookingId: confirmedBooking.id, connectionId: gcalConnectionId }, "Native booking: GCal event creation failed but event type is instant-confirm — booking stays confirmed");
+      void appendBookingLog(callId, agentId, "Booking Status", {
+        status: "confirmed",
+        reason: "gcal_failed_non_blocking",
+        bookingId: confirmedBooking.id,
+      }, "info");
     }
 
     sendBookingCreatedEmail({
