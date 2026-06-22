@@ -666,9 +666,9 @@ export default function SettingsPage() {
     : "general";
 
   function goTab(tab: SettingsTab) {
-    if (tab === "general")      navigate(`${BASE}/app/settings`);
-    else if (tab === "calendar") navigate(`${BASE}/app/settings/calendar`);
-    else                         navigate(`${BASE}/app/settings/conferencing`);
+    if (tab === "general")       navigate("/app/settings");
+    else if (tab === "calendar") navigate("/app/settings/calendar");
+    else                         navigate("/app/settings/conferencing");
   }
 
   return (

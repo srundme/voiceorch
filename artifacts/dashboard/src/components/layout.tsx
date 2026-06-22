@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component } from "react";
 import { Link, useLocation } from "wouter";
 import { IncomingCallNotification } from "@/components/incoming-call-notification";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
@@ -12,6 +12,45 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
 import { useGetWallet } from "@workspace/api-client-react";
 import { SnapServeIcon } from "@/components/logo";
+
+/* ─── Error boundary ─────────────────────────────────────────────────────── */
+interface ErrorBoundaryState { hasError: boolean; error: unknown }
+class ErrorBoundary extends Component<
+  { location: string; children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor(props: { location: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidUpdate(prevProps: { location: string }) {
+    if (prevProps.location !== this.props.location && this.state.hasError) {
+      this.setState({ hasError: false, error: null });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
+          <p className="text-sm text-muted-foreground">Something went wrong on this page.</p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
 const LS_COLLAPSED    = "snapserve:sidebar-collapsed";
@@ -240,7 +279,7 @@ function SidebarContent({
 
   useEffect(() => {
     if (isInSettings && !settingsOpen) setSettingsOpen(true);
-  }, [isInSettings]);
+  }, [isInSettings, settingsOpen]);
 
   const toggleSettings = () => {
     setSettingsOpen(v => {
@@ -459,7 +498,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {children}
+          <ErrorBoundary location={location}>
+            {children}
+          </ErrorBoundary>
         </div>
       </main>
 
