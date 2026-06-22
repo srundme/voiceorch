@@ -184,7 +184,7 @@ export async function getValidAccessToken(connectionId: string): Promise<{
     .limit(1);
   const row = rows[0];
   if (!row) {
-    logger.warn({ connectionId }, "Google connection not found in DB");
+    logger.error({ connectionId }, "Google connection not found in DB — connectionId references a row that does not exist; check if the connection was deleted");
     return null;
   }
 
@@ -193,9 +193,23 @@ export async function getValidAccessToken(connectionId: string): Promise<{
 
   const now    = Date.now();
   const expiry = row.tokenExpiry ? row.tokenExpiry.getTime() : 0;
+  const msUntilExpiry = expiry - now;
+
+  // Log token state to help diagnose auth failures for specific connections
+  logger.info(
+    {
+      connectionId,
+      email: row.email,
+      tokenExpiryMs: expiry,
+      msUntilExpiry,
+      hasRefreshToken: !!refreshToken,
+      isExpiredOrExpiringSoon: msUntilExpiry < 5 * 60 * 1000,
+    },
+    "getValidAccessToken: resolved connection token state",
+  );
 
   // Refresh if less than 5 minutes remaining
-  if (expiry - now < 5 * 60 * 1000 && refreshToken) {
+  if (msUntilExpiry < 5 * 60 * 1000 && refreshToken) {
     try {
       const client = makePlatformOAuth2Client();
       client.setCredentials({ refresh_token: refreshToken });
@@ -213,7 +227,7 @@ export async function getValidAccessToken(connectionId: string): Promise<{
         return { accessToken: credentials.access_token, email: row.email };
       }
     } catch (err) {
-      logger.warn({ err, connectionId }, "Failed to refresh Google token");
+      logger.error({ err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, connectionId }, "Failed to refresh Google token — token may be revoked or OAuth grant expired");
     }
   }
 
@@ -370,9 +384,17 @@ export async function createCalendarEvent(params: {
     );
     return { meetLink, eventId };
   } catch (err) {
-    logger.warn(
-      { err: (err as any)?.message, googleApiError: (err as any)?.response?.data,
-        connectionId: params.connectionId, attendeeEmail: params.attendeeEmail, summary: params.summary },
+    logger.error(
+      {
+        err,
+        errMessage: (err as any)?.message,
+        errStack: (err as any)?.stack,
+        googleApiError: (err as any)?.response?.data,
+        errDetails: (err as any)?.errors,
+        connectionId: params.connectionId,
+        attendeeEmail: params.attendeeEmail,
+        summary: params.summary,
+      },
       "Failed to create Google Calendar event",
     );
     return null;
@@ -460,9 +482,16 @@ export async function updateCalendarEvent(params: {
     );
     return { meetLink, eventId };
   } catch (err) {
-    logger.warn(
-      { err: (err as any)?.message, googleApiError: (err as any)?.response?.data,
-        connectionId: params.connectionId, eventId: params.eventId },
+    logger.error(
+      {
+        err,
+        errMessage: (err as any)?.message,
+        errStack: (err as any)?.stack,
+        googleApiError: (err as any)?.response?.data,
+        errDetails: (err as any)?.errors,
+        connectionId: params.connectionId,
+        eventId: params.eventId,
+      },
       "Failed to update Google Calendar event",
     );
     return null;

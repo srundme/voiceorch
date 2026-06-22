@@ -214,10 +214,11 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
     return;
   }
 
-  // Create Google Calendar event with Meet link (best-effort, non-blocking)
+  // Create Google Calendar event with Meet link
   let meetLink: string | null = null;
   let googleEventId: string | null = null;
   let gcalConnectionId: string | null = null;
+  let gcalFailed = false;
   try {
     const calRow = await db.execute(
       sql`SELECT google_calendar_connection_id FROM scheduling_calendars WHERE id = ${calendar.id}`
@@ -250,7 +251,8 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       additionalHosts: calendar.additionalHosts,
     }) : null;
     if (gcalConnectionId && !gcalResult) {
-      logger.warn({ connectionId: gcalConnectionId, bookingId: booking.id }, "createCalendarEvent returned null — Google Calendar event not created");
+      gcalFailed = true;
+      logger.error({ connectionId: gcalConnectionId, bookingId: booking.id }, "createCalendarEvent returned null — Google Calendar event not created; booking will be downgraded to pending");
     }
     if (gcalResult) {
       meetLink = gcalResult.meetLink;
@@ -262,7 +264,19 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       }
     }
   } catch (err) {
-    logger.warn({ err, bookingId: booking.id, connectionId: gcalConnectionId }, "Google Calendar event creation failed");
+    if (gcalConnectionId) gcalFailed = true;
+    logger.error(
+      { err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, errDetails: (err as any)?.errors, bookingId: booking.id, connectionId: gcalConnectionId },
+      "Google Calendar event creation failed",
+    );
+  }
+
+  // If GCal was configured but failed, downgrade booking from confirmed → pending
+  // so the attendee is not left with a "confirmed" booking that has no calendar event.
+  if (gcalFailed && booking.status === "confirmed") {
+    await db.execute(sql`UPDATE bookings SET status = 'pending' WHERE id = ${booking.id}`);
+    booking = { ...booking, status: "pending" };
+    logger.warn({ bookingId: booking.id, connectionId: gcalConnectionId }, "Booking downgraded to pending — Google Calendar event creation failed; confirmation email suppressed");
   }
 
   // Issue self-service tokens for this booking
@@ -272,21 +286,24 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
   const cancelLink = `${baseUrl}/book/cancel?token=${encodeURIComponent(cancelTok)}`;
   const rescheduleLink = `${baseUrl}/book/reschedule?token=${encodeURIComponent(rescheduleTok)}`;
 
-  void sendBookingCreatedEmail({
-    attendeeName: booking.attendeeName,
-    attendeeEmail: booking.attendeeEmail,
-    eventTypeName: eventType.name,
-    slotStart: booking.slotStart,
-    slotEnd: booking.slotEnd,
-    timezone: calendar.timezone,
-    hostEmail: calendar.hostEmail,
-    additionalHosts: calendar.additionalHosts,
-    bookingId: booking.id,
-    notes: booking.attendeeNotes,
-    meetLink,
-    cancelLink,
-    rescheduleLink,
-  });
+  // Only send confirmation email when the booking is confirmed (i.e., GCal succeeded or was not configured)
+  if (!gcalFailed) {
+    void sendBookingCreatedEmail({
+      attendeeName: booking.attendeeName,
+      attendeeEmail: booking.attendeeEmail,
+      eventTypeName: eventType.name,
+      slotStart: booking.slotStart,
+      slotEnd: booking.slotEnd,
+      timezone: calendar.timezone,
+      hostEmail: calendar.hostEmail,
+      additionalHosts: calendar.additionalHosts,
+      bookingId: booking.id,
+      notes: booking.attendeeNotes,
+      meetLink,
+      cancelLink,
+      rescheduleLink,
+    });
+  }
   void dispatchSchedulingWebhooks(calendar.userId, "scheduling.booking.created", {
     booking: {
       ...booking,
