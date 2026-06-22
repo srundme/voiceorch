@@ -1,0 +1,151 @@
+# Task: Standardize the Logs for Live Calls and Web Calls
+
+Currently, the **Web Call Logs** provide detailed execution information, but the **Live Call Logs** do not. Both call types should use the same logging system and display the same level of detail.
+
+## Expected Behavior
+
+The Logs page should accurately represent the complete execution flow of every call, regardless of whether it is a Web Call or a Live Call.
+
+There should be no difference in the logging format between call types.
+
+## Required Changes
+
+### 1. Use the same execution flow for all call types
+
+Both **Web Calls** and **Live Calls** should log every execution step in chronological order.
+
+Typical execution flow:
+
+* Agent Initialization
+* Memory Retrieval
+* Variable Resolver
+* STT Request / Response
+* LLM Request
+* Tool Request (if applicable)
+* Tool Response (if applicable)
+* LLM Response
+* TTS Request
+* TTS Response
+* Memory Update (if applicable)
+* Call End
+
+Only log the events that actually occur during the call.
+
+---
+
+### 2. Replace generic log entries
+
+The Live Call logs currently contain generic entries such as:
+
+* Booking
+* VoiceOrch
+* Empty (`—`) Log Data
+
+These are not useful for debugging.
+
+Instead, log the actual execution events exactly like the Web Call logs.
+
+---
+
+### 3. Log tool execution
+
+If the LLM invokes one or more tools:
+
+* Log every Tool Request.
+* Log every Tool Response.
+* Display the tool name.
+* Display the tool input.
+* Display the tool output.
+
+If multiple tools are executed, each one should appear separately in chronological order.
+
+---
+
+### 4. Populate the Log Data column
+
+The **Log Data** column should never be empty when execution details are available.
+
+Display meaningful information such as:
+
+* STT transcript
+* Prompt sent to the LLM
+* LLM response
+* Tool name
+* Tool parameters
+* Tool output
+* Memory retrieved
+* Variables resolved
+* Error messages
+
+Avoid displaying `—` unless there is genuinely no data to display.
+
+---
+
+### 5. Improve error logging
+
+Currently failed events only display `ERR`.
+
+Instead, include the actual failure reason in the Log Data.
+
+Examples:
+
+* Provider timeout
+* LLM generation failed
+* STT failed
+* TTS failed
+* Tool execution failed
+* Invalid tool response
+* API error
+* Context length exceeded
+
+This makes debugging much easier.
+
+---
+
+### 6. Preserve execution order
+
+The Logs page should always reflect the exact order in which events occurred during the call.
+
+For example:
+
+STT Response
+
+↓
+
+LLM Request
+
+↓
+
+Tool Request
+
+↓
+
+Tool Response
+
+↓
+
+LLM Response
+
+↓
+
+TTS Request
+
+↓
+
+TTS Response
+
+↓
+
+Memory Update
+
+↓
+
+Call End
+
+---
+
+### Goal
+
+The Logs page should become a complete execution timeline for every conversation.
+
+Whether the call is a **Web Call**, **Live Call**, or any future call type, the logging experience should be identical, with meaningful execution details, complete tool traces, proper error messages, and no missing or generic log entries.

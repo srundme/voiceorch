@@ -1,0 +1,922 @@
+[
+  {
+    "id": 4210,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:22.379Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 22,
+      "agentName": "New Agent",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4212,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:22.386Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "New Agent",
+        "date": "Monday, June 22, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_request_date: June 24th  [today]\n• cancel_meeting_request_date: 24th  [today]\n• requested_new_appointment_time: 10 AM  [today]\n• appointment_change_request_date: 24th  [today]\n• appointments_on_date:"
+    },
+    "metadata": null
+  },
+  {
+    "id": 4211,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:22.386Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Gopi",
+        "callCount": 18
+      },
+      "factCount": 18,
+      "facts": {
+        "appointment_booking_request_time": "11 AM",
+        "appointment_booking_request_date": "June 24th",
+        "cancel_meeting_request_date": "24th",
+        "requested_new_appointment_time": "10 AM",
+        "appointment_change_request_date": "24th",
+        "appointments_on_date": "24th June",
+        "requested_booking_time": "9:00 AM",
+        "inquiry_availability_time_of_day": "first half and 2nd of both",
+        "inquiry_availability_date": "24th of this month",
+        "new_appointment_request": "June 23rd at 3:30 PM",
+        "requested_appointment_time": "2:45 PM",
+        "name": "Gopi",
+        "inquiry_reason_for_pending_status": "true",
+        "additional_appointment_request": "June 23rd at 2:30 PM",
+        "current_date_and_time_inquiry": "true",
+        "upcoming_bookings_inquiry": "all upcoming bookings for tomorrow",
+        "calendar_event_creation_failure": "true",
+        "appointment_date": "June 23rd"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 4213,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:36.628Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello."
+    },
+    "metadata": null
+  },
+  {
+    "id": 4214,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:36.730Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Monday, June 22, 2026 at 10:42 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_reques",
+      "historyLength": 2,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4215,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:37.991Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello Gopi!"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4216,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:38.023Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1293,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Hello Gopi! We've had a few calls recently. How can I help you today regarding your appointments?"
+    },
+    "metadata": {
+      "inputTokens": 5326,
+      "outputTokens": 23,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4217,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:38.023Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "We've had a few calls recently. How can I help you today regarding your appointments?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4218,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:38.707Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 717,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 11,
+      "firstByteMs": 151
+    },
+    "metadata": null
+  },
+  {
+    "id": 4219,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:39.090Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1069,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 133118,
+      "textLength": 85,
+      "firstByteMs": 268
+    },
+    "metadata": null
+  },
+  {
+    "id": 4220,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:48.942Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Book me an appointment on 24th June at 10 AM."
+    },
+    "metadata": null
+  },
+  {
+    "id": 4221,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:49.043Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Monday, June 22, 2026 at 10:42 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_reques",
+      "historyLength": 4,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4222,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:50.560Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-06-24T10:00:00+05:30",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4223,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:50.560Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1517,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": ""
+    },
+    "metadata": {
+      "inputTokens": 10693,
+      "outputTokens": 73,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4224,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:50.596Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 36,
+    "requestPayload": {
+      "tool": "check_availability"
+    },
+    "responsePayload": {
+      "result": "requested_slot_unavailable: requested=\"Wed Jun 24 at 10:00 AM\", alternatives=\"2026-06-24T11:30:00+05:30 (Wed Jun 24 at 11:30 AM); 2026-06-24T12:00:00+05:30 (Wed Jun 24 at 12:00 PM); 2026-06-24T12:30:00+05:30 (Wed Jun 24 at 12:30 PM); 2026-06-24T13:00:00+05:30 (Wed Jun 24 at 1:00 PM); 2026-06-24T13:30:00+05:30 (Wed Jun 24 at 1:30 PM)\""
+    },
+    "metadata": null
+  },
+  {
+    "id": 4225,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:50.596Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Monday, June 22, 2026 at 10:42 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_reques",
+      "historyLength": 6,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4226,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:51.894Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I apologize, but June 24th at 10 am is unavailable. However"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4227,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:51.993Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1397,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "I apologize, but June 24th at 10 AM is unavailable. However, I have a few alternative times on June 24th:\n\n* 11:30 AM\n* 12:00 PM\n* 12:30 PM\n* 1:00 PM\n* 1:30 PM\n\nWhich of these times would you prefer?"
+    },
+    "metadata": {
+      "inputTokens": 16247,
+      "outputTokens": 156,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4228,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:51.993Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I apologize, but June 24th at 10 am is unavailable. However, I have a few alternative times on June 24th:\n\n* 11:30 am\n* 12:00 pm\n* 12:30 pm\n* 1:00 pm\n* 1:30 pm\n\nWhich of these times would you prefer?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4229,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:52.875Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 981,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 135678,
+      "textLength": 59,
+      "firstByteMs": 146
+    },
+    "metadata": null
+  },
+  {
+    "id": 4230,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:12:54.649Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2656,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 494078,
+      "textLength": 199,
+      "firstByteMs": 263
+    },
+    "metadata": null
+  },
+  {
+    "id": 4231,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:15.855Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "11:30 AM."
+    },
+    "metadata": null
+  },
+  {
+    "id": 4232,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:15.956Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Monday, June 22, 2026 at 10:43 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_reques",
+      "historyLength": 8,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4234,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.452Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1497,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": ""
+    },
+    "metadata": {
+      "inputTokens": 21951,
+      "outputTokens": 232,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4233,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.453Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "book_appointment",
+      "args": {
+        "attendee_email": "ramr76562@gmail.com",
+        "attendee_name": "Gopi",
+        "timezone": "Asia/Kolkata",
+        "preferred_date": "2026-06-24T11:30:00+05:30"
+      }
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4235,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.468Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Request"
+    },
+    "responsePayload": {
+      "attendeeName": "Gopi",
+      "attendeeEmail": "ramr76562@gmail.com",
+      "preferredRaw": "2026-06-24T11:30:00+05:30",
+      "eventTypeName": "one to one1",
+      "calendarTimezone": "Asia/Kolkata",
+      "availableSlotsFound": 107
+    },
+    "metadata": null
+  },
+  {
+    "id": 4236,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.480Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Availability Applied"
+    },
+    "responsePayload": {
+      "bookingId": 17,
+      "slotStart": "2026-06-24T06:00:00.000Z",
+      "slotEnd": "2026-06-24T06:30:00.000Z",
+      "slotFormatted": "Wednesday, June 24th at 11:30 AM GMT+5:30",
+      "status": "confirmed",
+      "attendeeEmail": "ramr76562@gmail.com",
+      "attendeeName": "Gopi"
+    },
+    "metadata": null
+  },
+  {
+    "id": 4237,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.710Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "error",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Calendar Event Created"
+    },
+    "responsePayload": {
+      "result": "failed",
+      "connectionId": "87f14654-f21c-4bcc-ac53-f51905c8776e",
+      "bookingId": 17,
+      "gcalError": {
+        "errorCode": "google_api_error",
+        "status": 403,
+        "googleError": {
+          "code": 403,
+          "message": "Request had insufficient authentication scopes.",
+          "errors": [
+            {
+              "message": "Insufficient Permission",
+              "domain": "global",
+              "reason": "insufficientPermissions"
+            }
+          ],
+          "status": "PERMISSION_DENIED",
+          "details": [
+            {
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              "reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT",
+              "domain": "googleapis.com",
+              "metadata": {
+                "service": "calendar-json.googleapis.com",
+                "method": "calendar.v3.Events.Insert"
+              }
+            }
+          ]
+        },
+        "message": "Request had insufficient authentication scopes."
+      }
+    },
+    "metadata": null
+  },
+  {
+    "id": 4238,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.710Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Status"
+    },
+    "responsePayload": {
+      "status": "confirmed",
+      "reason": "gcal_failed_non_blocking",
+      "bookingId": 17
+    },
+    "metadata": null
+  },
+  {
+    "id": 4239,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.710Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Confirmed"
+    },
+    "responsePayload": {
+      "bookingId": 17,
+      "eventTypeName": "one to one1",
+      "slot": "Wednesday, June 24th at 11:30 AM GMT+5:30",
+      "attendeeName": "Gopi",
+      "attendeeEmail": "ramr76562@gmail.com",
+      "status": "confirmed",
+      "meetLink": null,
+      "googleEventId": null
+    },
+    "metadata": null
+  },
+  {
+    "id": 4240,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.710Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 256,
+    "requestPayload": {
+      "tool": "book_appointment"
+    },
+    "responsePayload": {
+      "result": "booking_confirmed: event=\"one to one1\", slot=\"Wednesday, June 24th at 11:30 AM GMT+5:30\", booking_id=17, attendee=\"Gopi\", email=\"ramr76562@gmail.com\", status=\"confirmed\""
+    },
+    "metadata": null
+  },
+  {
+    "id": 4241,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:17.710Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Monday, June 22, 2026 at 10:43 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_reques",
+      "historyLength": 10,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4242,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:18.606Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Your appointment has been successfully booked for Wednesday"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4243,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:18.609Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 898,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Your appointment has been successfully booked for Wednesday, June 24th at 11:30 AM."
+    },
+    "metadata": {
+      "inputTokens": 27654,
+      "outputTokens": 255,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4244,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:18.609Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Your appointment has been successfully booked for Wednesday, June 24th at 11:30 am."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4245,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:19.380Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 773,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94718,
+      "textLength": 59,
+      "firstByteMs": 154
+    },
+    "metadata": null
+  },
+  {
+    "id": 4246,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:19.660Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1051,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 156158,
+      "textLength": 83,
+      "firstByteMs": 161
+    },
+    "metadata": null
+  },
+  {
+    "id": 4247,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:21.352Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Invitation Sent"
+    },
+    "responsePayload": {
+      "attendeeEmail": "ramr76562@gmail.com",
+      "hostEmail": "gopinwrk@gmail.com",
+      "bookingId": 17,
+      "meetLink": null
+    },
+    "metadata": null
+  },
+  {
+    "id": 4248,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:47.768Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "huh"
+    },
+    "metadata": null
+  },
+  {
+    "id": 4249,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:49.270Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Monday, June 22, 2026 at 10:43 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 18  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to call to confirm or modify one of their recently booked appointments for June 24th, or to attempt to book another appointment.\n📊 SENTIMENT ARC: 😐 → ✅ → 😐 → ✅ → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• appointment_booking_request_time: 11 AM  [today]\n• appointment_booking_reques",
+      "historyLength": 12,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4250,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:49.952Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "disconnected",
+      "durationSeconds": 87,
+      "turns": 6
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4251,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:50.888Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "How can I help you today, Gopi?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4252,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:50.888Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1619,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "How can I help you today, Gopi?"
+    },
+    "metadata": {
+      "inputTokens": 33414,
+      "outputTokens": 265,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4253,
+    "callId": 263,
+    "agentId": 22,
+    "ts": "2026-06-22T17:13:51.551Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 663,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 63998,
+      "textLength": 31,
+      "firstByteMs": 160
+    },
+    "metadata": null
+  }
+]
