@@ -619,7 +619,10 @@ export async function executeNativeBooking(
             endTime: confirmedBooking.slotEnd,
             attendeeEmail: confirmedBooking.attendeeEmail,
             attendeeName: confirmedBooking.attendeeName,
-            timezone: calendar.timezone,
+            // Use the caller-requested timezone (e.g. Asia/Kolkata) so the
+            // Google Calendar event displays in the correct local time — not the
+            // calendar's DB-configured timezone which may differ (e.g. "UTC").
+            timezone: tz,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
             onError: (detail) => { gcalErrorDetail = detail; },

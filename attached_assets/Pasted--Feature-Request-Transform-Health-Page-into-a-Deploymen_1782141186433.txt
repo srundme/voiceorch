@@ -1,0 +1,322 @@
+# Feature Request: Transform Health Page into a Deployment & Operations Center
+
+The current Health page is useful for developers, but it is not useful for Admins, Operations teams, Support teams, or Founders.
+
+Today the page only answers:
+
+- Is the system up?
+
+However, after launching SnapServe AI as a SaaS platform, admins need operational visibility.
+
+They need answers to:
+
+- What changed?
+- What was deployed?
+- Who deployed it?
+- When was it deployed?
+- Did the deployment succeed?
+- Did any database migrations run?
+- What features are live?
+- What features are pending?
+- Can we rollback if something breaks?
+
+The goal is to convert the existing Health page into a complete Deployment & Operations Center.
+
+---
+
+## Section 1: Latest Deployment
+
+Replace the current GitHub Sync card.
+
+Current state:
+
+Latest Commit
+fix: Admin Impersonation...
+20 minutes ago
+Railway likely live
+
+Replace with:
+
+Deployment #782
+
+Status:
+SUCCESS / FAILED / IN_PROGRESS
+
+Commit:
+fix: Admin Impersonation
+
+Author:
+karthicscl2
+
+Branch:
+main
+
+Environment:
+Production
+
+Started:
+17:26:10
+
+Completed:
+17:27:02
+
+Duration:
+52 seconds
+
+Railway Build:
+SUCCESS
+
+Database Migration:
+YES / NO
+
+Rollback Available:
+YES / NO
+
+---
+
+## Section 2: Deployment History
+
+Add a Deployment History table.
+
+Columns:
+
+Time
+Status
+Author
+Branch
+Description
+
+Example:
+
+17:26 | SUCCESS | Karthic | main | Admin Impersonation
+16:41 | SUCCESS | Gopi | main | Calendar Fix
+15:12 | FAILED  | Karthic | main | OAuth Changes
+14:55 | SUCCESS | Gopi | main | Agent Memory Update
+
+Show latest 20 deployments.
+
+Allow clicking a deployment row.
+
+---
+
+## Section 3: Deployment Details Drawer
+
+When clicking a deployment row, open a side drawer.
+
+Show:
+
+Files Changed
+
++ server/routes/admin.ts
++ server/auth/impersonation.ts
++ client/src/pages/UserView.tsx
+
+Statistics:
+
+Files Changed: 3
+Insertions: 78
+Deletions: 12
+
+Show commit message.
+
+Show GitHub commit URL if available.
+
+---
+
+## Section 4: AI Generated Release Notes
+
+For every deployment automatically generate a plain-English summary.
+
+Example:
+
+What changed?
+
+• Fixed admin impersonation flow
+• Added audit logging
+• Added exit impersonation redirect
+• Improved security validation
+
+Purpose:
+
+Non-technical admins should immediately understand what was deployed.
+
+---
+
+## Section 5: Deployment Impact
+
+Display impacted platform areas.
+
+Example:
+
+Affected Modules
+
+✓ Admin Portal
+✓ User Authentication
+✓ Agent Management
+
+Unaffected
+
+✓ Calls
+✓ Billing
+✓ Voice Infrastructure
+
+This should be generated automatically if possible.
+
+---
+
+## Section 6: Railway Production Status
+
+Replace the current text:
+
+"Railway likely live"
+
+with a dedicated Production Status card.
+
+Show:
+
+Backend:
+🟢 Healthy
+
+Frontend:
+🟢 Healthy
+
+Database:
+🟢 Connected
+
+Redis:
+🟢 Connected
+
+Railway Deploy:
+🟢 Success
+
+Version:
+v1.8.24
+
+Show last health-check timestamp.
+
+---
+
+## Section 7: Database Migration Status
+
+Add a dedicated database migration card.
+
+Example:
+
+Database Changes
+
+Migration Applied:
+YES
+
+Migration Name:
+add_admin_impersonation_sessions
+
+Execution Time:
+1.2s
+
+If migration failed:
+
+🔴 Migration Failed
+
+This is critical for production operations.
+
+---
+
+## Section 8: Rollback Center
+
+Add Emergency Actions section.
+
+Show:
+
+Current Version:
+v1.8.24
+
+Previous Version:
+v1.8.23
+
+Rollback Available:
+YES
+
+Button:
+
+[Rollback To Previous Version]
+
+The rollback button should only be visible to super-admins.
+
+---
+
+## Section 9: Feature Rollout Tracker
+
+This is one of the most important sections.
+
+Admins need to know what features are live.
+
+Example:
+
+Features Deployed Today
+
+✓ Admin Impersonation
+✓ Calendar Confirmation Emails
+✓ Agent Version History
+
+Pending Deployment
+
+⏳ TTS Streaming Fix
+⏳ Web Call Tool Execution
+⏳ Compliance Audit Logs
+
+Show deployment status of each feature.
+
+---
+
+## Section 10: Environment Information
+
+Show:
+
+Environment:
+Production
+
+Branch:
+main
+
+Commit SHA:
+e7b5f90
+
+Deployment Source:
+GitHub
+
+Railway Project:
+SnapServe AI
+
+Deployment Triggered By:
+karthicscl2
+
+---
+
+## UI Requirements
+
+- Keep existing dark theme.
+- Match SnapServe design system.
+- Mobile responsive.
+- Fast loading.
+- Use cards and tables similar to the existing admin UI.
+- Add loading states and error states.
+- Show empty states when deployment data is unavailable.
+
+---
+
+## Expected Result
+
+The Health page should evolve from a simple infrastructure status page into a complete Deployment & Operations Center.
+
+It should become the single place where an Admin can understand:
+
+- Current system health
+- Latest deployment
+- Deployment history
+- Release notes
+- Railway status
+- Database migration status
+- Rollback readiness
+- Feature rollout progress
+
+without needing GitHub, Railway, or developer access.

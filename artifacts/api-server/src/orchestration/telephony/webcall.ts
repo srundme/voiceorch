@@ -1539,15 +1539,18 @@ export async function handleWebCallWebSocket(
       if (hasSchedulingNav) {
         const listTool = agentTools.find((t) => t.type === "native_list_bookings");
         const checkTool = agentTools.find((t) => t.type === "native_check_availability");
+        const cancelTool = agentTools.find((t) => t.type === "native_cancel");
+        const rescheduleTool = agentTools.find((t) => t.type === "native_reschedule");
         const listName = listTool?.name ?? "get_bookings";
         const checkName = checkTool?.name ?? "check_availability";
+        const navDefaultTz = (listTool as any)?.timezone ?? (cancelTool as any)?.timezone ?? (rescheduleTool as any)?.timezone ?? (checkTool as any)?.timezone ?? "Asia/Kolkata";
         systemPromptForTurn += [
           "",
           "",
           "[SCHEDULING TOOL GUIDE]",
           "State machine for cancel/reschedule:",
           `1. ALWAYS call "${listName}" (not "${checkName}") to look up their existing appointment by name. Never call "${checkName}" for this purpose.`,
-          `2. Always pass the caller's stated timezone into every scheduling tool call (e.g. timezone="Asia/Kolkata"). Default to "Asia/Kolkata" if not stated.`,
+          `2. Always pass timezone="${navDefaultTz}" into every scheduling tool call. NEVER ask the caller what timezone they are in — default silently to "${navDefaultTz}" unless the caller explicitly asks about a different timezone.`,
           `3. If "${listName}" returns an empty result, say: "There are no upcoming bookings under your name."`,
           `4. If all returned bookings are in the past, say: "Your previous appointment has already passed — I can only reschedule upcoming ones. Would you like to book a new one?"`,
           `5. Once a booking is identified for rescheduling: call "${checkName}" for the SAME DATE as the existing booking unless the caller explicitly states a different date. Use the booking's existing date as preferred_date.`,
@@ -1569,11 +1572,14 @@ export async function handleWebCallWebSocket(
         const checkTool = agentTools.find((t) => t.type === "native_check_availability");
         const bookName = bookTool?.name ?? "book_appointment";
         const checkName = checkTool?.name ?? "check_availability";
+        // Use the tool's configured default timezone; fall back to Asia/Kolkata
+        const calDefaultTz = (bookTool as any)?.timezone ?? (checkTool as any)?.timezone ?? "Asia/Kolkata";
         const lines = [
           "",
           "",
           "[BOOKING TOOL GUIDE]",
           `CRITICAL: NEVER invent, guess, or assume any available slot times. You MUST call "${checkName}" before telling the caller any available times. Only relay times you received directly from a "${checkName}" tool result.`,
+          `TIMEZONE RULE: The calendar is configured for timezone "${calDefaultTz}". Always pass timezone="${calDefaultTz}" in every tool call. NEVER ask the caller what timezone they are in — default silently to "${calDefaultTz}" unless the caller explicitly asks about a different timezone, in which case use that IANA timezone string.`,
         ];
         if (hasCheckAvailabilityTool) {
           lines.push(
