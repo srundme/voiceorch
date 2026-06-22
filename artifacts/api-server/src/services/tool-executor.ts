@@ -609,6 +609,7 @@ export async function executeNativeBooking(
         }, "info");
       }
 
+      let gcalErrorDetail: object | null = null;
       const gcalResult = gcalConnectionId
         ? await createCalendarEvent({
             connectionId: gcalConnectionId,
@@ -621,6 +622,7 @@ export async function executeNativeBooking(
             timezone: calendar.timezone,
             hostEmail: calendar.hostEmail,
             additionalHosts: calendar.additionalHosts,
+            onError: (detail) => { gcalErrorDetail = detail; },
           })
         : null;
       if (gcalResult) {
@@ -663,6 +665,7 @@ export async function executeNativeBooking(
           result: "failed",
           connectionId: gcalConnectionId,
           bookingId: confirmedBooking.id,
+          ...(gcalErrorDetail ? { gcalError: gcalErrorDetail } : {}),
         }, "error");
       }
     } catch (err) {

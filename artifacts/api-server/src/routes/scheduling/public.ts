@@ -238,6 +238,7 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       );
     }
 
+    let gcalErrorDetail: object | null = null;
     const gcalResult = gcalConnectionId ? await createCalendarEvent({
       connectionId: gcalConnectionId,
       summary: `${eventType.name} — ${booking.attendeeName}`,
@@ -249,10 +250,14 @@ router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
       timezone: calendar.timezone,
       hostEmail: calendar.hostEmail,
       additionalHosts: calendar.additionalHosts,
+      onError: (detail) => { gcalErrorDetail = detail; },
     }) : null;
     if (gcalConnectionId && !gcalResult) {
       gcalFailed = true;
-      logger.error({ connectionId: gcalConnectionId, bookingId: booking.id }, "createCalendarEvent returned null — Google Calendar event not created; booking will be downgraded to pending");
+      logger.error(
+        { connectionId: gcalConnectionId, bookingId: booking.id, gcalError: gcalErrorDetail },
+        "createCalendarEvent returned null — Google Calendar event not created; booking will be downgraded to pending",
+      );
     }
     if (gcalResult) {
       meetLink = gcalResult.meetLink;

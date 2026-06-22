@@ -61,6 +61,7 @@ export function getAuthUrl(
   returnTo?: string,
   returnOrigin?: string,
   redirectUri?: string,
+  connectionId?: string,
 ): string {
   const client = makePlatformOAuth2Client(redirectUri);
   const state = JSON.stringify({
@@ -69,6 +70,9 @@ export function getAuthUrl(
     // Pass the caller's origin so the callback can redirect back to the right domain
     // (dev preview vs production). Validated in the callback before use.
     ...(returnOrigin ? { returnOrigin } : {}),
+    // When re-authorizing an existing connection, pass its ID so the callback
+    // updates the row in-place instead of inserting a duplicate.
+    ...(connectionId ? { connectionId } : {}),
   });
   return client.generateAuthUrl({
     access_type: "offline",
@@ -145,9 +149,39 @@ export async function upsertConnection(
   accessToken: string,
   refreshToken: string,
   expiry: Date,
+  existingId?: string,
 ): Promise<string> {
   const encAccess  = encryptKey(accessToken);
   const encRefresh = refreshToken ? encryptKey(refreshToken) : "";
+
+  // If a specific connection ID is provided (re-auth flow), update it in place
+  // to avoid duplicate rows when the user reconnects the same Google account.
+  // Scope the UPDATE to both id AND userId to prevent cross-tenant row overwrite.
+  if (existingId) {
+    const { and } = await import("drizzle-orm");
+    const result = await db
+      .update(googleCalendarConnectionsTable)
+      .set({
+        email,
+        accessToken: encAccess,
+        refreshToken: encRefresh
+          ? encRefresh
+          : sql`google_calendar_connections.refresh_token`,
+        tokenExpiry: expiry,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(googleCalendarConnectionsTable.id, existingId),
+        eq(googleCalendarConnectionsTable.userId, userId),
+      ))
+      .returning({ id: googleCalendarConnectionsTable.id });
+    if (result.length > 0) {
+      return existingId;
+    }
+    // existingId not found or doesn't belong to userId — fall through to normal upsert
+    logger.warn({ existingId, userId }, "upsertConnection: existingId not found or userId mismatch — falling through to normal upsert");
+  }
+
   const rows = await db
     .insert(googleCalendarConnectionsTable)
     .values({ userId, email, accessToken: encAccess, refreshToken: encRefresh, tokenExpiry: expiry })
@@ -226,9 +260,28 @@ export async function getValidAccessToken(connectionId: string): Promise<{
           .where(eq(googleCalendarConnectionsTable.id, connectionId));
         return { accessToken: credentials.access_token, email: row.email };
       }
+      // Refresh succeeded but returned no access_token — do not return stale token
+      logger.error(
+        { connectionId, email: row.email },
+        "Google token refresh returned no access_token — returning null to prevent stale-token 401",
+      );
+      return null;
     } catch (err) {
-      logger.error({ err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, connectionId }, "Failed to refresh Google token — token may be revoked or OAuth grant expired");
+      logger.error(
+        { err, errStack: (err as any)?.stack, googleApiError: (err as any)?.response?.data, connectionId },
+        "Failed to refresh Google token — token may be revoked or OAuth grant expired; returning null",
+      );
+      return null;
     }
+  }
+
+  // Token is expired and there is no refresh token — cannot make API calls
+  if (msUntilExpiry < 0 && !refreshToken) {
+    logger.error(
+      { connectionId, email: row.email, msUntilExpiry },
+      "Google access token is expired and no refresh token is stored — returning null",
+    );
+    return null;
   }
 
   return { accessToken, email: row.email };
@@ -328,9 +381,16 @@ export async function createCalendarEvent(params: {
   timezone: string;
   hostEmail?: string | null;
   additionalHosts?: string[] | null;
+  onError?: (detail: { errorCode: string; status?: number; googleError?: string; googleErrorDescription?: string; message?: string }) => void;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   const tokens = await getValidAccessToken(params.connectionId);
-  if (!tokens) return null;
+  if (!tokens) {
+    params.onError?.({
+      errorCode: "token_expired_refresh_failed",
+      message: "getValidAccessToken returned null — token is expired or refresh failed; re-authorize this Google connection",
+    });
+    return null;
+  }
 
   const client = makePlatformOAuth2Client();
   client.setCredentials({ access_token: tokens.accessToken });
@@ -384,6 +444,9 @@ export async function createCalendarEvent(params: {
     );
     return { meetLink, eventId };
   } catch (err) {
+    const status: number | undefined            = (err as any)?.response?.status;
+    const googleError: string | undefined      = (err as any)?.response?.data?.error;
+    const googleErrorDesc: string | undefined  = (err as any)?.response?.data?.error_description;
     logger.error(
       {
         err,
@@ -394,9 +457,17 @@ export async function createCalendarEvent(params: {
         connectionId: params.connectionId,
         attendeeEmail: params.attendeeEmail,
         summary: params.summary,
+        httpStatus: status,
       },
       "Failed to create Google Calendar event",
     );
+    params.onError?.({
+      errorCode: "google_api_error",
+      status,
+      googleError,
+      googleErrorDescription: googleErrorDesc,
+      message: (err as any)?.message,
+    });
     return null;
   }
 }

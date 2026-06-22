@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Video, CheckCircle2, Loader2, Plus, Trash2, Link2, Unlink, AlertTriangle } from "lucide-react";
+import { Video, CheckCircle2, Loader2, Plus, Trash2, Link2, Unlink, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,11 +17,15 @@ type GoogleConnection = {
   reconnectReason?: string | null;
 };
 
+type TestStatus = "idle" | "testing" | "ok" | "failed";
+
 export default function ConferencingPage({ embedded = false }: { embedded?: boolean }) {
   const [connections, setConnections] = useState<GoogleConnection[]>([]);
   const [loading, setLoading]         = useState(true);
   const [connecting, setConnecting]   = useState(false);
   const [removingId, setRemovingId]   = useState<string | null>(null);
+  const [testingId, setTestingId]     = useState<string | null>(null);
+  const [testStatus, setTestStatus]   = useState<Record<string, TestStatus>>({});
   const { toast } = useToast();
 
   const load = useCallback(async () => {
@@ -101,10 +105,15 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
 
   useEffect(() => { void load(); }, [load]);
 
-  async function handleConnect() {
+  async function handleConnect(connectionId?: string) {
     setConnecting(true);
     try {
-      const { url } = await customFetch<{ url: string }>(`${API}/scheduling/google/connect-url?returnTo=conferencing&returnOrigin=${encodeURIComponent(window.location.origin)}`);
+      const qs = new URLSearchParams({
+        returnTo: "conferencing",
+        returnOrigin: window.location.origin,
+        ...(connectionId ? { connection_id: connectionId } : {}),
+      });
+      const { url } = await customFetch<{ url: string }>(`${API}/scheduling/google/connect-url?${qs.toString()}`);
       window.open(url, "_blank", "noopener");
     } catch {
       toast({ title: "Could not start Google sign-in", variant: "destructive" });
@@ -122,6 +131,31 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
       toast({ title: "Failed to disconnect", variant: "destructive" });
     } finally {
       setRemovingId(null);
+    }
+  }
+
+  async function handleTest(conn: GoogleConnection) {
+    setTestingId(conn.id);
+    setTestStatus(prev => ({ ...prev, [conn.id]: "testing" }));
+    try {
+      const result = await customFetch<{ ok: boolean; email?: string; error?: string; status?: number }>(
+        `${API}/scheduling/google/connections/${conn.id}/test`,
+        { method: "POST" },
+      );
+      if (result.ok) {
+        setTestStatus(prev => ({ ...prev, [conn.id]: "ok" }));
+        // Clear the needsReconnect flag locally
+        setConnections(prev => prev.map(c => c.id === conn.id ? { ...c, needsReconnect: false } : c));
+      } else {
+        setTestStatus(prev => ({ ...prev, [conn.id]: "failed" }));
+        // Mark as needing reconnect
+        setConnections(prev => prev.map(c => c.id === conn.id ? { ...c, needsReconnect: true } : c));
+      }
+    } catch {
+      setTestStatus(prev => ({ ...prev, [conn.id]: "failed" }));
+      setConnections(prev => prev.map(c => c.id === conn.id ? { ...c, needsReconnect: true } : c));
+    } finally {
+      setTestingId(null);
     }
   }
 
@@ -170,7 +204,7 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
 
             <Button
               size="sm"
-              onClick={handleConnect}
+              onClick={() => handleConnect()}
               disabled={connecting || loading}
               className="shrink-0 gap-1.5"
               variant={hasConnections ? "outline" : "default"}
@@ -200,58 +234,85 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
               </div>
 
               <div className="space-y-2">
-                {connections.map(conn => (
-                  <div
-                    key={conn.id}
-                    className={`flex flex-col gap-2 p-3 bg-background border rounded-lg ${conn.needsReconnect ? "border-destructive/50" : ""}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          <span className="text-xs font-semibold text-foreground">
-                            {conn.email[0]?.toUpperCase()}
-                          </span>
+                {connections.map(conn => {
+                  const ts = testStatus[conn.id] ?? "idle";
+                  return (
+                    <div
+                      key={conn.id}
+                      className={`flex flex-col gap-2 p-3 bg-background border rounded-lg ${conn.needsReconnect ? "border-destructive/50" : ""}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                            <span className="text-xs font-semibold text-foreground">
+                              {conn.email[0]?.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{conn.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Connected {new Date(conn.connectedAt).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{conn.email}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Connected {new Date(conn.connectedAt).toLocaleDateString()}
-                          </p>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Test button */}
+                          {ts === "ok" ? (
+                            <Badge className="bg-green-500/10 text-green-600 border-green-500/30 gap-1 text-xs h-7 px-2">
+                              <CheckCircle2 className="h-3 w-3" />OK
+                            </Badge>
+                          ) : ts === "failed" ? (
+                            <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs h-7 px-2">
+                              Auth expired
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={testingId === conn.id}
+                              onClick={() => handleTest(conn)}
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              {testingId === conn.id
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <><RefreshCw className="h-3 w-3 mr-1" />Test</>}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={removingId === conn.id}
+                            onClick={() => handleRemove(conn.id)}
+                            className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                          >
+                            {removingId === conn.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Trash2 className="h-3.5 w-3.5" />}
+                          </Button>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={removingId === conn.id}
-                        onClick={() => handleRemove(conn.id)}
-                        className="h-7 px-2 text-muted-foreground hover:text-destructive shrink-0"
-                      >
-                        {removingId === conn.id
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Trash2 className="h-3.5 w-3.5" />}
-                      </Button>
+                      {(conn.needsReconnect || ts === "failed") && (
+                        <div className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                            <p className="text-xs text-destructive">
+                              Reconnect needed — calendar events can't be created until you re-authorize. Make sure to grant calendar access.
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={connecting}
+                            onClick={() => handleConnect(conn.id)}
+                            className="h-7 px-2 text-xs shrink-0"
+                          >
+                            {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Reconnect"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    {conn.needsReconnect && (
-                      <div className="flex items-center justify-between gap-2 rounded-md bg-destructive/10 px-2.5 py-2">
-                        <div className="flex items-start gap-2 min-w-0">
-                          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
-                          <p className="text-xs text-destructive">
-                            Reconnect needed — calendar events can’t be created until you re-authorize. Make sure to grant calendar access.
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={connecting}
-                          onClick={handleConnect}
-                          className="h-7 px-2 text-xs shrink-0"
-                        >
-                          {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Reconnect"}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : (
@@ -282,6 +343,7 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
           <p>2. Optionally assign specific Google accounts to individual calendars (for multi-tenant setups)</p>
           <p>3. When a booking is confirmed, a Meet link is created on that Google account and emailed to both parties</p>
           <p>4. You can connect multiple Google accounts — e.g. one per department or agent</p>
+          <p>5. Use the <strong>Test</strong> button to verify a connection is working. If expired, use <strong>Reconnect</strong> to re-authorize in-place.</p>
         </CardContent>
       </Card>
 

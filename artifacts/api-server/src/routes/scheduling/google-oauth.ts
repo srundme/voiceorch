@@ -7,6 +7,7 @@ import {
   listConnectionsForUser,
   revokeConnection,
   listConnectionCalendars,
+  getValidAccessToken,
 } from "../../services/scheduling/google-calendar.js";
 import { logger } from "../../lib/logger.js";
 import { getAppDomain, getAppOrigins, getSelfBaseUrl } from "../../lib/app-domain.js";
@@ -124,14 +125,28 @@ router.get("/scheduling/google/connect", requireAuth, (req, res): void => {
 
 // ── OAuth connect URL — returns the Google auth URL as JSON (for Bearer-token callers) ─
 
-router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
+router.get("/scheduling/google/connect-url", requireAuth, async (req, res): Promise<void> => {
   const clerkId      = (req as any).clerkUserId as string;
   const returnTo     = (req.query["returnTo"] as string | undefined) ?? "conferencing";
   const returnOrigin = req.query["returnOrigin"] as string | undefined;
+  const connectionId = req.query["connection_id"] as string | undefined;
 
   if (!process.env["GOOGLE_CLIENT_ID"] || !process.env["GOOGLE_CLIENT_SECRET"]) {
     res.status(503).json({ error: "Google OAuth not configured on this platform." });
     return;
+  }
+
+  // If a connection_id is supplied (re-auth flow), verify ownership before embedding
+  // it in the OAuth state — prevents a user from overwriting another user's row.
+  let verifiedConnectionId: string | undefined;
+  if (connectionId) {
+    const connections = await listConnectionsForUser(clerkId);
+    const owns = connections.some(c => c.id === connectionId);
+    if (!owns) {
+      res.status(403).json({ error: "Not authorized to reconnect this connection" });
+      return;
+    }
+    verifiedConnectionId = connectionId;
   }
 
   const redirectUri = deriveRedirectUri(req);
@@ -147,6 +162,7 @@ router.get("/scheduling/google/connect-url", requireAuth, (req, res): void => {
     returnTo,
     returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : undefined,
     redirectUri,
+    verifiedConnectionId,
   );
   res.json({ url });
 });
@@ -163,12 +179,14 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   let clerkId: string | undefined;
   let returnTo     = "conferencing";
   let returnOrigin: string | undefined;
+  let stateConnectionId: string | undefined;
   if (rawState) {
     try {
-      const parsed = JSON.parse(rawState) as { clerkId?: string; returnTo?: string; returnOrigin?: string };
-      clerkId      = parsed.clerkId;
-      returnTo     = parsed.returnTo ?? "conferencing";
-      returnOrigin = parsed.returnOrigin;
+      const parsed = JSON.parse(rawState) as { clerkId?: string; returnTo?: string; returnOrigin?: string; connectionId?: string };
+      clerkId           = parsed.clerkId;
+      returnTo          = parsed.returnTo ?? "conferencing";
+      returnOrigin      = parsed.returnOrigin;
+      stateConnectionId = parsed.connectionId;
     } catch {
       // Legacy: state was just the clerkId string
       clerkId = rawState;
@@ -198,13 +216,45 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
       tokens.accessToken,
       tokens.refreshToken,
       tokens.expiry,
+      stateConnectionId,
     );
-    logger.info({ clerkId, email: tokens.email }, "Google Calendar connected");
+    logger.info({ clerkId, email: tokens.email, updatedExistingId: stateConnectionId ?? null }, "Google Calendar connected");
     res.redirect(`${redirectBase}?gcal=connected&email=${encodeURIComponent(tokens.email)}`);
   } catch (err) {
     logger.warn({ err, clerkId }, "Failed to exchange Google OAuth code");
     res.redirect(`${redirectBase}?gcal=error`);
   }
+});
+
+// ── Test a Google Calendar connection ────────────────────────────────────────
+// Calls calendarList.list to verify the token is valid and the API is reachable.
+// Returns { ok: true, email } on success, { ok: false, error, status? } on failure.
+
+router.post("/scheduling/google/connections/:id/test", requireAuth, async (req, res): Promise<void> => {
+  const clerkId      = (req as any).clerkUserId as string;
+  const connectionId = req.params["id"] as string;
+
+  const connections = await listConnectionsForUser(clerkId);
+  const conn = connections.find(c => c.id === connectionId);
+  if (!conn) {
+    res.status(403).json({ error: "Not authorized to test this connection" });
+    return;
+  }
+
+  const tokens = await getValidAccessToken(connectionId);
+  if (!tokens) {
+    res.json({ ok: false, error: "token_invalid", status: 401 });
+    return;
+  }
+
+  // Use listConnectionCalendars as a live reachability probe — it calls calendarList.list
+  const cals = await listConnectionCalendars(connectionId);
+  if (cals === null) {
+    res.json({ ok: false, error: "calendar_api_error", status: 401 });
+    return;
+  }
+
+  res.json({ ok: true, email: tokens.email });
 });
 
 // ── Disconnect a specific Google account ─────────────────────────────────────
