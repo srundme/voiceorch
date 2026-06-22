@@ -4656,6 +4656,10 @@ endDate?: string | null;
  * @nullable
  */
 bookedVia?: ListBookingsBookedVia;
+/**
+ * @nullable
+ */
+calendarSyncStatus?: ListBookingsCalendarSyncStatus;
 };
 
 export type ListBookingsStatus = typeof ListBookingsStatus[keyof typeof ListBookingsStatus] | null;
@@ -4676,6 +4680,17 @@ export const ListBookingsBookedVia = {
   agent: 'agent',
   web: 'web',
   api: 'api',
+  null: 'null',
+} as const;
+
+export type ListBookingsCalendarSyncStatus = typeof ListBookingsCalendarSyncStatus[keyof typeof ListBookingsCalendarSyncStatus] | null;
+
+
+export const ListBookingsCalendarSyncStatus = {
+  synced: 'synced',
+  sync_failed: 'sync_failed',
+  scope_insufficient: 'scope_insufficient',
+  skipped: 'skipped',
   null: 'null',
 } as const;
 

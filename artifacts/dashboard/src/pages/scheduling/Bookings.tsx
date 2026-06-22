@@ -17,10 +17,61 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function CalSyncBadge({ status, error }: { status: Booking["calendarSyncStatus"]; error?: string | null }) {
+  let badge: React.ReactNode;
+  switch (status) {
+    case "synced":
+      badge = (
+        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800 text-xs">
+          Synced
+        </Badge>
+      );
+      break;
+    case "scope_insufficient":
+      badge = (
+        <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 text-xs">
+          Scope issue
+        </Badge>
+      );
+      break;
+    case "sync_failed":
+      badge = (
+        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 text-xs">
+          Sync failed
+        </Badge>
+      );
+      break;
+    case "skipped":
+    default:
+      badge = (
+        <Badge variant="outline" className="text-muted-foreground text-xs">
+          No calendar
+        </Badge>
+      );
+      break;
+  }
+
+  if (!error) return <>{badge}</>;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help">{badge}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs break-words">
+        {error}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function statusBadge(status: string) {
   switch (status) {
@@ -152,6 +203,12 @@ export default function BookingDetailPage() {
                 View call log #{booking.callId}
               </a>
             )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Calendar sync:</span>
+              <TooltipProvider>
+                <CalSyncBadge status={booking.calendarSyncStatus} error={booking.calendarSyncError} />
+              </TooltipProvider>
+            </div>
           </CardContent>
         </Card>
       </div>

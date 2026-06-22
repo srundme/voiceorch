@@ -4427,7 +4427,8 @@ export const ListBookingsQueryParams = zod.object({
   "calendarId": zod.coerce.number().nullish(),
   "startDate": zod.coerce.string().nullish(),
   "endDate": zod.coerce.string().nullish(),
-  "bookedVia": zod.enum(['agent', 'web', 'api', 'null']).nullish()
+  "bookedVia": zod.enum(['agent', 'web', 'api', 'null']).nullish(),
+  "calendarSyncStatus": zod.enum(['synced', 'sync_failed', 'scope_insufficient', 'skipped', 'null']).nullish()
 })
 
 export const ListBookingsResponseItem = zod.object({
