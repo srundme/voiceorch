@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import { Calendar, Filter, ChevronRight, Bot, Globe } from "lucide-react";
+import { SchedulingTabNav } from "@/components/scheduling-tab-nav";
 import {
   useListBookings,
   useListCalendars,
@@ -120,27 +121,16 @@ export default function SchedulingPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6 p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-muted">
-              <Calendar className="h-5 w-5 text-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Scheduling</h1>
-              <p className="text-sm text-muted-foreground">Manage bookings, event types, and availability</p>
-            </div>
+      <div className="flex flex-col h-full overflow-hidden">
+        <SchedulingTabNav />
+      <div className="flex flex-col gap-6 p-6 flex-1 overflow-y-auto">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-muted">
+            <Calendar className="h-5 w-5 text-foreground" />
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`${BASE}/app/scheduling/calendars`}>Calendars</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`${BASE}/app/scheduling/event-types`}>Event Types</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`${BASE}/app/scheduling/availability`}>Availability</Link>
-            </Button>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Bookings</h1>
+            <p className="text-sm text-muted-foreground">Manage bookings, event types, and availability</p>
           </div>
         </div>
 
@@ -290,6 +280,7 @@ export default function SchedulingPage() {
             </Table>
           </CardContent>
         </Card>
+      </div>
       </div>
     </TooltipProvider>
   );

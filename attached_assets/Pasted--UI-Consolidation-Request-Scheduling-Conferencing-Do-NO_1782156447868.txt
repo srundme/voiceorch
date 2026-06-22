@@ -1,0 +1,123 @@
+# UI Consolidation Request – Scheduling & Conferencing
+
+Do NOT change any existing functionality, APIs, database structures, booking logic, Google Calendar integration, Google Meet generation, event creation flow, availability logic, or scheduling workflows.
+
+This is a UI/navigation consolidation request only.
+
+## Current Problem
+
+Calendar-related functionality is currently split across two different sections:
+
+### Scheduling Module
+
+Contains:
+
+* Calendars
+* Event Types
+* Availability
+
+### Settings Module
+
+Contains:
+
+* Calendar Connections
+* Google Calendar Accounts
+* Conferencing
+* Google Meet Configuration
+
+This creates confusion because all scheduling-related configuration is spread across multiple areas.
+
+---
+
+## Required Change
+
+Move calendar and conferencing management into the Scheduling section so all scheduling-related configuration is available in one place.
+
+### Scheduling Navigation
+
+Add the following tabs under Scheduling:
+
+* Calendars
+* Event Types
+* Availability
+* Conferencing
+
+The new "Conferencing" tab should expose the exact same functionality currently available under:
+
+Settings → Conferencing
+
+---
+
+## Conferencing Tab Requirements
+
+Display:
+
+### Connected Google Accounts
+
+* Connected Google accounts
+* Connection status
+* Test connection button
+* Reconnect button (if needed)
+* Remove account button
+
+### Google Meet Settings
+
+* Enable/Disable Google Meet generation
+* Account assignment visibility
+* Account usage information
+
+### Conferencing Information
+
+* Which account is generating Meet links
+* Which account is attached to each calendar
+* Connection health indicators
+
+---
+
+## Navigation Requirement
+
+Users should be able to manage:
+
+* Availability
+* Calendars
+* Event Types
+* Google Calendar Connections
+* Google Meet Configuration
+
+from a single Scheduling area.
+
+---
+
+## Important Constraints
+
+DO NOT:
+
+* Change booking behavior
+* Change availability calculation
+* Change Google Meet generation
+* Change email delivery
+* Change attendee handling
+* Change calendar sync logic
+* Change OAuth logic
+* Change database schema
+* Change API contracts
+* Change existing integrations
+
+This is a navigation and UI organization improvement only.
+
+---
+
+## Optional Enhancement
+
+Inside Scheduling, create a top navigation:
+
+Scheduling
+├── Calendars
+├── Event Types
+├── Availability
+└── Conferencing
+
+All existing functionality should continue working exactly as it does today.
+
+Goal:
+Create a single Scheduling Control Center where users can manage everything related to bookings, calendars, availability, and conferencing without having to switch to Settings.

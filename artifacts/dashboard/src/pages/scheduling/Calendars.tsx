@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "wouter";
 import { Plus, Pencil, Trash2, MoreHorizontal, Calendar, ArrowLeft, Globe, Mail, Video, Loader2, CheckCircle2, Link2, AlertTriangle } from "lucide-react";
+import { SchedulingTabNav } from "@/components/scheduling-tab-nav";
 import {
   useListCalendars,
   useCreateCalendar,
@@ -677,15 +678,12 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-3xl">
+    <div className={embedded ? "flex flex-col gap-6 max-w-3xl" : "flex flex-col h-full overflow-hidden"}>
+      {!embedded && <SchedulingTabNav />}
+      <div className={embedded ? "contents" : "flex flex-col gap-6 p-6 max-w-3xl flex-1 overflow-y-auto"}>
       {/* Back + header — hidden when embedded inside Settings tabs */}
       {!embedded && (
         <div>
-          <Link href={`${BASE}/app/scheduling`}>
-            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
-              <ArrowLeft className="h-3.5 w-3.5" /> Scheduling
-            </button>
-          </Link>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold">Calendars</h1>
@@ -820,6 +818,7 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
         editing={null}
         takenAgentIds={new Set(calendars?.map(c => c.agentId) ?? [])}
       />
+      </div>
     </div>
   );
 }

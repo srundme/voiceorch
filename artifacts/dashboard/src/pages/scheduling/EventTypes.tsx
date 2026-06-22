@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
+import { SchedulingTabNav } from "@/components/scheduling-tab-nav";
 import {
   useListEventTypes,
   useCreateEventType,
@@ -286,13 +287,9 @@ export default function EventTypesPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <SchedulingTabNav />
       {/* Header */}
       <div className="border-b px-6 py-4 shrink-0">
-        <Link href={`${BASE}/app/scheduling`}>
-          <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2.5">
-            <ArrowLeft className="h-3 w-3" /> Back to Scheduling
-          </button>
-        </Link>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-muted">

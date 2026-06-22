@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Plus, Trash2, ArrowLeft, Pencil, Check, X, Copy } from "lucide-react";
+import { SchedulingTabNav } from "@/components/scheduling-tab-nav";
 import {
   useListCalendars,
   useListAvailability,
@@ -264,13 +265,9 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full">
-      {/* Back navigation */}
-      <Link href={`${BASE}/app/scheduling`}>
-        <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground self-start transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Scheduling
-        </button>
-      </Link>
+    <div className="flex flex-col h-full overflow-hidden">
+      <SchedulingTabNav />
+    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full flex-1 overflow-y-auto">
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
@@ -400,6 +397,7 @@ export default function AvailabilityPage() {
           </Card>
         </>
       )}
+    </div>
     </div>
   );
 }

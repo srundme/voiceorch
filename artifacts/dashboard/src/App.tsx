@@ -44,6 +44,7 @@ import SchedulingEventTypesPage from "@/pages/scheduling/EventTypes";
 import SchedulingEventTypeDetailPage from "@/pages/scheduling/EventTypeDetail";
 import SchedulingAvailabilityPage from "@/pages/scheduling/Availability";
 import SchedulingBookingDetailPage from "@/pages/scheduling/Bookings";
+import SchedulingConferencingPage from "@/pages/scheduling/Conferencing";
 import PublicBookingPage from "@/pages/book/[slug]";
 import CancelBookingPage from "@/pages/book/cancel";
 import RescheduleBookingPage from "@/pages/book/reschedule";
@@ -743,6 +744,7 @@ function AppRoutes() {
         <Route path="/app/scheduling/event-types/:id" component={SchedulingEventTypeDetailPage} />
         <Route path="/app/scheduling/event-types" component={SchedulingEventTypesPage} />
         <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
+        <Route path="/app/scheduling/conferencing" component={SchedulingConferencingPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
         <Route path="/app/settings/calendar" component={Settings} />
         <Route path="/app/settings/conferencing" component={Settings} />
