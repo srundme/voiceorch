@@ -1590,6 +1590,8 @@ export async function handleWebCallWebSocket(
             `Before calling "${bookName}", you MUST collect the caller's full name and email address. Ask for them if not yet provided.`,
             `NEVER tell the caller their appointment is confirmed or scheduled unless you have received a booking_confirmed: result from "${bookName}".`,
             `Do NOT say "Your appointment has been scheduled" or any equivalent phrase before "${bookName}" returns a booking_confirmed: result.`,
+            `When "${bookName}" returns booking_pending: — the booking was received but NOT confirmed. Tell the caller: "Your appointment request has been received and is pending confirmation — we'll follow up to confirm it." Do NOT say it is booked, scheduled, or confirmed.`,
+            `When "${bookName}" returns booking_failed: — the booking could not be created. Tell the caller the booking could not be completed and ask them to try again or call back.`,
           );
         }
         systemPromptForTurn += lines.join("\n");
