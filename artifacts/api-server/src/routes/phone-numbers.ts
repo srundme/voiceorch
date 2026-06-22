@@ -283,39 +283,14 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  // 2. Deduct marked-up cost from user's SnapServe wallet.
-  //    Vobiz already deducted the carrier's raw cost from the platform master wallet above.
-  //    SnapServe charges the user the marked-up price; the margin stays with the platform.
-  const setupCents          = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
-  const carrierMonthlyCents = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
+  // 2. Phone numbers are free during beta — no wallet deduction.
+  //    Vobiz carrier cost is absorbed by the platform master wallet.
+  const setupCents           = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
+  const carrierMonthlyCents  = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
   const markedUpMonthlyCents = addMarkup(carrierMonthlyCents);
-  // User is charged: setup fee (at cost) + first month at marked-up rate
-  const totalCents = setupCents + markedUpMonthlyCents;
+  const totalCents           = 0; // free beta — skip all user charges
 
-  if (totalCents > 0 && user.walletBalanceCents < totalCents) {
-    // Rollback: release the number back since we can't charge the user
-    try {
-      await releaseVobizNumber(authId!, authToken!, number);
-    } catch (rollbackErr) {
-      req.log.error({ rollbackErr, number }, "Failed to rollback number after wallet check failure");
-    }
-    const totalDisplay = `₹${(totalCents / 100).toFixed(0)}`;
-    res.status(402).json({ error: `Insufficient balance. This number costs ${totalDisplay} (setup + first month). Top up your wallet.` });
-    return;
-  }
-
-  // 3. Record in SnapServe DB
-  if (totalCents > 0) {
-    const newBalance = user.walletBalanceCents - totalCents;
-    await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
-    await db.insert(walletTransactionsTable).values({
-      userId:      user.id,
-      type:        "debit",
-      amountCents: -totalCents,
-      description: `Phone number ${number} purchased (setup + 1 month)`,
-      status:      "completed",
-    });
-  }
+  // 3. Record in SnapServe DB (no deduction)
 
   const [row] = await db.insert(phoneNumbersTable).values({
     userId:           clerkId,
