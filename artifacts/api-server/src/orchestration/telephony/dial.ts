@@ -97,12 +97,13 @@ export async function dialVobiz(opts: {
   machineDetectionUrl?: string;
 }): Promise<string> {
   const url  = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/`;
-  const body: Record<string, string> = {
+  const body: Record<string, string | number> = {
     to: opts.toNumber, from: opts.fromNumber,
     answer_url: opts.answerUrl, hangup_url: opts.hangupUrl,
   };
   if (opts.maxDurationSeconds && opts.maxDurationSeconds > 0) {
-    body["time_limit"] = String(Math.floor(opts.maxDurationSeconds));
+    // Vobiz max is 86400 s (24 h); cap to avoid 400 on large wallet balances
+    body["time_limit"] = Math.min(Math.floor(opts.maxDurationSeconds), 86400);
   }
   if (opts.machineDetection) {
     body["machine_detection"]        = opts.machineDetection;
