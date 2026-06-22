@@ -5,7 +5,7 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, type CampaignFieldMappings } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
 import { eq, and, count, desc, inArray } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
@@ -147,37 +147,34 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     ? (parsed.data.fieldMappings as CampaignFieldMappings)
     : { phone: "phone" };
 
-  // ── Block managed platform numbers from being used in campaigns ──
-  if (parsed.data.agentId) {
-    const [campaignAgent] = await db
-      .select({ telephonyProvider: agentsTable.telephonyProvider })
-      .from(agentsTable)
-      .where(eq(agentsTable.id, parsed.data.agentId));
+  // ── Block platform-managed numbers from being used in campaigns ──
+  // A number is "managed" only if it lives in the platform's managed_phone_numbers
+  // pool (platform_settings). Numbers the user purchased themselves are in
+  // phoneNumbersTable and are always allowed — they are the user's own numbers.
+  if (parsed.data.fromNumber) {
+    const selectedNumber = parsed.data.fromNumber;
 
-    if (campaignAgent && campaignAgent.telephonyProvider.toLowerCase() === "vobiz") {
-      const [providerRow] = await db
-        .select({ extraConfig: providersTable.extraConfig })
-        .from(providersTable)
-        .where(and(eq(providersTable.userId, userId), eq(providersTable.providerName, "vobiz")));
+    // Check if this number is one of the user's own purchased numbers first.
+    // If it is, it is never a managed-platform number, regardless of VoBiz creds.
+    const [ownedRow] = await db
+      .select({ id: phoneNumbersTable.id })
+      .from(phoneNumbersTable)
+      .where(and(eq(phoneNumbersTable.userId, userId), eq(phoneNumbersTable.number, selectedNumber)));
 
-      const cfg = providerRow?.extraConfig ? (JSON.parse(providerRow.extraConfig) as Record<string, string>) : {};
-      const hasOwnCreds = !!(providerRow && cfg["authId"] && cfg["fromNumber"]);
+    if (!ownedRow) {
+      // Not in the user's own inventory — check if it's a platform-managed number.
+      const [numbersRow] = await db
+        .select({ value: platformSettingsTable.value })
+        .from(platformSettingsTable)
+        .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
+      const managedPool: string[] = numbersRow?.value ? (JSON.parse(numbersRow.value) as string[]) : [];
 
-      if (!hasOwnCreds) {
-        // Also check if there's an existing managed pool — if empty, different error
-        const [numbersRow] = await db
-          .select({ value: platformSettingsTable.value })
-          .from(platformSettingsTable)
-          .where(eq(platformSettingsTable.key, "managed_phone_numbers"));
-        const hasManagedPool = !!(numbersRow?.value && (JSON.parse(numbersRow.value) as string[]).length > 0);
-
-        if (hasManagedPool) {
-          res.status(403).json({
-            error: "Platform managed numbers cannot be used for campaigns. Configure your own VoBiz sub-account and number to run outbound campaigns.",
-            code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
-          });
-          return;
-        }
+      if (managedPool.includes(selectedNumber)) {
+        res.status(403).json({
+          error: "Platform managed numbers cannot be used for campaigns. Purchase your own number from Phone Numbers and use it here.",
+          code: "MANAGED_NUMBER_CAMPAIGN_BLOCKED",
+        });
+        return;
       }
     }
   }

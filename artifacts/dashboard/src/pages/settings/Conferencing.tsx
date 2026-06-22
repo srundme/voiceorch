@@ -161,7 +161,11 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
     }
   }
 
-  const hasConnections = connections.length > 0;
+  const hasConnections   = connections.length > 0;
+  // True only if at least one connection has the full calendar scope.
+  const hasScopedAccount = connections.some(c => c.scopeValid === true);
+  // True if every connection needs a reconnect (scope_insufficient or null).
+  const allNeedReconnect = hasConnections && connections.every(c => c.scopeValid !== true);
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
@@ -226,14 +230,28 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
             </div>
           ) : hasConnections ? (
             <>
-              <div className="p-3 bg-muted border border-border rounded-lg text-xs text-foreground">
-                <p className="font-medium">✓ Active — Google Meet links are generated for new bookings</p>
-                <p className="mt-0.5 text-foreground">
-                  Assign a specific account to each calendar from the{" "}
-                  <a href={`${BASE}/app/scheduling/calendars`} className="underline underline-offset-2">Calendars</a>{" "}
-                  page. Unassigned calendars use the first connected account.
-                </p>
-              </div>
+              {allNeedReconnect ? (
+                /* Every connection has insufficient scopes — Meet links are NOT being created */
+                <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs">
+                  <p className="font-semibold text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Google Meet links are NOT being created
+                  </p>
+                  <p className="mt-1 text-destructive/80">
+                    Your connected account was authorized without full calendar access. Click{" "}
+                    <strong>Reconnect</strong> below to grant the required permission — this takes 30 seconds.
+                  </p>
+                </div>
+              ) : hasScopedAccount ? (
+                <div className="p-3 bg-muted border border-border rounded-lg text-xs text-foreground">
+                  <p className="font-medium">✓ Active — Google Meet links are generated for new bookings</p>
+                  <p className="mt-0.5 text-foreground">
+                    Assign a specific account to each calendar from the{" "}
+                    <a href={`${BASE}/app/scheduling/calendars`} className="underline underline-offset-2">Calendars</a>{" "}
+                    page. Unassigned calendars use the first connected account.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="space-y-2">
                 {connections.map(conn => {
