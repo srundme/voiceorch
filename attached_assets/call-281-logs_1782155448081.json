@@ -1,0 +1,426 @@
+[
+  {
+    "id": 4774,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:07.664Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 22,
+      "agentName": "New Agent",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4776,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:07.668Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "New Agent",
+        "date": "Monday, June 22, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 27  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Gopi is likely to call to modify or inquire about one of his recently booked appointments, potentially due to the multiple bookings on the same day.\n📊 SENTIMENT ARC: 😐 → 😐 → 😊 → 😐 → ✅ (📈 improving)\n\nKNOWN FACTS:\n• new_appointment_request_time: 3:00 PM  [today]\n• new_appointment_request_date: June 25th  [today]\n• appointment_time: 3:30 PM  [today]\n• appointment_date: June 25th  [today]\n• new_appointment_time: 2:30 PM  [today]\n• new_appointment_date: June 25th  [today]\n• email"
+    },
+    "metadata": null
+  },
+  {
+    "id": 4775,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:07.668Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Gopi",
+        "callCount": 27
+      },
+      "factCount": 29,
+      "facts": {
+        "new_appointment_request_time": "3:00 PM",
+        "new_appointment_request_date": "June 25th",
+        "appointment_time": "3:30 PM",
+        "appointment_date": "June 25th",
+        "new_appointment_time": "2:30 PM",
+        "new_appointment_date": "June 25th",
+        "email_address": "Gopinwrk@gmail.com",
+        "inquiry_appointment_time": "4:00 PM",
+        "inquiry_appointment_date": "24th June",
+        "appointment_booking_request_time": "4:30 PM",
+        "upcoming_bookings_inquiry_date_2": "23rd June",
+        "upcoming_bookings_inquiry_date_1": "24th June",
+        "alternative_appointment_request_time": "11:30 AM",
+        "appointment_booking_request_date": "24th June",
+        "cancel_meeting_request_date": "24th",
+        "requested_new_appointment_time": "10 AM",
+        "appointment_change_request_date": "24th",
+        "appointments_on_date": "24th June",
+        "requested_booking_time": "9:00 AM",
+        "inquiry_availability_time_of_day": "first half and 2nd of both",
+        "inquiry_availability_date": "24th of this month",
+        "new_appointment_request": "June 23rd at 3:30 PM",
+        "requested_appointment_time": "2:45 PM",
+        "name": "Gopi",
+        "inquiry_reason_for_pending_status": "true",
+        "additional_appointment_request": "June 23rd at 2:30 PM",
+        "current_date_and_time_inquiry": "true",
+        "upcoming_bookings_inquiry": "all upcoming bookings for tomorrow",
+        "calendar_event_creation_failure": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 4777,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:16.519Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello."
+    },
+    "metadata": null
+  },
+  {
+    "id": 4778,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:16.621Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 12:39 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 27  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Gopi is likely to call to modify or inquire about one of his recently booked appointments, potentially due to the multiple bookings on the same day.\n📊 SENTIMENT ARC: 😐 → 😐 → 😊 → 😐 → ✅ (📈 improving)\n\nKNOWN FACTS:\n• new_appointment_request_time: 3:00 PM  [today]\n• new_appointment_reques",
+      "historyLength": 2,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4779,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:17.959Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hi Gopi, I hope you're having a good day. How can I help you with your appointments today?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4780,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:17.959Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1338,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Hi Gopi, I hope you're having a good day. How can I help you with your appointments today?"
+    },
+    "metadata": {
+      "inputTokens": 5421,
+      "outputTokens": 24,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4781,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:18.918Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 961,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 127998,
+      "textLength": 90,
+      "firstByteMs": 164
+    },
+    "metadata": null
+  },
+  {
+    "id": 4782,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:26.527Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "What are all the my upcoming documents?"
+    },
+    "metadata": null
+  },
+  {
+    "id": 4783,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:26.628Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 12:39 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 27  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Gopi is likely to call to modify or inquire about one of his recently booked appointments, potentially due to the multiple bookings on the same day.\n📊 SENTIMENT ARC: 😐 → 😐 → 😊 → 😐 → ✅ (📈 improving)\n\nKNOWN FACTS:\n• new_appointment_request_time: 3:00 PM  [today]\n• new_appointment_reques",
+      "historyLength": 4,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4784,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:28.160Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1532,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": ""
+    },
+    "metadata": {
+      "inputTokens": 10876,
+      "outputTokens": 52,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4785,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:28.160Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "list_bookings",
+      "args": {
+        "attendee_name": "Gopi",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4786,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:28.166Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 6,
+    "requestPayload": {
+      "tool": "list_bookings"
+    },
+    "responsePayload": {
+      "result": "bookings_found: count=5, booking_id=6, event=\"one to one1\", iso_start=2026-06-23T04:30:00.000Z, iso_end=2026-06-23T05:00:00.000Z, date=\"Tue Jun 23 at 10:00 AM GMT+5:30 – 10:30 AM GMT+5:30\", status=\"confirmed\" | booking_id=7, event=\"one to one1\", iso_start=2026-06-23T05:00:00.000Z, iso_end=2026-06-23T05:30:00.000Z, date=\"Tue Jun 23 at 10:30 AM GMT+5:30 – 11:00 AM GMT+5:30\", status=\"confirmed\" | booking_id=8, event=\"one to one1\", iso_start=2026-06-23T06:30:00.000Z, iso_end=2026-06-23T07:00:00.000Z, date=\"Tue Jun 23 at 12:00 PM GMT+5:30 – 12:30 PM GMT+5:30\", status=\"pending\" | booking_id=10, event=\"one to one1\", iso_start=2026-06-23T09:00:00.000Z, iso_end=2026-06-23T09:30:00.000Z, date=\"Tue Jun 23 at 2:30 PM GMT+5:30 – 3:00 PM GMT+5:30\", status=\"confirmed\" | booking_id=11, event=\"one to one1\""
+    },
+    "metadata": null
+  },
+  {
+    "id": 4787,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:28.166Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 12:39 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 27  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Gopi is likely to call to modify or inquire about one of his recently booked appointments, potentially due to the multiple bookings on the same day.\n📊 SENTIMENT ARC: 😐 → 😐 → 😊 → 😐 → ✅ (📈 improving)\n\nKNOWN FACTS:\n• new_appointment_request_time: 3:00 PM  [today]\n• new_appointment_reques",
+      "historyLength": 6,
+      "tools": [
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "tool"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4788,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:29.123Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You have five upcoming bookings today"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4789,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:29.480Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1313,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "You have five upcoming bookings today, June 23rd:\n\nOne confirmed appointment from 10:00 AM to 10:30 AM.\nAnother confirmed appointment from 10:30 AM to 11:00 AM.\nA pending appointment from 12:00 PM to 12:30 PM.\nA confirmed appointment from 2:30 PM to 3:00 PM.\nAnd another pending appointment from 3:30 PM to 4:00 PM."
+    },
+    "metadata": {
+      "inputTokens": 16857,
+      "outputTokens": 166,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 4790,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:29.480Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You have five upcoming bookings today, June 23rd:\n\nOne confirmed appointment from 10:00 am to 10:30 am.\nAnother confirmed appointment from 10:30 am to 11:00 am.\nA pending appointment from 12:00 pm to 12:30 pm.\nA confirmed appointment from 2:30 pm to 3:00 pm.\nAnd another pending appointment from 3:30 pm to 4:00 pm."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 4791,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:29.793Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 670,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 69118,
+      "textLength": 37,
+      "firstByteMs": 156
+    },
+    "metadata": null
+  },
+  {
+    "id": 4792,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:32.829Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3350,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 675838,
+      "textLength": 315,
+      "firstByteMs": 266
+    },
+    "metadata": null
+  },
+  {
+    "id": 4793,
+    "callId": 281,
+    "agentId": 22,
+    "ts": "2026-06-22T19:09:52.622Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "silence_timeout",
+      "durationSeconds": 44,
+      "turns": 4
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]

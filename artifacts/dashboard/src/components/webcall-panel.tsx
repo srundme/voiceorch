@@ -88,6 +88,8 @@ export function WebCallPanel({
   const statusRef        = useRef<CallStatus>("idle");
   // ref mirror for stale flag — safe to read inside WS message closure
   const streamingStaleRef = useRef(false);
+  // Timer: fires when the browser's audio queue drains so we can notify the server.
+  const playbackEndedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { statusRef.current = status; }, [status]);
 
@@ -128,6 +130,32 @@ export function WebCallPanel({
     if (ctx) nextPlayRef.current = ctx.currentTime;
   }
 
+  /**
+   * Schedule a `playback_ended` message to be sent to the server once the
+   * browser's audio queue drains.  Called when the server sends
+   * `status: "listening"` — meaning it finished sending TTS audio for this
+   * turn.  The server uses this signal to safely start the silence-hangup
+   * countdown (avoids ending the call while the agent is still audibly speaking).
+   */
+  function schedulePlaybackEnded() {
+    if (playbackEndedTimerRef.current) {
+      clearTimeout(playbackEndedTimerRef.current);
+      playbackEndedTimerRef.current = null;
+    }
+    const ctx = audioCtxRef.current;
+    const ws  = wsRef.current;
+    if (!ctx || !ws) return;
+    const remaining = Math.max(0, nextPlayRef.current - ctx.currentTime);
+    // Add 200 ms buffer so the last sample finishes decoding before we signal done.
+    const delayMs = remaining * 1000 + 200;
+    playbackEndedTimerRef.current = setTimeout(() => {
+      playbackEndedTimerRef.current = null;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "playback_ended" }));
+      }
+    }, delayMs);
+  }
+
   function playPCM16(buf: ArrayBuffer) {
     const ctx = audioCtxRef.current;
     if (!ctx) return;
@@ -148,6 +176,10 @@ export function WebCallPanel({
   }
 
   function cleanup() {
+    if (playbackEndedTimerRef.current) {
+      clearTimeout(playbackEndedTimerRef.current);
+      playbackEndedTimerRef.current = null;
+    }
     processorRef.current?.disconnect();
     processorRef.current = null;
     audioCtxRef.current?.close().catch(() => {});
@@ -267,6 +299,11 @@ export function WebCallPanel({
             }
           } else if (msg.type === "interrupted") {
             // Barge-in: commit any pending agent turn, then clear state.
+            // Cancel any pending playback_ended notification — the user already spoke.
+            if (playbackEndedTimerRef.current) {
+              clearTimeout(playbackEndedTimerRef.current);
+              playbackEndedTimerRef.current = null;
+            }
             // Guard against a LATE/spurious interrupt: only flush the audio queue
             // when there is still meaningfully more than the final word/tail
             // scheduled ahead (a genuine mid-response barge-in). If the server's
@@ -306,6 +343,9 @@ export function WebCallPanel({
                 setStreamingStale(false);
                 setMsgs(prev => [...prev, { speaker: "agent", text: t }]);
               }
+              // Notify the server when the browser's audio queue actually drains
+              // so it can safely start the silence-hangup countdown.
+              schedulePlaybackEnded();
             }
             setStatus(msg.status);
           } else if (msg.type === "transcript" && msg.speaker && msg.text) {

@@ -898,6 +898,11 @@ export async function handleWebCallWebSocket(
   const audioChunks: Buffer[] = [];
   let silenceTimer: ReturnType<typeof setTimeout> | null = null;
   let hangupSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Fallback: if the client never sends `playback_ended` (old client, crash),
+  // call resetHangupSilenceTimer after this many ms. Generous enough to cover
+  // any plausible TTS response length (~120 s) so it is a backstop only.
+  const PLAYBACK_ENDED_FALLBACK_MS = 120_000;
+  let playbackSilenceTimer: ReturnType<typeof setTimeout> | null = null;
   let processing  = false;
   let speaking        = false; // true while audio frames are being sent to client
   let speakingStartedAt = 0;  // timestamp (ms) when speaking last transitioned to true
@@ -2428,8 +2433,20 @@ export async function handleWebCallWebSocket(
       }
 
       // No tool was called this turn — the agent's spoken response is done.
-      // Start the silence-hangup countdown (webcall equivalent of pipeline's resetHangupTimer).
-      resetHangupSilenceTimer();
+      // The server has finished SENDING audio bytes, but the browser still has
+      // them queued for playback (Web Audio API schedules future buffers).
+      // Starting the silence timer here would fire mid-playback for long responses.
+      // Instead: wait for the client to send { type: "playback_ended" } once its
+      // audio queue actually drains, then call resetHangupSilenceTimer().
+      // A fallback fires after PLAYBACK_ENDED_FALLBACK_MS to handle old clients / crashes.
+      if (playbackSilenceTimer) { clearTimeout(playbackSilenceTimer); playbackSilenceTimer = null; }
+      if (agent.silenceTimeoutSeconds) {
+        playbackSilenceTimer = setTimeout(() => {
+          playbackSilenceTimer = null;
+          logger.warn({ callId }, "Webcall: playback_ended not received within fallback window — starting silence timer");
+          resetHangupSilenceTimer();
+        }, PLAYBACK_ENDED_FALLBACK_MS);
+      }
       // If configured, hang up immediately after the LLM finishes responding (one-shot agents).
       if (hangupAfterLlmCall && !closed) {
         logger.info({ callId }, "Webcall: hangupAfterLlmCall — ending call");
@@ -2809,6 +2826,7 @@ export async function handleWebCallWebSocket(
     if (maxTimer) { clearTimeout(maxTimer); maxTimer = undefined; }
     clearSilenceTimer();
     if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
+    if (playbackSilenceTimer) { clearTimeout(playbackSilenceTimer); playbackSilenceTimer = null; }
 
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
@@ -3068,7 +3086,17 @@ export async function handleWebCallWebSocket(
     if (closed) return;
 
     if (typeof data === "string") {
-      try { const m = JSON.parse(data) as { type: string }; if (m.type === "end") void hangup("normal"); }
+      try {
+        const m = JSON.parse(data) as { type: string };
+        if (m.type === "end") void hangup("normal");
+        else if (m.type === "playback_ended") {
+          // Client audio queue drained — safe to start the silence-hangup timer now.
+          // Cancel the fallback timer (no longer needed) and arm the real one.
+          if (playbackSilenceTimer) { clearTimeout(playbackSilenceTimer); playbackSilenceTimer = null; }
+          logger.info({ callId }, "Webcall: playback_ended received — starting silence timer");
+          resetHangupSilenceTimer();
+        }
+      }
       catch { /* ignore */ }
       return;
     }
