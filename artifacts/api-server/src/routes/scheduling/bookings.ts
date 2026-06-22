@@ -468,6 +468,9 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       }
     })();
 
+    // The GCal patch runs in a fire-and-forget block above, so we cannot wait for
+    // its result here. The Meet link does NOT change on reschedule (the same GCal
+    // event is patched in-place), so we can safely read it from the existing booking row.
     void sendBookingRescheduledEmail({
       attendeeName: newBooking.attendeeName,
       attendeeEmail: newBooking.attendeeEmail,
@@ -479,6 +482,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       additionalHosts: calendar?.additionalHosts,
       bookingId: newBooking.id,
       oldSlotStart: existing.slotStart,
+      meetLink: existing.meetLink ?? null,
     });
     void dispatchSchedulingWebhooks(clerkId, "scheduling.booking.rescheduled", { booking: formatBooking(newBooking) });
     res.json(UpdateBookingResponse.parse(formatBooking(newBooking)));

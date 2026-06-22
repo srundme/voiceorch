@@ -1252,7 +1252,9 @@ export async function executeNativeReschedule(
     // Google Calendar sync: patch the existing event in-place (best-effort)
     // Using patch/update instead of delete+create so attendees get a seamless
     // "time changed" notification rather than a cancellation + new invite.
-    let meetLink: string | null = null;
+    // Seed meetLink from the old booking — the GCal patch preserves the same link,
+    // so even if the sync fails below the email still gets the correct Meet URL.
+    let meetLink: string | null = existing.meetLink ?? null;
     try {
       const oldGcalRow = await db.execute(
         sql`SELECT google_event_id FROM bookings WHERE id = ${bookingId}`,

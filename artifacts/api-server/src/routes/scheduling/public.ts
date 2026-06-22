@@ -652,6 +652,9 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   const newCancelLink = `${baseUrl}/book/cancel?token=${encodeURIComponent(newCancelTok)}`;
   const newRescheduleLink = `${baseUrl}/book/reschedule?token=${encodeURIComponent(newRescheduleTok)}`;
 
+  // The GCal patch runs in a fire-and-forget block above, so we cannot wait for
+  // its result here. The Meet link does NOT change on reschedule (the same GCal
+  // event is patched in-place), so we can safely read it from the old booking row.
   void sendBookingRescheduledEmail({
     attendeeName: newBooking.attendeeName,
     attendeeEmail: newBooking.attendeeEmail,
@@ -663,6 +666,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     additionalHosts: calendar.additionalHosts,
     bookingId: newBooking.id,
     oldSlotStart: booking.slotStart,
+    meetLink: booking.meetLink ?? null,
     cancelLink: newCancelLink,
     rescheduleLink: newRescheduleLink,
   });
