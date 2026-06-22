@@ -144,7 +144,6 @@ const agentFormSchema = z.object({
   language:                z.string().optional(),
   backchannelingEnabled:   z.boolean().optional(),
   backchannelingFrequency: z.number().min(0).max(1).optional(),
-  backchannelPhrases:      z.string().optional(),
   webhookUrl:              z.string().optional(),
   noiseCancellationEnabled: z.boolean().optional(),
   inactivityMessage:        z.string().optional(),
@@ -353,7 +352,6 @@ function WebCallPanel({ agent, onCallSaved }: { agent: InsuranceAgent; onCallSav
           greetingMessage: agent.greetingMessage, endCallPhrases: agent.endCallPhrases,
           language: agent.language, backchannelingEnabled: agent.backchannelingEnabled,
           backchannelingFrequency: agent.backchannelingFrequency,
-          backchannelPhrases: agent.backchannelPhrases,
           noiseCancellationEnabled: agent.noiseCancellationEnabled,
           inactivityMessage: agent.inactivityMessage, webhookUrl: agent.webhookUrl,
           silenceTimeoutSeconds: agent.silenceTimeoutSeconds,
@@ -770,7 +768,7 @@ export default function FamilyAgentDetail() {
       systemPrompt: "", temperature: 0.7, maxDuration: 600,
       greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", backchannelingEnabled: true, backchannelingFrequency: 0.5,
-      backchannelPhrases: "", webhookUrl: "", noiseCancellationEnabled: true,
+      webhookUrl: "", noiseCancellationEnabled: true,
       inactivityMessage: "", asrLanguage: "",
       asrBackgroundDenoising: false, asrConfidenceThreshold: 0.40,
       asrEndOfTurnConfidence: 0.70, asrEndOfTurnTimeout: 5000,
@@ -825,7 +823,6 @@ export default function FamilyAgentDetail() {
       language:                agent.language ?? "en-IN",
       backchannelingEnabled:   agent.backchannelingEnabled ?? true,
       backchannelingFrequency: agent.backchannelingFrequency ?? 0.5,
-      backchannelPhrases:      agent.backchannelPhrases ?? "",
       webhookUrl:              agent.webhookUrl ?? "",
       webhookSecret:           agent.webhookSecret ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
@@ -901,7 +898,6 @@ export default function FamilyAgentDetail() {
       language: data.language,
       backchannelingEnabled: data.backchannelingEnabled,
       backchannelingFrequency: data.backchannelingFrequency,
-      backchannelPhrases: data.backchannelPhrases || undefined,
       webhookUrl: data.webhookUrl || undefined,
       webhookSecret: data.webhookSecret || undefined,
       noiseCancellationEnabled: data.noiseCancellationEnabled,
@@ -1273,14 +1269,6 @@ export default function FamilyAgentDetail() {
                                   <FormControl>
                                     <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]} onValueChange={(vals) => field.onChange(vals[0])} />
                                   </FormControl>
-                                </FormItem>
-                              )} />
-                              <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Backchannel Phrases</FormLabel>
-                                  <FormControl><Input placeholder="I see, Got it, Okay" {...field} /></FormControl>
-                                  <FormDescription>Comma-separated. Leave blank for defaults.</FormDescription>
-                                  <FormMessage />
                                 </FormItem>
                               )} />
                             </>

@@ -107,11 +107,6 @@ export async function createSession(params: {
     ? agent.endCallPhrases.split(",").map(s => s.trim()).filter(Boolean)
     : [];
 
-  // Parse comma-separated backchannel phrases (empty = use hardcoded defaults at runtime)
-  const backchannelPhrases = agent.backchannelPhrases
-    ? agent.backchannelPhrases.split(",").map(s => s.trim()).filter(Boolean)
-    : [];
-
   // Parse tools JSON column (null-safe, type-cast to AgentTool[])
   const tools = Array.isArray(agent.tools) ? (agent.tools as unknown as AgentTool[]) : [];
 
@@ -207,7 +202,6 @@ export async function createSession(params: {
     language: agent.language ?? null,
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
-    backchannelPhrases,
     webhookUrl: agent.webhookUrl ?? null,
     noiseCancellationEnabled: agent.noiseCancellationEnabled ?? false,
     ambientNoiseEnabled: (agentCfg["ambientNoiseEnabled"] as boolean | undefined) ?? false,

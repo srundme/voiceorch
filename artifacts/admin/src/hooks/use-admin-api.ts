@@ -786,7 +786,6 @@ export interface ProvisionFamilyAgentInput {
   language?: string;
   backchannelingEnabled?: boolean;
   backchannelingFrequency?: number;
-  backchannelPhrases?: string;
   noiseCancellationEnabled?: boolean;
   inactivityMessage?: string;
   webhookUrl?: string;

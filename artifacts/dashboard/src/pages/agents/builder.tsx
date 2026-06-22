@@ -1202,12 +1202,6 @@ function VoiceTab({ form }: { form: any }) {
                   </FormControl>
                 </FormItem>
               )} />
-              <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">Custom Phrases (comma-separated)</FormLabel>
-                  <FormControl><Input placeholder="mm-hmm, I see, got it" className="h-8 text-xs" {...field} /></FormControl>
-                </FormItem>
-              )} />
             </>
           )}
 
@@ -3851,7 +3845,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       systemPrompt: "", temperature: 0.10, maxDuration: 300,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
-      backchannelingFrequency: 0.5, backchannelPhrases: "", webhookUrl: "",
+      backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", promptVariables: [],
       vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200,
@@ -3903,7 +3897,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       asrLanguage:              agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
-      backchannelPhrases:       agent.backchannelPhrases ?? "",
       webhookUrl:               agent.webhookUrl ?? "",
       // Note: legacy http:// values are kept so the user can see and correct them;
       // an inline error is set below after reset so it surfaces on the Advanced tab.

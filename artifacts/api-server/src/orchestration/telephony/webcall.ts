@@ -28,6 +28,7 @@ import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
+import { getBackchannelFillers } from "../backchannel.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER } from "../conversationDiscipline.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
@@ -72,13 +73,6 @@ const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum spee
 const AUDIO_CHUNK_BYTES        = 1280; // 40ms per WS frame
 const HANDOFF_SILENCE_MS       = 3000; // sustained silence that may indicate a phone handoff
 const TTS_VOLUME_GAIN          = 1.5;  // PCM amplitude multiplier — reduced from 2.5 to prevent hard-clipping distortion
-
-// Default backchannel fillers are Tamil.
-// For English or other language agents, configure backchannelPhrases on the agent.
-const BACKCHANNEL_PHRASES = [
-  "சரி.", "ஓகே.", "புரிஞ்சுது.", "தெரியும்.", "சரிதான்.",
-  "ஆமாங்க.", "சரிங்க.", "ஓகே சார்.",
-];
 
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
@@ -1640,12 +1634,12 @@ export async function handleWebCallWebSocket(
       if (toolIterations === 0 && agent.backchannelingEnabled && !interrupted) {
         const freq = (agent.backchannelingFrequency ?? 0.6) as number;
         if (Math.random() < freq) {
-          const customPhrases = agent.backchannelPhrases
-            ? agent.backchannelPhrases.split(",").map(s => s.trim()).filter(Boolean)
-            : [];
-          const phrasePool = customPhrases.length > 0 ? customPhrases : BACKCHANNEL_PHRASES;
-          const phrase = phrasePool[Math.floor(Math.random() * phrasePool.length)]!;
-          queueSentence(phrase);
+          // Strict, language-based fillers only — no cross-language fallback.
+          const phrasePool = getBackchannelFillers(agent.asrLanguage ?? agent.language);
+          if (phrasePool.length > 0) {
+            const phrase = phrasePool[Math.floor(Math.random() * phrasePool.length)]!;
+            queueSentence(phrase);
+          }
         }
       }
       tokenBuf = "";

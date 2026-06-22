@@ -17,6 +17,7 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
+import { getBackchannelFillers } from "./backchannel.js";
 import { performance } from "perf_hooks";
 import {
   computeEndpointMs,
@@ -105,10 +106,6 @@ const HANDOFF_PHRASES = [
   // Hindi-romanized
   "baat karo", "usse baat", "use de do", "phone de do",
   "le lo phone", "in se baat",
-];
-
-const BACKCHANNEL_PHRASES = [
-  "I see.", "Got it.", "Okay.", "Mm-hmm.", "Sure.", "I understand.", "Go on.",
 ];
 
 // ── Global token-optimization kill switch (cached 30 s to avoid per-turn DB hits) ──
@@ -1742,10 +1739,13 @@ export class OrchestrationPipeline {
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
-        const pool = this.agent.backchannelPhrases.length > 0 ? this.agent.backchannelPhrases : BACKCHANNEL_PHRASES;
-        const phrase = pool[Math.floor(Math.random() * pool.length)]!;
-        enqueue(phrase);
-        backchanneledThisTurn = true;
+        // Strict, language-based fillers only — no cross-language fallback.
+        const pool = getBackchannelFillers(this.agent.sttConfig.language);
+        if (pool.length > 0) {
+          const phrase = pool[Math.floor(Math.random() * pool.length)]!;
+          enqueue(phrase);
+          backchanneledThisTurn = true;
+        }
       }
     }
 

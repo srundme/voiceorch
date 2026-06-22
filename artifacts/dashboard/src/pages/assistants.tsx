@@ -1440,7 +1440,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
   // ── Tab 4 — Engine ──────────────────────────────────────────────
   const [backchannelingEnabled, setBackchannelingEnabled]   = useState(true);
   const [backchannelingFrequency, setBackchannelingFrequency] = useState(0.3);
-  const [backchannelPhrases, setBackchannelPhrases]         = useState("");
   const [noiseCancellationEnabled, setNoiseCancellationEnabled] = useState(true);
   const [endCallPhrases, setEndCallPhrases]                 = useState("");
   const [inactivityMessage, setInactivityMessage]           = useState("");
@@ -1623,7 +1622,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     setTelephony(agent.telephonyProvider ?? "");
     setBackchannelingEnabled(agent.backchannelingEnabled ?? true);
     setBackchannelingFrequency((agent.backchannelingFrequency ?? 0.3) as number);
-    setBackchannelPhrases((agent as unknown as Record<string, unknown>).backchannelPhrases as string ?? "");
     setNoiseCancellationEnabled(agent.noiseCancellationEnabled ?? true);
     setEndCallPhrases(agent.endCallPhrases ?? "");
     setInactivityMessage(agent.inactivityMessage ?? "");
@@ -1673,7 +1671,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
           ttsVoice: ttsVoice || undefined,
           telephonyProvider: telephony,
           backchannelingEnabled, backchannelingFrequency,
-          backchannelPhrases: backchannelPhrases || undefined,
           noiseCancellationEnabled,
           endCallPhrases: endCallPhrases || undefined,
           inactivityMessage: inactivityMessage || undefined,
@@ -2849,16 +2846,6 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 {backchannelingEnabled && <>
                   <SliderRow label="Frequency" desc="Probability of backchanneling per turn" value={backchannelingFrequency} onChange={v => { setBackchannelingFrequency(v); setDirty(true); }} min={0} max={1} step={0.01} />
                   <SliderRow label="Start Delay" desc="Wait before injecting backchannel audio" value={cfg.backchannelingStartDelay ?? 1.5} onChange={v => setCfg({ backchannelingStartDelay: v })} min={0} max={5} step={0.1} unit="s" />
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-foreground">Phrases</p>
-                    <p className="text-[11px] text-muted-foreground">Comma-separated. Leave blank to use the default English phrases.</p>
-                    <input
-                      className="w-full bg-card border border-border rounded-md px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                      placeholder="I see, Got it, Okay, சரி, ஆமாம், புரிகிறது"
-                      value={backchannelPhrases}
-                      onChange={e => { setBackchannelPhrases(e.target.value); setDirty(true); }}
-                    />
-                  </div>
                 </>}
               </div>
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">

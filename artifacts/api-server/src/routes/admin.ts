@@ -1221,7 +1221,6 @@ router.post("/admin/family/provision", async (req, res): Promise<void> => {
       language:        (body["language"]          as string | undefined) ?? null,
       backchannelingEnabled:   Boolean(body["backchannelingEnabled"]),
       backchannelingFrequency: typeof body["backchannelingFrequency"] === "number" ? body["backchannelingFrequency"] as number : null,
-      backchannelPhrases:      (body["backchannelPhrases"]  as string | undefined) ?? null,
       noiseCancellationEnabled: Boolean(body["noiseCancellationEnabled"]),
       inactivityMessage:        (body["inactivityMessage"] as string | undefined) ?? null,
       webhookUrl:               (body["webhookUrl"]        as string | undefined) ?? null,

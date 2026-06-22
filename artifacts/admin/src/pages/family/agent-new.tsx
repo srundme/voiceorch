@@ -183,7 +183,6 @@ const agentFormSchema = z.object({
   language:                z.string().optional(),
   backchannelingEnabled:   z.boolean().optional(),
   backchannelingFrequency: z.number().min(0).max(1).optional(),
-  backchannelPhrases:      z.string().optional(),
   webhookUrl:              z.string().optional(),
   noiseCancellationEnabled: z.boolean().optional(),
   inactivityMessage:        z.string().optional(),
@@ -361,7 +360,7 @@ export default function FamilyAgentNew() {
       temperature: 0.7, maxDuration: 600,
       greetingMessage: "", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-IN", backchannelingEnabled: true, backchannelingFrequency: 0.5,
-      backchannelPhrases: "", webhookUrl: "", noiseCancellationEnabled: true,
+      webhookUrl: "", noiseCancellationEnabled: true,
       inactivityMessage: "", asrLanguage: "",
       asrBackgroundDenoising: false, asrConfidenceThreshold: 0.40,
       asrEndOfTurnConfidence: 0.70, asrEndOfTurnTimeout: 5000,
@@ -456,7 +455,6 @@ export default function FamilyAgentNew() {
       language: data.language,
       backchannelingEnabled: data.backchannelingEnabled,
       backchannelingFrequency: data.backchannelingFrequency,
-      backchannelPhrases: data.backchannelPhrases || undefined,
       webhookUrl: data.webhookUrl || undefined,
       webhookSecret: data.webhookSecret || undefined,
       noiseCancellationEnabled: data.noiseCancellationEnabled,
@@ -891,16 +889,6 @@ export default function FamilyAgentNew() {
                                 <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]}
                                   onValueChange={(vals) => field.onChange(vals[0])} />
                               </FormControl>
-                            </FormItem>
-                          )} />
-                          <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Backchannel Phrases</FormLabel>
-                              <FormControl>
-                                <Input placeholder="I see, Got it, Okay, हाँ, समझ गया, ठीक है" {...field} />
-                              </FormControl>
-                              <FormDescription>Comma-separated. Leave blank for default English phrases.</FormDescription>
-                              <FormMessage />
                             </FormItem>
                           )} />
                         </>

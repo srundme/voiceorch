@@ -58,7 +58,6 @@ const agentFormSchema = z.object({
   asrLanguage:              z.string().optional(),
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
-  backchannelPhrases:       z.string().optional(),
   webhookUrl:               z.string().optional().refine(
     (v) => !v || v.startsWith("https://"),
     { message: "Webhook URL must start with https://" }
@@ -372,7 +371,6 @@ export default function AdminAgentEdit() {
       asrLanguage:             agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
-      backchannelPhrases:       agent.backchannelPhrases ?? "",
       webhookUrl:               agent.webhookUrl ?? "",
       webhookSecret:            (agent.agentConfig?.webhookSecret as string | undefined) ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
@@ -945,13 +943,6 @@ export default function AdminAgentEdit() {
                             <Slider min={0} max={1} step={0.05} value={[field.value ?? 0.5]}
                               onValueChange={vals => field.onChange(vals[0])} />
                           </FormControl>
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="backchannelPhrases" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Backchannel Phrases</FormLabel>
-                          <FormControl><Input placeholder="I see, Got it, Okay" {...field} /></FormControl>
-                          <FormDescription className="text-xs">Comma-separated. Leave blank for defaults.</FormDescription>
                         </FormItem>
                       )} />
                     </>

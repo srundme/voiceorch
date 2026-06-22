@@ -23,7 +23,6 @@ export const agentFormSchema = z.object({
   asrLanguage:              z.string().optional(),
   backchannelingEnabled:    z.boolean().optional(),
   backchannelingFrequency:  z.number().min(0).max(1).optional(),
-  backchannelPhrases:       z.string().optional(),
   webhookUrl:               z.string().optional().refine(
     (v) => !v || v.startsWith("https://"),
     { message: "Webhook URL must start with https://" }
