@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { useGetWallet, useCreateTopup, useVerifyPayment, useListTransactions, useUpdateAutopay, getGetWalletQueryKey } from "@workspace/api-client-react";
+import { useGetWallet, useCreateTopup, useVerifyPayment, useListTransactions, useUpdateAutopay, getGetWalletQueryKey, getListTransactionsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -66,6 +66,9 @@ export default function WalletPage() {
     const order = await createTopup({ data: { amountCents, setupMandate } });
 
     return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+
       const opts: Record<string, unknown> = {
         key:       order.keyId,
         amount:    order.amountPaise,
@@ -76,23 +79,31 @@ export default function WalletPage() {
           ? `Auto-pay mandate — ${centsToUsd(amountCents)}`
           : `Wallet top-up — ${centsToUsd(amountCents)}`,
         theme: { color: "#ededed" },
+        modal: {
+          // Called when user closes the modal without completing payment
+          ondismiss: () => settle(() => reject(new Error("cancelled"))),
+        },
         handler: async (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
           razorpay_signature: string;
         }) => {
           try {
-            await verifyPayment({
+            const updated = await verifyPayment({
               data: {
                 razorpayOrderId:   response.razorpay_order_id,
                 razorpayPaymentId:  response.razorpay_payment_id,
                 razorpaySignature: response.razorpay_signature,
               },
             });
-            queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
-            resolve();
+            // Immediately update the wallet cache with the verified balance
+            // so the UI reflects the new balance without waiting for a refetch.
+            queryClient.setQueryData(getGetWalletQueryKey(), updated);
+            // Also refresh the transaction list to show the new top-up entry.
+            queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
+            settle(() => resolve());
           } catch {
-            reject(new Error("Payment verification failed"));
+            settle(() => reject(new Error("Payment verification failed")));
           }
         },
       };
