@@ -388,10 +388,10 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       return;
     }
 
-    // Google Calendar sync for reschedule (best-effort, non-blocking)
-    // Patch the existing event in-place so attendees get a seamless "time changed"
-    // notification rather than a cancellation + new invite.
-    void (async () => {
+    // Google Calendar sync for reschedule (best-effort) — awaited so the resulting
+    // Meet link is available for the reschedule confirmation email.
+    let rescheduledMeetLink: string | null = existing.meetLink ?? null;
+    {
       let reschedConnectionId: string | null = null;
       try {
         const calRow = await db.execute(
@@ -432,6 +432,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
               await db.update(bookingsTable)
                 .set({ meetLink: gcalResult.meetLink, googleEventId: gcalResult.eventId })
                 .where(eq(bookingsTable.id, newBooking.id));
+              rescheduledMeetLink = gcalResult.meetLink ?? rescheduledMeetLink;
             }
           } else {
             // No existing Google event — create fresh
@@ -456,6 +457,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
               await db.update(bookingsTable)
                 .set({ meetLink: gcalResult.meetLink, googleEventId: gcalResult.eventId })
                 .where(eq(bookingsTable.id, newBooking.id));
+              rescheduledMeetLink = gcalResult.meetLink ?? null;
             }
           }
         }
@@ -466,11 +468,8 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
           "Google Calendar event creation failed on reschedule",
         );
       }
-    })();
+    }
 
-    // The GCal patch runs in a fire-and-forget block above, so we cannot wait for
-    // its result here. The Meet link does NOT change on reschedule (the same GCal
-    // event is patched in-place), so we can safely read it from the existing booking row.
     void sendBookingRescheduledEmail({
       attendeeName: newBooking.attendeeName,
       attendeeEmail: newBooking.attendeeEmail,
@@ -482,7 +481,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
       additionalHosts: calendar?.additionalHosts,
       bookingId: newBooking.id,
       oldSlotStart: existing.slotStart,
-      meetLink: existing.meetLink ?? null,
+      meetLink: rescheduledMeetLink,
     });
     void dispatchSchedulingWebhooks(clerkId, "scheduling.booking.rescheduled", { booking: formatBooking(newBooking) });
     res.json(UpdateBookingResponse.parse(formatBooking(newBooking)));

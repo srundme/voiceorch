@@ -565,10 +565,10 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     res.status(409).json({ error: "This slot is no longer available — please choose another" }); return;
   }
 
-  // Google Calendar sync (best-effort)
-  // Reschedule patches the EXISTING event in-place so attendees get a seamless
-  // "time changed" notification rather than a cancellation + new invite.
-  void (async () => {
+  // Google Calendar sync (best-effort) — awaited so the resulting Meet link is
+  // available for the reschedule confirmation email.
+  let rescheduledMeetLink: string | null = booking.meetLink ?? null;
+  {
     let reschedConnectionId: string | null = null;
     try {
       const calRow = await db.execute(
@@ -609,6 +609,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
             await db.execute(
               sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
             );
+            rescheduledMeetLink = gcalResult.meetLink ?? rescheduledMeetLink;
           }
         } else {
           // No existing event — create fresh
@@ -633,6 +634,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
             await db.execute(
               sql`UPDATE bookings SET meet_link = ${gcalResult.meetLink}, google_event_id = ${gcalResult.eventId} WHERE id = ${newBooking.id}`
             );
+            rescheduledMeetLink = gcalResult.meetLink ?? null;
           }
         }
       }
@@ -643,7 +645,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
         "Google Calendar event creation failed on reschedule",
       );
     }
-  })();
+  }
 
   // Issue new reschedule token for the new booking
   const baseUrl = getBaseUrl();
@@ -652,9 +654,6 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
   const newCancelLink = `${baseUrl}/book/cancel?token=${encodeURIComponent(newCancelTok)}`;
   const newRescheduleLink = `${baseUrl}/book/reschedule?token=${encodeURIComponent(newRescheduleTok)}`;
 
-  // The GCal patch runs in a fire-and-forget block above, so we cannot wait for
-  // its result here. The Meet link does NOT change on reschedule (the same GCal
-  // event is patched in-place), so we can safely read it from the old booking row.
   void sendBookingRescheduledEmail({
     attendeeName: newBooking.attendeeName,
     attendeeEmail: newBooking.attendeeEmail,
@@ -666,7 +665,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     additionalHosts: calendar.additionalHosts,
     bookingId: newBooking.id,
     oldSlotStart: booking.slotStart,
-    meetLink: booking.meetLink ?? null,
+    meetLink: rescheduledMeetLink,
     cancelLink: newCancelLink,
     rescheduleLink: newRescheduleLink,
   });

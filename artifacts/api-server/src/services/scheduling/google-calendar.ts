@@ -439,10 +439,10 @@ export async function createCalendarEvent(params: {
     let meetLink = event.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
 
     // Google Calendar generates Meet links asynchronously — the initial insert
-    // response often has statusCode="pending" with no entryPoints. Wait 1 s and
-    // fetch the event once more so the email gets a real link.
-    if ((meetLink === null || statusCode === "pending") && eventId) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+    // response often has statusCode="pending" with no entryPoints. Retry up to
+    // twice (2 s apart) to give Google's async Meet link generation time to complete.
+    for (let attempt = 1; attempt <= 2 && (meetLink === null || statusCode === "pending") && eventId; attempt++) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 2000));
       try {
         const fetched = await calendar.events.get({
           calendarId: "primary",
@@ -452,12 +452,12 @@ export async function createCalendarEvent(params: {
         const retryLink = fetched.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
         if (retryLink) meetLink = retryLink;
         logger.info(
-          { connectionId: params.connectionId, eventId, statusCode, meetLink },
+          { connectionId: params.connectionId, eventId, statusCode, meetLink, attempt },
           "Google Calendar Meet link retry fetch complete",
         );
       } catch (fetchErr) {
         logger.warn(
-          { connectionId: params.connectionId, eventId, fetchErr: (fetchErr as any)?.message },
+          { connectionId: params.connectionId, eventId, fetchErr: (fetchErr as any)?.message, attempt },
           "Meet link retry fetch failed — proceeding with initial response",
         );
       }
