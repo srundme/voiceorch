@@ -103,10 +103,15 @@ interface EnvInfo {
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
-function useDeployments() {
+interface DeploymentsPage {
+  commits: Deployment[];
+  hasNextPage: boolean;
+}
+
+function useDeployments(page: number) {
   return useQuery({
-    queryKey: ["admin", "deployments"],
-    queryFn: () => adminFetch<Deployment[]>("/deployments"),
+    queryKey: ["admin", "deployments", page],
+    queryFn: () => adminFetch<DeploymentsPage>(`/deployments?page=${page}`),
     refetchInterval: 120_000,
   });
 }
@@ -747,13 +752,19 @@ function DeploymentDrawer({ sha, open, onClose }: { sha: string | null; open: bo
 }
 
 function DeploymentHistoryTable() {
-  const { data, isLoading, isError, refetch, isFetching } = useDeployments();
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, refetch, isFetching } = useDeployments(page);
   const [selectedSha, setSelectedSha] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   function openDrawer(sha: string) {
     setSelectedSha(sha);
     setDrawerOpen(true);
+  }
+
+  function handleRefresh() {
+    setPage(1);
+    refetch();
   }
 
   return (
@@ -767,7 +778,7 @@ function DeploymentHistoryTable() {
             </CardTitle>
           </div>
           <button
-            onClick={() => refetch()}
+            onClick={handleRefresh}
             disabled={isFetching}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border border-border hover:bg-muted transition-colors disabled:opacity-40"
           >
@@ -790,7 +801,7 @@ function DeploymentHistoryTable() {
                 <span className="hidden md:block">Branch</span>
                 <span>Status</span>
               </div>
-              {(data ?? []).map((dep) => (
+              {(data?.commits ?? []).map((dep) => (
                 <button
                   key={dep.sha}
                   onClick={() => openDrawer(dep.sha)}
@@ -810,6 +821,24 @@ function DeploymentHistoryTable() {
                   </div>
                 </button>
               ))}
+              {/* Pagination controls */}
+              <div className="flex items-center justify-between px-4 py-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1 || isFetching}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted transition-colors disabled:opacity-40"
+                >
+                  ← Prev
+                </button>
+                <span className="text-xs text-muted-foreground">Page {page}</span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!data?.hasNextPage || isFetching}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted transition-colors disabled:opacity-40"
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -835,9 +864,9 @@ const PENDING_FEATURES = [
 ];
 
 function FeatureRolloutTracker() {
-  const { data, isLoading } = useDeployments();
+  const { data, isLoading } = useDeployments(1);
 
-  const deployedToday = (data ?? [])
+  const deployedToday = (data?.commits ?? [])
     .filter((d) => {
       const ms = Date.now() - new Date(d.date).getTime();
       return ms < 24 * 60 * 60 * 1000;
@@ -947,12 +976,12 @@ function EnvironmentInfoCard() {
 // ── Rollback Center ───────────────────────────────────────────────────────────
 
 function RollbackCenter() {
-  const { data } = useDeployments();
+  const { data } = useDeployments(1);
   const { data: envInfo } = useEnvInfo();
   const [showModal, setShowModal] = useState(false);
 
-  const current = data?.[0];
-  const previous = data?.[1];
+  const current = data?.commits?.[0];
+  const previous = data?.commits?.[1];
   const isSuperAdmin = envInfo?.isSuperAdmin ?? false;
 
   return (

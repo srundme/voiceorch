@@ -139,13 +139,14 @@ function buildDeploymentDetail(
   };
 }
 
-// ─── GET /admin/deployments — last 20 commits (list) ─────────────────────────
+// ─── GET /admin/deployments — paginated commits (10 per page) ────────────────
 
 router.get("/admin/deployments", async (req, res): Promise<void> => {
   const token = process.env["GITHUB_PERSONAL_ACCESS_TOKEN"];
+  const page = Math.max(1, parseInt(String(req.query["page"] ?? "1"), 10) || 1);
   try {
     const ghRes = await fetch(
-      `https://api.github.com/repos/${REPO}/commits?per_page=20&sha=main`,
+      `https://api.github.com/repos/${REPO}/commits?per_page=10&page=${page}&sha=main`,
       { headers: ghHeaders(token) },
     );
     if (!ghRes.ok) {
@@ -155,13 +156,17 @@ router.get("/admin/deployments", async (req, res): Promise<void> => {
     const commits = (await ghRes.json()) as GHCommit[];
 
     // Fetch real CI status for each commit in parallel.
-    // With a token, GitHub allows 5000 req/hour — 20 parallel check-run
+    // With a token, GitHub allows 5000 req/hour — 10 parallel check-run
     // requests are well within limits and resolve quickly (usually cached by GH).
     const statuses = await Promise.all(
       commits.map((c) => getCommitStatus(c.sha, token)),
     );
 
-    res.json(commits.map((c, i) => mapCommitBase(c, statuses[i] ?? "SUCCESS")));
+    const hasNextPage = commits.length === 10;
+    res.json({
+      commits: commits.map((c, i) => mapCommitBase(c, statuses[i] ?? "SUCCESS")),
+      hasNextPage,
+    });
   } catch (err) {
     req.log.error({ err }, "admin/deployments failed");
     res.status(502).json({ error: "Failed to reach GitHub API" });
