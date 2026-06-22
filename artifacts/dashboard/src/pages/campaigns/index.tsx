@@ -6,6 +6,7 @@ import {
   useGetPlatformAnalyticsQueue,
   useListAgents,
   useListPhoneNumbers,
+  useGetAccount,
 } from "@workspace/api-client-react";
 import type { Campaign, ConsentBasisBasisType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -225,13 +226,20 @@ function CampaignWizard({
   const create = useCreateCampaign();
   const { data: agents } = useListAgents();
   const { data: phoneNumbers } = useListPhoneNumbers();
+  const { data: accountInfo } = useGetAccount();
+
+  // User's account-level concurrent call ceiling (set by admin; default 15).
+  // The campaign slider must never allow a value above this limit.
+  const maxConcurrency = accountInfo?.concurrentLimit ?? 15;
 
   const [step, setStep] = useState<WizardStep>("info");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [agentId, setAgentId] = useState<number | null>(null);
   const [fromNumber, setFromNumber] = useState<string | null>(null);
-  const [concurrentCallLimit, setConcurrentCallLimit] = useState(20);
+  const [concurrentCallLimit, setConcurrentCallLimit] = useState<number | null>(null);
+  // Resolved value: user-chosen (if within limit) or clamped to limit.
+  const effectiveConcurrency = Math.min(concurrentCallLimit ?? maxConcurrency, maxConcurrency);
 
   // ── DPDP consent basis (audit-only; required when agent has DPDP on) ──
   const [consentBasisType, setConsentBasisType] = useState<ConsentBasisType | "">("");
@@ -246,7 +254,7 @@ function CampaignWizard({
 
   function reset() {
     setStep("info"); setName(""); setDesc(""); setAgentId(null);
-    setFromNumber(null); setConcurrentCallLimit(20);
+    setFromNumber(null); setConcurrentCallLimit(null);
     setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
     setConsentProofRef(""); setConsentNotes("");
   }
@@ -299,13 +307,15 @@ function CampaignWizard({
       : undefined;
     try {
       await create.mutateAsync({
-        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit, consentBasis },
+        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit: effectiveConcurrency, consentBasis },
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign created", description: name.trim() });
       close();
-    } catch {
-      toast({ title: "Failed to create campaign", variant: "destructive" });
+    } catch (err) {
+      const msg = (err instanceof Error ? err.message : null)
+        ?? "Failed to create campaign";
+      toast({ title: "Failed to create campaign", description: msg, variant: "destructive" });
     }
   }
 
@@ -465,13 +475,13 @@ function CampaignWizard({
               <div className="bg-card border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-2">
                   <Label className="text-xs">Max Concurrent Calls</Label>
-                  <span className="text-xl font-mono font-bold text-foreground">{concurrentCallLimit}</span>
+                  <span className="text-xl font-mono font-bold text-foreground">{effectiveConcurrency}</span>
                 </div>
-                <input type="range" min={1} max={100} step={1} value={concurrentCallLimit}
+                <input type="range" min={1} max={maxConcurrency} step={1} value={effectiveConcurrency}
                   onChange={e => setConcurrentCallLimit(Number(e.target.value))}
                   className="w-full h-1.5 accent-foreground cursor-pointer" />
                 <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40">
-                  <span>1 (serial)</span><span>100</span>
+                  <span>1 (serial)</span><span>{maxConcurrency} (your limit)</span>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -497,7 +507,7 @@ function CampaignWizard({
                   { label: "Description",   value: desc || "—", mono: false },
                   { label: "Agent",         value: selectedAgent?.name ?? "—", mono: false },
                   { label: "From Number",   value: fromNumber ?? "—", mono: true },
-                  { label: "Concurrent Calls", value: String(concurrentCallLimit), mono: true },
+                  { label: "Concurrent Calls", value: String(effectiveConcurrency), mono: true },
                 ].map(r => (
                   <div key={r.label} className="flex items-center justify-between px-4 py-2.5">
                     <span className="text-xs text-muted-foreground">{r.label}</span>

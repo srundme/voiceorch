@@ -15,9 +15,13 @@ ends the call (`onCallEnd`) or stops audio immediately after will clip whatever
 is still buffered downstream. Terminal/one-shot paths bypass the normal loop's
 tail handling, so they each have to replicate it.
 
-**Two paths need DIFFERENT drains — do not assume one fix covers both:**
-- **Telephony:** the carrier holds ~100-300ms in a jitter buffer. A passive wait
-  (sleep) before teardown is sufficient.
+**Both paths need real silence frames — a passive sleep is NOT enough for either:**
+- **Telephony (Vobiz):** Vobiz detects "no audio" and closes its playout window
+  early even while PCM is buffered. A passive sleep does NOT work. Must send real
+  20ms silence PCM frames at real-time pace for `TELEPHONY_TAIL_DRAIN_MS` (800ms)
+  so Vobiz keeps its buffer clock ticking. `drainPlaybackTail()` in pipeline.ts
+  now sends `FRAME_BYTES` silence at 20ms intervals using `this.config.rawPcmOutput`
+  to pick the right frame size (320B for 16-bit PCM / 160B for µ-law).
 - **Web (browser AudioContext):** a passive wait does NOT help — the timeline
   must be physically extended by *sending real silence frames* after the last
   word, plus padding the buffer with trailing silence.
