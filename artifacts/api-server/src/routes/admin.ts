@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
+import { sendTestEmail } from "../services/scheduling/notifications.js";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like } from "drizzle-orm";
 import { TRACK_PARAMS } from "../orchestration/ambient.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
@@ -1300,6 +1301,35 @@ router.post("/admin/dpdp/erasure", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "admin/dpdp/erasure failed");
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Test Email ───────────────────────────────────────────────────────────────
+
+router.post("/admin/test-email", async (req, res): Promise<void> => {
+  const gmailUser = process.env["GMAIL_USER"];
+  const gmailPass = process.env["GMAIL_APP_PASSWORD"];
+
+  if (!gmailUser || !gmailPass) {
+    res.status(503).json({ ok: false, message: "GMAIL_USER or GMAIL_APP_PASSWORD not configured" });
+    return;
+  }
+
+  const { to } = req.body as { to?: string };
+  if (!to || typeof to !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())) {
+    res.status(400).json({ ok: false, message: "Invalid or missing 'to' email address" });
+    return;
+  }
+
+  const recipient = to.trim();
+
+  try {
+    await sendTestEmail(recipient);
+
+    res.json({ ok: true, message: `Test email sent to ${recipient}` });
+  } catch (err) {
+    req.log.error({ err }, "admin/test-email failed");
+    res.status(500).json({ ok: false, message: "SMTP error — check server logs for details" });
   }
 });
 

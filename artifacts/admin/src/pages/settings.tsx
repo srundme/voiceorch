@@ -11,6 +11,7 @@ import {
   type AlertNotificationLogEntry,
   useAlertCooldownStats, useResetAlertSuppressedCount,
   useTokenOptimizationEnabled, useSaveTokenOptimizationEnabled,
+  useSendTestEmail,
 } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff, Sparkles } from "lucide-react";
+import { Settings, Bell, Mail, Check, AlertTriangle, Slack, Send, CheckCircle2, XCircle, Clock, RotateCcw, ShieldCheck, ShieldOff, Sparkles, FlaskConical } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -209,6 +210,9 @@ export default function PlatformSettings() {
   const [alertCooldownInput, setAlertCooldownInput] = useState("10");
   const [testDialogOpen, setTestDialogOpen] = useState(false);
 
+  const sendTestEmail = useSendTestEmail();
+  const [testEmailInput, setTestEmailInput] = useState("");
+
   useEffect(() => {
     if (thresholdData?.threshold != null) setThresholdInput(String(thresholdData.threshold));
   }, [thresholdData]);
@@ -349,6 +353,20 @@ export default function PlatformSettings() {
       toast({ title: "Counter reset", description: "Suppressed notification count cleared." });
     } catch {
       toast({ title: "Failed to reset counter", variant: "destructive" });
+    }
+  }
+
+  async function handleSendTestEmail() {
+    const val = testEmailInput.trim();
+    if (!val || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+      toast({ title: "Invalid email address", variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await sendTestEmail.mutateAsync(val);
+      toast({ title: "Test email sent", description: result.message });
+    } catch (err) {
+      toast({ title: "Test email failed", description: formatApiError(err), variant: "destructive" });
     }
   }
 
@@ -650,6 +668,41 @@ export default function PlatformSettings() {
                 Save
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border shadow-sm">
+        <CardHeader className="pb-3 border-b border-border">
+          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <FlaskConical className="h-4 w-4" />
+            Scheduling Email Test
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-4">
+          <p className="text-xs text-muted-foreground max-w-lg">
+            Sends a sample booking confirmation email to the address below using the configured{" "}
+            <code className="text-xs bg-muted px-1 rounded">GMAIL_USER</code> /{" "}
+            <code className="text-xs bg-muted px-1 rounded">GMAIL_APP_PASSWORD</code> credentials.
+            Use this to verify SMTP is working before going live with scheduling.
+          </p>
+          <div className="flex items-center gap-2 max-w-sm">
+            <Input
+              type="email"
+              placeholder="recipient@example.com"
+              value={testEmailInput}
+              onChange={(e) => setTestEmailInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSendTestEmail()}
+              className="w-64"
+            />
+            <Button
+              size="sm"
+              onClick={handleSendTestEmail}
+              disabled={sendTestEmail.isPending}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              {sendTestEmail.isPending ? "Sending…" : "Send test"}
+            </Button>
           </div>
         </CardContent>
       </Card>

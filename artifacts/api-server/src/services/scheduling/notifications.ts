@@ -97,6 +97,44 @@ async function sendToAll(
   }
 }
 
+/**
+ * Sends a single test booking-confirmation email to the given address.
+ * Unlike the regular send helpers, this throws on SMTP failure so callers
+ * can surface the error as an HTTP 500 response.
+ */
+export async function sendTestEmail(to: string): Promise<void> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    throw new Error("GMAIL_USER or GMAIL_APP_PASSWORD not configured");
+  }
+
+  const now = new Date();
+  const slotEnd = new Date(now.getTime() + 30 * 60 * 1000);
+  const from = formatDateTime(now, "UTC");
+  const toTime = formatDateTime(slotEnd, "UTC");
+
+  const body = `Hi Test Attendee,
+
+Your appointment "Test Event (30 min)" has been booked successfully.
+
+Date & Time: ${from} – ${toTime} (UTC)
+Notes: This is a test email sent from the VoiceOrch Admin panel to verify GMAIL configuration.
+
+Booking Reference: #0
+
+We look forward to speaking with you!`;
+
+  const content = buildEmailContent("Appointment Confirmed: Test Event (30 min)", body);
+
+  await transporter.sendMail({
+    from: process.env["GMAIL_USER"],
+    to,
+    ...content,
+  });
+
+  logger.info({ to }, "Admin test email sent");
+}
+
 export async function sendBookingCreatedEmail(data: BookingEmailData): Promise<void> {
   const transporter = getTransporter();
   if (!transporter) {

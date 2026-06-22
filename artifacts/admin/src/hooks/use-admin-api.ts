@@ -827,3 +827,13 @@ export function useSaveTokenOptimizationEnabled() {
     },
   });
 }
+
+export function useSendTestEmail() {
+  return useMutation({
+    mutationFn: (to: string) =>
+      adminFetch<{ ok: boolean; message: string }>("/test-email", {
+        method: "POST",
+        body: JSON.stringify({ to }),
+      }),
+  });
+}
