@@ -22,8 +22,8 @@ import { consumeTicket } from "./lib/webcall-ticket.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
-import { platformSettingsTable, agentsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { platformSettingsTable, agentsTable, usersTable, walletTransactionsTable } from "@workspace/db";
+import { eq, sql, lt } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workerFile = join(__dirname, "orchestration", "audioWorker.mjs");
@@ -169,6 +169,51 @@ async function migrateSaarikaToSaaras(): Promise<void> {
   }
 }
 
+/**
+ * One-shot: top every user up to $100 (10000 cents) if they have less.
+ * Guarded by a platform_settings flag so it runs exactly once.
+ */
+async function runBetaCreditMigration(): Promise<void> {
+  const FLAG = "beta_credit_v1_done";
+  try {
+    const [existing] = await db
+      .select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, FLAG));
+    if (existing) {
+      logger.info("Beta credit migration already applied — skipping");
+      return;
+    }
+
+    const users = await db
+      .select({ id: usersTable.id, balance: usersTable.walletBalanceCents })
+      .from(usersTable)
+      .where(lt(usersTable.walletBalanceCents, 10000));
+
+    for (const user of users) {
+      const topUpCents = 10000 - user.balance;
+      await db
+        .update(usersTable)
+        .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${topUpCents}` })
+        .where(eq(usersTable.id, user.id));
+      await db.insert(walletTransactionsTable).values({
+        userId:      user.id,
+        type:        "free_credit",
+        amountCents: topUpCents,
+        description: "Beta credit top-up — $100 welcome balance",
+        status:      "completed",
+      });
+    }
+
+    await db.insert(platformSettingsTable).values({ key: FLAG, value: "done" })
+      .onConflictDoNothing();
+
+    logger.info({ usersUpdated: users.length }, "Beta credit migration applied — all users topped up to $100");
+  } catch (err) {
+    logger.warn({ err }, "Beta credit migration failed (non-fatal)");
+  }
+}
+
 async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<void> {
   const envKey = (process.env[envVar] ?? "").trim();
   if (!envKey) return;
@@ -284,6 +329,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
       void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
       void migrateSaarikaToSaaras();
+      void runBetaCreditMigration();
       startCallbackPoller();
       startSpikeChecker();
       startAlertSweep();
