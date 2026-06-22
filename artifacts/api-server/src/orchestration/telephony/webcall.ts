@@ -527,6 +527,10 @@ export async function handleWebCallWebSocket(
           // This prevents a faint background speaker (distant person) producing
           // a short 1-word Sarvam/Deepgram transcript from cutting the agent off.
           if (speaking) {
+            // Allow Barge-in disabled → the agent owns the turn while speaking; no
+            // transcript (semantic or otherwise) may interrupt it, matching the
+            // energy path and pipeline.ts which nests semantic barge-in under the flag.
+            if (!bargeInEnabled) return;
             // P0-C: Semantic barge-in — keywords bypass the word-count gate
             const semanticOverride = isSemanticInterrupt(text);
             const wc = text.trim().split(/\s+/).length;
@@ -590,6 +594,8 @@ export async function handleWebCallWebSocket(
                     if (!text.trim()) return;
                     // onFinal() deferred to process() so discarded transcripts don't clear the stall.
                     if (speaking) {
+                      // Allow Barge-in disabled → never interrupt while speaking.
+                      if (!bargeInEnabled) return;
                       const semanticOverride = isSemanticInterrupt(text);
                       const wc = text.trim().split(/\s+/).length;
                       if (!semanticOverride && wc < wordsForInterruption) {
@@ -816,6 +822,18 @@ export async function handleWebCallWebSocket(
     const combined = Math.max(framesFromWords, framesFromTime);
     if (combined > 0) effectiveBargeInMinFrames = combined;
   }
+  // Allow Barge-in (bargeInEnabled): when off, the agent is never interrupted
+  // (neither the energy-based nor the STT-transcript path may fire).
+  const bargeInEnabled = (agentCfg["bargeInEnabled"] as boolean | undefined) ?? true;
+  // Energy Threshold (bargeInEnergyThreshold): RMS the caller mic must exceed while
+  // the agent is speaking before a barge-in is counted. Falls back to BARGE_IN_RMS.
+  const bargeInRmsThreshold = (agentCfg["bargeInEnergyThreshold"] as number | undefined) ?? BARGE_IN_RMS;
+  // Back-off Silence (stopSpeakingPlan.backOffSeconds): the post-TTS-start echo-grace
+  // window during which non-semantic barge-in is suppressed. Driven by the configured
+  // back-off when set (>= 0), otherwise the hardcoded BARGE_IN_ECHO_GRACE_MS fallback.
+  const echoGraceMs = (stopSpeakingPlanCfg && (stopSpeakingPlanCfg.backOffSeconds ?? -1) >= 0)
+    ? Math.round((stopSpeakingPlanCfg.backOffSeconds ?? 0) * 1000)
+    : BARGE_IN_ECHO_GRACE_MS;
   const incrementalDelayMs    = (agentCfg["incrementalDelay"]        as number | undefined) ?? 0;
   const ttsMinSentenceChars   = (agentCfg["ttsMinSentenceChars"]     as number | undefined) ?? 15;
   const llmMaxTokens          = (agentCfg["llmMaxTokens"]            as number | null | undefined) ?? null;
@@ -1059,7 +1077,7 @@ export async function handleWebCallWebSocket(
               sendStatus("speaking");
               speaking = true;
               speakingStartedAt = Date.now();
-              echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+              echoGraceUntil = Date.now() + echoGraceMs;
               for (let _ci = 0; _ci < audio.length; _ci += 3200) {
                 if (closed || interrupted) break;
                 sendSpeechAudio(audio.slice(_ci, _ci + 3200));
@@ -2102,7 +2120,7 @@ export async function handleWebCallWebSocket(
       speakingStartedAt = Date.now();
       // Arm the start echo-grace for the gap before the first sentence's audio
       // streams; it is re-armed per sentence inside the playback loop below.
-      echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+      echoGraceUntil = Date.now() + echoGraceMs;
 
       // Drop any audio that accumulated while the LLM was generating.
       // Without this, speech spoken during the "thinking" phase would be
@@ -2144,7 +2162,7 @@ export async function handleWebCallWebSocket(
           // TTS request fires — no full-buffer wait.
           // echoGrace: open immediately on sentence start; we extend it on every
           // frame so the window always covers the current playback position.
-          echoGraceUntil = Date.now() + BARGE_IN_ECHO_GRACE_MS;
+          echoGraceUntil = Date.now() + echoGraceMs;
           let frameBuf = Buffer.alloc(0);
           let bytesSent = 0;
           try {
@@ -2157,7 +2175,7 @@ export async function handleWebCallWebSocket(
                 frameBuf = frameBuf.subarray(AUDIO_CHUNK_BYTES);
                 bytesSent += AUDIO_CHUNK_BYTES;
                 // Keep echoGrace window alive: one 40ms frame + decay margin
-                echoGraceUntil = Date.now() + 40 + BARGE_IN_ECHO_GRACE_MS;
+                echoGraceUntil = Date.now() + 40 + echoGraceMs;
                 recording.addAgentChunk(frame);
                 sendSpeechAudio(frame);
                 await new Promise<void>(r => setTimeout(r, 40));
@@ -2208,7 +2226,7 @@ export async function handleWebCallWebSocket(
           // Re-arm echo-grace for full sentence duration
           {
             const sentenceDurationMs = Math.round((pcmOut.length / 2 / 16000) * 1000);
-            echoGraceUntil = Date.now() + sentenceDurationMs + BARGE_IN_ECHO_GRACE_MS;
+            echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
           }
 
           for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
@@ -2530,7 +2548,7 @@ export async function handleWebCallWebSocket(
     speakingStartedAt = Date.now();
     {
       const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
-      echoGraceUntil = Date.now() + sentenceDurationMs + BARGE_IN_ECHO_GRACE_MS;
+      echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
     }
     for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
       if (closed || interrupted) break;
@@ -2682,7 +2700,7 @@ export async function handleWebCallWebSocket(
           // of the agent's own voice doesn't trigger a false barge-in mid-greeting.
           {
             const greetDurationMs = Math.round((greetAudio.length / 2 / 16000) * 1000);
-            echoGraceUntil = Date.now() + greetDurationMs + BARGE_IN_ECHO_GRACE_MS;
+            echoGraceUntil = Date.now() + greetDurationMs + echoGraceMs;
           }
 
           // Send transcript before audio starts so the UI shows the text
@@ -3061,8 +3079,11 @@ export async function handleWebCallWebSocket(
       // barge-in for the entire utterance. The end grace is applied BELOW, in the
       // !speaking branch, to suppress the trailing echo of the final word from starting
       // a new user turn.
+      // Allow Barge-in disabled → never interrupt via energy. Still drain the
+      // silence-timer branch below by returning (agent owns the turn while speaking).
+      if (!bargeInEnabled) return;
       const inStartGrace = Date.now() < echoGraceUntil;
-      if (!inStartGrace && rms > BARGE_IN_RMS) {
+      if (!inStartGrace && rms > bargeInRmsThreshold) {
         bargeInFrames++;
         bargeInLowEnergyFrames = 0; // high-energy frame — reset the dip counter
         const bargeFrame = Buffer.from(data);

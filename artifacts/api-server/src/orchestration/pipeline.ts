@@ -70,6 +70,9 @@ const BARGE_IN_ENERGY_THRESHOLD = 1200; // Much higher than normal VAD (300) —
 const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after playback starts —
                                          // gives audio time to reach the caller before we start
                                          // counting any returning echo as a real interruption.
+const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
+                                         // loud frame can't cut the agent off, even when a Stop
+                                         // Speaking Plan configures very low sensitivity.
 const TELEPHONY_TAIL_DRAIN_MS = 600;    // After the final utterance fully streams, wait this long
                                          // before tearing the call down so the carrier's jitter
                                          // buffer plays out the last words (mirrors the web path's
@@ -166,6 +169,10 @@ export class OrchestrationPipeline {
   private readonly bargeInEnergyThreshold: number;
   private readonly bargeInMinFrames: number;
   private readonly bargeInEchoGraceMs: number;
+  // True when an explicit Stop Speaking Plan is configured. When set, the
+  // plan-derived bargeInMinFrames is authoritative and the non-UI
+  // wordsForInterruption×20 floor must NOT override the configured sensitivity.
+  private readonly stopSpeakingPlanConfigured: boolean;
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
@@ -258,6 +265,7 @@ export class OrchestrationPipeline {
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
     // P1-J: Stop Speaking Plan overrides barge-in params when configured
+    this.stopSpeakingPlanConfigured = !!config.agentConfig.stopSpeakingPlan;
     if (config.agentConfig.stopSpeakingPlan) {
       const sp = config.agentConfig.stopSpeakingPlan;
       // numWords: 1 word ≈ 20 frames at 20ms/frame (150wpm = 2.5wps ≈ 0.4s/word = 20 frames)
@@ -490,7 +498,14 @@ export class OrchestrationPipeline {
         // matching the behaviour of the energy-based path in batch STT mode.
         const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
         this.streamingBargeInWordCount += wordCount;
-        const threshold = this.agent.wordsForInterruption ?? 2;
+        // Prefer the configured Stop Speaking Plan Min Words (UI-exposed) over the
+        // non-UI wordsForInterruption default so lowering/raising Min Words actually
+        // drives streaming-STT barge-in. Fall back to wordsForInterruption when no
+        // plan numWords is set.
+        const planNumWords = this.agent.stopSpeakingPlan?.numWords;
+        const threshold = (planNumWords && planNumWords > 0)
+          ? planNumWords
+          : (this.agent.wordsForInterruption ?? 2);
         if (this.streamingBargeInWordCount >= threshold) {
           this.bargeInRequested = true;
           this.bargeInCallback?.();
@@ -661,11 +676,18 @@ export class OrchestrationPipeline {
           // but ambient noise, echo bleed, or background conversation won't.
           this.bargeInSpeechFrames++;
           // wordsForInterruption: each word ≈ 20 frames at 20ms/frame (150 wpm).
-          // Effective min frames = max(bargeInMinFrames, wordsForInterruption * 20).
-          const effectiveMinFrames = Math.max(
-            this.bargeInMinFrames,
-            (this.agent.wordsForInterruption ?? 2) * 20,
-          );
+          // When an explicit Stop Speaking Plan is configured, bargeInMinFrames is
+          // already derived from the configured Min Words / Min Voice Duration and is
+          // authoritative — do NOT apply the non-UI wordsForInterruption×20 floor, which
+          // would otherwise dominate and make the configured sensitivity have no effect.
+          // We still keep a sane minimum (BARGE_IN_MIN_FRAMES floor) so a single loud
+          // frame can't trigger a barge-in. Without a plan, retain the legacy floor.
+          const effectiveMinFrames = this.stopSpeakingPlanConfigured
+            ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
+            : Math.max(
+                this.bargeInMinFrames,
+                (this.agent.wordsForInterruption ?? 2) * 20,
+              );
           if (this.bargeInSpeechFrames >= effectiveMinFrames) {
             this.bargeInRequested = true;
             this.bargeInCallback?.();
