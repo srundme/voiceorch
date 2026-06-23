@@ -1,0 +1,435 @@
+# SnapServe AI – Agent Draft History & Version Control System
+
+## Objective
+
+Implement a complete Git-like version control system for AI Agents.
+
+Current behavior:
+
+* Versions are only created on Publish.
+* Users can lose working configurations if they save multiple times and later want to restore an earlier state.
+
+New behavior:
+
+* Every Save automatically creates a Draft Snapshot.
+* Every Publish creates a Published Version.
+* Users can compare any two snapshots or versions.
+* Users can restore any snapshot or version at any time.
+* No existing agent execution, voice infrastructure, tools, memory, scheduling, CRM, analytics, or publishing behavior should be changed.
+
+---
+
+# Core Concepts
+
+## Draft Snapshots
+
+Create a snapshot automatically every time the user clicks Save.
+
+Examples:
+
+Draft Snapshot #1
+Draft Snapshot #2
+Draft Snapshot #3
+
+Metadata:
+
+* Snapshot ID
+* Agent ID
+* Created By
+* Timestamp
+* Change Summary
+* Snapshot Type = Draft
+* Full Agent Configuration JSON
+
+---
+
+## Published Versions
+
+Create only when Publish is clicked.
+
+Examples:
+
+V1 Published
+V2 Published
+V3 Published
+
+Metadata:
+
+* Version Number
+* Agent ID
+* Published By
+* Published Timestamp
+* Change Summary
+* Full Agent Configuration JSON
+
+---
+
+# UI Changes
+
+## Existing Tab
+
+Keep:
+
+Versions
+
+Do not create a new menu item.
+
+---
+
+## Add Sub Tabs
+
+Inside Versions:
+
+Published Versions
+Draft History
+
+---
+
+## Published Versions View
+
+Show:
+
+V5 Production
+Published 2 hours ago
+
+V4
+Published yesterday
+
+V3
+Published last week
+
+Actions:
+
+Compare
+Restore
+Archive
+
+---
+
+## Draft History View
+
+Show timeline:
+
+Today
+
+10:42 AM
+Prompt Modified
+
+10:35 AM
+Tools Updated
+
+10:12 AM
+Voice Configuration Changed
+
+Yesterday
+
+9:14 PM
+Advanced Settings Updated
+
+Actions:
+
+Compare
+Restore
+Delete
+
+---
+
+# Auto Save Tracking
+
+Whenever Save is clicked:
+
+1. Capture complete agent configuration.
+2. Generate snapshot.
+3. Store snapshot.
+4. Generate change summary automatically.
+
+Examples:
+
+Prompt Modified
+
+Tools Modified
+
+Voice Changed
+
+Knowledge Base Updated
+
+Advanced Settings Updated
+
+Multiple Changes
+
+---
+
+# Compare Feature
+
+Add Compare action on:
+
+Draft Snapshots
+Published Versions
+
+User can select:
+
+Current Draft vs Snapshot
+
+Snapshot vs Snapshot
+
+Version vs Version
+
+Version vs Current Draft
+
+---
+
+## Compare Modal
+
+Left Panel:
+
+Selected Version A
+
+Right Panel:
+
+Selected Version B
+
+Show differences for:
+
+Prompt
+
+Voice
+
+Tools
+
+Knowledge
+
+Advanced Settings
+
+Scheduling Settings
+
+Compliance Settings
+
+Variables
+
+System Prompt
+
+Greeting
+
+Functions
+
+Knowledge Sources
+
+---
+
+## Diff Visualization
+
+Added:
+
+Green
+
+Removed:
+
+Red
+
+Modified:
+
+Yellow Highlight
+
+For JSON:
+
+Show structured side-by-side comparison.
+
+---
+
+# Restore Feature
+
+When Restore is clicked:
+
+DO NOT overwrite immediately.
+
+Show modal:
+
+Restore Snapshot
+
+This will create a new Draft Snapshot from the selected version.
+
+Current configuration will remain recoverable.
+
+Buttons:
+
+Cancel
+
+Restore
+
+---
+
+Restore Process
+
+Selected Snapshot
+→ Create New Snapshot
+→ Make Current Working Draft
+
+This ensures no data is ever lost.
+
+---
+
+# Version Storage
+
+Create new table:
+
+agent_versions
+
+Fields:
+
+id
+
+agent_id
+
+snapshot_type
+(draft | published)
+
+version_number
+
+created_by
+
+created_at
+
+change_summary
+
+configuration_json
+
+is_archived
+
+source_snapshot_id
+
+---
+
+Configuration JSON
+
+Store full configuration.
+
+Include:
+
+Prompt
+
+Voice
+
+Tools
+
+Knowledge
+
+Scheduling
+
+Variables
+
+Advanced Settings
+
+Compliance Settings
+
+CRM Settings
+
+Everything required to fully rebuild the agent.
+
+---
+
+# Retention Policy
+
+Draft Snapshots
+
+Keep latest 100 snapshots.
+
+Auto-delete oldest snapshots after 100.
+
+Published Versions
+
+Never delete automatically.
+
+User can archive manually.
+
+---
+
+# Restore Last Working Version
+
+Existing button:
+
+Restore Last Working Version
+
+Update behavior:
+
+Restore latest published version as a new draft snapshot.
+
+Never overwrite directly.
+
+---
+
+# Audit Trail
+
+Track:
+
+User Name
+
+User Email
+
+Timestamp
+
+Action
+
+Examples:
+
+Prompt Modified
+
+Published V5
+
+Restored Snapshot
+
+Archived Version
+
+Deleted Snapshot
+
+---
+
+# Performance Requirements
+
+Version creation must not affect:
+
+Agent Calls
+
+Voice Calls
+
+Scheduling
+
+Memory
+
+CRM
+
+Analytics
+
+Publishing
+
+Execution Pipeline
+
+Version system must operate as an independent persistence layer.
+
+---
+
+# Success Criteria
+
+✓ Every Save creates Draft Snapshot
+
+✓ Every Publish creates Published Version
+
+✓ Compare Any Version
+
+✓ Compare Any Snapshot
+
+✓ Restore Any Version
+
+✓ Restore Any Snapshot
+
+✓ No Data Loss
+
+✓ Git-like History
+
+✓ Full Audit Trail
+
+✓ Independent from Production Execution
+
+✓ Scalable for Thousands of Agents
+
+Important:
+Implement this as a standalone versioning layer. Do not modify existing agent execution logic, call handling, scheduling engine, memory system, CRM, analytics, tool execution framework, publishing flow, or production runtime behavior.

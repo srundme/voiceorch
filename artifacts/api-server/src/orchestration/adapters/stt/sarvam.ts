@@ -192,10 +192,11 @@ export class SarvamSTT implements STTAdapter {
     //   fast speaker → 120 ms · medium → 220 ms · slow / older caller → 350 ms
     // Seeded at COALESCE_DEFAULT_MS until at least 2 real pauses are observed;
     // converges within 2–3 turns of natural speech.
-    const COALESCE_MIN_MS     = 120;
-    const COALESCE_DEFAULT_MS = 220;
-    const COALESCE_MAX_MS     = 350;
-    const PAUSE_HISTORY_MAX   = 5;
+    const COALESCE_MIN_MS        = 120;
+    const COALESCE_DEFAULT_MS    = 220;
+    const COALESCE_MAX_MS        = 500;  // raised from 350 — covers ~400ms thinking pauses
+    const COALESCE_INCOMPLETE_MS = 1200; // extra hold for obviously-incomplete fragments
+    const PAUSE_HISTORY_MAX      = 5;
     const pauseHistory: number[] = [];
     let transcriptArrivedAt    = 0;   // wall-clock ms when last transcript buffered
     let coalesceMergedSegments = 0;   // # of Sarvam segments folded into current buf
@@ -206,6 +207,41 @@ export class SarvamSTT implements STTAdapter {
       if (avg < 150) return COALESCE_MIN_MS;
       if (avg < 400) return COALESCE_DEFAULT_MS;
       return COALESCE_MAX_MS;
+    }
+
+    /**
+     * Returns true when the transcript looks like a mid-sentence fragment that the
+     * caller is still formulating. Triggers COALESCE_INCOMPLETE_MS hold instead of
+     * the adaptive window so the caller can finish their thought.
+     *
+     * Patterns detected (Tamil-aware + generic):
+     *   • Single word                          — always incomplete
+     *   • Ends with Tamil possessive suffix    — உங்களோட, என்னோட, அதோட, …
+     *   • Ends with Tamil case markers         — -ஐ, -க்கு, -கிட்ட, -ல, -னால, …
+     *   • Ends with common connective words    — "and", "or", "but", "also", "with"
+     *   • Ends with relative/attribute marker  — -ன, -ற (verb participial forms)
+     *   • All-caps abbreviation (e.g. "DTDC") — likely partial proper noun phrase
+     */
+    function looksIncomplete(text: string): boolean {
+      const t = text.trim();
+      const words = t.split(/\s+/);
+      if (words.length === 0) return false;
+      // Single word → almost certainly a fragment
+      if (words.length === 1) return true;
+      const last = words[words.length - 1];
+      // Tamil possessive / genitive suffixes → more to come
+      if (/[ஓோ]ட$|உடைய$|களோட$/.test(last)) return true;
+      // Tamil dative, locative, instrumental markers
+      if (/க்கு$|கிட்ட$|கிட்டே$|னால$|னாலே$|ஐ$/.test(last)) return true;
+      // Tamil relative-participial / adverbial forms
+      if (/ன்ற$|கிற$|வந்த$|போன$/.test(last)) return true;
+      // Hindi/Hinglish possessives & case markers
+      if (/\bका$|\bकी$|\bके$|\bको$|\bसे$|\bमें$|\bने$|\bपर$/u.test(last)) return true;
+      // Generic English connectives that signal more is coming
+      if (/^(and|or|but|also|with|for|of|to|the|a|an|in|on|at)$/i.test(last)) return true;
+      // All-caps token ≥ 2 chars (e.g. "DTDC", "KYC") often precedes more speech
+      if (/^[A-Z]{2,}$/.test(last)) return true;
+      return false;
     }
 
     let coalesceBuf = "";
@@ -336,9 +372,13 @@ export class SarvamSTT implements STTAdapter {
           coalesceMeta           = meta;         // keep latest latency measurement
           coalesceMergedSegments++;
           transcriptArrivedAt    = Date.now();   // start of the hold window
-          // (Re-)arm the emit timer with the caller-adapted hold duration.
+          // (Re-)arm the emit timer. For obviously-incomplete fragments (single word,
+          // trailing Tamil possessive/case suffix, all-caps abbreviation, English
+          // connective) use COALESCE_INCOMPLETE_MS so the caller can finish their
+          // thought before we dispatch to the LLM. Otherwise use the adaptive window.
           if (coalesceTimer) clearTimeout(coalesceTimer);
-          coalesceTimer = setTimeout(emitCoalesced, adaptiveHoldMs());
+          const holdMs = looksIncomplete(coalesceBuf) ? COALESCE_INCOMPLETE_MS : adaptiveHoldMs();
+          coalesceTimer = setTimeout(emitCoalesced, holdMs);
           return;
         }
 
