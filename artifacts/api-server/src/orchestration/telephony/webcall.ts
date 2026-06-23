@@ -27,6 +27,7 @@ import { loadCallerContext, injectEnhancedMemory, updateCallerProfile, latchCall
 import { GenderDetector } from "../genderDetector.js";
 import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
+import { SileroVAD } from "../silero-vad.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
 import { getBackchannelFillers } from "../backchannel.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "../conversationDiscipline.js";
@@ -1051,6 +1052,11 @@ export async function handleWebCallWebSocket(
   // Used to distinguish "user started speaking after agent ended" (new turn, don't discard)
   // from "user spoke during agent speech but didn't interrupt" (leftover, discard).
   let lastUserSpeechStartAt = 0;
+
+  // ── Silero VAD — neural speech/non-speech classifier ──────────────────────
+  // Replaces the energy-based RMS threshold.  Fire-and-forget async inference;
+  // isSpeech() returns the result from the most recently completed window (~40ms lag).
+  const sileroVad = new SileroVAD(0.5, callId);
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   let _webcallTurnIdx   = 0;
@@ -3166,6 +3172,7 @@ export async function handleWebCallWebSocket(
   }
 
   async function hangup(reason = "normal", errorDetail?: unknown) {
+    sileroVad.destroy();
     if (closed) return;
     closed = true;
     safetyNet.clear();
@@ -3489,6 +3496,11 @@ export async function handleWebCallWebSocket(
     if (genderDetector && !speaking) genderDetector.addSpeechChunk(pcm8kForGender);
     const rms = rmsEnergy(data);
 
+    // Feed Silero VAD (fire-and-forget async); isSpeech() returns last completed result.
+    // Falls back to energy threshold if the ONNX session hasn't warmed up yet (first ~40ms).
+    sileroVad.push(data as Buffer);
+    const isSpeech = sileroVad.isAvailable() ? sileroVad.isSpeech() : rms > SPEECH_RMS_THRESHOLD;
+
     if (speaking) {
       // Agent is speaking — use elevated threshold to ignore echo / ambient noise.
       // Require BARGE_IN_MIN_FRAMES consecutive loud frames before accepting a barge-in,
@@ -3507,7 +3519,7 @@ export async function handleWebCallWebSocket(
       // silence-timer branch below by returning (agent owns the turn while speaking).
       if (!bargeInEnabled) return;
       const inStartGrace = Date.now() < echoGraceUntil;
-      if (!inStartGrace && rms > bargeInRmsThreshold) {
+      if (!inStartGrace && isSpeech) {
         if (bargeInFrames === 0) bargeInFirstFrameAt = Date.now(); // start of this loud run
         bargeInFrames++;
         bargeInLowEnergyFrames = 0; // high-energy frame — reset the dip counter
@@ -3568,10 +3580,10 @@ export async function handleWebCallWebSocket(
     // When streaming fires a valid final it cancels the timer and clears the
     // backup (see the onFinal handler above).
     if (streamSTT) {
-      if (!processing && rms > SPEECH_RMS_THRESHOLD) sendStatus("listening");
+      if (!processing && isSpeech) sendStatus("listening");
       const chunk = Buffer.from(data);
       streamSTT.sendAudio(chunk);
-      if (rms > SPEECH_RMS_THRESHOLD) {
+      if (isSpeech) {
         audioChunks.push(chunk);
         clearStreamingFallback(); // user still speaking — reset the fallback window
         if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
@@ -3603,7 +3615,7 @@ export async function handleWebCallWebSocket(
     }
 
     // Batch STT path: local VAD accumulates speech, flushes after silence
-    if (rms > SPEECH_RMS_THRESHOLD) {
+    if (isSpeech) {
       const chunk = Buffer.from(data);
       audioChunks.push(chunk);
       clearSilenceTimer();

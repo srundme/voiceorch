@@ -1,0 +1,301 @@
+Here’s the full current website copy, section by section, so you can rewrite it.
+
+Meta & SEO (index.html)
+Title: SnapServe — Voice AI Orchestration with Memory | All Regional Languages
+
+Description: Enterprise voice agents that remember every caller across calls. Native support for all regional Indian languages, provider-agnostic, IRDAI/DPDP/TRAI aligned. Built by AITEL.
+
+OG Title: Voice agents that remember every caller.
+
+OG Description: Enterprise voice AI for India. Persistent memory, all regional languages, provider-agnostic.
+
+Navigation
+Sidebar links: Memory / CRM · Smart Reconnect · How it works · Contact
+Sidebar footer: by AITEL · Chennai · Bengaluru
+
+Mobile header: Open dashboard
+
+All primary CTAs: Open dashboard → https://app.snapserve.ai
+All secondary CTAs: Sign up → https://app.snapserve.ai
+GlowButton hover: Go to app →
+
+1. Hero
+Eyebrow: Voice AI that doesn't start from zero
+
+Headline: Voice agents that remember every caller.
+
+Subline: All regional languages
+
+Language tagline: Tamil, Telugu, Hindi, Bengali, Marathi, Gujarati, Kannada, Malayalam & every major Indian language
+
+Body: SnapServe orchestrates enterprise voice AI for India — persistent caller memory, native support for every regional language, and Smart Reconnect when networks drop.
+
+Trust pills: IRDAI · DPDP · TRAI · 1+ year in production · Insurance & EdTech
+
+Hero visual (live call mock)
+Caller: Tambaram-la villa irukka? Budget 75 lakhs.
+Agent: Yes Karthik — I have your plot search in Red Hills saved too.
+Label: memory saved
+Caller memory: 17 facts · 52 calls
+Fact chips: Name: Karthik · Property type: Plot & villa · Budget: 75 lakhs · Locations: Tambaram, Vadapalani
+2. Live stats ticker
+Stat	Value
+Calls with memory
+2.8M+ (animated)
+Reconnect time
+0.8s
+Regional languages
+22+
+Uptime
+99.9%
+3. Memory / CRM
+Label: Memory / CRM
+
+Headline: Every caller gets a profile. Your agent reads it automatically.
+
+Body: Facts, episodes, and call history — saved after every conversation and injected into the next one. No database to build. No context to re-enter.
+
+CRM dashboard mock (Karthik)
+Stats: 52 calls · 17 facts · 5 recent calls · Last active: Just now
+Caller info: Name Karthik · browser · Chennai · Tamil + English (regional)
+Facts: Name, Property type (Plot & villa), Budget (75 lakhs), Locations (Tambaram, Vadapalani), Other areas (Red Hills, Madhavaram), Interest Tamil (வீடு)
+Episode: Karthik continued his property search in Chennai — villas in Tambaram, plots in Red Hills and Madhavaram. Budget 75 lakhs. Memory injected in 300ms before the agent spoke.
+Call history: #206 Browser 19s · #205 Outbound 4m 12s · #204 Inbound 2m 48s
+Observability
+Headline: See the call log as JSON
+Body: Every Memory fetch, VariableResolver injection, and call lifecycle event — structured and searchable. Toggle Trace or raw JSON.
+
+Three layers cards
+Tab	Title	Description	Example
+Facts
+Extracted facts
+Budget, locations, property type — structured from every call, including regional language.
+75 lakhs · Tambaram · வீடு
+Episodes
+Episode summaries
+What happened on each call, in plain language. The story, not just the transcript.
+Property search · Chennai · villas & plots
+Call History
+Full call logs
+Every event logged as JSON — Memory load, prompt injection, call end. Full observability.
+callId 206 · 4 events · browser
+CTA: Open dashboard
+
+4. Statement
+Left: Every call should feel like a continuation,
+Right: not a cold start.
+
+Body 1: We're building the orchestration layer for enterprise voice AI in India — where persistent memory, all regional language support, and provider-agnostic infrastructure aren't features, they're the foundation.
+
+Body 2: SnapServe sits between your voice provider and your agent, injecting caller context transparently into every turn — engineered for the realities of Indian telephony from day one.
+
+5. Trust grid
+Copy: Trusted in production across insurance and edutech outbound & inbound campaigns.
+
+Logos: ICICI Lombard · Care Health · Star Health · A leading health insurer (repeated)
+
+6. Testimonial
+"SnapServe was the breakthrough we needed — callers stopped repeating themselves on call two."
+
+— Head of Growth, Insurance
+
+7. Smart Reconnect (Flagship)
+Badge: Flagship
+
+Headline: Network drops. SnapServe calls back.
+
+Body 1: When a call disconnects due to network issues, SnapServe doesn't wait for the caller to dial again. Within a second, it initiates an outbound callback — apologizes for the disconnect, and resumes exactly where the conversation left off.
+
+Body 2: This isn't a system-prompt trick. It's orchestration with memory and intent — the agent knows to call back if they asked, and knows what to say without asking the same details again.
+
+Trait	Description
+Detects disconnects
+Network drops, signal loss, abrupt hangups — SnapServe knows the difference.
+Calls back in < 1 second
+Outbound callback fires automatically. No queue. No human handoff.
+Opens with context
+"Sorry, we got disconnected due to network" — then continues the exact thread.
+Never re-asks
+Policy numbers, preferences, dispositions — already in memory. Zero repetition.
+Phone demo script (insurance example)
+On call: Agent discusses ICICI policy IL-28491 renewal · Caller says call back if network drops
+Network lost: Signal dropped — call disconnected
+Auto-callback: SnapServe initiated outbound callback · < 1s
+Reconnected: Agent apologizes, resumes IL-28491 renewal · Caller: "Wow, you didn't ask me anything again."
+Badge: No re-introduction. No repeated questions.
+CTA: Open dashboard
+
+8. Intelligence — "Not a system prompt. A brain."
+Headline: Stateless agents follow scripts. SnapServe agents reason.
+
+Typical voice AI (bad)
+You are a helpful agent.
+If call drops, say sorry.
+Ask for policy number.
+Ask for language preference.
+Start from hello every time.
+Caption: Drop the call → caller phones back → agent starts over. Every time.
+
+SnapServe orchestration (good)
+Caller asked: call back if we drop
+Last topic: IL-28491 renewal
+Regional language detected: Telugu
+Disposition: send payment link
+Action: auto-outbound in 0.8s
+Auto-action: Network drop detected → outbound callback in 0.8s → resume with full context
+
+9. The Voice AI Problem (2×2 grid)
+Section label: The Voice AI Problem
+
+Problem headline: Most voice AI forgets the moment the call ends.
+
+Your customer explained their situation last week. They confirmed their policy number. They told your agent they'd call back after lunch.
+And then they did — to an agent that knew none of it.
+For high-stakes verticals like insurance, that's not just friction — it's lost conversions and broken trust.
+Visual labels: Call 1 — context captured → Call 2 — without memory
+Caption: Context lost between calls — unless SnapServe remembers it.
+
+Pipeline visual: ASR → LLM → TTS
+
+Solution label: The Solution
+Solution headline: SnapServe gives your voice agents a memory.
+
+Three layers of caller memory — raw transcripts, episode summaries, and extracted facts — injected transparently into every conversation.
+Provider-agnostic by design. Never locked in.
+10. Memory Architecture
+Label: Memory Architecture
+
+Headline: Three layers of intelligence. One caller identity.
+
+Body: SnapServe doesn't just store calls — it builds a living profile of every caller that compounds with each conversation. Transparent injection, zero re-architecture.
+
+Layer	Title	Description
+Layer 1
+Raw Transcripts
+Every word, every call — stored and searchable. The foundation your agents build context from.
+Layer 2
+Episode Summaries
+Condensed narratives of each conversation. What happened, what was promised, what comes next.
+Layer 3
+Extracted Facts
+Structured data pulled automatically — policy numbers, preferences, dispositions, callbacks.
+CTA: Open dashboard
+
+11. Unified Stack
+Label: The Solution
+Headline: A Unified Stack For Caller Intelligence
+
+Body: Three memory layers ensure context isn't lost between calls. OpenAI-compatible proxy. Redis-backed horizontal scale.
+
+12. Comparison chart
+Headline: Memory, Language, Scale. Pick Two Three
+
+Body: SnapServe performs as well as stateless platforms when latency is factored — with persistent caller memory included.
+
+Tabs: Memory vs Latency · Multilingual Score
+Axis labels: Context Retention / Multilingual Accuracy vs Latency (ms)
+
+13. Platform / How it works
+Headline: Ready To Build? Say Hello to the SnapServe Orchestration Layer
+
+Body: Voice agents that remember every caller — in every regional language, natively, and interact in real time.
+
+Console mock (snapserve-console)
+# Caller memory config
+caller_id: +91XXXXXXXXXX
+layers: [transcripts, episodes, facts]
+languages: all regional (ta, te, hi, bn, mr, gu, kn, ml, …)
+# Auto-inject on every turn via OpenAI-compatible proxy
+Tabs: Memory · Providers · Latency · Settings
+Live call overlay:
+
+User: Last time you said renewal is next week...
+Agent: Yes, your ICICI policy IL-28491 renews March 15.
+memory_inject: 28ms
+Feature grid
+Feature	Description
+OpenAI-Compatible Proxy
+Drop-in memory injection via REST. No re-architecture required.
+Provider-Agnostic
+Orchestrate across Sarvam, Cartesia, Bolna, Vapi, Retell, and more.
+Latency Instrumentation
+Six checkpoints per turn — latency you tune, not tolerate.
+Smart Reconnect
+Network drop? Auto-callback in <1s with full context — no repeated questions.
+How it works steps
+Connect your provider. Sarvam, Cartesia, Bolna, Vapi, Retell, and more.
+Memory injects automatically. OpenAI-compatible proxy layers caller memory into every turn.
+Smart Reconnect handles drops. Network lost? SnapServe calls back in <1s, apologizes, and resumes — no repeated questions.
+Your agents get smarter every call. Dispositions feed a training flywheel — performance compounds.
+14. Built for production
+Label: Built for Production, Not Demos
+Headline: Engineered for Indian telephony.
+
+Feature	Detail
+Per-turn latency instrumentation
+Six checkpoints per conversation.
+Regional language endpointing
+Speech patterns for every major Indian language.
+Alphanumeric capture
+"B for Bombay" works for PAN, Aadhaar.
+Horizontal scale
+Redis-backed sessions at any volume.
+15. Compliance
+Label: Compliance First
+Headline: Built for the Indian regulatory environment.
+Body: IRDAI · DPDP · TRAI — architected from day one.
+
+Frameworks: IRDAI · DPDP · TRAI
+
+16. Use cases
+Vertical	Description
+Insurance
+Renewals, claims, inbound support with policyholder history.
+EdTech
+Admissions and follow-ups in your students' languages.
+Enterprise
+High-volume workflows where context matters.
+17. Comparison table — Why SnapServe
+Headline: Stateless platforms vs. SnapServe
+
+Feature	Stateless	SnapServe
+Cross-call memory
+✗ Every call starts fresh
+✓ Persistent caller memory
+Network drop recovery
+✗ Caller must dial back
+✓ Auto-callback in <1s with context
+Regional languages
+~ Translation bolt-ons
+✓ All major Indian languages
+Dropped-call recovery
+✗ Restart from zero
+✓ Resume mid-conversation
+Agent intelligence
+✗ System prompt only
+✓ Memory + intent orchestration
+Provider lock-in
+✗ Tied to one stack
+✓ Provider-agnostic
+Indian compliance
+~ Generic
+✓ IRDAI / DPDP / TRAI aligned
+18. Final CTA
+Headline: Your agents should have a memory. And a brain.
+
+Body: See SnapServe auto-reconnect after a network drop, handle every regional language, natively, and never ask the same question twice.
+
+CTAs: Open dashboard · Sign up
+
+19. Footer
+Brand: SnapServe by AITEL · Chennai · Bengaluru
+
+Links: Product · How it works · Compliance · Contact 1
+
+Legal: Privacy Policy · Terms of Service · SUPPORT@SNAPSERVE.AI
+
+Copyright: © 2026 AITEL
+
+Separate pages (not on landing)
+/privacy — Full Privacy Policy (Google API, data rights, support@snapserve.ai)
+/terms — Full Terms of Service (9 sections, support@snapserve.ai)

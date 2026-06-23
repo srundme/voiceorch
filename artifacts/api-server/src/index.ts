@@ -19,6 +19,7 @@ import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
 import { consumeTicket } from "./lib/webcall-ticket.js";
+import { warmSileroVAD } from "./orchestration/silero-vad.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
@@ -326,6 +327,7 @@ async function bootstrapMigrationJournal(): Promise<void> {
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
   initAudioPool(new URL(`file://${workerFile}`));
+  void warmSileroVAD(); // preload Silero VAD ONNX session so first call doesn't pay load cost
 
   // Run DB migrations after the port is open so Railway's health-check passes
   // while the schema is being applied. Services that need tables will become
