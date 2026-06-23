@@ -64,6 +64,8 @@ const WEBCALL_FRAME_MS         = 128;   // browser ScriptProcessorNode(2048) at 
 const BARGE_IN_ECHO_GRACE_MS   = 700;  // suppress barge-in after TTS starts — allows browser echo cancellation to adapt
 const BARGE_IN_END_GRACE_MS    = 600;  // suppress barge-in for 600ms after the last TTS chunk — prevents mic echo
                                         // of the final word triggering a false barge-in and cutting it off
+const ECHO_DISCARD_OVERLAP_MS  = 1500; // speech that starts within this many ms of agent ending is genuine overlap,
+                                        // not echo (echo from TTS starts at TTS onset, not near the end)
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
 const WEB_TAIL_ECHO_MARGIN_MS  = 100;  // extra echo-grace held PAST the tail-silence drain so the agent's own
@@ -567,13 +569,13 @@ export async function handleWebCallWebSocket(
             });
             logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via streaming STT");
           } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS
-                     && lastUserSpeechStartAt <= speakingEndedAt) {
+                     && lastUserSpeechStartAt > 0 && lastUserSpeechStartAt <= speakingEndedAt - ECHO_DISCARD_OVERLAP_MS) {
             // Transcript arrived after speaking ended but within the end-grace window,
-            // AND the user's speech_start VAD fired while the agent was still speaking.
-            // This means the user spoke DURING agent speech but didn't trigger barge-in —
-            // a true leftover that would make the agent answer its own echo.
-            // If speech_start fired AFTER speakingEndedAt, the user started speaking after
-            // the agent ended (new clean turn) — do NOT discard it.
+            // AND the user's speech_start VAD fired well before the agent stopped (>1.5s before).
+            // This is a true echo/leftover — acoustic feedback from TTS starts at TTS onset,
+            // not near the end. If the user started speaking within ECHO_DISCARD_OVERLAP_MS of
+            // agent ending, treat it as genuine overlap (user waiting for agent to finish) and
+            // let it through as a new turn.
             logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt, lastUserSpeechStartAt, speakingEndedAt }, "Webcall: discarding post-speech transcript (leftover from barge-in detection)");
             // Discarded leftover — stay cleanly in Listening (re-arm stall, drop
             // any stale best-partial) instead of clearing the safety net.
@@ -636,10 +638,10 @@ export async function handleWebCallWebSocket(
                       });
                       logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via fallback streaming STT");
                     } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS
-                               && lastUserSpeechStartAt <= speakingEndedAt) {
+                               && lastUserSpeechStartAt > 0 && lastUserSpeechStartAt <= speakingEndedAt - ECHO_DISCARD_OVERLAP_MS) {
                       // Same guard as primary STT: only discard if speech_start VAD fired
-                      // while the agent was speaking (true leftover). If the user started
-                      // speaking after the agent ended, let it through as a new turn.
+                      // well before the agent stopped (>1.5s). Speech starting within
+                      // ECHO_DISCARD_OVERLAP_MS of agent ending is genuine overlap, not echo.
                       logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (fallback STT)");
                       safetyNet.beginListening(); // stay cleanly in Listening
                       return;

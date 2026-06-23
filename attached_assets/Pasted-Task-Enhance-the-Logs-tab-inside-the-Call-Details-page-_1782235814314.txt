@@ -1,0 +1,174 @@
+Task: Enhance the Logs tab inside the Call Details page with additional lifecycle and debugging events.
+
+This task should ONLY modify the **Logs** tab inside an individual call.
+
+Location:
+Call Logs
+→ Select any call
+→ Logs tab
+
+Do NOT modify:
+- Main Call Logs listing page
+- Transcript tab
+- Summary tab
+- Tools tab
+- Call Recording tab
+- Metadata tab
+- Dashboard
+- Analytics
+- Any other UI
+
+Only extend the existing Logs timeline by adding the following missing events while preserving the current UI and chronological order.
+
+## 1. Call Started Event
+
+The first log entry should always be:
+
+- Call Started
+- Call ID
+- Session ID
+- Call Type (Webcall / Live Call)
+- Direction (Inbound / Outbound)
+- Recording Enabled / Disabled
+- WebRTC Connected
+- Media Stream Started
+- Connection Established Timestamp
+
+This should appear before provider initialization.
+
+---
+
+## 2. Playback Lifecycle
+
+Log playback events in the timeline:
+
+- Playback Started
+- Playback Completed
+- Playback Interrupted
+- Playback Cancelled
+
+Include:
+- Timestamp
+- Turn Number
+- Playback Duration
+- Audio Duration
+- Stop Reason (if interrupted)
+
+---
+
+## 3. Tool Execution Timeline
+
+Whenever the LLM invokes a tool, log:
+
+- Tool Requested
+- Tool Arguments
+- Execution Started
+- Execution Completed
+- Execution Duration
+- Tool Result
+- Success / Failure
+
+If failed, include:
+- Error Message
+- Retry Count
+- Failure Reason
+
+---
+
+## 4. Recording Lifecycle
+
+Log recording events:
+
+- Recording Started
+- Recording Paused
+- Recording Resumed
+- Recording Saved
+- Recording Uploaded
+- Recording Failed
+
+Include timestamps and status.
+
+---
+
+## 5. Warning & Error Events
+
+Add warning events to the timeline, such as:
+
+- STT Timeout
+- High STT Latency
+- Barge-in Detected
+- Playback Interrupted
+- TTS Retry
+- LLM Retry
+- Provider Reconnected
+- Network Delay
+- Recording Delay
+- WebRTC Reconnect
+- Tool Retry
+
+Warnings should be clearly distinguishable from normal success logs.
+
+---
+
+## 6. Richer Call End Summary
+
+Enhance the existing "Call Ended" card.
+
+Include:
+
+- Disconnect Reason
+- Triggering Component
+- Provider
+- Call Duration
+- Total Turns
+- Last Component Executed
+- Last User Transcript
+- Last Agent Response
+- Recording Status
+- Warning Count
+- Error Count
+- Retry Count
+- Fallback Count
+- Final Call Outcome
+
+Example:
+
+Call Ended
+
+Reason: Caller Hung Up
+
+Component: Telephony
+
+Duration: 65 sec
+
+Turns: 5
+
+Last Component: STT
+
+Last Transcript: "..."
+
+Last Agent Response: "..."
+
+Recording: Saved
+
+Warnings: 1
+
+Errors: 0
+
+Retries: 0
+
+Fallbacks: 0
+
+Outcome: Completed
+
+---
+
+Requirements
+
+- Do not redesign the UI.
+- Do not remove any existing log entries.
+- Do not change the current filtering or JSON export.
+- Keep the current timeline layout.
+- Simply extend the existing Logs tab with richer lifecycle events and debugging information.
+
+The goal is to make the Logs tab a complete end-to-end execution trace so that an engineer can diagnose any call issue without needing backend logs.

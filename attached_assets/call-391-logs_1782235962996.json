@@ -1,0 +1,1009 @@
+[
+  {
+    "id": 6819,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.706Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "sarvam",
+      "llmProvider": "qwen",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6820,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.706Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 6821,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.706Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "qwen",
+      "model": "qwen/qwen3-32b"
+    }
+  },
+  {
+    "id": 6823,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.706Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 6822,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.707Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    }
+  },
+  {
+    "id": 6824,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.722Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Tuesday, June 23, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 70  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to clarify remaining property details or confirm decision timeline for the Janglpet location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• location_interest: Janglpet  [today]\n• decision_timeline: 10 days  [today]\n• requested_callback_next_day: yes  [today]\n• declined_senior_executive_now: yes  [today]\n• request_for_full_details: yes  [today]\n• property_approval_asked: DTDC approved  [today]\n• information_only: yes  [today]"
+    },
+    "metadata": null
+  },
+  {
+    "id": 6826,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.722Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthikeyan",
+        "callCount": 70
+      },
+      "factCount": 46,
+      "facts": {
+        "location_interest": "Janglpet",
+        "decision_timeline": "10 days",
+        "requested_callback_next_day": "yes",
+        "declined_senior_executive_now": "yes",
+        "request_for_full_details": "yes",
+        "property_approval_asked": "DTDC approved",
+        "information_only": "yes",
+        "site_visit_time": "5:30 PM",
+        "pickup_location": "Central",
+        "arrival_time": "3:00 PM",
+        "starting_city": "Coimbatore",
+        "arrival_time_approx": "2:00 PM",
+        "arrival_city": "Chennai",
+        "pickup_requested": "yes",
+        "visit_scheduled_day": "tomorrow",
+        "site_visit_location": "Madhavaram",
+        "site_visit_time_request": "5:30 PM",
+        "needs_time_to_decide_on_other_locations": "yes",
+        "no_changes_to_site_visit": "yes",
+        "preferred_site_visit_time": "5:30 PM",
+        "looking_for_property_in": "Chennai",
+        "visit_timing_comfortable": "yes",
+        "site_visit_time_confirmed": "5 PM",
+        "visit_scheduled_date": "tomorrow",
+        "visit_scheduled_time": "10 AM",
+        "budget": "75 lakhs",
+        "location": "Madhavaram",
+        "currently_searching_for_villa": "yes",
+        "interested_in_location": "Madhavaram",
+        "interested_in": "villa",
+        "call_back_time": "11 AM",
+        "call_back_day": "tomorrow",
+        "call_back_requested": "yes",
+        "name": "Karthikeyan",
+        "location_of_interest": "Madhavaram",
+        "interested_in_plots_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_for_villa": "75 lakhs",
+        "area_of_interest": "Vadapalani",
+        "interested_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_range": "7.5 lakh",
+        "property_type": "plot",
+        "looking_for_property_in_chennai": "yes",
+        "property_type_of_interest": "villa",
+        "looking_for_property": "yes",
+        "interested_in_property_in_chennai": "true",
+        "policy_interest": "வீடு"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 6825,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:30:53.722Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "3ce7e8294be7",
+      "promptLength": 23220,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 70  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to clarify remaining property details or confirm "
+    }
+  },
+  {
+    "id": 6827,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:12.985Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "நல்லா இருக்குது மேடம் நீங்க எப்படி இருக்கீங்க?",
+      "endDetectToFinalMs": 110,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 6828,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:13.089Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:01 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 70  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to clarify remaining property details or confirm decision timeline for the Janglpet location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• location_interest: Janglpet  [today]\n• decision_timeline: 10 days  [today]\n• requested_callback_",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 6829,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:13.572Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 486,
+      "turnNumber": 1,
+      "durationMs": 486
+    }
+  },
+  {
+    "id": 6830,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:13.732Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களை மீண்டும் காண மகிழ்ச்சி, கார்த்திகேயன்!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 6831,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:13.999Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "🥰 \nநீங்க வீடு கட்டிக்க ஆசைப்படுற Jallpeth இடத்துல எங்களுக்கு நல்லா அப்டேட்ஸ் இருகுது."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 6832,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:14.138Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "10 நாட்களுக்குள்ள முடிவு எடுக்கலாம் என்றும் சொல்லியிருக்கீங்க"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 6833,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:14.157Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1068,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "உங்களை மீண்டும் காண மகிழ்ச்சி, கார்த்திகேயன்! 🥰  \nநீங்க வீடு கட்டிக்க ஆசைப்படுற Jallpeth இடத்துல எங்களுக்கு நல்லா அப்டேட்ஸ் இருகுது. 10 நாட்களுக்குள்ள முடிவு எடுக்கலாம் என்றும் சொல்லியிருக்கீங்க, நல்லாயிருக்குதா?"
+    },
+    "metadata": {
+      "inputTokens": 6461,
+      "outputTokens": 233,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 1,
+      "durationMs": 1068
+    }
+  },
+  {
+    "id": 6834,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:14.157Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "🥰 \nநீங்க வீடு கட்டிக்க ஆசைப்படுற Jallpeth இடத்துல எங்களுக்கு நல்லா அப்டேட்ஸ் இருகுது. 10 நாட்களுக்குள்ள முடிவு எடுக்கலாம் என்றும் சொல்லியிருக்கீங்க, நல்லாயிருக்குதா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 6835,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:14.764Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1032,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 45,
+      "firstByteMs": 277
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1032
+    }
+  },
+  {
+    "id": 6836,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:14.893Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 896,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 127998,
+      "textLength": 86,
+      "firstByteMs": 161
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 896
+    }
+  },
+  {
+    "id": 6837,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:15.040Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 904,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 92158,
+      "textLength": 61,
+      "firstByteMs": 311
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 904
+    }
+  },
+  {
+    "id": 6838,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:15.691Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1536,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 253438,
+      "textLength": 166,
+      "firstByteMs": 295
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1536
+    }
+  },
+  {
+    "id": 6855,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:41.592Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "இருக்குது மேடம் நீங்க எப்படி இருக்கீங்க?",
+      "endDetectToFinalMs": 167,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 6857,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:41.695Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "பாக்கறேன்..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 6856,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:41.695Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:01 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 70  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to clarify remaining property details or confirm decision timeline for the Janglpet location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• location_interest: Janglpet  [today]\n• decision_timeline: 10 days  [today]\n• requested_callback_",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 6858,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:42.129Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 437,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20480,
+      "textLength": 12,
+      "firstByteMs": 154
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 437
+    }
+  },
+  {
+    "id": 6859,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:42.388Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 694,
+      "turnNumber": 2,
+      "durationMs": 694
+    }
+  },
+  {
+    "id": 6860,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:42.473Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நல்லாவே இருக்கேன்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 6861,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:42.627Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு Jallpeth இடத்துல என்ன விசயத்தை பற்றி விரிவாக சொல்லிக்கொடுக்கணும்?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 6862,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:42.627Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 933,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நல்லாவே இருக்கேன். உங்களுக்கு Jallpeth இடத்துல என்ன விசயத்தை பற்றி விரிவாக சொல்லிக்கொடுக்கணும்?"
+    },
+    "metadata": {
+      "inputTokens": 13205,
+      "outputTokens": 341,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 2,
+      "durationMs": 933
+    }
+  },
+  {
+    "id": 6863,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:43.066Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 594,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 56318,
+      "textLength": 23,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 594
+    }
+  },
+  {
+    "id": 6864,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:31:43.458Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 832,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117758,
+      "textLength": 76,
+      "firstByteMs": 139
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 832
+    }
+  },
+  {
+    "id": 6874,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:11.778Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello Madam கேட்குதா?",
+      "endDetectToFinalMs": 103,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 6875,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:11.881Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:02 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 70  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to clarify remaining property details or confirm decision timeline for the Janglpet location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• location_interest: Janglpet  [today]\n• decision_timeline: 10 days  [today]\n• requested_callback_",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 6876,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:12.580Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 700,
+      "turnNumber": 3,
+      "durationMs": 700
+    }
+  },
+  {
+    "id": 6877,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:12.708Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 827,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "இருக்குது, என்ன உங்களுக்கு தெரிஞ்சா சொல்லுங்க?"
+    },
+    "metadata": {
+      "inputTokens": 20077,
+      "outputTokens": 397,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 3,
+      "durationMs": 827
+    }
+  },
+  {
+    "id": 6878,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:12.708Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இருக்குது, என்ன உங்களுக்கு தெரிஞ்சா சொல்லுங்க?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 6879,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:13.388Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 680,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79358,
+      "textLength": 46,
+      "firstByteMs": 151
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 680
+    }
+  },
+  {
+    "id": 6880,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:18.530Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Swimming pool இருக்குதா?",
+      "endDetectToFinalMs": 107,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 6882,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:18.633Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 6881,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:18.633Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:02 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 70  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan will likely call to clarify remaining property details or confirm decision timeline for the Janglpet location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• location_interest: Janglpet  [today]\n• decision_timeline: 10 days  [today]\n• requested_callback_",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 6883,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:19.115Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 485,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 28160,
+      "textLength": 6,
+      "firstByteMs": 176
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 485
+    }
+  },
+  {
+    "id": 6884,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:19.124Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 493,
+      "turnNumber": 4,
+      "durationMs": 493
+    }
+  },
+  {
+    "id": 6885,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:19.404Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்களுக்கு நல்லா தெரியும் ரவில்லா ஹோம்ஸ் Jallpeth இடத்துல உள்ள வீடு குவின்மி பூல் வசதி பற்றி."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 6886,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:19.415Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 782,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, உங்களுக்கு நல்லா தெரியும் ரவில்லா ஹோம்ஸ் Jallpeth இடத்துல உள்ள வீடு குவின்மி பூல் வசதி பற்றி. இருக்குதா?"
+    },
+    "metadata": {
+      "inputTokens": 27025,
+      "outputTokens": 514,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 4,
+      "durationMs": 782
+    }
+  },
+  {
+    "id": 6887,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:19.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இருக்குதா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 6888,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:19.901Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 487,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25600,
+      "textLength": 10,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 487
+    }
+  },
+  {
+    "id": 6889,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:20.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1114,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 181758,
+      "textLength": 98,
+      "firstByteMs": 140
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 1114
+    }
+  },
+  {
+    "id": 6891,
+    "callId": 391,
+    "agentId": 5,
+    "ts": "2026-06-23T17:32:27.979Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Telephony",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 94,
+        "turns": 5
+      },
+      "durationSeconds": 94,
+      "turns": 5
+    }
+  }
+]
