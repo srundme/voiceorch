@@ -194,19 +194,23 @@ export async function handleVobizWebSocket(
     }
   });
 
-  ws.on("close", async () => {
+  ws.on("close", () => {
     logger.info({ sessionId }, "Vobiz WS closed");
     if (sessionId) {
-      await endSession(sessionId);
+      endSession(sessionId).catch((err: unknown) =>
+        logger.error({ sessionId, err }, "Vobiz WS close: endSession failed"),
+      );
     } else {
       sessionEndedBeforeReady = true;
     }
   });
 
-  ws.on("error", async (err: unknown) => {
+  ws.on("error", (err: unknown) => {
     logger.error({ sessionId, err }, "Vobiz WS error");
     if (sessionId) {
-      await failSession(sessionId, toReadableError(err, "Telephony error"));
+      failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
+        logger.error({ sessionId, err: e }, "Vobiz WS error: failSession failed"),
+      );
     } else {
       sessionEndedBeforeReady = true;
     }

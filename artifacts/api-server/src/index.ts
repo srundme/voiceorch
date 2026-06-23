@@ -33,6 +33,16 @@ if (!rawPort) throw new Error("PORT environment variable is required but was not
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
+// Global safety-nets: prevent unhandled async rejections from crashing the process.
+// Node.js 15+ exits on unhandledRejection by default — one transient DB timeout in
+// a ws.on("close") async callback would kill the server and 502 all in-flight calls.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "Unhandled promise rejection — caught at process level (process kept alive)");
+});
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "Uncaught exception — caught at process level (process kept alive)");
+});
+
 // Install the shared keep-alive HTTP pool as the global dispatcher BEFORE any
 // outbound provider call can happen. Keeps sockets warm across turn gaps so
 // repeat LLM/TTS/STT calls skip the TCP+TLS handshake. Process-wide: also covers

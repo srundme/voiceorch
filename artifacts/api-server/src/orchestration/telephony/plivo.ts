@@ -124,13 +124,21 @@ export async function handlePlivoWebSocket(
     }
   });
 
-  ws.on("close", async () => {
-    if (sessionId) await endSession(sessionId);
+  ws.on("close", () => {
+    if (sessionId) {
+      endSession(sessionId).catch((err: unknown) =>
+        logger.error({ sessionId, err }, "Plivo WS close: endSession failed"),
+      );
+    }
   });
 
-  ws.on("error", async (err: unknown) => {
+  ws.on("error", (err: unknown) => {
     logger.error({ sessionId, err }, "Plivo WS error");
-    if (sessionId) await failSession(sessionId, toReadableError(err, "Telephony error"));
+    if (sessionId) {
+      failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
+        logger.error({ sessionId, err: e }, "Plivo WS error: failSession failed"),
+      );
+    }
   });
 }
 

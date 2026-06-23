@@ -119,14 +119,22 @@ export async function handleTwilioWebSocket(
     }
   });
 
-  ws.on("close", async () => {
+  ws.on("close", () => {
     logger.info({ sessionId }, "Twilio WS closed");
-    if (sessionId) await endSession(sessionId);
+    if (sessionId) {
+      endSession(sessionId).catch((err: unknown) =>
+        logger.error({ sessionId, err }, "Twilio WS close: endSession failed"),
+      );
+    }
   });
 
-  ws.on("error", async (err: unknown) => {
+  ws.on("error", (err: unknown) => {
     logger.error({ sessionId, err }, "Twilio WS error");
-    if (sessionId) await failSession(sessionId, toReadableError(err, "Telephony error"));
+    if (sessionId) {
+      failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
+        logger.error({ sessionId, err: e }, "Twilio WS error: failSession failed"),
+      );
+    }
   });
 }
 

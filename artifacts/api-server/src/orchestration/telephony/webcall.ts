@@ -3616,9 +3616,9 @@ export async function handleWebCallWebSocket(
     }
   });
 
-  ws.on("close", async () => { if (!closed) await hangup("disconnected"); });
-  ws.on("error", async (err: unknown) => {
+  ws.on("close", () => { if (!closed) hangup("disconnected").catch((err: unknown) => logger.error({ callId, err }, "WebCall WS close: hangup failed")); });
+  ws.on("error", (err: unknown) => {
     logger.error({ callId, err }, "WebCall WS error");
-    if (!closed) await hangup("error", err);
+    if (!closed) hangup("error", err).catch((e: unknown) => logger.error({ callId, err: e }, "WebCall WS error: hangup failed"));
   });
 }
