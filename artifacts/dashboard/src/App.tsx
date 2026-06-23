@@ -304,17 +304,17 @@ function SignInPage() {
   const submitBtnStyle = (isLoading: boolean): React.CSSProperties => ({
     marginTop: 6,
     width: "100%",
-    background: isLoading ? "rgba(124,58,237,0.5)" : "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
-    color: "#fff",
+    background: isLoading ? "rgba(255,255,255,0.35)" : "#fff",
+    color: "#000",
     fontWeight: 700,
     fontSize: "0.9rem",
     padding: "14px 0",
     borderRadius: 12,
     border: "none",
     cursor: isLoading ? "not-allowed" : "pointer",
-    transition: "opacity .15s",
+    transition: "background .15s",
     letterSpacing: "-0.1px",
-    boxShadow: isLoading ? "none" : "0 4px 24px rgba(168,85,247,0.35)",
+    boxShadow: isLoading ? "none" : "0 2px 12px rgba(0,0,0,0.2)",
   });
 
   const logoIcon = (

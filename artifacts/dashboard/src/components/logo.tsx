@@ -111,7 +111,7 @@ export function SnapServeLoader() {
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
       style={{
-        background: "linear-gradient(140deg, #cfd8f0 0%, #d8dcf0 18%, #e0e4f4 35%, #dde6f2 52%, #d5dced 70%, #cfd9ef 85%, #d8dff2 100%)",
+        background: "#000",
       }}
     >
       {/* Animated three-bar icon */}
