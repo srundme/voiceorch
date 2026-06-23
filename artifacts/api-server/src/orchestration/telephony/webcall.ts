@@ -3557,8 +3557,11 @@ export async function handleWebCallWebSocket(
     // TTS chunk was sent. This prevents the trailing echo of the agent's final word
     // (still playing in the browser speaker) from being picked up by the mic and
     // immediately firing a new user turn before the caller has a chance to speak.
+    // NOTE: for streaming STT we compute this flag but do NOT early-return here —
+    // we must still call streamSTT.sendAudio() so the provider receives the full
+    // audio stream. Gating sendAudio on inEndGrace drops the first 1200ms of the
+    // user's response after every agent turn (the provider's own VAD rejects echo).
     const inEndGrace = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
-    if (inEndGrace) return;
 
     // Streaming STT path: send all audio directly to the provider WebSocket.
     // We ALSO mirror speech frames into audioChunks as a backup so batch STT
@@ -3568,9 +3571,14 @@ export async function handleWebCallWebSocket(
     // When streaming fires a valid final it cancels the timer and clears the
     // backup (see the onFinal handler above).
     if (streamSTT) {
-      if (!processing && rms > SPEECH_RMS_THRESHOLD) sendStatus("listening");
       const chunk = Buffer.from(data);
       streamSTT.sendAudio(chunk);
+      // During end grace: audio is forwarded to the provider (above) but we do
+      // NOT accumulate chunks or signal "listening" — this prevents echo from
+      // triggering a new turn via our local logic.  The provider's server-side VAD
+      // will not fire a final from the attenuated echo frames.
+      if (inEndGrace) return;
+      if (!processing && rms > SPEECH_RMS_THRESHOLD) sendStatus("listening");
       if (rms > SPEECH_RMS_THRESHOLD) {
         audioChunks.push(chunk);
         clearStreamingFallback(); // user still speaking — reset the fallback window
