@@ -1,7 +1,7 @@
 import { WebSocket } from "ws";
 import { randomUUID } from "crypto";
 import { pcmToWav } from "../../audio.js";
-import type { STTAdapter } from "./base.js";
+import type { STTAdapter, SttFinalMetadata } from "./base.js";
 import type { STTConfig, StreamSTT } from "../../types.js";
 import { logger } from "../../../lib/logger.js";
 
@@ -235,7 +235,7 @@ export class AzureSTT implements STTAdapter {
   // ── Streaming WebSocket ───────────────────────────────────────────────────
 
   transcribeStream(
-    onTranscript: (text: string, isFinal: boolean, detectedLanguage?: string) => void,
+    onTranscript: (text: string, isFinal: boolean, detectedLanguage?: string, metadata?: SttFinalMetadata) => void,
     onClose?: () => void,
   ): StreamSTT {
     const params = this.buildParams();
@@ -252,6 +252,9 @@ export class AzureSTT implements STTAdapter {
     let currentRequestId = "";
     const MAX_RECONNECT_ATTEMPTS = 10;
     const audioQueue: Buffer[] = [];
+    // Endpointing latency tracking
+    let lastPartialAt = 0;          // timestamp of last speech.hypothesis
+    let speechEndDetectedAt = 0;    // timestamp of speech.enddetected
 
     const openSocket = () => {
       // Each Azure connection needs its own requestId — shared across all
@@ -344,7 +347,10 @@ export class AzureSTT implements STTAdapter {
           try {
             const msg = JSON.parse(body) as AzureHypothesisBody;
             const text = msg.Text?.trim();
-            if (text) onTranscript(text, false);
+            if (text) {
+              lastPartialAt = Date.now();
+              onTranscript(text, false);
+            }
           } catch {
             // malformed JSON — ignore
           }
@@ -379,7 +385,16 @@ export class AzureSTT implements STTAdapter {
               return;
             }
 
-            onTranscript(text, true);
+            const now = Date.now();
+            const meta: SttFinalMetadata = {
+              endDetectToFinalMs: speechEndDetectedAt > 0 ? now - speechEndDetectedAt : undefined,
+              lastPartialToFinalMs: lastPartialAt > 0 ? now - lastPartialAt : undefined,
+            };
+            logger.info(
+              { region: this.region, endDetectToFinalMs: meta.endDetectToFinalMs, lastPartialToFinalMs: meta.lastPartialToFinalMs },
+              "Azure STT: speech.phrase final",
+            );
+            onTranscript(text, true, undefined, meta);
           } catch {
             // malformed JSON — ignore
           }
@@ -400,6 +415,7 @@ export class AzureSTT implements STTAdapter {
         }
 
         if (path === "speech.enddetected") {
+          speechEndDetectedAt = Date.now();
           logger.debug({ region: this.region }, "Azure STT: speech.enddetected");
           return;
         }

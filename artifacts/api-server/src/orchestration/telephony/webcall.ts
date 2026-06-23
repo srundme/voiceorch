@@ -408,6 +408,7 @@ export async function handleWebCallWebSocket(
   // ── Streaming STT (saaras:v3, Deepgram) ─────────────────────────────────
   // Initialised below, after the call record exists and callId is known.
   let streamSTT: StreamSTT | null = null;
+  let pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number } | null = null;
   // Transcript received from streaming STT WebSocket — consumed by process()
   let streamingTranscriptPending: string | null = null;
   // Prefer asrLanguage over language for TTS — setting the Transcriber to
@@ -488,7 +489,7 @@ export async function handleWebCallWebSocket(
   if (stt.transcribeStream) {
     try {
       streamSTT = stt.transcribeStream(
-        (text, isFinal) => {
+        (text, isFinal, _lang, sttMeta) => {
           if (closed) return;
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent speech, where partials are
@@ -497,6 +498,7 @@ export async function handleWebCallWebSocket(
           if (!text.trim()) return;
           // NB: safetyNet.onFinal() is DEFERRED to process() so a transcript that is
           // later discarded below (echo / leftover) does NOT clear the stall backstop.
+          pendingSttMeta = sttMeta ?? null;
           // Barge-in: if agent is speaking, only interrupt if the transcript
           // meets the same wordsForInterruption gate as energy-based barge-in.
           // This prevents a faint background speaker (distant person) producing
@@ -1108,9 +1110,12 @@ export async function handleWebCallWebSocket(
         }
       }
 
+      const _sttMeta = pendingSttMeta;
+      pendingSttMeta = null;
       logExecution("STT", "response", {
         provider: agent.asrProvider,
-        responsePayload: { transcript: userText },
+        responsePayload: { transcript: userText, ...(_sttMeta ?? {}) },
+        latencyMs: _sttMeta?.lastPartialToFinalMs ? Math.round(_sttMeta.lastPartialToFinalMs) : undefined,
         status: "success",
       });
       send({ type: "transcript", speaker: "user", text: userText });

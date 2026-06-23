@@ -227,6 +227,8 @@ export class OrchestrationPipeline {
   // Adaptive endpoint: set by scheduleSilenceFlush(), captured+reset in processTurn()
   private _lastEndpointMs: number | null = null;
   private _lastEndpointReason = "";
+  // Azure STT endpointing metadata — set in streaming callback, consumed in processTurn
+  private _pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number } | null = null;
   private _fillerPlayedThisTurn = false;
 
   // Usage accumulators — updated on every LLM call and every TTS synthesis.
@@ -418,7 +420,7 @@ export class OrchestrationPipeline {
     if (!this.stt.transcribeStream) return;
     try {
       this.streamSTT = this.stt.transcribeStream(
-        (text, isFinal) => {
+        (text, isFinal, _lang, metadata) => {
           if (this.closed) return;
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent playback, where partials are
@@ -435,6 +437,7 @@ export class OrchestrationPipeline {
           this.resetHangupTimer();
           // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
           // transcript that is later discarded (tail-echo) does NOT clear the stall.
+          this._pendingSttMeta = metadata ?? null;
           void this.handleStreamingTranscript(text, Date.now());
         },
         () => {
@@ -473,7 +476,13 @@ export class OrchestrationPipeline {
   private async handleStreamingTranscript(transcript: string, sttEmittedAt = Date.now(), closeReason: TurnCloseReason = "stt_final"): Promise<void> {
     this._turnCloseReason = closeReason;
     const _tStreamNow = performance.now();
-    this._tTurnVadFlush = _tStreamNow;
+    // For Azure streaming, use lastPartialToFinalMs to back-compute when the caller
+    // stopped speaking — this gives a meaningful stt_ms in the turn_latency log.
+    if (this._pendingSttMeta?.lastPartialToFinalMs) {
+      this._tTurnVadFlush = _tStreamNow - this._pendingSttMeta.lastPartialToFinalMs;
+    } else {
+      this._tTurnVadFlush = _tStreamNow;
+    }
     this._tTurnSttFinal = _tStreamNow;
     const sttToProcessMs = Date.now() - sttEmittedAt;
     logger.info(
@@ -1683,11 +1692,13 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
 
     // STT execution-log row — the recognized caller utterance for this turn.
+    const _sttMeta = this._pendingSttMeta;
+    this._pendingSttMeta = null;
     this.logExec("STT", "response", {
       provider: this.agent.asrProvider,
       status: "success",
-      latencyMs: Math.round(sttLatencyMs),
-      responsePayload: { transcript },
+      latencyMs: _sttMeta?.lastPartialToFinalMs ? Math.round(_sttMeta.lastPartialToFinalMs) : (Math.round(sttLatencyMs) || undefined),
+      responsePayload: { transcript, ...(_sttMeta ?? {}) },
     });
 
     // P1-I: Start Speaking Plan — content-based delay before triggering LLM response
