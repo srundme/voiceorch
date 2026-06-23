@@ -26,7 +26,8 @@ export class CartesiaSTT implements STTAdapter {
     formData.append("model", this.model);
     if (this.cfg.language) formData.append("language", this.cfg.language);
 
-    const resp = await fetch("https://api.cartesia.ai/v1/audio/transcriptions", {
+    const base = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
+    const resp = await fetch(`${base}/v1/audio/transcriptions`, {
       method: "POST",
       headers: { "X-API-Key": this.key },
       body: formData,

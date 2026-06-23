@@ -7,7 +7,8 @@ import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
-const CARTESIA_BASE_URL = "https://api.cartesia.ai";
+/** India endpoint by default; override via CARTESIA_BASE_URL env var. */
+const CARTESIA_BASE_URL = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
 const CARTESIA_VERSION = "2026-03-01";
 
 async function getCartesiaKey(): Promise<string | null> {

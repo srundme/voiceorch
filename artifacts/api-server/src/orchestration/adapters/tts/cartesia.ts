@@ -9,6 +9,9 @@ import type { TTSAdapter } from "../../types.js";
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 300;
 
+/** India endpoint by default for lowest latency; override via CARTESIA_BASE_URL env var. */
+const CARTESIA_BASE_URL = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
+
 /** Retry a fetch call on transient network failures (ETIMEDOUT, ECONNRESET, etc.). */
 async function fetchWithRetry(
   url: string,
@@ -87,7 +90,7 @@ export class CartesiaTTS implements TTSAdapter {
   }
 
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
-    const resp = await fetchWithRetry("https://api.cartesia.ai/tts/bytes", {
+    const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.headers,
       body: this.buildRequestBody(text),
@@ -113,7 +116,7 @@ export class CartesiaTTS implements TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const resp = await fetchWithRetry("https://api.cartesia.ai/tts/bytes", {
+    const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.headers,
       body: this.buildRequestBody(text),

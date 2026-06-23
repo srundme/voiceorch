@@ -69,7 +69,8 @@ router.get("/wizard/voices", requireDbUser, async (req, res): Promise<void> => {
   }
 
   try {
-    const response = await fetch("https://api.cartesia.ai/voices", {
+    const cartesiaBase = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
+    const response = await fetch(`${cartesiaBase}/voices`, {
       headers: {
         "X-API-Key": cartesiaKey,
         "Cartesia-Version": "2024-06-10",
@@ -155,7 +156,8 @@ router.post("/wizard/preview-voice", requireDbUser, async (req, res): Promise<vo
   const model = (modelId && PREVIEW_VALID_MODELS.has(modelId)) ? modelId : "sonic-3.5";
 
   try {
-    const response = await fetch("https://api.cartesia.ai/tts/bytes", {
+    const cartesiaBase2 = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
+    const response = await fetch(`${cartesiaBase2}/tts/bytes`, {
       method: "POST",
       headers: {
         "X-API-Key": cartesiaKey,

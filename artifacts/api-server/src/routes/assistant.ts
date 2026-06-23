@@ -185,7 +185,8 @@ router.post("/assistant/tts", async (req: Request, res: Response): Promise<void>
   }
 
   try {
-    const ttsRes = await fetch("https://api.cartesia.ai/tts/bytes", {
+    const cartesiaBase = (process.env["CARTESIA_BASE_URL"] ?? "https://api-india.cartesia.ai").replace(/\/+$/, "");
+    const ttsRes = await fetch(`${cartesiaBase}/tts/bytes`, {
       method: "POST",
       headers: {
         "X-API-Key": cartesiaKey,
