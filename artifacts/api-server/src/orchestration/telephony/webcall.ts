@@ -498,6 +498,10 @@ export async function handleWebCallWebSocket(
           // barge-in candidates). Don't process yet.
           if (!isFinal) { if (!speaking && text.trim()) { safetyNet.onPartial(text); resetHangupSilenceTimer(); } return; }
           if (!text.trim()) return;
+          // Streaming produced a valid result — cancel batch-STT fallback timer and
+          // clear the backup audio buffer; streaming STT has covered this utterance.
+          clearStreamingFallback();
+          audioChunks.splice(0);
           // NB: safetyNet.onFinal() is DEFERRED to process() so a transcript that is
           // later discarded below (echo / leftover) does NOT clear the stall backstop.
           pendingSttMeta = sttMeta ?? null;
@@ -927,6 +931,14 @@ export async function handleWebCallWebSocket(
   // barge-in mid-utterance, clipping the response. Semantic interrupts ("stop") bypass it.
   let echoGraceUntil = 0;
   let pendingShortUtterance: string | null = null; // short transcript discarded during speaking — replayed after agent finishes
+  // Streaming-STT batch fallback: when streaming gives no final (Azure NoMatch /
+  // low-confidence), this timer fires batch STT on the audio we mirrored into
+  // audioChunks while streaming was running.
+  let streamingFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  const STREAMING_BATCH_FALLBACK_MS = 1500; // ms of silence before triggering batch-STT fallback
+  const clearStreamingFallback = () => {
+    if (streamingFallbackTimer) { clearTimeout(streamingFallbackTimer); streamingFallbackTimer = null; }
+  };
   let interrupted = false;          // barge-in flag; checked inside audio loop
   let bargeInFrames = 0;           // high-RMS frames accumulated while agent is speaking
   let bargeInLowEnergyFrames = 0;  // consecutive LOW-energy frames since the last high-energy frame
@@ -2201,6 +2213,7 @@ export async function handleWebCallWebSocket(
         logger.info({ callId, droppedChunks: audioChunks.length }, "Dropping pre-TTS buffered audio (thinking phase)");
         audioChunks.splice(0);
       }
+      clearStreamingFallback();
       bargeInFrames = 0;
       bargeInLowEnergyFrames = 0;
 
@@ -2363,6 +2376,7 @@ export async function handleWebCallWebSocket(
           logger.info({ callId, dropped: audioChunks.length }, "Discarding during-speech audio (no barge-in triggered)");
           audioChunks.splice(0);
         }
+        clearStreamingFallback();
         // Replay any short utterance that was said during the agent's speech but was
         // too short to trigger a barge-in. Process it now as the user's actual turn.
         if (pendingShortUtterance) {
@@ -3239,13 +3253,35 @@ export async function handleWebCallWebSocket(
     const inEndGrace = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
     if (inEndGrace) return;
 
-    // Streaming STT path: send all audio directly to the provider WebSocket —
-    // no local VAD accumulation needed (provider handles endpointing server-side).
+    // Streaming STT path: send all audio directly to the provider WebSocket.
+    // We ALSO mirror speech frames into audioChunks as a backup so batch STT
+    // can recover if the streaming provider fires a NoMatch / empty final.
+    // The streamingFallbackTimer fires after STREAMING_BATCH_FALLBACK_MS of
+    // silence; if streaming produced nothing by then, process() runs batch STT.
+    // When streaming fires a valid final it cancels the timer and clears the
+    // backup (see the onFinal handler above).
     if (streamSTT) {
-      // Mirror the batch-path UX: show "listening" when the user is actually speaking
-      // so the UI doesn't stay stuck on "Speaking…" after the agent finishes.
       if (!processing && rms > SPEECH_RMS_THRESHOLD) sendStatus("listening");
-      streamSTT.sendAudio(Buffer.from(data));
+      const chunk = Buffer.from(data);
+      streamSTT.sendAudio(chunk);
+      if (rms > SPEECH_RMS_THRESHOLD) {
+        audioChunks.push(chunk);
+        clearStreamingFallback(); // user still speaking — reset the fallback window
+        if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
+      } else if (audioChunks.length > 0) {
+        audioChunks.push(chunk);
+        if (!streamingFallbackTimer) {
+          streamingFallbackTimer = setTimeout(() => {
+            streamingFallbackTimer = null;
+            if (!processing && !speaking && !closed && audioChunks.length > 0 && !streamingTranscriptPending) {
+              logger.warn({ callId, chunks: audioChunks.length }, "Webcall: streaming STT gave no final — falling back to batch STT");
+              void process();
+            } else {
+              audioChunks.splice(0); // streaming handled it or call ended — discard backup
+            }
+          }, STREAMING_BATCH_FALLBACK_MS);
+        }
+      }
       return;
     }
 
