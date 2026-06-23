@@ -214,6 +214,19 @@ export function WebCallPanel({
     setStreamingStale(false);
     setStatus("connecting");
     try {
+      // Mic capture constraints — trade-off note (recording quality vs. barge-in):
+      // We keep `echoCancellation`/`noiseSuppression` ON even though browser AEC
+      // can duck the caller's mic slightly while the agent plays (mildly
+      // attenuating the caller on the recorded left channel). This single mic
+      // stream feeds BOTH the server-side recording AND the STT/barge-in path.
+      // Disabling AEC would let the agent's own TTS echo back through the mic,
+      // which (a) trips false barge-ins and (b) bleeds agent voice onto the
+      // caller channel of the recording — both worse than the slight ducking.
+      // A separate, less-processed capture stream purely for recording was
+      // considered but rejected: it doubles uplink bandwidth and adds a second
+      // un-AEC'd stream whose echo would still need server-side handling. The
+      // primary caller-audio loss was the server `!speaking` recording gate
+      // (now removed), not AEC, so we leave these constraints as-is.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
       });

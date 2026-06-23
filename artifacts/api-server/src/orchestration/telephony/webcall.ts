@@ -3183,14 +3183,13 @@ export async function handleWebCallWebSocket(
       return;
     }
 
-    // Record caller audio only when the agent is NOT speaking.
-    // When the agent is speaking, the agent-chunk loop already pads the caller
-    // track with silence (same length as each TTS chunk), so both tracks stay
-    // perfectly aligned without this call. Adding caller frames here *during*
-    // agent speech would interleave silence blocks into the agent track every
-    // time a mic frame arrives — causing the "on and off" dropouts heard in
-    // call recordings.
-    if (!speaking) recording.addCallerChunk(data as Buffer);
+    // Record caller audio UNCONDITIONALLY — including while the agent speaks.
+    // RecordingBuffer now lays each track on a shared wall-clock timeline, so
+    // capturing the caller during agent speech preserves talk-over / barge-in /
+    // early-reply audio on the caller (left) channel without desyncing or
+    // creating the "on and off" agent-track dropouts the old `!speaking` gate
+    // was added to prevent. The barge-in/STT/gender gates below are untouched.
+    recording.addCallerChunk(data as Buffer);
 
     // Gender detector needs 8 kHz (trained on telephony-band audio)
     const pcm8kForGender = downsample16to8(data as Buffer);

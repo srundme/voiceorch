@@ -9,9 +9,22 @@
  *   rec.addAgentChunk(pcm);                   // on every outbound TTS frame
  *   const url = await rec.finalize(callId);   // at call end → serving URL
  *
- * The two tracks are kept time-aligned by padding the silent side with zeros
- * for every chunk added to the active side.  This preserves the call timeline
- * without needing per-frame wall-clock timestamps.
+ * Time alignment (wall-clock anchored, per-track):
+ *   Each track (caller / agent) is laid down on a SHARED timeline anchored to
+ *   the first chunk seen on EITHER side (`startMs`). When a chunk arrives we
+ *   compute where it belongs on its own track from the elapsed wall-clock time
+ *   (`(now - startMs) * sampleRate`); if that position is ahead of what we have
+ *   already written for that track, we fill the gap with per-track silence,
+ *   then append the chunk. Chunks arriving faster than real time (provider
+ *   bursts) simply append contiguously.
+ *
+ *   This replaces the previous scheme that padded the *opposite* track with
+ *   silence on every append. That scheme assumed only one side ever appended
+ *   at a time; once both sides capture continuously (the caller is now recorded
+ *   even while the agent speaks, so talk-over is preserved) it double-stretched
+ *   the timeline and serialized overlapping speech instead of mixing it. The
+ *   wall-clock model keeps both tracks on one timeline with no progressive
+ *   drift, so overlapping caller/agent speech mixes correctly into L/R.
  *
  * Storing in Postgres (already running in both dev and prod) removes the
  * dependency on Replit Object Storage, which is unavailable in the Railway
@@ -22,31 +35,62 @@ import { eq } from "drizzle-orm";
 import { db, callRecordingsTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
+const BYTES_PER_SAMPLE = 2; // LINEAR16
+
 export class RecordingBuffer {
   private readonly sampleRate: number;
   private callerChunks: Buffer[] = [];
   private agentChunks: Buffer[] = [];
+  private callerBytes = 0;
+  private agentBytes = 0;
+  /** Wall-clock anchor for the shared timeline; set by the first chunk seen. */
+  private startMs: number | null = null;
 
   constructor(sampleRate: number) {
     this.sampleRate = sampleRate;
   }
 
-  /** Called for every inbound PCM frame from the caller. */
+  /** Byte offset on the shared timeline corresponding to `now`. */
+  private timelineBytes(now: number): number {
+    if (this.startMs === null) this.startMs = now;
+    const samples = Math.round(((now - this.startMs) / 1000) * this.sampleRate);
+    return Math.max(0, samples) * BYTES_PER_SAMPLE;
+  }
+
+  /**
+   * Place a chunk on its track at its real wall-clock position, filling any
+   * gap since the last write on THIS track with per-track silence. Returns the
+   * new byte length of the track.
+   */
+  private appendAligned(chunks: Buffer[], writtenBytes: number, pcm: Buffer): number {
+    const target = this.timelineBytes(Date.now());
+    if (target > writtenBytes) {
+      const pad = target - writtenBytes;
+      chunks.push(Buffer.alloc(pad));
+      writtenBytes += pad;
+    }
+    chunks.push(pcm);
+    return writtenBytes + pcm.length;
+  }
+
+  /**
+   * Called for every inbound PCM frame from the caller.
+   * Captured unconditionally (even while the agent speaks) so talk-over /
+   * barge-in / early-reply audio is preserved on the caller channel.
+   */
   addCallerChunk(pcm: Buffer): void {
     if (!pcm.length) return;
-    this.callerChunks.push(pcm);
-    this.agentChunks.push(Buffer.alloc(pcm.length)); // silence on agent side
+    this.callerBytes = this.appendAligned(this.callerChunks, this.callerBytes, pcm);
   }
 
   /** Called for every outbound PCM frame sent to the caller (TTS audio). */
   addAgentChunk(pcm: Buffer): void {
     if (!pcm.length) return;
-    this.agentChunks.push(pcm);
-    this.callerChunks.push(Buffer.alloc(pcm.length)); // silence on caller side
+    this.agentBytes = this.appendAligned(this.agentChunks, this.agentBytes, pcm);
   }
 
   get hasData(): boolean {
-    return this.callerChunks.length > 0;
+    return this.callerBytes > 0 || this.agentBytes > 0;
   }
 
   /**
@@ -70,7 +114,10 @@ export class RecordingBuffer {
     try {
       const callerPcm = Buffer.concat(this.callerChunks);
       const agentPcm  = Buffer.concat(this.agentChunks);
-      const numSamples = callerPcm.length >> 1;
+      // Tracks may differ in length (e.g. a long agent tail with no caller
+      // frames, or vice-versa). Span the longer one; the encoder reads the
+      // shorter track as silence past its end.
+      const numSamples = Math.max(callerPcm.length, agentPcm.length) >> 1;
 
       const wav = encodeStereoPcmWav(callerPcm, agentPcm, numSamples, this.sampleRate);
 
