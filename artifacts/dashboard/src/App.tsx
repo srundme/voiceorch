@@ -60,7 +60,6 @@ import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
 import ImpersonatePage from "@/pages/impersonate";
-import LandingPage from "@/pages/landing";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 const queryClient = new QueryClient({
@@ -105,21 +104,23 @@ function QueryClientCacheInvalidator() {
 // ── Shared style constants ─────────────────────────────────────────────────────
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "#1f2030",
-  border: "1px solid rgba(255,255,255,0.06)",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 12,
   padding: "14px 16px",
   fontSize: "0.9rem",
   color: "#fff",
   outline: "none",
-  transition: "border-color .15s",
+  transition: "border-color .15s, background .15s",
 };
 
 function inputFocus(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = "rgba(74,222,128,0.3)";
+  e.currentTarget.style.borderColor = "rgba(168,85,247,0.5)";
+  e.currentTarget.style.background = "rgba(168,85,247,0.06)";
 }
 function inputBlur(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+  e.currentTarget.style.background = "rgba(255,255,255,0.04)";
 }
 
 type SignInMode = "login" | "register" | "forgot";
@@ -289,40 +290,45 @@ function SignInPage() {
   }
 
   const cardStyle: React.CSSProperties = {
-    width: 440,
-    maxWidth: "100%",
-    background: "#161720",
-    borderRadius: 20,
-    padding: "40px 36px 36px",
-    boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+    width: 460,
+    maxWidth: "calc(100vw - 32px)",
+    background: "rgba(10,8,20,0.9)",
+    borderRadius: 24,
+    padding: "44px 40px 40px",
+    boxShadow: "0 0 0 1px rgba(168,85,247,0.15), 0 32px 80px rgba(0,0,0,0.7)",
+    backdropFilter: "blur(16px)",
+    position: "relative" as const,
+    zIndex: 1,
   };
 
   const submitBtnStyle = (isLoading: boolean): React.CSSProperties => ({
     marginTop: 6,
     width: "100%",
-    background: isLoading ? "#d4d4d4" : "#fff",
-    color: "#0e0f14",
+    background: isLoading ? "rgba(124,58,237,0.5)" : "linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)",
+    color: "#fff",
     fontWeight: 700,
     fontSize: "0.9rem",
     padding: "14px 0",
     borderRadius: 12,
     border: "none",
     cursor: isLoading ? "not-allowed" : "pointer",
-    transition: "background .15s",
+    transition: "opacity .15s",
     letterSpacing: "-0.1px",
+    boxShadow: isLoading ? "none" : "0 4px 24px rgba(168,85,247,0.35)",
   });
 
   const logoIcon = (
-    <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#162a1e", border: "1px solid rgba(74,222,128,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="13" cy="13" r="5" stroke="#4ade80" strokeWidth="1.6"/>
-          <line x1="13" y1="2" x2="13" y2="7" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-          <line x1="13" y1="19" x2="13" y2="24" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-          <line x1="2" y1="13" x2="7" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-          <line x1="19" y1="13" x2="24" y2="13" stroke="#4ade80" strokeWidth="1.6" strokeLinecap="round"/>
-          <circle cx="13" cy="13" r="1.8" fill="#4ade80"/>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28, gap: 14 }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #6d28d9 0%, #a855f7 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 32px rgba(168,85,247,0.4)" }}>
+        <svg width="28" height="22" viewBox="0 0 28 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="8" width="5" height="14" rx="2.5" fill="white" fillOpacity="0.75"/>
+          <rect x="7.5" y="4" width="5" height="18" rx="2.5" fill="white"/>
+          <rect x="15" y="0" width="5" height="14" rx="2.5" fill="white" fillOpacity="0.9"/>
+          <rect x="22.5" y="5" width="5" height="12" rx="2.5" fill="white" fillOpacity="0.65"/>
         </svg>
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: "0.78rem", color: "rgba(168,85,247,0.8)", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>SnapServe AI</div>
       </div>
     </div>
   );
@@ -342,8 +348,8 @@ function SignInPage() {
         justifyContent: "center",
         gap: 10,
         width: "100%",
-        background: "#1a1b27",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.1)",
         borderRadius: 12,
         padding: "13px 0",
         color: "#fff",
@@ -355,13 +361,12 @@ function SignInPage() {
         letterSpacing: "-0.1px",
       }}
       onMouseEnter={e => {
-        (e.currentTarget as HTMLAnchorElement).style.background = "#21223200";
-        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.16)";
-        (e.currentTarget as HTMLAnchorElement).style.background = "#21222e";
+        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)";
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.18)";
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLAnchorElement).style.background = "#1a1b27";
-        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.08)";
+        (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)";
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)";
       }}
     >
       <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
@@ -399,7 +404,7 @@ function SignInPage() {
     // Google-only hint
     if (googleOnly) {
       return (
-        <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={cardStyle}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -418,7 +423,7 @@ function SignInPage() {
     // Step: enter email
     if (forgotStep === "email") {
       return (
-        <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={cardStyle}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -443,8 +448,8 @@ function SignInPage() {
                 type="submit"
                 disabled={loading}
                 style={submitBtnStyle(loading)}
-                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
-                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = "0.85"; }}
+                onMouseLeave={e => { if (!loading) e.currentTarget.style.opacity = "1"; }}
               >
                 {loading ? "Sending…" : "Send reset code"}
               </button>
@@ -458,7 +463,7 @@ function SignInPage() {
     // Step: enter OTP
     if (forgotStep === "otp") {
       return (
-        <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={cardStyle}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -485,8 +490,8 @@ function SignInPage() {
                 type="submit"
                 disabled={loading}
                 style={submitBtnStyle(loading)}
-                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
-                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = "0.85"; }}
+                onMouseLeave={e => { if (!loading) e.currentTarget.style.opacity = "1"; }}
               >
                 {loading ? "Verifying…" : "Verify code"}
               </button>
@@ -525,7 +530,7 @@ function SignInPage() {
 
     // Step: set new password
     return (
-      <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+      <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
         <div style={cardStyle}>
           {logoIcon}
           <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -576,7 +581,7 @@ function SignInPage() {
 
   // ── Login / Register ──────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: "#0e0f14", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
       <div style={cardStyle}>
         {logoIcon}
 
@@ -695,7 +700,7 @@ function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <SnapServeLoader />;
   if (isSignedIn) return <Redirect to="/app" />;
-  return <LandingPage />;
+  return <SignInPage />;
 }
 
 function AppRoutes() {
