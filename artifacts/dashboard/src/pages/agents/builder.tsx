@@ -3186,8 +3186,93 @@ const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
   { label: "TTS / Voice",   keys: ["ttsProvider", "ttsVoice", "ttsModel"] },
   { label: "Telephony",     keys: ["telephonyProvider"] },
   { label: "Call Settings", keys: ["maxDuration", "silenceTimeoutSeconds", "language", "webhookUrl", "noiseCancellationEnabled", "backchannelingEnabled"] },
+  { label: "Tools",         keys: ["tools"] },
+  { label: "Knowledge Base", keys: ["knowledgeSourceIds"] },
+  { label: "Scheduling",    keys: ["schedulingCalendarId", "schedulingEventTypeId"] },
+  { label: "Compliance",    keys: ["agentConfig.complianceDpdp", "agentConfig.complianceIrdai", "agentConfig.complianceHipaa", "agentConfig.complianceTrai"] },
   { label: "Advanced",      keys: ["agentConfig"] },
 ];
+
+const FIELD_LABELS: Record<string, string> = {
+  systemPrompt: "System Prompt",
+  greetingMessage: "Greeting Message",
+  endCallPhrases: "End Call Phrases",
+  asrProvider: "ASR Provider",
+  asrModel: "ASR Model",
+  asrLanguage: "ASR Language",
+  asrBackgroundDenoising: "Background Denoising",
+  asrConfidenceThreshold: "Confidence Threshold",
+  asrKeyterms: "Key Terms",
+  asrSmartEndpointing: "Smart Endpointing",
+  llmProvider: "LLM Provider",
+  llmModel: "LLM Model",
+  temperature: "Temperature",
+  ttsProvider: "TTS Provider",
+  ttsVoice: "Voice Name",
+  ttsModel: "TTS Model",
+  telephonyProvider: "Telephony Provider",
+  maxDuration: "Max Duration (s)",
+  silenceTimeoutSeconds: "Silence Timeout (s)",
+  language: "Language",
+  webhookUrl: "Webhook URL",
+  noiseCancellationEnabled: "Noise Cancellation",
+  backchannelingEnabled: "Backchannel",
+  tools: "Tools",
+  knowledgeSourceIds: "Knowledge Sources",
+  schedulingCalendarId: "Scheduling Calendar",
+  schedulingEventTypeId: "Event Type",
+  "agentConfig.complianceDpdp": "DPDP Compliance",
+  "agentConfig.complianceIrdai": "IRDAI Compliance",
+  "agentConfig.complianceHipaa": "HIPAA Compliance",
+  "agentConfig.complianceTrai": "TRAI Compliance",
+  agentConfig: "Advanced Config",
+};
+
+function getNestedValue(obj: Record<string, unknown>, key: string): unknown {
+  const parts = key.split(".");
+  let val: unknown = obj;
+  for (const part of parts) {
+    if (val == null || typeof val !== "object") return undefined;
+    val = (val as Record<string, unknown>)[part];
+  }
+  return val;
+}
+
+function formatVisualValue(key: string, val: unknown): string {
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "boolean") return val ? "Yes" : "No";
+  if (typeof val === "number") return String(val);
+  if (Array.isArray(val)) {
+    if (val.length === 0) return "None";
+    if (key === "tools") return (val as any[]).map((t) => t?.name || t?.type || "Unknown Tool").join(", ");
+    if (key === "knowledgeSourceIds") return val.map(String).join(", ");
+    return val.map(String).join(", ");
+  }
+  if (typeof val === "object") return JSON.stringify(val, null, 2);
+  return String(val);
+}
+
+function ToolsDiff({ oldTools, newTools }: { oldTools: unknown; newTools: unknown }) {
+  const oldNames = Array.isArray(oldTools) ? (oldTools as any[]).map((t) => t?.name || t?.type || "Unknown") : [];
+  const newNames = Array.isArray(newTools) ? (newTools as any[]).map((t) => t?.name || t?.type || "Unknown") : [];
+  const removed = oldNames.filter((n) => !newNames.includes(n));
+  const added = newNames.filter((n) => !oldNames.includes(n));
+  const kept = oldNames.filter((n) => newNames.includes(n));
+  return (
+    <div className="flex gap-3 text-[11px]">
+      <div className="flex-1 space-y-0.5">
+        {kept.map((n) => <div key={`k-${n}`} className="text-foreground/70">{n}</div>)}
+        {removed.map((n) => <div key={`r-${n}`} className="text-red-400 line-through opacity-70">{n}</div>)}
+        {oldNames.length === 0 && <span className="text-muted-foreground/40 italic">None</span>}
+      </div>
+      <div className="flex-1 space-y-0.5">
+        {kept.map((n) => <div key={`k-${n}`} className="text-foreground/70">{n}</div>)}
+        {added.map((n) => <div key={`a-${n}`} className="text-green-400">{n}</div>)}
+        {newNames.length === 0 && <span className="text-muted-foreground/40 italic">None</span>}
+      </div>
+    </div>
+  );
+}
 
 function normalizeForDiff(text: string): string {
   return text
@@ -3238,16 +3323,21 @@ function WordDiff({ oldText, newText, ignoreFormatting }: { oldText: string; new
 }
 
 function CompareView({
-  agentId, baseVersion, allVersions,
+  agentId, baseVersion, allVersions, initialCompareId,
   onClose,
 }: {
   agentId: number;
   baseVersion: AgentVersion;
   allVersions: VersionSummary[];
+  initialCompareId?: number | null;
   onClose: () => void;
 }) {
-  const [compareId, setCompareId] = useState<number | null>(null);
+  const [compareId, setCompareId] = useState<number | null>(initialCompareId ?? null);
   const [ignoreFormatting, setIgnoreFormatting] = useState(true);
+  const [viewMode, setViewMode] = useState<"visual" | "technical">("visual");
+  const [searchQuery, setSearchQuery] = useState("");
+  const contentRef = useRef<HTMLDivElement>(null);
+
   const compareTarget = allVersions.find(v => v.id === compareId);
 
   const { data: baseSnap } = useGetAgentVersion(agentId, baseVersion.id, {
@@ -3269,27 +3359,58 @@ function CompareView({
       ? `${v.versionNumber} · ${v.versionName}`
       : `${v.versionNumber}: ${v.versionName}`;
 
+  const a = useMemo(() => (baseSnap?.snapshot ?? {}) as Record<string, unknown>, [baseSnap]);
+  const b = useMemo(() => (compareSnap?.snapshot ?? {}) as Record<string, unknown>, [compareSnap]);
+
   const renderValue = (val: unknown): string => {
     if (val === null || val === undefined) return "—";
     if (typeof val === "object") return JSON.stringify(val, null, 2);
     return String(val);
   };
 
-  const renderDiff = (section: typeof COMPARE_SECTIONS[number]) => {
-    const a = (baseSnap?.snapshot ?? {}) as Record<string, unknown>;
-    const b = (compareSnap?.snapshot ?? {}) as Record<string, unknown>;
+  const sectionChangeCounts = useMemo(() => {
+    if (!compareId) return {} as Record<string, number>;
+    return Object.fromEntries(
+      COMPARE_SECTIONS.map(section => {
+        const n = section.keys.filter(key => {
+          const aVal = renderValue(getNestedValue(a, key));
+          const bVal = renderValue(getNestedValue(b, key));
+          return aVal !== bVal;
+        }).length;
+        return [section.label, n];
+      })
+    );
+  }, [a, b, compareId]);
+
+  const totalChanges = useMemo(() => Object.values(sectionChangeCounts).reduce((s, n) => s + n, 0), [sectionChangeCounts]);
+  const changedSections = useMemo(
+    () => COMPARE_SECTIONS.filter(s => (sectionChangeCounts[s.label] ?? 0) > 0),
+    [sectionChangeCounts],
+  );
+
+  const scrollToSection = (label: string) => {
+    const el = document.getElementById(`compare-section-${label.replace(/\s+/g, "-")}`);
+    if (el && contentRef.current) {
+      const containerTop = contentRef.current.getBoundingClientRect().top;
+      const elTop = el.getBoundingClientRect().top;
+      contentRef.current.scrollTop += elTop - containerTop - 16;
+    }
+  };
+
+  const renderTechnicalDiff = (section: typeof COMPARE_SECTIONS[number]) => {
     return section.keys.map(key => {
-      const aRaw = a[key];
-      const bRaw = b[key];
+      const aRaw = getNestedValue(a, key);
+      const bRaw = getNestedValue(b, key);
       const aVal = renderValue(aRaw);
       const bVal = renderValue(bRaw);
       const changed = aVal !== bVal;
       const useWordDiff = changed && (isTextValue(aRaw, aVal) || isTextValue(bRaw, bVal));
+      const displayKey = key.includes(".") ? key.split(".").pop()! : key;
 
       if (useWordDiff) {
         return (
           <tr key={key} className="bg-yellow-500/5">
-            <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{key}</td>
+            <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{displayKey}</td>
             <td colSpan={2} className="py-1.5 pr-3 text-[11px] align-top">
               <WordDiff oldText={aVal} newText={compareSnap ? bVal : "—"} ignoreFormatting={ignoreFormatting} />
             </td>
@@ -3299,7 +3420,7 @@ function CompareView({
 
       return (
         <tr key={key} className={changed ? "bg-yellow-500/5" : ""}>
-          <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{key}</td>
+          <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{displayKey}</td>
           <td className={cn("py-1.5 pr-3 text-[11px] align-top", changed && "text-red-400 line-through opacity-60")}>
             <pre className="whitespace-pre-wrap break-all font-mono">{aVal}</pre>
           </td>
@@ -3311,83 +3432,276 @@ function CompareView({
     });
   };
 
+  const renderVisualSection = (section: typeof COMPARE_SECTIONS[number]) => {
+    const rows: React.ReactNode[] = [];
+    for (const key of section.keys) {
+      const aRaw = getNestedValue(a, key);
+      const bRaw = getNestedValue(b, key);
+      const aVal = renderValue(aRaw);
+      const bVal = renderValue(bRaw);
+      const changed = aVal !== bVal;
+      if (!changed) continue;
+
+      const label = FIELD_LABELS[key] ?? key;
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const aDisplay = formatVisualValue(key, aRaw);
+        const bDisplay = formatVisualValue(key, bRaw);
+        if (!label.toLowerCase().includes(q) && !aDisplay.toLowerCase().includes(q) && !bDisplay.toLowerCase().includes(q)) continue;
+      }
+
+      const isAdded = (aRaw == null || aRaw === "" || (Array.isArray(aRaw) && aRaw.length === 0)) && bRaw != null;
+      const isRemoved = aRaw != null && (bRaw == null || bRaw === "" || (Array.isArray(bRaw) && bRaw.length === 0));
+      const rowColor = isAdded ? "bg-green-500/5 border-l-2 border-green-500/40" : isRemoved ? "bg-red-500/5 border-l-2 border-red-500/40" : "bg-yellow-500/5 border-l-2 border-yellow-500/30";
+
+      const isToolsKey = key === "tools";
+      const isLongText = isTextValue(aRaw, aVal) || isTextValue(bRaw, bVal);
+
+      rows.push(
+        <div key={key} className={cn("px-4 py-3 rounded-lg mb-2", rowColor)}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] font-semibold text-foreground/80">{label}</span>
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full",
+              isAdded ? "bg-green-500/15 text-green-400" : isRemoved ? "bg-red-500/15 text-red-400" : "bg-yellow-500/15 text-yellow-400"
+            )}>
+              {isAdded ? "Added" : isRemoved ? "Removed" : "Modified"}
+            </span>
+          </div>
+          {isToolsKey ? (
+            <ToolsDiff oldTools={aRaw} newTools={bRaw} />
+          ) : isLongText ? (
+            <WordDiff oldText={aVal} newText={bVal} ignoreFormatting={ignoreFormatting} />
+          ) : (
+            <div className="flex gap-3 text-[11px]">
+              <div className={cn("flex-1 px-2 py-1.5 rounded bg-red-500/8 border border-red-500/15", isAdded && "opacity-40")}>
+                <span className={cn("font-mono", isRemoved ? "text-red-400" : "text-foreground/70")}>{formatVisualValue(key, aRaw)}</span>
+              </div>
+              <div className={cn("flex-1 px-2 py-1.5 rounded bg-green-500/8 border border-green-500/15", isRemoved && "opacity-40")}>
+                <span className={cn("font-mono", isAdded ? "text-green-400" : "text-green-300")}>{formatVisualValue(key, bRaw)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    return rows;
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-border/60 shrink-0 flex-wrap">
-        <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X className="h-4 w-4" />
-        </button>
-        <ArrowLeftRight className="h-4 w-4 text-primary" />
-        <span className="font-semibold text-sm">Compare Versions</span>
-        <div className="ml-auto flex items-center gap-3 flex-wrap">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <Switch
-              checked={ignoreFormatting}
-              onCheckedChange={setIgnoreFormatting}
-              className="scale-75 origin-left"
-            />
-            <span className="text-[11px] text-muted-foreground">Ignore Formatting</span>
-          </label>
-          <span className="text-xs text-muted-foreground">Comparing</span>
-          <Badge variant="outline" className="text-[10px]">
-            {(baseVersion as any).snapshotType === "draft"
-              ? `${baseVersion.versionNumber} · ${baseVersion.versionName}`
-              : `${baseVersion.versionNumber}: ${baseVersion.versionName}`}
-          </Badge>
-          <span className="text-xs text-muted-foreground">vs</span>
-          <Select value={compareId != null ? String(compareId) : "__none__"} onValueChange={v => setCompareId(v === "__none__" ? null : parseInt(v, 10))}>
-            <SelectTrigger className="h-7 w-56 text-xs">
-              <SelectValue placeholder="Pick version…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__" className="text-xs">Pick version…</SelectItem>
-              {otherPublished.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-1">Published</SelectLabel>
-                  {otherPublished.map(v => (
-                    <SelectItem key={v.id} value={String(v.id)} className="text-xs">{versionLabel(v)}</SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-              {otherDrafts.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-1">Draft History</SelectLabel>
-                  {otherDrafts.map(v => (
-                    <SelectItem key={v.id} value={String(v.id)} className="text-xs">{versionLabel(v)}</SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-            </SelectContent>
-          </Select>
+      {/* Header */}
+      <div className="shrink-0 border-b border-border/60 px-5 py-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+          <ArrowLeftRight className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-sm">Compare Versions</span>
+          <div className="ml-auto flex items-center gap-1 p-0.5 rounded-lg bg-muted/40 border border-border/50">
+            <button
+              type="button"
+              onClick={() => setViewMode("visual")}
+              className={cn("px-3 py-1 rounded-md text-xs font-medium transition-colors", viewMode === "visual" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              Visual
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("technical")}
+              className={cn("px-3 py-1 rounded-md text-xs font-medium transition-colors", viewMode === "technical" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              Technical
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-6">
-        {!compareId && (
-          <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
-            Select a version to compare against
+        {/* Version cards row */}
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+          <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2 space-y-0.5">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono">{baseVersion.versionNumber}</Badge>
+              <span className="text-xs font-semibold truncate">{baseVersion.versionName}</span>
+            </div>
+            {(baseVersion as any).publishedBy && (
+              <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                <User2 className="h-2.5 w-2.5" />{(baseVersion as any).publishedBy?.slice(0, 18)}
+              </p>
+            )}
+            {(baseVersion as any).createdAt && (
+              <p className="text-[10px] text-muted-foreground/50">{format(new Date((baseVersion as any).createdAt), "MMM d, yyyy · HH:mm")}</p>
+            )}
+          </div>
+
+          <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1">vs</div>
+
+          <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2 space-y-1">
+            <Select value={compareId != null ? String(compareId) : "__none__"} onValueChange={v => setCompareId(v === "__none__" ? null : parseInt(v, 10))}>
+              <SelectTrigger className="h-6 w-full text-xs border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                <SelectValue placeholder="Pick version to compare…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__" className="text-xs">Pick version…</SelectItem>
+                {otherVersions.map(v => (
+                  <SelectItem key={v.id} value={String(v.id)} className="text-xs">{v.versionNumber}: {v.versionName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {compareTarget && (
+              <>
+                {(compareTarget as any).publishedBy && (
+                  <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                    <User2 className="h-2.5 w-2.5" />{(compareTarget as any).publishedBy?.slice(0, 18)}
+                  </p>
+                )}
+                <p className="text-[10px] text-muted-foreground/50">{format(new Date(compareTarget.createdAt), "MMM d, yyyy · HH:mm")}</p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Search bar (visual mode only) */}
+        {viewMode === "visual" && compareId && (
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/60" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Filter changes…"
+              className="w-full h-7 pl-7 pr-7 text-xs bg-muted/30 border border-border/50 rounded-md outline-none focus:ring-1 focus:ring-primary/40"
+            />
+            {searchQuery && (
+              <button type="button" onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground">
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )}
-        {compareId && COMPARE_SECTIONS.map(section => (
-          <div key={section.label} className="space-y-2">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{section.label}</div>
-            <div className="rounded-lg border border-border/50 overflow-hidden">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-border/40 bg-muted/20">
-                    <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground w-32">Field</th>
-                    <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{baseVersion.versionNumber}</th>
-                    <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{compareTarget?.versionNumber ?? "…"}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/20">
-                  {renderDiff(section)}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
+
+        {/* Ignore formatting (technical mode) */}
+        {viewMode === "technical" && (
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <Switch checked={ignoreFormatting} onCheckedChange={setIgnoreFormatting} className="scale-75 origin-left" />
+            <span className="text-[11px] text-muted-foreground">Ignore Formatting</span>
+          </label>
+        )}
       </div>
+
+      {/* Summary chips */}
+      {compareId && viewMode === "visual" && (
+        <div className="shrink-0 px-5 py-2.5 border-b border-border/40 bg-muted/5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-semibold text-muted-foreground mr-1">
+              {totalChanges === 0 ? "No changes detected" : `${totalChanges} change${totalChanges !== 1 ? "s" : ""} detected`}
+            </span>
+            {COMPARE_SECTIONS.map(section => {
+              const count = sectionChangeCounts[section.label] ?? 0;
+              return (
+                <button
+                  key={section.label}
+                  type="button"
+                  onClick={() => count > 0 && scrollToSection(section.label)}
+                  className={cn(
+                    "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                    count > 0
+                      ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer"
+                      : "border-border/30 bg-transparent text-muted-foreground/40 cursor-default",
+                  )}
+                >
+                  {section.label} {count > 0 && <span className="font-bold">· {count}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Body */}
+      {!compareId && (
+        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+          Select a version to compare against
+        </div>
+      )}
+
+      {compareId && viewMode === "visual" && (
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          {/* Left section nav (only when there are changed sections) */}
+          {changedSections.length > 0 && (
+            <div className="w-36 shrink-0 border-r border-border/40 overflow-y-auto py-3 px-2 space-y-0.5">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-2 mb-2">Sections</p>
+              {changedSections.map(section => {
+                const count = sectionChangeCounts[section.label] ?? 0;
+                return (
+                  <button
+                    key={section.label}
+                    type="button"
+                    onClick={() => scrollToSection(section.label)}
+                    className="w-full text-left px-2 py-1 rounded-md text-[11px] flex items-center justify-between gap-1 transition-colors text-foreground/80 hover:bg-muted/30"
+                  >
+                    <span className="truncate">{section.label}</span>
+                    <span className="text-[9px] font-bold text-primary shrink-0">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Visual diff content */}
+          <div ref={contentRef} className="flex-1 overflow-y-auto p-5 space-y-5">
+            {COMPARE_SECTIONS.map(section => {
+              const rows = renderVisualSection(section);
+              if (rows.length === 0) return null;
+              return (
+                <div key={section.label} id={`compare-section-${section.label.replace(/\s+/g, "-")}`} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{section.label}</span>
+                    <span className="text-[9px] text-primary font-semibold">{rows.length} change{rows.length !== 1 ? "s" : ""}</span>
+                  </div>
+                  {rows}
+                </div>
+              );
+            })}
+            {totalChanges === 0 && !searchQuery && (
+              <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
+                <Check className="h-8 w-8 text-green-400/60" />
+                <p className="text-sm font-medium text-foreground/70">No differences found</p>
+                <p className="text-xs text-muted-foreground">These two versions are identical.</p>
+              </div>
+            )}
+            {totalChanges > 0 && searchQuery && COMPARE_SECTIONS.every(s => renderVisualSection(s).length === 0) && (
+              <div className="flex items-center justify-center h-20 text-sm text-muted-foreground">
+                No matches for &ldquo;{searchQuery}&rdquo;
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {compareId && viewMode === "technical" && (
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {COMPARE_SECTIONS.map(section => (
+            <div key={section.label} id={`compare-section-${section.label.replace(/\s+/g, "-")}`} className="space-y-2">
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{section.label}</div>
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/40 bg-muted/20">
+                      <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground w-32">Field</th>
+                      <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{baseVersion.versionNumber}</th>
+                      <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{compareTarget?.versionNumber ?? "…"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {renderTechnicalDiff(section)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3404,6 +3718,9 @@ function VersionCard({
   restorePending,
   archivePending,
   showArchiveAction,
+  selected,
+  selectionDisabled,
+  onSelect,
 }: {
   v: VersionSummary;
   onCompare: () => void;
@@ -3412,6 +3729,9 @@ function VersionCard({
   restorePending: boolean;
   archivePending: boolean;
   showArchiveAction: boolean;
+  selected?: boolean;
+  selectionDisabled?: boolean;
+  onSelect?: (id: number, checked: boolean) => void;
 }) {
   const isArchived = v.status === "archived";
   const changedFields = (v as any).changedFields as string[] | null | undefined;
@@ -3420,7 +3740,25 @@ function VersionCard({
     <div className={cn(
       "flex items-start gap-4 px-5 py-4 hover:bg-muted/10 transition-colors",
       isArchived && "opacity-60",
+      selected && "bg-primary/5",
     )}>
+      {/* Compare checkbox */}
+      {onSelect && (
+        <button
+          type="button"
+          disabled={selectionDisabled && !selected}
+          onClick={() => onSelect(v.id, !selected)}
+          className={cn(
+            "shrink-0 mt-2 h-4 w-4 rounded border transition-colors flex items-center justify-center",
+            selected ? "bg-primary border-primary text-primary-foreground" : "border-border/60 bg-transparent hover:border-primary/60",
+            selectionDisabled && !selected && "opacity-30 cursor-not-allowed",
+          )}
+          title={selected ? "Deselect" : selectionDisabled ? "Max 2 selected" : "Select for compare"}
+        >
+          {selected && <Check className="h-2.5 w-2.5" />}
+        </button>
+      )}
+
       {/* Timeline node */}
       <div className="shrink-0 mt-1 flex flex-col items-center gap-1">
         <div className={cn(
@@ -3489,6 +3827,110 @@ function VersionCard({
   );
 }
 
+/* ── Restore preview dialog ──────────────────────────────────────────────────── */
+
+function RestorePreviewDialog({
+  restoreTarget,
+  restoreSnapshot,
+  prodSnapshot,
+  hasProductionVersion,
+  onCancel,
+  onConfirm,
+  isPending,
+}: {
+  restoreTarget: VersionSummary;
+  restoreSnapshot: Record<string, unknown> | null;
+  prodSnapshot: Record<string, unknown> | null;
+  hasProductionVersion: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const renderVal = (v: unknown) => {
+    if (v == null) return "—";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  };
+
+  const sectionStatuses = useMemo(() => {
+    if (!restoreSnapshot) return [];
+    const base = restoreSnapshot;
+    const prod = prodSnapshot ?? {};
+    return COMPARE_SECTIONS.map(section => {
+      const changed = section.keys.some(key => {
+        return renderVal(getNestedValue(base, key)) !== renderVal(getNestedValue(prod, key));
+      });
+      return { label: section.label, changed };
+    });
+  }, [restoreSnapshot, prodSnapshot]);
+
+  const willChange = sectionStatuses.filter(s => s.changed);
+  const noChange = sectionStatuses.filter(s => !s.changed);
+  const isLoading = !restoreSnapshot || (hasProductionVersion && !prodSnapshot);
+
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-400" /> Restore Snapshot Preview
+          </DialogTitle>
+          <DialogDescription>
+            Restoring <strong>{restoreTarget.versionNumber}: {restoreTarget.versionName}</strong> will replace your current draft. Review what will change below.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-green-400 flex items-center gap-1.5">
+                <Check className="h-3 w-3" /> Will be restored ({willChange.length})
+              </p>
+              <div className="space-y-1">
+                {willChange.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/60 italic">No sections will change</p>
+                ) : willChange.map(s => (
+                  <div key={s.label} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-green-500/8 border border-green-500/15">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-400 shrink-0" />
+                    <span className="text-[11px] text-green-300 font-medium">{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5">
+                <Eye className="h-3 w-3" /> No changes ({noChange.length})
+              </p>
+              <div className="space-y-1">
+                {noChange.map(s => (
+                  <div key={s.label} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/10 border border-border/30">
+                    <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30 shrink-0" />
+                    <span className="text-[11px] text-muted-foreground/50">{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <p className="text-[10px] text-muted-foreground/50 mt-1">Call logs and analytics are not affected.</p>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button type="button" disabled={isPending || !!isLoading} onClick={onConfirm} className="gap-1.5">
+            <RotateCcw className="h-3.5 w-3.5" />
+            {isPending ? "Restoring…" : "Restore Snapshot"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── Versions tab ────────────────────────────────────────────────────────────── */
 
 function groupDraftsByDate(drafts: VersionSummary[]): Array<{ label: string; items: VersionSummary[] }> {
@@ -3516,10 +3958,12 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const [, navigate] = useLocation();
   const [activeSubTab, setActiveSubTab] = useState<"published" | "drafts">("published");
   const [compareVersion, setCompareVersion] = useState<AgentVersion | null>(null);
+  const [compareInitialId, setCompareInitialId] = useState<number | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<VersionSummary | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<VersionSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VersionSummary | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [selectedForCompare, setSelectedForCompare] = useState<Set<number>>(new Set());
 
   const { data: listData, isLoading } = useListAgentVersions(agentId);
   const versions: VersionSummary[] = listData?.versions ?? [];
@@ -3539,6 +3983,44 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const productionVersion = publishedVersions.find(v => v.status === "production");
 
   const draftGroups = groupDraftsByDate(draftVersions);
+
+  const { data: previewRestoreSnap } = useGetAgentVersion(agentId, restoreTarget?.id ?? -1, {
+    query: {
+      queryKey: getGetAgentVersionQueryKey(agentId, restoreTarget?.id ?? -1),
+      enabled: restoreTarget != null,
+    },
+  });
+  const { data: previewProdSnap } = useGetAgentVersion(agentId, productionVersion?.id ?? -1, {
+    query: {
+      queryKey: getGetAgentVersionQueryKey(agentId, productionVersion?.id ?? -1),
+      enabled: productionVersion != null,
+    },
+  });
+
+  const handleSelectForCompare = (id: number, checked: boolean) => {
+    setSelectedForCompare(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        if (next.size < 2) next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleQuickCompare = () => {
+    const selectedIds = Array.from(selectedForCompare);
+    if (selectedIds.length !== 2) return;
+    const vA = versions.find(v => v.id === selectedIds[0]);
+    const vB = versions.find(v => v.id === selectedIds[1]);
+    if (!vA || !vB) return;
+    const newer = (vA.id > vB.id) ? vA : vB;
+    const older = (vA.id > vB.id) ? vB : vA;
+    setCompareInitialId(older.id);
+    setCompareVersion(newer as AgentVersion);
+    setSelectedForCompare(new Set());
+  };
 
   const handleConfirmRestore = async () => {
     if (!restoreTarget) return;
@@ -3587,10 +4069,15 @@ function VersionsTab({ agentId }: { agentId: number }) {
         agentId={agentId}
         baseVersion={compareVersion}
         allVersions={versions}
-        onClose={() => setCompareVersion(null)}
+        initialCompareId={compareInitialId}
+        onClose={() => { setCompareVersion(null); setCompareInitialId(null); }}
       />
     );
   }
+
+  const selectedArr = Array.from(selectedForCompare);
+  const selectedV1 = versions.find(v => v.id === selectedArr[0]);
+  const selectedV2 = versions.find(v => v.id === selectedArr[1]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -3687,12 +4174,15 @@ function VersionsTab({ agentId }: { agentId: number }) {
                   <VersionCard
                     key={v.id}
                     v={v}
-                    onCompare={() => setCompareVersion(v as AgentVersion)}
+                    onCompare={() => { setCompareInitialId(null); setCompareVersion(v as AgentVersion); }}
                     onRestore={() => setRestoreTarget(v)}
                     onArchive={() => setArchiveTarget(v)}
                     restorePending={restore.isPending}
                     archivePending={archive.isPending}
                     showArchiveAction={v.status !== "production"}
+                    selected={selectedForCompare.has(v.id)}
+                    selectionDisabled={selectedForCompare.size >= 2}
+                    onSelect={handleSelectForCompare}
                   />
                 ))}
               </div>
@@ -3717,7 +4207,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
                       <VersionCard
                         key={v.id}
                         v={v}
-                        onCompare={() => setCompareVersion(v as AgentVersion)}
+                        onCompare={() => { setCompareInitialId(null); setCompareVersion(v as AgentVersion); }}
                         onRestore={() => setRestoreTarget(v)}
                         restorePending={restore.isPending}
                         archivePending={archive.isPending}
@@ -3817,26 +4307,34 @@ function VersionsTab({ agentId }: { agentId: number }) {
         </div>
       )}
 
-      {/* Restore confirmation dialog */}
-      <Dialog open={!!restoreTarget} onOpenChange={open => { if (!open) setRestoreTarget(null); }}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400" /> Restore Version
-            </DialogTitle>
-            <DialogDescription>
-              This will create a new draft from <strong>{restoreTarget?.versionNumber}: {restoreTarget?.versionName}</strong>. Your current draft will be replaced with this snapshot. Call logs and analytics are not affected.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRestoreTarget(null)}>Cancel</Button>
-            <Button type="button" disabled={restore.isPending} onClick={handleConfirmRestore} className="gap-1.5">
-              <RotateCcw className="h-3.5 w-3.5" />
-              {restore.isPending ? "Restoring…" : "Restore Draft"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Quick compare sticky bar */}
+      {selectedForCompare.size === 2 && selectedV1 && selectedV2 && (
+        <div className="shrink-0 border-t border-primary/30 bg-primary/5 px-5 py-3 flex items-center gap-3">
+          <ArrowLeftRight className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-xs text-foreground/80 flex-1 truncate">
+            Compare <strong>{selectedV1.versionNumber}</strong> vs <strong>{selectedV2.versionNumber}</strong>
+          </span>
+          <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setSelectedForCompare(new Set())}>
+            <X className="h-3 w-3 mr-1" /> Clear
+          </Button>
+          <Button type="button" size="sm" className="h-7 text-xs gap-1.5" onClick={handleQuickCompare}>
+            <ArrowLeftRight className="h-3 w-3" /> Compare
+          </Button>
+        </div>
+      )}
+
+      {/* Restore preview dialog */}
+      {restoreTarget && (
+        <RestorePreviewDialog
+          restoreTarget={restoreTarget}
+          restoreSnapshot={previewRestoreSnap ? (previewRestoreSnap.snapshot as Record<string, unknown>) : null}
+          prodSnapshot={previewProdSnap ? (previewProdSnap.snapshot as Record<string, unknown>) : null}
+          hasProductionVersion={productionVersion != null}
+          onCancel={() => setRestoreTarget(null)}
+          onConfirm={handleConfirmRestore}
+          isPending={restore.isPending}
+        />
+      )}
 
       {/* Archive confirmation dialog */}
       <Dialog open={!!archiveTarget} onOpenChange={open => { if (!open) setArchiveTarget(null); }}>
