@@ -621,7 +621,7 @@ export default function AgentDetail() {
           {agent.status === "draft"    && <Badge variant="outline" className="text-zinc-500 border-zinc-500">Draft</Badge>}
         </div>
         <div className="flex items-center gap-2 ml-auto">
-          <Link href={`/app/agents/${id}/edit`}>
+          <Link href={`/app/agents/${id}`}>
             <Button variant="outline" className="gap-2">
               <Pencil className="h-4 w-4" />
               Edit Agent

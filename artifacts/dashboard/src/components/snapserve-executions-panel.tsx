@@ -231,7 +231,7 @@ export function SnapServeExecutionsPanel({ agentId }: SnapServeExecutionsPanelPr
               </Button>
             </Link>
           ) : (
-            <Link href={`/app/agents/${agentId}/edit`}>
+            <Link href={`/app/agents/${agentId}`}>
               <Button size="sm" variant="outline" className="gap-1.5 text-xs">
                 <ExternalLink className="h-3 w-3" /> Configure SnapServe Agent ID
               </Button>

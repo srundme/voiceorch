@@ -254,7 +254,7 @@ export default function AgentsList() {
                             View Details
                           </DropdownMenuItem>
                         </Link>
-                        <Link href={`/app/agents/${agent.id}/edit`}>
+                        <Link href={`/app/agents/${agent.id}`}>
                           <DropdownMenuItem className="cursor-pointer">
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit Agent
