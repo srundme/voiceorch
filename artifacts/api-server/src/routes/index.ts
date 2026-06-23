@@ -57,7 +57,6 @@ import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
-import simulationRouter from "./simulation.js";
 import docsRouter from "./docs.js";
 import webcallTicketRouter from "./webcall-ticket.js";
 import callbacksRouter from "./callbacks.js";
@@ -140,7 +139,6 @@ router.use(webcallNotifyRouter);
 router.use(testToolRouter);
 router.use(dispositionRouter);
 router.use(agentVersionsRouter);
-router.use(simulationRouter);
 router.use(webcallTicketRouter);
 router.use(callbacksRouter);
 

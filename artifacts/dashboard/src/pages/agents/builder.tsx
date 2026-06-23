@@ -73,14 +73,13 @@ import {
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { WebCallPanel } from "@/components/webcall-panel";
-import { SimulationTab } from "./builder/SimulationTab";
 
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs" | "versions" | "simulation";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -94,7 +93,6 @@ const TABS: TabDef[] = [
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
   { id: "logs",        label: "Logs",        icon: <List className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
-  { id: "simulation",  label: "Simulation",  icon: <TestTube2 className="h-3.5 w-3.5" /> },
 ];
 
 /* ── Small helpers ──────────────────────────────────────────────────────────── */
@@ -4132,10 +4130,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       ) : activeTab === "versions" ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           <VersionsTab agentId={agent.id} />
-        </div>
-      ) : activeTab === "simulation" ? (
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <SimulationTab agentId={agentId} />
         </div>
       ) : (
         <Form {...form}>
