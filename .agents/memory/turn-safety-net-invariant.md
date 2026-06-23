@@ -18,6 +18,14 @@ dormant while the agent is speaking.
   re-arm the stall and drop the stale best-partial, never leave the turn unguarded.
 - A queued (isProcessing) transcript must carry its `closeReason` through to replay,
   or a force_finalized turn is mis-logged as stt_final.
+- The separate **silence-hangup timer** (pipeline `resetHangupTimer` / webcall
+  `resetHangupSilenceTimer`, driven by `agent.silenceTimeoutSeconds`) must also be
+  reset on every accepted **partial** while listening — not just on finals. STT that
+  streams partials but no final (Indic langs) otherwise hits the hangup timeout and
+  the call drops mid-conversation even though the caller is actively talking.
+- `onPartial()` itself also resets `repromptCount=0` + re-arms the stall backstop:
+  active speech is the opposite of silence, so an actively-speaking caller must never
+  be cut off by the reprompt give-up budget.
 
 **Why:** an earlier impl cleared timers in the STT callback and armed force from
 playback partials; both broke the Tamil/Hinglish hang fix. Two architect passes

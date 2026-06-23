@@ -108,6 +108,68 @@ describe("TurnSafetyNet", () => {
     expect(onStallReprompt).toHaveBeenCalledTimes(1);
   });
 
+  it("a continuing partial re-arms the stall backstop so an actively-speaking caller is never cut off (Bug 1)", () => {
+    const onForceFinalize = vi.fn();
+    const onStallReprompt = vi.fn();
+    const onStallGiveUp = vi.fn();
+    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+    net.beginListening();
+
+    // Caller keeps talking: a fresh partial arrives before the (short)
+    // force-finalize window expires. Each partial must reset BOTH the stall
+    // backstop and the force-finalize timer, so neither fires while speech is
+    // ongoing — even though the cumulative time far exceeds STALL_BACKSTOP_MS.
+    const step = FORCE_FINALIZE_MS - 50;
+    const iters = Math.ceil(STALL_BACKSTOP_MS / step) + 5; // cumulative > stall window
+    let last = "";
+    for (let i = 0; i < iters; i++) {
+      vi.advanceTimersByTime(step);
+      last = `still talking ${i}`;
+      net.onPartial(last);
+    }
+    expect(onStallReprompt).not.toHaveBeenCalled();
+    expect(onStallGiveUp).not.toHaveBeenCalled();
+    expect(onForceFinalize).not.toHaveBeenCalled();
+
+    // Caller finally pauses → no more partials → force-finalize fires from the
+    // best (most recent) partial after FORCE_FINALIZE_MS.
+    vi.advanceTimersByTime(FORCE_FINALIZE_MS + 10);
+    expect(onForceFinalize).toHaveBeenCalledTimes(1);
+    expect(onForceFinalize.mock.calls[0]![0]).toBe(last);
+    expect(onStallGiveUp).not.toHaveBeenCalled();
+
+    net.clear();
+  });
+
+  it("a partial resets the reprompt counter so the give-up budget restarts after the caller speaks", () => {
+    const onForceFinalize = vi.fn();
+    let net!: TurnSafetyNet;
+    const onStallReprompt = vi.fn(() => net.beginListening());
+    const onStallGiveUp = vi.fn();
+    net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+
+    net.beginListening();
+    // Burn one reprompt with silence.
+    vi.advanceTimersByTime(STALL_BACKSTOP_MS + 10);
+    expect(onStallReprompt).toHaveBeenCalledTimes(1);
+
+    // Caller speaks (partial) → counter resets. Whitespace-only is ignored, so
+    // use real text. After this the full reprompt budget is available again.
+    net.onPartial("hello are you there");
+    // The partial re-armed the force timer; let it finalize so we return to a
+    // clean listening state, then re-enter listening as production does.
+    vi.advanceTimersByTime(FORCE_FINALIZE_MS + 10);
+    expect(onForceFinalize).toHaveBeenCalledTimes(1);
+    net.beginListening();
+
+    // Now silence again: we should get the FULL reprompt budget, not give up early.
+    for (let i = 0; i < STALL_MAX_REPROMPTS + 1; i++) {
+      vi.advanceTimersByTime(STALL_BACKSTOP_MS + 10);
+    }
+    expect(onStallReprompt).toHaveBeenCalledTimes(1 + STALL_MAX_REPROMPTS);
+    expect(onStallGiveUp).toHaveBeenCalledTimes(1);
+  });
+
   it("clear() cancels both timers (barge-in / teardown)", () => {
     const onForceFinalize = vi.fn();
     const onStallReprompt = vi.fn();

@@ -3,7 +3,8 @@ import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
-import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER } from "./conversationDiscipline.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
+import { makeThinkFilter, stripReasoningBlocks } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -427,7 +428,10 @@ export class OrchestrationPipeline {
           // are actually listening (not during agent playback, where partials are
           // barge-in candidates handled separately). Don't process yet.
           if (!isFinal) {
-            if (!this.isPlaying && text.trim()) this.safetyNet.onPartial(text);
+            if (!this.isPlaying && text.trim()) {
+              this.safetyNet.onPartial(text);
+              this.resetHangupTimer();
+            }
             return;
           }
           if (!text.trim()) return;
@@ -821,8 +825,7 @@ export class OrchestrationPipeline {
         }
         // Strip <think> reasoning blocks and any <emotion>/<break> markup tags
         // that some models emit — TTS must receive plain text only.
-        greeting = greeting
-          .replace(/<think>[\s\S]*?<\/think>/g, "")
+        greeting = stripReasoningBlocks(greeting)
           .replace(/<\/?emotion[^>]*>/gi, "")
           .replace(/<break[^>]*\/?>/gi, "")
           .replace(/[^\S\r\n]{2,}/g, " ")
@@ -1516,7 +1519,7 @@ export class OrchestrationPipeline {
           (token) => { summaryText += token; },
           (full)  => { summaryText = full; },
         );
-        operatorSummary = summaryText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        operatorSummary = stripReasoningBlocks(summaryText).trim();
         logger.info({ callId: this.config.callId, summaryLength: operatorSummary.length }, "Warm transfer: operator summary ready");
       } catch (err) {
         logger.error({ callId: this.config.callId, err }, "Warm transfer: summary generation failed — proceeding with cold transfer");
@@ -1602,7 +1605,7 @@ export class OrchestrationPipeline {
         (token) => { summaryText += token; },
         (full)  => { summaryText = full; },
       );
-      operatorSummary = summaryText.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      operatorSummary = stripReasoningBlocks(summaryText).trim();
       logger.info({ callId: this.config.callId, summaryLength: operatorSummary.length }, "transfer_warm: operator summary ready");
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "transfer_warm: summary generation failed — proceeding without summary");
@@ -1761,6 +1764,10 @@ export class OrchestrationPipeline {
 
     let llmResponse = "";
     let pendingText  = "";
+    // One-step output guard: suppresses any second question (and everything
+    // after it) so a turn that runs through multiple flow steps is truncated at
+    // the first natural yield point. Mirrored into stored history below.
+    const stepGuard = makeFlowStepGuard();
     let allEnqueued  = false;
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
@@ -2147,7 +2154,7 @@ export class OrchestrationPipeline {
           if (!afterBrackets) return;
           pendingText += afterBrackets;
           const { sentences, remainder } = extractSentences(pendingText);
-          for (const s of sentences) enqueue(s);
+          for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
         },
         (fullText) => { llmResponse = fullText; },
@@ -2218,7 +2225,7 @@ export class OrchestrationPipeline {
               if (!afterBrackets) return;
               pendingText += afterBrackets;
               const { sentences, remainder } = extractSentences(pendingText);
-              for (const s of sentences) enqueue(s);
+              for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
               pendingText = remainder;
             },
             (fullText) => { llmResponse = fullText; },
@@ -2274,7 +2281,7 @@ export class OrchestrationPipeline {
     // (identical ordering to the web-call path).
     {
       const _llmLogText = stripBracketedInstructions(
-        stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")))
+        stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse)))
       ).trim();
       this.logExec("LLM", "response", {
         provider: this.agent.llmProvider,
@@ -2291,7 +2298,7 @@ export class OrchestrationPipeline {
       // Without this, continueWithToolResult would see two consecutive "user" messages
       // (the caller's speech + the tool result), which breaks Sarvam's strict turn
       // alternation and confuses all LLMs lacking a tool-result role.
-      const assistantToolContent = stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, ""))).trim() || `[calling tool: ${triggeredToolName}]`;
+      const assistantToolContent = stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))).trim() || `[calling tool: ${triggeredToolName}]`;
       this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
 
       // Enqueue a brief filler (language-aware) so the caller hears something while
@@ -2323,7 +2330,7 @@ export class OrchestrationPipeline {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")))).trim();
+    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse)))).trim();
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
@@ -2369,7 +2376,7 @@ export class OrchestrationPipeline {
     } else {
       flushText = pendingText;
     }
-    if (flushText.trim()) enqueue(flushText);
+    { const g = stepGuard.push(flushText); if (g.trim()) enqueue(g); }
     allEnqueued = true;
     const finalWake = wakePlayer as (() => void) | null;
     wakePlayer = null;
@@ -2380,8 +2387,12 @@ export class OrchestrationPipeline {
       "LLM complete"
     );
 
-    this.conversationHistory.push({ role: "assistant", content: cleanResponse });
-    this.config.onTranscript("agent", cleanResponse);
+    // Keep stored history in sync with what was actually SPOKEN: if the one-step
+    // guard truncated this turn, store only the spoken portion so the agent
+    // resumes from the dropped step next turn instead of believing it covered it.
+    const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
+    this.conversationHistory.push({ role: "assistant", content: spokenResponse });
+    this.config.onTranscript("agent", spokenResponse);
     this.config.onConversationUpdate?.(this.conversationHistory);
 
     // ── Token Optimization: Stage detection ───────────────────────────────
@@ -2644,6 +2655,9 @@ export class OrchestrationPipeline {
 
     let llmResponse = "";
     let pendingText = "";
+    // One-step output guard (same as the main turn path) — truncate at the first
+    // natural yield point if the post-tool reply runs through multiple steps.
+    const stepGuard = makeFlowStepGuard();
     let allEnqueued = false;
 
     // Keep tools attached on follow-up turns so the agent can chain calls in a
@@ -2750,7 +2764,7 @@ export class OrchestrationPipeline {
           if (!afterBrackets) return;
           pendingText += afterBrackets;
           const { sentences, remainder } = extractSentences(pendingText);
-          for (const s of sentences) enqueue(s);
+          for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
         },
         (fullText) => { llmResponse = fullText; },
@@ -2785,7 +2799,7 @@ export class OrchestrationPipeline {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(llmResponse.replace(/<think>[\s\S]*?<\/think>/g, "")))).trim();
+    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse)))).trim();
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
@@ -2814,7 +2828,7 @@ export class OrchestrationPipeline {
     } else {
       flushText = pendingText;
     }
-    if (flushText.trim()) enqueue(flushText);
+    { const g = stepGuard.push(flushText); if (g.trim()) enqueue(g); }
     allEnqueued = true;
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
     await playPromise;
@@ -2832,8 +2846,9 @@ export class OrchestrationPipeline {
     }
 
     if (cleanResponse) {
-      this.conversationHistory.push({ role: "assistant", content: cleanResponse });
-      this.config.onTranscript("agent", cleanResponse);
+      const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
+      this.conversationHistory.push({ role: "assistant", content: spokenResponse });
+      this.config.onTranscript("agent", spokenResponse);
       this.config.onConversationUpdate?.(this.conversationHistory);
     }
 
@@ -3307,43 +3322,6 @@ function makeBracketFilter(): (token: string) => string {
  */
 function stripBracketedInstructions(text: string): string {
   return text.replace(/\[[\s\S]{120,}?\]/g, "").replace(/[^\S\r\n]{2,}/g, " ");
-}
-
-function makeThinkFilter(): (token: string) => string {
-  let inThinkBlock = false;
-  let thinkBuf = "";
-
-  return function filterThinkToken(token: string): string {
-    thinkBuf += token;
-    let out = "";
-
-    while (thinkBuf.length > 0) {
-      if (inThinkBlock) {
-        const closeIdx = thinkBuf.indexOf("</think>");
-        if (closeIdx !== -1) {
-          inThinkBlock = false;
-          thinkBuf = thinkBuf.slice(closeIdx + "</think>".length);
-        } else {
-          const tail = Math.max(0, thinkBuf.length - "</think>".length + 1);
-          thinkBuf = thinkBuf.slice(tail);
-          break;
-        }
-      } else {
-        const openIdx = thinkBuf.indexOf("<think>");
-        if (openIdx !== -1) {
-          out += thinkBuf.slice(0, openIdx);
-          inThinkBlock = true;
-          thinkBuf = thinkBuf.slice(openIdx + "<think>".length);
-        } else {
-          const tail = Math.max(0, thinkBuf.length - "<think>".length + 1);
-          out += thinkBuf.slice(0, tail);
-          thinkBuf = thinkBuf.slice(tail);
-          break;
-        }
-      }
-    }
-    return out;
-  };
 }
 
 /**

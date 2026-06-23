@@ -29,7 +29,8 @@ import { GenderDetectorML } from "../genderDetectorML.js";
 import { GenderDetectorMLv2 } from "../genderDetectorMLv2.js";
 import { buildDatetimeInjection } from "../datetimeInject.js";
 import { getBackchannelFillers } from "../backchannel.js";
-import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER } from "../conversationDiscipline.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "../conversationDiscipline.js";
+import { makeThinkFilter, stripReasoningBlocks } from "../reasoningFilter.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
   buildToolDefs,
@@ -492,7 +493,7 @@ export async function handleWebCallWebSocket(
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent speech, where partials are
           // barge-in candidates). Don't process yet.
-          if (!isFinal) { if (!speaking && text.trim()) safetyNet.onPartial(text); return; }
+          if (!isFinal) { if (!speaking && text.trim()) { safetyNet.onPartial(text); resetHangupSilenceTimer(); } return; }
           if (!text.trim()) return;
           // NB: safetyNet.onFinal() is DEFERRED to process() so a transcript that is
           // later discarded below (echo / leftover) does NOT clear the stall backstop.
@@ -564,7 +565,7 @@ export async function handleWebCallWebSocket(
                   (text: string, isFinal: boolean) => {
                     if (closed) return;
                     // Interim → drive force-finalize only while listening (not during speech).
-                    if (!isFinal) { if (!speaking && text.trim()) safetyNet.onPartial(text); return; }
+                    if (!isFinal) { if (!speaking && text.trim()) { safetyNet.onPartial(text); resetHangupSilenceTimer(); } return; }
                     if (!text.trim()) return;
                     // onFinal() deferred to process() so discarded transcripts don't clear the stall.
                     if (speaking) {
@@ -1164,40 +1165,13 @@ export async function handleWebCallWebSocket(
       let tokenBuf    = "";   // filtered text waiting to be split into sentences
       let fullReply   = "";   // raw LLM output (may include <think> blocks)
 
-      // ── Think-block filter (same as pipeline.ts) ──────────────────────────
-      let inThinkBlock = false;
-      let thinkBuf = "";
-
-      function filterThinkToken(token: string): string {
-        thinkBuf += token;
-        let out = "";
-        while (thinkBuf.length > 0) {
-          if (inThinkBlock) {
-            const closeIdx = thinkBuf.indexOf("</think>");
-            if (closeIdx !== -1) {
-              inThinkBlock = false;
-              thinkBuf = thinkBuf.slice(closeIdx + "</think>".length);
-            } else {
-              const tail = Math.max(0, thinkBuf.length - "</think>".length + 1);
-              thinkBuf = thinkBuf.slice(tail);
-              break;
-            }
-          } else {
-            const openIdx = thinkBuf.indexOf("<think>");
-            if (openIdx !== -1) {
-              out += thinkBuf.slice(0, openIdx);
-              inThinkBlock = true;
-              thinkBuf = thinkBuf.slice(openIdx + "<think>".length);
-            } else {
-              const tail = Math.max(0, thinkBuf.length - "<think>".length + 1);
-              out += thinkBuf.slice(0, tail);
-              thinkBuf = thinkBuf.slice(tail);
-              break;
-            }
-          }
-        }
-        return out;
-      }
+      // ── Reasoning-block filter (shared with pipeline.ts) ──────────────────
+      // Drops <think>/<thinking>/<reasoning> blocks token-by-token, hardened
+      // against tags split across token boundaries.
+      let filterThinkToken = makeThinkFilter();
+      // One-step output guard: suppress any second question (and everything
+      // after) so a multi-step dump is truncated at the first natural yield point.
+      let stepGuard = makeFlowStepGuard();
 
       // ── Function-tag filter: strips <function=NAME>…</function> from TTS ──
       // Mirrors makeFunctionTagFilter() in pipeline.ts but inlined for webcall.
@@ -1654,8 +1628,8 @@ export async function handleWebCallWebSocket(
       }
       tokenBuf = "";
       fullReply = "";
-      inThinkBlock = false;
-      thinkBuf = "";
+      filterThinkToken = makeThinkFilter();
+      stepGuard = makeFlowStepGuard();
       inFnTag = false;
       fnBuf = "";
       markupBuf = "";
@@ -1746,7 +1720,8 @@ export async function handleWebCallWebSocket(
           send({ type: "token", text: afterBrackets });
           const [sentences, rest] = extractSentences(tokenBuf, ttsMinSentenceChars);
           for (const s of sentences) {
-            queueSentence(s);
+            const g = stepGuard.push(s);
+            if (g) queueSentence(g);
           }
           tokenBuf = rest;
         },
@@ -1773,7 +1748,7 @@ export async function handleWebCallWebSocket(
             logger.warn({ callId, err: llmErr, fallbackProvider }, "Webcall: primary LLM failed (no tokens) — retrying with fallback");
             tokenBuf = "";
             fullReply = "";
-            inThinkBlock = false; thinkBuf = "";
+            filterThinkToken = makeThinkFilter(); stepGuard = makeFlowStepGuard();
             inFnTag = false; fnBuf = "";
             markupBuf = ""; markupPrevSpace = false;
             inBracketBlock = false; bracketOuterBuf = ""; bracketContent = "";
@@ -1797,7 +1772,8 @@ export async function handleWebCallWebSocket(
                   send({ type: "token", text: afterBrackets });
                   const [sentences, remainder] = extractSentences(tokenBuf, ttsMinSentenceChars);
                   for (const s of sentences) {
-                    queueSentence(s);
+                    const g = stepGuard.push(s);
+                    if (g) queueSentence(g);
                   }
                   tokenBuf = remainder;
                 },
@@ -1842,7 +1818,7 @@ export async function handleWebCallWebSocket(
       logExecution("LLM", "response", {
         provider: agent.llmProvider,
         responsePayload: {
-          text: fullReply.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<function[\s\S]*?>/g, "").trim().substring(0, 1500),
+          text: stripReasoningBlocks(fullReply).replace(/<function[\s\S]*?>/g, "").trim().substring(0, 1500),
         },
         latencyMs: Date.now() - llmStartMs,
         status: "success",
@@ -1858,8 +1834,7 @@ export async function handleWebCallWebSocket(
       // extractSentences on the full clean reply to get the definitive last
       // segment, and use it instead of the potentially-truncated tokenBuf.
       {
-        const cleanForFlush = fullReply
-          .replace(/<think>[\s\S]*?<\/think>/g, "")
+        const cleanForFlush = stripReasoningBlocks(fullReply)
           .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
           .replace(/<function=\w+[^>]*\/>/g, "")
           .replace(/<function=\w+[^>]*>/g, "")
@@ -1893,14 +1868,14 @@ export async function handleWebCallWebSocket(
         const flushText = useLastFullSentence
           ? lastFullSentence
           : (trueRemainder.trim().length > trimmedTB.length ? trueRemainder : tokenBuf);
-        if (flushText.trim()) queueSentence(flushText);
+        const flushGuarded = stepGuard.push(flushText);
+        if (flushGuarded.trim()) queueSentence(flushGuarded);
       }
 
       // ── Tool call handling ─────────────────────────────────────────────────
       if (triggeredToolName) {
         // Push the assistant's tool-invocation turn to history
-        const assistantToolContent = fullReply
-          .replace(/<think>[\s\S]*?<\/think>/g, "")
+        const assistantToolContent = stripReasoningBlocks(fullReply)
           .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
           .replace(/<function=\w+[^>]*\/>/g, "")
           .replace(/<function=\w+[^>]*>/g, "")
@@ -2058,8 +2033,7 @@ export async function handleWebCallWebSocket(
       // ── Normal (non-tool) TTS playback path ───────────────────────────────
 
       // Clean the stored reply — strip think blocks and inline function tags
-      const cleanReply = fullReply
-        .replace(/<think>[\s\S]*?<\/think>/g, "")
+      const cleanReply = stripReasoningBlocks(fullReply)
         .replace(/<function=\w+[^>]*>[\s\S]*?<\/function>/g, "")
         .replace(/<function=\w+[^>]*\/>/g, "")
         .replace(/<function=\w+[^>]*>/g, "")
@@ -2068,6 +2042,11 @@ export async function handleWebCallWebSocket(
         .replace(/\[[\s\S]{120,}?\]/g, "")
         .replace(/[^\S\r\n]{2,}/g, " ")
         .trim();
+
+      // Keep stored history/transcript in sync with what was actually SPOKEN: if
+      // the one-step guard truncated this turn, store only the spoken portion so
+      // the agent resumes from the dropped step next turn instead of skipping it.
+      const spokenReply = stepGuard.truncated() ? truncateToSingleStep(cleanReply).text : cleanReply;
 
       if (!cleanReply || sentenceJobs.length === 0) {
         // ── Tag-only response: LLM emitted a function tag with no spoken text ──
@@ -2169,7 +2148,7 @@ export async function handleWebCallWebSocket(
         return;
       }
 
-      history.push({ role: "assistant", content: cleanReply });
+      history.push({ role: "assistant", content: spokenReply });
       sendStatus("speaking");
       speaking = true;
       speakingStartedAt = Date.now();
@@ -2203,7 +2182,7 @@ export async function handleWebCallWebSocket(
         }
 
         if (!transcriptSent) {
-          send({ type: "transcript", speaker: "agent", text: cleanReply });
+          send({ type: "transcript", speaker: "agent", text: spokenReply });
           transcriptSent = true;
         }
         send({ type: "sentence_start", index: i, text: sentenceTexts[i] ?? "" });
@@ -2749,8 +2728,7 @@ export async function handleWebCallWebSocket(
         );
         // Strip <think> blocks and any <emotion>/<break> markup that some models
         // emit — TTS must receive plain text, and the transcript must be clean.
-        greetingText = greetingText
-          .replace(/<think>[\s\S]*?<\/think>/g, "")
+        greetingText = stripReasoningBlocks(greetingText)
           .replace(/<\/?emotion[^>]*>/gi, "")
           .replace(/<break[^>]*\/?>/gi, "")
           .replace(/[^\S\r\n]{2,}/g, " ")

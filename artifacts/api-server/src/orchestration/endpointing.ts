@@ -173,6 +173,15 @@ export class TurnSafetyNet {
     this.bestPartial = t;
     if (this.forceTimer) clearTimeout(this.forceTimer);
     this.forceTimer = setTimeout(() => this.onForceExpire(), this.forceMs);
+    // A streaming partial means the caller is ACTIVELY speaking — they are not
+    // silent. Push the stall backstop forward and reset the accumulated reprompt
+    // count so the give-up path can only ever fire on genuine sustained silence,
+    // never while a (slow-to-finalize) caller is still talking. Without this, a
+    // caller whose STT streams partials but is slow/never emits a final would be
+    // treated as silent: reprompts accumulate and the net ends a live call.
+    this.repromptCount = 0;
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
   }
 
   /** Real STT final (or otherwise-usable speech) — clear timers, reset reprompts. */
