@@ -3347,6 +3347,10 @@ function formatVisualValue(key: string, val: unknown): string {
   return String(val);
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
 function ToolsDiff({ oldTools, newTools }: { oldTools: unknown; newTools: unknown }) {
   const oldNames = Array.isArray(oldTools) ? (oldTools as any[]).map((t) => t?.name || t?.type || "Unknown") : [];
   const newNames = Array.isArray(newTools) ? (newTools as any[]).map((t) => t?.name || t?.type || "Unknown") : [];
@@ -3483,6 +3487,28 @@ function CompareView({
     [sectionChangeCounts],
   );
 
+  // Diff summary: additions (present in current a, absent in old b),
+  // removals (absent in current a, present in old b), modifications (changed in both)
+  const diffSummary = useMemo(() => {
+    if (!compareId) return { additions: 0, removals: 0, modifications: 0 };
+    let additions = 0, removals = 0, modifications = 0;
+    for (const section of COMPARE_SECTIONS) {
+      for (const key of section.keys) {
+        const aRaw = getNestedValue(a, key);
+        const bRaw = getNestedValue(b, key);
+        const aVal = renderValue(aRaw);
+        const bVal = renderValue(bRaw);
+        if (aVal === bVal) continue;
+        const aAbsent = aRaw == null || aRaw === "" || (Array.isArray(aRaw) && aRaw.length === 0);
+        const bAbsent = bRaw == null || bRaw === "" || (Array.isArray(bRaw) && bRaw.length === 0);
+        if (!aAbsent && bAbsent) additions++;
+        else if (aAbsent && !bAbsent) removals++;
+        else modifications++;
+      }
+    }
+    return { additions, removals, modifications };
+  }, [a, b, compareId]);
+
   const scrollToSection = (label: string) => {
     const el = document.getElementById(`compare-section-${label.replace(/\s+/g, "-")}`);
     if (el && contentRef.current) {
@@ -3493,68 +3519,116 @@ function CompareView({
   };
 
   const renderTechnicalDiff = (section: typeof COMPARE_SECTIONS[number]) => {
-    return section.keys.map(key => {
-      const aRaw = getNestedValue(a, key);
-      const bRaw = getNestedValue(b, key);
+    const rows: React.ReactNode[] = [];
+
+    for (const key of section.keys) {
+      const aRaw = getNestedValue(a, key); // current (newer)
+      const bRaw = getNestedValue(b, key); // old (compare target)
       const aVal = renderValue(aRaw);
       const bVal = renderValue(bRaw);
       const changed = aVal !== bVal;
-      const useWordDiff = changed && (isTextValue(aRaw, aVal) || isTextValue(bRaw, bVal));
       const displayKey = key.includes(".") ? key.split(".").pop()! : key;
 
+      // Structural diff for plain objects (e.g. agentConfig)
+      if (changed && isPlainObject(aRaw) && isPlainObject(bRaw)) {
+        const allSubKeys = Array.from(new Set([...Object.keys(aRaw), ...Object.keys(bRaw)]));
+        for (const subKey of allSubKeys) {
+          const aSubVal = renderValue(aRaw[subKey]);
+          const bSubVal = renderValue(bRaw[subKey]);
+          const subChanged = aSubVal !== bSubVal;
+          if (!subChanged) continue;
+          const useSubWordDiff = isTextValue(aRaw[subKey], aSubVal) || isTextValue(bRaw[subKey], bSubVal);
+          if (useSubWordDiff) {
+            rows.push(
+              <tr key={`${key}.${subKey}`} className="bg-yellow-500/5">
+                <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{displayKey}.{subKey}</td>
+                <td colSpan={2} className="py-1.5 pr-3 text-[11px] align-top">
+                  <WordDiff oldText={bSubVal} newText={aSubVal} ignoreFormatting={ignoreFormatting} />
+                </td>
+              </tr>
+            );
+          } else {
+            rows.push(
+              <tr key={`${key}.${subKey}`} className="bg-yellow-500/5">
+                <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{displayKey}.{subKey}</td>
+                <td className="py-1.5 pr-3 text-[11px] align-top text-red-400 line-through opacity-60">
+                  <pre className="whitespace-pre-wrap break-all font-mono">{bSubVal}</pre>
+                </td>
+                <td className="py-1.5 text-[11px] align-top text-green-400">
+                  <pre className="whitespace-pre-wrap break-all font-mono">{aSubVal}</pre>
+                </td>
+              </tr>
+            );
+          }
+        }
+        continue;
+      }
+
+      const useWordDiff = changed && (isTextValue(aRaw, aVal) || isTextValue(bRaw, bVal));
+
       if (useWordDiff) {
-        return (
+        rows.push(
           <tr key={key} className="bg-yellow-500/5">
             <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{displayKey}</td>
             <td colSpan={2} className="py-1.5 pr-3 text-[11px] align-top">
-              <WordDiff oldText={aVal} newText={compareSnap ? bVal : "—"} ignoreFormatting={ignoreFormatting} />
+              {/* oldText=bVal (previous), newText=aVal (current) */}
+              <WordDiff oldText={compareSnap ? bVal : "—"} newText={aVal} ignoreFormatting={ignoreFormatting} />
             </td>
           </tr>
         );
+        continue;
       }
 
-      return (
+      rows.push(
         <tr key={key} className={changed ? "bg-yellow-500/5" : ""}>
           <td className="py-1.5 pr-3 text-[10px] text-muted-foreground font-mono align-top w-32 shrink-0">{displayKey}</td>
+          {/* Red = old value (bVal); Green = new/current value (aVal) */}
           <td className={cn("py-1.5 pr-3 text-[11px] align-top", changed && "text-red-400 line-through opacity-60")}>
-            <pre className="whitespace-pre-wrap break-all font-mono">{aVal}</pre>
+            {compareSnap ? <pre className="whitespace-pre-wrap break-all font-mono">{bVal}</pre> : <span className="text-muted-foreground/40 italic">—</span>}
           </td>
           <td className={cn("py-1.5 text-[11px] align-top", changed && "text-green-400")}>
-            {compareSnap ? <pre className="whitespace-pre-wrap break-all font-mono">{bVal}</pre> : <span className="text-muted-foreground/40 italic">—</span>}
+            <pre className="whitespace-pre-wrap break-all font-mono">{aVal}</pre>
           </td>
         </tr>
       );
-    });
+    }
+
+    return rows;
   };
 
   const renderVisualSection = (section: typeof COMPARE_SECTIONS[number]) => {
     const rows: React.ReactNode[] = [];
-    for (const key of section.keys) {
-      const aRaw = getNestedValue(a, key);
-      const bRaw = getNestedValue(b, key);
-      const aVal = renderValue(aRaw);
-      const bVal = renderValue(bRaw);
-      const changed = aVal !== bVal;
-      if (!changed) continue;
 
-      const label = FIELD_LABELS[key] ?? key;
+    const pushRow = (
+      rowKey: string,
+      label: string,
+      aRawVal: unknown,
+      bRawVal: unknown,
+    ) => {
+      const aV = renderValue(aRawVal); // current
+      const bV = renderValue(bRawVal); // old
 
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const aDisplay = formatVisualValue(key, aRaw);
-        const bDisplay = formatVisualValue(key, bRaw);
-        if (!label.toLowerCase().includes(q) && !aDisplay.toLowerCase().includes(q) && !bDisplay.toLowerCase().includes(q)) continue;
+        const aDisplay = formatVisualValue(rowKey, aRawVal);
+        const bDisplay = formatVisualValue(rowKey, bRawVal);
+        if (!label.toLowerCase().includes(q) && !aDisplay.toLowerCase().includes(q) && !bDisplay.toLowerCase().includes(q)) return;
       }
 
-      const isAdded = (aRaw == null || aRaw === "" || (Array.isArray(aRaw) && aRaw.length === 0)) && bRaw != null;
-      const isRemoved = aRaw != null && (bRaw == null || bRaw === "" || (Array.isArray(bRaw) && bRaw.length === 0));
+      // isAdded = exists in current (a) but not in old (b)
+      const isAdded = aRawVal != null && aRawVal !== "" && !(Array.isArray(aRawVal) && aRawVal.length === 0)
+        && (bRawVal == null || bRawVal === "" || (Array.isArray(bRawVal) && bRawVal.length === 0));
+      // isRemoved = exists in old (b) but not in current (a)
+      const isRemoved = bRawVal != null && bRawVal !== "" && !(Array.isArray(bRawVal) && bRawVal.length === 0)
+        && (aRawVal == null || aRawVal === "" || (Array.isArray(aRawVal) && aRawVal.length === 0));
+
       const rowColor = isAdded ? "bg-green-500/5 border-l-2 border-green-500/40" : isRemoved ? "bg-red-500/5 border-l-2 border-red-500/40" : "bg-yellow-500/5 border-l-2 border-yellow-500/30";
 
-      const isToolsKey = key === "tools";
-      const isLongText = isTextValue(aRaw, aVal) || isTextValue(bRaw, bVal);
+      const isToolsKey = rowKey === "tools";
+      const isLongText = isTextValue(aRawVal, aV) || isTextValue(bRawVal, bV);
 
       rows.push(
-        <div key={key} className={cn("px-4 py-3 rounded-lg mb-2", rowColor)}>
+        <div key={rowKey} className={cn("px-4 py-3 rounded-lg mb-2", rowColor)}>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[11px] font-semibold text-foreground/80">{label}</span>
             <span className={cn(
@@ -3565,21 +3639,52 @@ function CompareView({
             </span>
           </div>
           {isToolsKey ? (
-            <ToolsDiff oldTools={aRaw} newTools={bRaw} />
+            // oldTools=bRaw (previous), newTools=aRaw (current)
+            <ToolsDiff oldTools={bRawVal} newTools={aRawVal} />
           ) : isLongText ? (
-            <WordDiff oldText={aVal} newText={bVal} ignoreFormatting={ignoreFormatting} />
+            // oldText=bV (previous), newText=aV (current)
+            <WordDiff oldText={bV} newText={aV} ignoreFormatting={ignoreFormatting} />
           ) : (
             <div className="flex gap-3 text-[11px]">
+              {/* Left box = old value (red); Right box = current value (green) */}
               <div className={cn("flex-1 px-2 py-1.5 rounded bg-red-500/8 border border-red-500/15", isAdded && "opacity-40")}>
-                <span className={cn("font-mono", isRemoved ? "text-red-400" : "text-foreground/70")}>{formatVisualValue(key, aRaw)}</span>
+                <span className={cn("font-mono", isRemoved ? "text-red-400" : "text-foreground/70")}>{formatVisualValue(rowKey, bRawVal)}</span>
               </div>
               <div className={cn("flex-1 px-2 py-1.5 rounded bg-green-500/8 border border-green-500/15", isRemoved && "opacity-40")}>
-                <span className={cn("font-mono", isAdded ? "text-green-400" : "text-green-300")}>{formatVisualValue(key, bRaw)}</span>
+                <span className={cn("font-mono", isAdded ? "text-green-400" : "text-green-300")}>{formatVisualValue(rowKey, aRawVal)}</span>
               </div>
             </div>
           )}
         </div>
       );
+    };
+
+    for (const key of section.keys) {
+      const aRaw = getNestedValue(a, key); // current (newer)
+      const bRaw = getNestedValue(b, key); // old (compare target)
+      const aVal = renderValue(aRaw);
+      const bVal = renderValue(bRaw);
+      const changed = aVal !== bVal;
+      if (!changed) continue;
+
+      const label = FIELD_LABELS[key] ?? key;
+
+      // Structural diff for plain objects (e.g. agentConfig)
+      if (isPlainObject(aRaw) && isPlainObject(bRaw)) {
+        const allSubKeys = Array.from(new Set([...Object.keys(aRaw), ...Object.keys(bRaw)]));
+        for (const subKey of allSubKeys) {
+          const aSubRaw = aRaw[subKey];
+          const bSubRaw = bRaw[subKey];
+          const aSubVal = renderValue(aSubRaw);
+          const bSubVal = renderValue(bSubRaw);
+          if (aSubVal === bSubVal) continue;
+          const subLabel = `${label} › ${subKey}`;
+          pushRow(`${key}.${subKey}`, subLabel, aSubRaw, bSubRaw);
+        }
+        continue;
+      }
+
+      pushRow(key, label, aRaw, bRaw);
     }
     return rows;
   };
@@ -3613,48 +3718,81 @@ function CompareView({
         </div>
 
         {/* Version cards row */}
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
-          <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2 space-y-0.5">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono">{baseVersion.versionNumber}</Badge>
-              <span className="text-xs font-semibold truncate">{baseVersion.versionName}</span>
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-start">
+          <div className="space-y-1">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-green-400/80 px-0.5">Current Version</p>
+            <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-2 space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono">{baseVersion.versionNumber}</Badge>
+                <span className="text-xs font-semibold truncate">{baseVersion.versionName}</span>
+              </div>
+              {(baseVersion as any).publishedBy && (
+                <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                  <User2 className="h-2.5 w-2.5" />{(baseVersion as any).publishedBy?.slice(0, 18)}
+                </p>
+              )}
+              {(baseVersion as any).createdAt && (
+                <p className="text-[10px] text-muted-foreground/50">{format(new Date((baseVersion as any).createdAt), "MMM d, yyyy · HH:mm")}</p>
+              )}
             </div>
-            {(baseVersion as any).publishedBy && (
-              <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
-                <User2 className="h-2.5 w-2.5" />{(baseVersion as any).publishedBy?.slice(0, 18)}
-              </p>
-            )}
-            {(baseVersion as any).createdAt && (
-              <p className="text-[10px] text-muted-foreground/50">{format(new Date((baseVersion as any).createdAt), "MMM d, yyyy · HH:mm")}</p>
-            )}
           </div>
 
-          <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1">vs</div>
+          <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1 mt-5">vs</div>
 
-          <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2 space-y-1">
-            <Select value={compareId != null ? String(compareId) : "__none__"} onValueChange={v => setCompareId(v === "__none__" ? null : parseInt(v, 10))}>
-              <SelectTrigger className="h-6 w-full text-xs border-0 bg-transparent p-0 shadow-none focus:ring-0">
-                <SelectValue placeholder="Pick version to compare…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__" className="text-xs">Pick version…</SelectItem>
-                {otherVersions.map(v => (
-                  <SelectItem key={v.id} value={String(v.id)} className="text-xs">{v.versionNumber}: {v.versionName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {compareTarget && (
-              <>
-                {(compareTarget as any).publishedBy && (
-                  <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
-                    <User2 className="h-2.5 w-2.5" />{(compareTarget as any).publishedBy?.slice(0, 18)}
-                  </p>
-                )}
-                <p className="text-[10px] text-muted-foreground/50">{format(new Date(compareTarget.createdAt), "MMM d, yyyy · HH:mm")}</p>
-              </>
-            )}
+          <div className="space-y-1">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60 px-0.5">Compared Against</p>
+            <div className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2 space-y-1">
+              <Select value={compareId != null ? String(compareId) : "__none__"} onValueChange={v => setCompareId(v === "__none__" ? null : parseInt(v, 10))}>
+                <SelectTrigger className="h-6 w-full text-xs border-0 bg-transparent p-0 shadow-none focus:ring-0">
+                  <SelectValue placeholder="Pick version to compare…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__" className="text-xs">Pick version…</SelectItem>
+                  {otherVersions.map(v => (
+                    <SelectItem key={v.id} value={String(v.id)} className="text-xs">{v.versionNumber}: {v.versionName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {compareTarget && (
+                <>
+                  {(compareTarget as any).publishedBy && (
+                    <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                      <User2 className="h-2.5 w-2.5" />{(compareTarget as any).publishedBy?.slice(0, 18)}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground/50">{format(new Date(compareTarget.createdAt), "MMM d, yyyy · HH:mm")}</p>
+                </>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Diff summary card */}
+        {compareId && (diffSummary.additions > 0 || diffSummary.removals > 0 || diffSummary.modifications > 0) && (
+          <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
+            <span className="text-[10px] font-semibold text-muted-foreground mr-1">Changes:</span>
+            {diffSummary.additions > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
+                <span className="font-bold">+{diffSummary.additions}</span> addition{diffSummary.additions !== 1 ? "s" : ""}
+              </span>
+            )}
+            {diffSummary.removals > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
+                <span className="font-bold">−{diffSummary.removals}</span> removal{diffSummary.removals !== 1 ? "s" : ""}
+              </span>
+            )}
+            {diffSummary.modifications > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-full px-2 py-0.5">
+                <span className="font-bold">~{diffSummary.modifications}</span> modification{diffSummary.modifications !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
+        {compareId && diffSummary.additions === 0 && diffSummary.removals === 0 && diffSummary.modifications === 0 && (
+          <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
+            <span className="text-[10px] text-muted-foreground/60">Versions are identical — no changes detected.</span>
+          </div>
+        )}
 
         {/* Search bar (visual mode only) */}
         {viewMode === "visual" && compareId && (
@@ -3784,8 +3922,15 @@ function CompareView({
                   <thead>
                     <tr className="border-b border-border/40 bg-muted/20">
                       <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground w-32">Field</th>
-                      <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{baseVersion.versionNumber}</th>
-                      <th className="text-left py-1.5 px-3 font-medium text-[10px] text-muted-foreground">{compareTarget?.versionNumber ?? "…"}</th>
+                      {/* Left = old/previous (compareTarget), Right = current (baseVersion) */}
+                      <th className="text-left py-1.5 px-3 font-medium text-[10px] w-[38%]">
+                        <span className="text-red-400/70">Previous</span>
+                        <span className="ml-1.5 text-muted-foreground/50 font-mono font-normal">{compareTarget?.versionNumber ?? "…"}</span>
+                      </th>
+                      <th className="text-left py-1.5 px-3 font-medium text-[10px] w-[38%]">
+                        <span className="text-green-400/70">Current</span>
+                        <span className="ml-1.5 text-muted-foreground/50 font-mono font-normal">{baseVersion.versionNumber}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
