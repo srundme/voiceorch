@@ -20,30 +20,59 @@
  *
  * The model runs on CPU in ~2–5 ms per 32 ms window, well within the 40 ms
  * chunk cadence.  The maximum lag for isSpeech() is one 40 ms chunk (imperceptible).
+ *
+ * Resilience: onnxruntime-node is imported lazily (dynamic import) so that a missing
+ * native dependency (e.g. libgomp.so.1 absent from a slim Docker image) does NOT crash
+ * the process at module load time.  If the ONNX session fails to initialise, all
+ * SileroVAD instances return isAvailable()=false and callers fall back to energy-based
+ * RMS thresholds.
  */
 
-import * as ort from "onnxruntime-node";
+import type * as OrtNS from "onnxruntime-node";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../lib/logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// __dirname in the esbuild bundle = the dist/ directory (set by the banner shim).
+// build.mjs copies silero_vad.onnx to dist/orchestration/silero_vad.onnx.
 const MODEL_PATH  = join(__dirname, "orchestration", "silero_vad.onnx");
 const SAMPLE_RATE = 16000;
 const CHUNK_SIZE  = 512;   // samples — optimal window for Silero VAD v5 at 16 kHz (32 ms)
 
-// ── Process-global session (lazy, created on first call) ────────────────────
-let _sessionPromise: Promise<ort.InferenceSession> | null = null;
+// ── Lazy onnxruntime-node loader ─────────────────────────────────────────────
+// Dynamic import so a missing native lib (libgomp, etc.) degrades gracefully
+// rather than crashing the process before the HTTP server can bind its port.
+let _ortPromise: Promise<typeof OrtNS> | null = null;
 
-function getSession(): Promise<ort.InferenceSession> {
+async function loadOrt(): Promise<typeof OrtNS | null> {
+  if (!_ortPromise) {
+    _ortPromise = import("onnxruntime-node").catch((err) => {
+      _ortPromise = null;
+      logger.warn({ err }, "SileroVAD: onnxruntime-node failed to load — falling back to energy-based VAD");
+      return null as unknown as typeof OrtNS;
+    });
+  }
+  return _ortPromise;
+}
+
+// ── Process-global InferenceSession (lazy, created on first call) ────────────
+let _sessionPromise: Promise<OrtNS.InferenceSession | null> | null = null;
+
+async function getSession(): Promise<OrtNS.InferenceSession | null> {
   if (!_sessionPromise) {
-    _sessionPromise = ort.InferenceSession.create(MODEL_PATH, {
-      executionProviders: ["cpu"],
-      logSeverityLevel: 3, // suppress ONNX verbose/info logs
-    }).catch((err) => {
-      _sessionPromise = null; // allow retry
-      throw err;
+    _sessionPromise = (async () => {
+      const ort = await loadOrt();
+      if (!ort) return null;
+      return ort.InferenceSession.create(MODEL_PATH, {
+        executionProviders: ["cpu"],
+        logSeverityLevel: 3, // suppress ONNX verbose/info logs
+      });
+    })().catch((err) => {
+      _sessionPromise = null; // allow retry on next call
+      logger.warn({ err }, "SileroVAD: failed to create InferenceSession");
+      return null;
     });
   }
   return _sessionPromise;
@@ -51,15 +80,14 @@ function getSession(): Promise<ort.InferenceSession> {
 
 /** Warm the ONNX session at server startup so the first call doesn't pay the load cost. */
 export async function warmSileroVAD(): Promise<void> {
-  try {
-    await getSession();
+  const session = await getSession();
+  if (session) {
     logger.info("SileroVAD: ONNX session ready");
-  } catch (err) {
-    logger.warn({ err }, "SileroVAD: failed to load ONNX model — energy-based VAD will be used as fallback");
   }
+  // failure already logged inside getSession / loadOrt
 }
 
-// ── Per-call instance ───────────────────────────────────────────────────────
+// ── Per-call instance ─────────────────────────────────────────────────────────
 
 export class SileroVAD {
   private h: Float32Array = new Float32Array(2 * 1 * 64); // LSTM hidden state [2,1,64]
@@ -77,14 +105,14 @@ export class SileroVAD {
 
   /**
    * Returns true if the most recently completed inference decided "speech".
-   * Returns false (conservatively) before the first inference completes.
-   * Falls back to false on ONNX load failure (caller should use energy VAD).
+   * Returns false (conservatively) before the first inference completes,
+   * or if the ONNX session failed to load (caller falls back to energy VAD).
    */
   isSpeech(): boolean {
     return this._isSpeech;
   }
 
-  /** True once the first inference has succeeded. Useful to detect load failures. */
+  /** True once the first inference has succeeded. False on ONNX load failure. */
   isAvailable(): boolean {
     return this._available;
   }
@@ -108,28 +136,26 @@ export class SileroVAD {
 
     // Drain complete 512-sample windows, queue them sequentially
     while (this._buf.length >= CHUNK_SIZE) {
-      const chunk  = this._buf.slice(0, CHUNK_SIZE);
-      this._buf    = this._buf.slice(CHUNK_SIZE);
-      this._queue  = this._queue.then(() => this._infer(chunk));
+      const chunk = this._buf.slice(0, CHUNK_SIZE);
+      this._buf   = this._buf.slice(CHUNK_SIZE);
+      this._queue = this._queue.then(() => this._infer(chunk));
     }
   }
 
-  /** Release LSTM state and cancel any pending inference. */
+  /** Release LSTM state. Pending inferences may still complete but won't update state. */
   destroy(): void {
     this._buf   = new Float32Array(0);
-    this._queue = Promise.resolve(); // orphan pending work — results won't update state
+    this._queue = Promise.resolve();
   }
 
-  // ── Internal ──────────────────────────────────────────────────────────────
+  // ── Internal ─────────────────────────────────────────────────────────────
 
   private async _infer(samples: Float32Array): Promise<void> {
-    let session: ort.InferenceSession;
-    try {
-      session = await getSession();
-    } catch (err) {
-      logger.warn({ err, callId: this.callId }, "SileroVAD: session unavailable, skipping frame");
-      return;
-    }
+    const session = await getSession();
+    if (!session) return; // ONNX not available — stay on energy-based fallback
+
+    const ort = await loadOrt();
+    if (!ort) return;
 
     try {
       const inputT = new ort.Tensor("float32", samples, [1, CHUNK_SIZE]);
@@ -143,7 +169,7 @@ export class SileroVAD {
       this._isSpeech  = prob >= this.threshold;
       this._available = true;
 
-      // onnxruntime-node returns TypedArrays directly from .data; copy to detach from session memory
+      // onnxruntime-node returns TypedArrays from .data; copy to detach from session memory
       if (result["hn"]?.data) this.h = Float32Array.from(result["hn"].data as Float32Array);
       if (result["cn"]?.data) this.c = Float32Array.from(result["cn"].data as Float32Array);
     } catch (err) {

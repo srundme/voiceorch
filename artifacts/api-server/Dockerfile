@@ -36,6 +36,11 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:22-slim
 WORKDIR /workspace
 
+# libgomp1 is required by onnxruntime-node's native CPU-execution addon at runtime.
+# node:22-slim (Debian Bookworm slim) doesn't ship it; without it the server crashes
+# at startup with "libgomp.so.1: cannot open shared object file" before binding the port.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 RUN npm install -g pnpm@10.26.1
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
