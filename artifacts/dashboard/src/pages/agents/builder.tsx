@@ -1913,7 +1913,7 @@ function VoicemailTab({ form }: { form: any }) {
 
 /* ── Tab: Advanced ──────────────────────────────────────────────────────────── */
 
-type AdvSection = "timing" | "interruption" | "limits" | "compliance" | "optimize";
+type AdvSection = "timing" | "interruption" | "limits" | "compliance";
 
 function AdvSlider({ form, name, label, hint, min, max, step, fmt }: {
   form: any; name: string; label: string; hint?: string;
@@ -1981,15 +1981,12 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [dpdpConfirmOpen, setDpdpConfirmOpen] = useState(false);
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
-  const llmProvider = form.watch("llmProvider");
-  const stagedPromptEnabled = form.watch("stagedPromptEnabled");
 
   const nav: { id: AdvSection; icon: React.ReactNode; label: string }[] = [
     { id: "timing",       icon: <Timer className="h-3.5 w-3.5" />,       label: "Timing"       },
     { id: "interruption", icon: <MicOff className="h-3.5 w-3.5" />,      label: "Interruption" },
     { id: "limits",       icon: <Gauge className="h-3.5 w-3.5" />,       label: "Limits"       },
     { id: "compliance",   icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Compliance"   },
-    { id: "optimize",     icon: <Layers className="h-3.5 w-3.5" />,      label: "Optimize"     },
   ];
 
   return (
@@ -2362,139 +2359,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </AlertDialog>
 
             <IrdaiComplianceBanner enabled={!!form.watch("complianceIrdai")} agent={agent} />
-          </>
-        )}
-
-        {/* ── OPTIMIZE ── */}
-        {section === "optimize" && (
-          <>
-            <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Token Optimization</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Reduce LLM token usage to lower costs. Each layer is independent.
-              </p>
-            </div>
-
-            {/* KV Cache */}
-            {(() => {
-              const kvCacheTooltips: Record<string, string> = {
-                anthropic: "Explicit prompt caching — VoiceOrch sends cache_control breakpoints so Anthropic caches your system prompt server-side after turn 1, saving ~5× on repeated input tokens.",
-                gemini: "Google auto-caches prompts >1024 tokens on their end — no explicit configuration needed. Savings appear automatically in your Google AI usage.",
-                openai: "OpenAI silently caches prompts >1024 tokens at no extra cost — no explicit configuration needed.",
-              };
-              const kvCacheTooltip = kvCacheTooltips[llmProvider ?? ""] ??
-                "This provider does not currently support prompt caching. Consider Sliding Window or Summarization to reduce token costs.";
-              return (
-                <div className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", llmProvider === "anthropic" ? "bg-amber-500/15 text-amber-400" : "bg-muted/40 text-muted-foreground/50")}>
-                      <Zap className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-[12.5px] font-semibold text-foreground">KV Cache <span className="text-[10px] text-muted-foreground font-normal ml-1">Anthropic only</span></p>
-                      <p className="text-[10px] text-muted-foreground leading-relaxed">Auto-enabled — caches system prompt, saving ~5× on repeated input tokens</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button type="button" className="text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-default">
-                          <HelpCircle className="h-3.5 w-3.5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left" className="max-w-[260px] text-[11px] leading-relaxed">
-                        {kvCacheTooltip}
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className={cn("text-[10.5px] font-semibold px-2.5 py-1 rounded-lg", llmProvider === "anthropic" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-muted/40 text-muted-foreground border border-border/40")}>
-                      {llmProvider === "anthropic" ? "Active" : "N/A"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Sliding Window */}
-            <FormField control={form.control} name="contextWindowTurns" render={({ field }) => (
-              <FormItem className="rounded-xl border border-border/50 bg-card/40 px-4 py-3.5 space-y-0">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
-                      <Layers className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <FormLabel className="text-[12.5px] font-semibold">Sliding Window Context</FormLabel>
-                      <FormDescription className="text-[10px]">Limit past turns sent — older turns dropped. Blank = full history.</FormDescription>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] text-muted-foreground">Last</span>
-                    <FormControl>
-                      <Input type="number" min={1} max={1000} placeholder="∞"
-                        className="w-14 h-7 text-xs text-center"
-                        value={field.value == null ? "" : String(field.value)}
-                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value, 10))}
-                      />
-                    </FormControl>
-                    <span className="text-[10px] text-muted-foreground">turns</span>
-                  </div>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {/* Auto Summarization (post-call summary) */}
-            <FormField control={form.control} name="summarizationEnabled" render={({ field }) => (
-              <FormItem className={cn("rounded-xl border bg-card/40 px-4 py-3.5 space-y-0 transition-colors", field.value ? "border-primary/30" : "border-border/50")}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground/50")}>
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <FormLabel className="text-[12.5px] font-semibold">Auto Summarization</FormLabel>
-                      <FormDescription className="text-[10px]">Generate a concise AI summary for every completed call, shown in the call log</FormDescription>
-                    </div>
-                  </div>
-                  <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
-                </div>
-              </FormItem>
-            )} />
-
-            {/* Staged Prompt */}
-            <FormField control={form.control} name="stagedPromptEnabled" render={({ field }) => (
-              <FormItem className={cn("rounded-xl border bg-card/40 px-4 py-3.5 space-y-0 transition-colors", field.value ? "border-primary/30" : "border-border/50")}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", field.value ? "bg-primary/15 text-primary" : "bg-muted/40 text-muted-foreground/50")}>
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <FormLabel className="text-[12.5px] font-semibold">Staged System Prompt</FormLabel>
-                      <FormDescription className="text-[10px]">Stage-specific prompts per conversation phase — LLM signals via <code className="bg-muted px-1 rounded">[STAGE:Name]</code></FormDescription>
-                    </div>
-                  </div>
-                  <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
-                </div>
-                {stagedPromptEnabled && (
-                  <div className="mt-3 pt-3 border-t border-border/40 space-y-3">
-                    <FormField control={form.control} name="stagedPromptCoreIdentity" render={({ field: idf }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Core Identity <span className="text-muted-foreground font-normal">(always included)</span></FormLabel>
-                        <FormControl>
-                          <Textarea className="min-h-[60px] text-xs"
-                            placeholder="You are a helpful assistant for Acme Corp. Always be polite and professional."
-                            {...idf} />
-                        </FormControl>
-                        <FormDescription className="text-[10px]">Prepended to every stage prompt — name, role, tone only.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <StagedPromptEditor control={form.control} />
-                  </div>
-                )}
-              </FormItem>
-            )} />
           </>
         )}
 
