@@ -2,7 +2,6 @@ import type { STTAdapter } from "./base.js";
 import type { STTConfig } from "../../types.js";
 import { AzureSTT } from "./azure.js";
 import { AssemblyAISTT } from "./assemblyai.js";
-import { SarvamSTT } from "./sarvam.js";
 import { CartesiaSTT } from "./cartesia.js";
 import { DeepgramSTT } from "./deepgram.js";
 import { STUB_PROVIDERS_ENABLED, createStubSTT } from "../stubs.js";
@@ -20,8 +19,6 @@ export function createSTTAdapter(
       return new AzureSTT(apiKey, model, extraConfig, cfg);
     case "assemblyai":
       return new AssemblyAISTT(apiKey, model, cfg);
-    case "sarvam":
-      return new SarvamSTT(apiKey, model, cfg);
     case "cartesia":
       return new CartesiaSTT(apiKey, model, cfg);
     case "deepgram":
