@@ -1594,6 +1594,18 @@ export async function handleWebCallWebSocket(
       }
 
       const toolDefs = buildToolDefs(agentTools);
+      // schedule_callback is always available so the LLM knows about it
+      toolDefs.push({
+        name: "schedule_callback",
+        description: "Schedule a callback call for this caller. Call this when the caller asks to be called back later.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            scheduled_at: { type: "string", description: "ISO 8601 datetime to call back. Omit to default to 1 hour from now." },
+            notes: { type: "string", description: "Brief note about why the callback was requested." },
+          },
+        },
+      });
       let triggeredToolName: string | null = null;
       let triggeredToolArgs: Record<string, unknown> = {};
 
@@ -1940,7 +1952,12 @@ export async function handleWebCallWebSocket(
         try {
           const tool = matchToolByName(agentTools, triggeredToolName);
           if (!tool) {
-            logger.warn({ callId, triggeredToolName }, "Webcall: LLM called unknown tool — ignoring");
+            if (triggeredToolName === "schedule_callback") {
+              // Browser webcall — acknowledge the callback request without DB insert
+              toolResult = "Callback noted. I'll make sure someone follows up with you.";
+            } else {
+              logger.warn({ callId, triggeredToolName }, "Webcall: LLM called unknown tool — ignoring");
+            }
           } else if (tool.type === "native_booking") {
             toolResult = await executeNativeBooking(callId, agentId, tool, triggeredToolArgs);
           } else if (tool.type === "native_check_availability") {
@@ -2088,7 +2105,9 @@ export async function handleWebCallWebSocket(
             }
 
             let inlineFnResult: string | undefined;
-            try {
+            if (fnName === "schedule_callback") {
+              inlineFnResult = "Callback noted. I'll make sure someone follows up with you.";
+            } else try {
               const tool = matchToolByName(agentTools, fnName);
               if (tool) {
                 if (tool.type === "native_booking") {
@@ -2387,7 +2406,9 @@ export async function handleWebCallWebSocket(
 
             // Route through the shared executor
             let inlineFnResult: string | undefined;
-            try {
+            if (fnName === "schedule_callback") {
+              inlineFnResult = "Callback noted. I'll make sure someone follows up with you.";
+            } else try {
               const tool = matchToolByName(agentTools, fnName);
               if (tool) {
                 if (tool.type === "native_booking") {

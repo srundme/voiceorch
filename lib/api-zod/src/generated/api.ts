@@ -6090,3 +6090,83 @@ export const CreateWebcallTicketResponse = zod.object({
 })
 
 
+/**
+ * @summary List scheduled callbacks and auto-redials
+ */
+export const listCallbacksQueryStatusDefault = `pending`;
+export const listCallbacksQueryReasonDefault = `all`;
+export const listCallbacksQueryPageDefault = 0;
+export const listCallbacksQueryLimitDefault = 50;
+
+export const ListCallbacksQueryParams = zod.object({
+  "status": zod.enum(['pending', 'triggered', 'cancelled', 'all']).default(listCallbacksQueryStatusDefault),
+  "reason": zod.enum(['callback_requested', 'no_answer', 'all']).default(listCallbacksQueryReasonDefault),
+  "page": zod.coerce.number().default(listCallbacksQueryPageDefault),
+  "limit": zod.coerce.number().default(listCallbacksQueryLimitDefault)
+})
+
+export const ListCallbacksResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "agentName": zod.string(),
+  "toNumber": zod.string(),
+  "scheduledAt": zod.coerce.date().nullable(),
+  "status": zod.enum(['pending', 'triggering', 'triggered', 'cancelled', 'failed']),
+  "reason": zod.enum(['callback_requested', 'no_answer']),
+  "attemptCount": zod.number().nullable(),
+  "maxAttempts": zod.number().nullable(),
+  "redialIntervalMinutes": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "triggeredAt": zod.coerce.date().nullish(),
+  "cancelledAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "minutesUntilDue": zod.number().nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Get summary stats for callbacks
+ */
+export const GetCallbackStatsResponse = zod.object({
+  "pendingCallbacks": zod.number(),
+  "pendingRedials": zod.number(),
+  "dueNow": zod.number()
+})
+
+
+/**
+ * @summary Cancel a pending callback
+ */
+export const CancelCallbackParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelCallbackResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary Reschedule a callback to a new time
+ */
+export const RescheduleCallbackParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RescheduleCallbackBody = zod.object({
+  "scheduledAt": zod.coerce.date().describe('New scheduled time for the callback (ISO 8601)')
+})
+
+export const RescheduleCallbackResponse = zod.object({
+  "id": zod.number(),
+  "scheduledAt": zod.coerce.date(),
+  "status": zod.string()
+})
+
+

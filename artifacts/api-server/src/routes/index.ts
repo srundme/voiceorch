@@ -60,6 +60,7 @@ import dispositionRouter from "./disposition.js";
 import simulationRouter from "./simulation.js";
 import docsRouter from "./docs.js";
 import webcallTicketRouter from "./webcall-ticket.js";
+import callbacksRouter from "./callbacks.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -141,5 +142,6 @@ router.use(dispositionRouter);
 router.use(agentVersionsRouter);
 router.use(simulationRouter);
 router.use(webcallTicketRouter);
+router.use(callbacksRouter);
 
 export default router;

@@ -1,0 +1,60 @@
+## Bug Fix: Live Calls Are Not Using Language-Specific Backchannel Fillers
+
+The language-specific backchannel filler implementation works correctly in **Web Calls**, but it is **not working in Live Calls**.
+
+I have attached the Live Call log JSON for reference.
+
+### Current Behavior
+
+When the agent language is **Tamil**, the LLM correctly generates responses in Tamil.
+
+However, before the response is sent to TTS, the Live Call pipeline inserts English filler phrases such as:
+
+* "One moment please..."
+* "Sure, give me just a second..."
+
+This should never happen.
+
+Since Web Calls already use the correct language-specific fillers, this indicates that the Live Call pipeline is not using the same backchannel implementation or language-selection logic.
+
+### Required Changes
+
+* Investigate the complete Live Call runtime flow.
+* Compare the Backchannel implementation used in Web Calls and Live Calls.
+* Ensure that both call types use the **same backchannel implementation**.
+* There should be **one single source of truth** for selecting filler phrases based on the agent's configured language.
+* Remove any hardcoded English filler phrases or separate fallback logic that exists only in the Live Call pipeline.
+* The filler should always be selected dynamically from the predefined backend language-specific filler list.
+
+### Language Rules
+
+When Backchanneling is enabled:
+
+* Tamil → Tamil fillers only
+* English → English fillers only
+* Hindi → Hindi fillers only
+* Telugu → Telugu fillers only
+* Kannada → Kannada fillers only
+* Malayalam → Malayalam fillers only
+* Marathi → Marathi fillers only
+
+A filler from one language must **never** be used when another language is selected.
+
+### Runtime Validation
+
+Please add temporary debug logs to verify:
+
+* Selected agent language
+* Whether Backchanneling is enabled
+* Which filler list was loaded
+* Which filler phrase was selected
+* The final text sent to TTS
+
+### Expected Result
+
+After the fix:
+
+* Web Calls and Live Calls should behave identically.
+* The selected agent language should always determine the filler language.
+* No English filler should ever be spoken by a Tamil agent (or vice versa).
+* The same backchannel behavior should be consistent across all supported call types.

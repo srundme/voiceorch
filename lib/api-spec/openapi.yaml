@@ -5821,6 +5821,126 @@ paths:
         "403":
           description: Agent not found or not owned by the authenticated user
 
+  /callbacks:
+    get:
+      operationId: listCallbacks
+      summary: List scheduled callbacks and auto-redials
+      tags: [callbacks]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, triggered, cancelled, all]
+            default: pending
+        - in: query
+          name: reason
+          schema:
+            type: string
+            enum: [callback_requested, no_answer, all]
+            default: all
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 0
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Paginated list of callbacks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledCallbackListResponse"
+        "401":
+          description: Unauthorized
+
+  /callbacks/stats:
+    get:
+      operationId: getCallbackStats
+      summary: Get summary stats for callbacks
+      tags: [callbacks]
+      responses:
+        "200":
+          description: Callback statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledCallbackStats"
+        "401":
+          description: Unauthorized
+
+  /callbacks/{id}:
+    delete:
+      operationId: cancelCallback
+      summary: Cancel a pending callback
+      tags: [callbacks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Callback cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id:     { type: integer }
+                  status: { type: string }
+        "400":
+          description: Not pending
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+    patch:
+      operationId: rescheduleCallback
+      summary: Reschedule a callback to a new time
+      tags: [callbacks]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RescheduleCallbackBody"
+      responses:
+        "200":
+          description: Callback rescheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, scheduledAt, status]
+                properties:
+                  id:          { type: integer }
+                  scheduledAt: { type: string, format: date-time }
+                  status:      { type: string }
+        "400":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
 components:
   parameters:
     AdminToken:
@@ -10503,3 +10623,52 @@ components:
         token:
           type: string
           description: Session JWT — store and use as Authorization Bearer token
+
+    ScheduledCallbackItem:
+      type: object
+      required: [id, agentId, agentName, toNumber, scheduledAt, status, reason, attemptCount, maxAttempts, createdAt]
+      properties:
+        id:                    { type: integer }
+        agentId:               { type: integer }
+        agentName:             { type: string }
+        toNumber:              { type: string }
+        scheduledAt:           { type: string, format: date-time, nullable: true }
+        status:                { type: string, enum: [pending, triggering, triggered, cancelled, failed] }
+        reason:                { type: string, enum: [callback_requested, no_answer] }
+        attemptCount:          { type: integer, nullable: true }
+        maxAttempts:           { type: integer, nullable: true }
+        redialIntervalMinutes: { type: integer, nullable: true }
+        notes:                 { type: string, nullable: true }
+        triggeredAt:           { type: string, format: date-time, nullable: true }
+        cancelledAt:           { type: string, format: date-time, nullable: true }
+        createdAt:             { type: string, format: date-time }
+        minutesUntilDue:       { type: integer, nullable: true }
+
+    ScheduledCallbackListResponse:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduledCallbackItem"
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
+
+    ScheduledCallbackStats:
+      type: object
+      required: [pendingCallbacks, pendingRedials, dueNow]
+      properties:
+        pendingCallbacks: { type: integer }
+        pendingRedials:   { type: integer }
+        dueNow:           { type: integer }
+
+    RescheduleCallbackBody:
+      type: object
+      required: [scheduledAt]
+      properties:
+        scheduledAt:
+          type: string
+          format: date-time
+          description: New scheduled time for the callback (ISO 8601)

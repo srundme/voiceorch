@@ -6,7 +6,7 @@ import {
   Monitor, Users, Zap, CalendarDays, Brain, Phone,
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
-  LogOut, Bell, Search, SlidersHorizontal, BookOpen,
+  LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
@@ -64,6 +64,7 @@ const NAV_PRIMARY = [
   { name: "Scheduling",      href: "/app/scheduling",      icon: CalendarDays },
   { name: "Memory / CRM",    href: "/app/memory",          icon: Brain },
   { name: "Call Logs",       href: "/app/calls",           icon: Phone },
+  { name: "Callbacks",       href: "/app/callbacks",       icon: PhoneMissed },
 ];
 
 const NAV_SETTINGS = [
@@ -86,6 +87,7 @@ const ROUTE_TITLES: [string, string][] = [
   ["/app/scheduling",      "Scheduling"],
   ["/app/memory",          "Memory / CRM"],
   ["/app/calls",           "Call Logs"],
+  ["/app/callbacks",       "Callbacks"],
   ["/app/providers",       "Providers"],
   ["/app/voices",          "Voices"],
   ["/app/phone-numbers",   "Phone Numbers"],

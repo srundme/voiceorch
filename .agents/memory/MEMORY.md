@@ -40,3 +40,4 @@
 - [VoBiz session race condition](vobiz-session-race.md) — sessionEndedBeforeReady flag: if stop/close fires while createSession is awaiting, call endSession after createSession returns
 - [Vobiz audio byte order](vobiz-audio-byte-order.md) — Vobiz uses LE PCM both ways; no byte-swap in either direction; contentType header still required or µ-law tractor noise
 - [Managed plan post-call memory](managed-plan-memory.md) — updateCallerProfile skips silently if no BYOP key; must fall back to platform managed key from platform_settings then GROQ_API_KEY env
+- [Orval codegen pitfalls](orval-codegen-pitfalls.md) — duplicate YAML schema key silently breaks codegen; TS config fails jiti; use orval.config.mjs; existing campaign schemas named CallbackItem/CallbacksPage etc.

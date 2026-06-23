@@ -1,0 +1,836 @@
+[
+  {
+    "id": 5305,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:22.806Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 26,
+      "telephonyProvider": "vobiz",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5304,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:22.806Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "பெனிஷ்யா",
+        "callCount": 1
+      },
+      "factCount": 2,
+      "facts": {
+        "property_location_interest": "தாம்பரம்",
+        "name": "பெனிஷ்யா"
+      },
+      "recentCallsCount": 1
+    },
+    "metadata": null
+  },
+  {
+    "id": 5306,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:22.806Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "918637416033",
+        "from_number": "917971543255",
+        "agent_name": "Ravilla",
+        "caller_number": "917971543255",
+        "date": "Tuesday, June 23, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: பெனிஷ்யா  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• property_location_interest: தாம்பரம்  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Benishya, is looking for a property in Tambaram. The agent informed her that there are no properties available in Tambaram at the moment but offered options in Red Hills, Madhavaram, and Thirunindravur.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest"
+    },
+    "metadata": null
+  },
+  {
+    "id": 5307,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:24.225Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஹலோ பெனிஷ்யா! இன்னைக்கு நீங்க தாம்பரம் ஏரியாவுல ப்ராப்பர்ட்டி பாக்குறீங்கன்னு ஞாபகம் இருக்கு. இப்போதைக்கு அங்க ப்ராப்பர்ட்டிஸ் பெருசா இல்ல, ஆனா வேற சில ஏரியாவுல ஆப்ஷன்ஸ் இருக்கு. நீங்க வேற எங்கயாச்சும் ப்ராப்பர்ட்டி பாக்குறீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5319,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:36.169Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 11945,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 363518,
+      "textLength": 230,
+      "firstByteMs": 160
+    },
+    "metadata": null
+  },
+  {
+    "id": 5320,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:37.447Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமாப்பா."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5323,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:38.149Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:44 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: பெனிஷ்யா  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• property_location_interest: தாம்பரம்  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Benishya, is looking for a property in Tambaram. The agent informed her that there are no properties available in Tambaram at the moment but offered options in Red Hills, Madhavaram, and Thirunindravur.\n\n⚠️ NAME PRIORITY RU",
+      "historyLength": 2,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5326,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:39.135Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 854,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி பெனிஷ்யா, உங்களுக்கு எந்த ஏரியால ப்ராப்பர்ட்டி பாக்குறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 4770,
+      "outputTokens": 31,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5327,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:39.150Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5328,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:40.585Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி பெனிஷ்யா, உங்களுக்கு எந்த ஏரியால ப்ராப்பர்ட்டி பாக்குறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5329,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:40.585Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1436,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 20,
+      "firstByteMs": 153
+    },
+    "metadata": null
+  },
+  {
+    "id": 5334,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:44.429Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3845,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112640,
+      "textLength": 63,
+      "firstByteMs": 261
+    },
+    "metadata": null
+  },
+  {
+    "id": 5336,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:49.716Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "உங்ககிட்ட ரொம்ப ஏரியா ல தான் இருக்கு."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5337,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:50.418Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:44 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: பெனிஷ்யா  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• property_location_interest: தாம்பரம்  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Benishya, is looking for a property in Tambaram. The agent informed her that there are no properties available in Tambaram at the moment but offered options in Red Hills, Madhavaram, and Thirunindravur.\n\n⚠️ NAME PRIORITY RU",
+      "historyLength": 4,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5341,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:51.418Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sure, give me just a second..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5343,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:53.443Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2026,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 58878,
+      "textLength": 30,
+      "firstByteMs": 145
+    },
+    "metadata": null
+  },
+  {
+    "id": 5345,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:14:56.247Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 862,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[User response analysis: The user mentions \"Enkitta romba area la thaan irukku\" which roughly translates to \"I have it in many areas\". This is a bit ambiguous. It could mean they *own* properties in many areas, or they are *looking* for properties in many areas. Given the context of the previous turn where I asked \"which area are you looking in?\", it's more likely they are saying there are many areas they are interested in. However, the previous turn from the system was \"சரி பெனிஷ்யா, உங்களுக்கு எந்த ஏரியால ப்ராப்பர்ட்டி பாக்குறீங்க?\" (Okay Benishya, in which area are you looking for property?). The user's response \"ஆமாப்பா.\" (Yes pa.) was to that question. Then I asked \"உங்களுக்கு எந்த ஏரியால ப்ராப்பர்ட்டி பாக்குறீங்க?\" again. The user's latest response is \"உங்ககிட்ட ரொம்ப ஏரியா ல தான் இருக்கு.\" which translates to \"You have it in many areas.\". This is a direct response to the question \"which area are you looking in?\" by saying that \"you (the company) have properties in many areas.\" This implies the user is NOT specifying an area, but asking about the company's offerings.\n\nThe current step in the flow (based on the overall structure and previous turns) would be Step 6, as the property is not in the three specified areas (Red Hills, Madhavaram, Thirunindravur). However, the user's response is not a direct answer to \"which area are you looking in?\". It's a statement about the company's locations.\n\nLet's re-evaluate the flow based on the last few turns:\n1. Agent: \"சரி பெனிஷ்யா, உங்களுக்கு எந்த ஏரியால ப்ராப்பர்ட்டி பாக்குறீங்க?\" (Okay Benishya, in which area are you looking for property?)\n2. User: \"ஆமாப்பா.\" (Yes pa.) - This is an affirmative to the general question of looking for property, but not specific to an area.\n3. Agent: \"உங்களுக்கு எந்த ஏரியால ப்ராப்பர்ட்டி பாக்குறீங்க?\" (In which area are you looking for property?) - Agent is trying to get a specific area.\n4. User: \"உங்ககிட்ட ரொம்ப ஏரியா ல தான் இருக்கு.\" (You have it in many areas.) - User is implying that the company has options in many areas, and they are not specifying one area *they* are looking in, but rather asking about the company's spread.\n\nThis means the user is not giving a specific area of interest. According to Step 6: \"If the area is outside the three zones MUST ASK — in this order, one at a time: Whether they are looking for an apartment, villa, or plot. What is their budget.\"\n\nThe user's response \"உங்ககிட்ட ரொம்ப ஏரியா ல தான் இருக்கு\" can be interpreted as they are open to multiple areas, and are asking about the company's inventory. So, we should proceed to ask about property type and budget as per Step 6.\n\nThe user has not mentioned an area. So, the condition \"If the area is outside the three zones\" is not directly met by user input. However, the user's response implies they are not focused on one specific area and are asking about the general availability. So, we can interpret this as needing to ask about property type and budget, as they haven't specified an area that is *within* the three zones.\n\nTherefore, the next logical step is to ask about the property type.\n\nPlan:\n1. Acknowledge (implicitly) that they're not specifying an area and we need to understand their requirements.\n2. Ask about property type (apartment, villa, or plot) as per Step 6.\n3. Use a filler and then ask the question.\n4. Keep the response in Tamil.\n5. Use the 'curious' emotion.\n6. End with a question.சரி. நீங்க apartment, villa, இல்ல plot-ல என்ன பாக்குறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 4805,
+      "outputTokens": 880,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5347,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:03.473Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஹலோ."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5348,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:04.177Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:45 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: பெனிஷ்யா  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• property_location_interest: தாம்பரம்  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Benishya, is looking for a property in Tambaram. The agent informed her that there are no properties available in Tambaram at the moment but offered options in Red Hills, Madhavaram, and Thirunindravur.\n\n⚠️ NAME PRIORITY RU",
+      "historyLength": 6,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5349,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:05.043Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 867,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ஹலோ! நீங்க apartment, villa, இல்ல plot-ல என்ன பாக்குறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 5683,
+      "outputTokens": 28,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5350,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:05.177Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5351,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:06.868Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1689,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 46080,
+      "textLength": 20,
+      "firstByteMs": 268
+    },
+    "metadata": null
+  },
+  {
+    "id": 5352,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:06.868Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஹலோ!"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5353,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:07.948Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1081,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 30720,
+      "textLength": 4,
+      "firstByteMs": 141
+    },
+    "metadata": null
+  },
+  {
+    "id": 5354,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:07.948Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க apartment, villa, இல்ல plot-ல என்ன பாக்குறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5355,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:11.754Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3806,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 110080,
+      "textLength": 53,
+      "firstByteMs": 282
+    },
+    "metadata": null
+  },
+  {
+    "id": 5356,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:15.582Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "பில்லா மார்க் தான் மாம் பாத்துட்டு இருக்கேன்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5359,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:16.285Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:45 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: பெனிஷ்யா  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• property_location_interest: தாம்பரம்  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Benishya, is looking for a property in Tambaram. The agent informed her that there are no properties available in Tambaram at the moment but offered options in Red Hills, Madhavaram, and Thirunindravur.\n\n⚠️ NAME PRIORITY RU",
+      "historyLength": 8,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5360,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:17.214Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 930,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ஓ அப்படியா! சரி, உங்க பட்ஜெட் என்ன சொல்லுங்க?"
+    },
+    "metadata": {
+      "inputTokens": 5718,
+      "outputTokens": 24,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5361,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:17.284Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5362,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:18.742Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1458,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 20,
+      "firstByteMs": 155
+    },
+    "metadata": null
+  },
+  {
+    "id": 5363,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:18.743Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓ அப்படியா!"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5366,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:20.093Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1350,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 11,
+      "firstByteMs": 290
+    },
+    "metadata": null
+  },
+  {
+    "id": 5367,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:20.093Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்க பட்ஜெட் என்ன சொல்லுங்க?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5374,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:22.817Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2725,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 33,
+      "firstByteMs": 284
+    },
+    "metadata": null
+  },
+  {
+    "id": 5376,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:26.774Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "50,00,000."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5377,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:27.485Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:45 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: பெனிஷ்யா  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• property_location_interest: தாம்பரம்  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Benishya, is looking for a property in Tambaram. The agent informed her that there are no properties available in Tambaram at the moment but offered options in Red Hills, Madhavaram, and Thirunindravur.\n\n⚠️ NAME PRIORITY RU",
+      "historyLength": 10,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5378,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:28.485Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5379,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:28.495Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 962,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி. ஒரு villa-க்கு 50 lakhs பட்ஜெட்-ல பாக்குறீங்க, அப்படித்தானே?"
+    },
+    "metadata": {
+      "inputTokens": 5745,
+      "outputTokens": 34,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5380,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:30.195Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1710,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 20,
+      "firstByteMs": 145
+    },
+    "metadata": null
+  },
+  {
+    "id": 5381,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:30.195Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5383,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:31.074Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 879,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 23040,
+      "textLength": 4,
+      "firstByteMs": 155
+    },
+    "metadata": null
+  },
+  {
+    "id": 5382,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:31.074Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஒரு villa-க்கு 50 lakhs பட்ஜெட்-ல பாக்குறீங்க, அப்படித்தானே?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5384,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:32.882Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1808,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 115198,
+      "textLength": 60,
+      "firstByteMs": 167
+    },
+    "metadata": null
+  },
+  {
+    "id": 5385,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:33.043Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 878,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "durationSeconds": 70,
+      "turns": 5,
+      "avgSttMs": 0,
+      "avgLlmMs": 878,
+      "avgTtsMs": 1184
+    }
+  },
+  {
+    "id": 5386,
+    "callId": 296,
+    "agentId": 26,
+    "ts": "2026-06-23T06:15:34.795Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]

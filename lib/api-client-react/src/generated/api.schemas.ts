@@ -4282,6 +4282,61 @@ export interface PasswordResetVerifyResponse {
   token: string;
 }
 
+export type ScheduledCallbackItemStatus = typeof ScheduledCallbackItemStatus[keyof typeof ScheduledCallbackItemStatus];
+
+
+export const ScheduledCallbackItemStatus = {
+  pending: 'pending',
+  triggering: 'triggering',
+  triggered: 'triggered',
+  cancelled: 'cancelled',
+  failed: 'failed',
+} as const;
+
+export type ScheduledCallbackItemReason = typeof ScheduledCallbackItemReason[keyof typeof ScheduledCallbackItemReason];
+
+
+export const ScheduledCallbackItemReason = {
+  callback_requested: 'callback_requested',
+  no_answer: 'no_answer',
+} as const;
+
+export interface ScheduledCallbackItem {
+  id: number;
+  agentId: number;
+  agentName: string;
+  toNumber: string;
+  scheduledAt: string | null;
+  status: ScheduledCallbackItemStatus;
+  reason: ScheduledCallbackItemReason;
+  attemptCount: number | null;
+  maxAttempts: number | null;
+  redialIntervalMinutes?: number | null;
+  notes?: string | null;
+  triggeredAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
+  minutesUntilDue?: number | null;
+}
+
+export interface ScheduledCallbackListResponse {
+  items: ScheduledCallbackItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ScheduledCallbackStats {
+  pendingCallbacks: number;
+  pendingRedials: number;
+  dueNow: number;
+}
+
+export interface RescheduleCallbackBody {
+  /** New scheduled time for the callback (ISO 8601) */
+  scheduledAt: string;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -4928,5 +4983,42 @@ export type CreateWebcallTicketBody = {
 export type CreateWebcallTicket200 = {
   /** 64-hex-char single-use token, valid for 60 s */
   ticket: string;
+};
+
+export type ListCallbacksParams = {
+status?: ListCallbacksStatus;
+reason?: ListCallbacksReason;
+page?: number;
+limit?: number;
+};
+
+export type ListCallbacksStatus = typeof ListCallbacksStatus[keyof typeof ListCallbacksStatus];
+
+
+export const ListCallbacksStatus = {
+  pending: 'pending',
+  triggered: 'triggered',
+  cancelled: 'cancelled',
+  all: 'all',
+} as const;
+
+export type ListCallbacksReason = typeof ListCallbacksReason[keyof typeof ListCallbacksReason];
+
+
+export const ListCallbacksReason = {
+  callback_requested: 'callback_requested',
+  no_answer: 'no_answer',
+  all: 'all',
+} as const;
+
+export type CancelCallback200 = {
+  id: number;
+  status: string;
+};
+
+export type RescheduleCallback200 = {
+  id: number;
+  scheduledAt: string;
+  status: string;
 };
 

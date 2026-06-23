@@ -27,6 +27,7 @@ import WalletPage from "@/pages/wallet";
 import ActivityPage from "@/pages/activity";
 import PhoneNumbersPage from "@/pages/phone-numbers";
 import WebhooksPage from "@/pages/webhooks";
+import CallbacksPage from "@/pages/callbacks";
 import AgentAnalyticsPage from "@/pages/agent-analytics";
 import AnalyticsPage from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
@@ -733,6 +734,7 @@ function AppRoutes() {
         <Route path="/app/activity" component={() => <Redirect to="/app/calls" />} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
+        <Route path="/app/callbacks" component={CallbacksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />
         <Route path="/app/campaigns/:id/leads/:leadId" component={CampaignLeadProfilePage} />
         <Route path="/app/campaigns/:id/batches/new" component={BatchWizardPage} />

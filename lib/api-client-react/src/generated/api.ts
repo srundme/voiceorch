@@ -104,6 +104,7 @@ import type {
   CampaignLeadProfile,
   CampaignTransfersPage,
   CampaignUpdate,
+  CancelCallback200,
   CancelCampaignBooking200,
   ChangePassword200,
   ChangePassword400,
@@ -185,6 +186,7 @@ import type {
   ListBatchLeadsParams,
   ListBatchWorkspaceLeadsParams,
   ListBookingsParams,
+  ListCallbacksParams,
   ListCallsParams,
   ListCampaignBookingsParams,
   ListCampaignCallbacksParams,
@@ -249,10 +251,14 @@ import type {
   PurchasePhoneNumberInput,
   RedialBatchNoPickup200,
   RedialCampaignNoPickup200,
+  RescheduleCallback200,
+  RescheduleCallbackBody,
   RescheduleCampaignBooking200,
   RescheduleCampaignBookingBody,
   RescheduleCampaignCallback200,
   RetryCampaignTransfer200,
+  ScheduledCallbackListResponse,
+  ScheduledCallbackStats,
   SchedulingCalendar,
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
@@ -19474,5 +19480,308 @@ export const useCreateWebcallTicket = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateWebcallTicketMutationOptions(options));
+    }
+
+export const getListCallbacksUrl = (params?: ListCallbacksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/callbacks?${stringifiedParams}` : `/api/callbacks`
+}
+
+/**
+ * @summary List scheduled callbacks and auto-redials
+ */
+export const listCallbacks = async (params?: ListCallbacksParams, options?: RequestInit): Promise<ScheduledCallbackListResponse> => {
+
+  return customFetch<ScheduledCallbackListResponse>(getListCallbacksUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCallbacksQueryKey = (params?: ListCallbacksParams,) => {
+    return [
+    `/api/callbacks`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCallbacksQueryOptions = <TData = Awaited<ReturnType<typeof listCallbacks>>, TError = ErrorType<void>>(params?: ListCallbacksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCallbacks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCallbacksQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCallbacks>>> = ({ signal }) => listCallbacks(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCallbacks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCallbacksQueryResult = NonNullable<Awaited<ReturnType<typeof listCallbacks>>>
+export type ListCallbacksQueryError = ErrorType<void>
+
+
+/**
+ * @summary List scheduled callbacks and auto-redials
+ */
+
+export function useListCallbacks<TData = Awaited<ReturnType<typeof listCallbacks>>, TError = ErrorType<void>>(
+ params?: ListCallbacksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCallbacks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCallbacksQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCallbackStatsUrl = () => {
+
+
+
+
+  return `/api/callbacks/stats`
+}
+
+/**
+ * @summary Get summary stats for callbacks
+ */
+export const getCallbackStats = async ( options?: RequestInit): Promise<ScheduledCallbackStats> => {
+
+  return customFetch<ScheduledCallbackStats>(getGetCallbackStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCallbackStatsQueryKey = () => {
+    return [
+    `/api/callbacks/stats`
+    ] as const;
+    }
+
+
+export const getGetCallbackStatsQueryOptions = <TData = Awaited<ReturnType<typeof getCallbackStats>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallbackStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCallbackStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCallbackStats>>> = ({ signal }) => getCallbackStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCallbackStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCallbackStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getCallbackStats>>>
+export type GetCallbackStatsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get summary stats for callbacks
+ */
+
+export function useGetCallbackStats<TData = Awaited<ReturnType<typeof getCallbackStats>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallbackStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCallbackStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCancelCallbackUrl = (id: number,) => {
+
+
+
+
+  return `/api/callbacks/${id}`
+}
+
+/**
+ * @summary Cancel a pending callback
+ */
+export const cancelCallback = async (id: number, options?: RequestInit): Promise<CancelCallback200> => {
+
+  return customFetch<CancelCallback200>(getCancelCallbackUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getCancelCallbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelCallback>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelCallback>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['cancelCallback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelCallback>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelCallback(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof cancelCallback>>>
+
+    export type CancelCallbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Cancel a pending callback
+ */
+export const useCancelCallback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelCallback>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelCallback>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getCancelCallbackMutationOptions(options));
+    }
+
+export const getRescheduleCallbackUrl = (id: number,) => {
+
+
+
+
+  return `/api/callbacks/${id}`
+}
+
+/**
+ * @summary Reschedule a callback to a new time
+ */
+export const rescheduleCallback = async (id: number,
+    rescheduleCallbackBody: RescheduleCallbackBody, options?: RequestInit): Promise<RescheduleCallback200> => {
+
+  return customFetch<RescheduleCallback200>(getRescheduleCallbackUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      rescheduleCallbackBody,)
+  }
+);}
+
+
+
+
+export const getRescheduleCallbackMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rescheduleCallback>>, TError,{id: number;data: BodyType<RescheduleCallbackBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rescheduleCallback>>, TError,{id: number;data: BodyType<RescheduleCallbackBody>}, TContext> => {
+
+const mutationKey = ['rescheduleCallback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rescheduleCallback>>, {id: number;data: BodyType<RescheduleCallbackBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rescheduleCallback(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RescheduleCallbackMutationResult = NonNullable<Awaited<ReturnType<typeof rescheduleCallback>>>
+    export type RescheduleCallbackMutationBody = BodyType<RescheduleCallbackBody>
+    export type RescheduleCallbackMutationError = ErrorType<void>
+
+    /**
+ * @summary Reschedule a callback to a new time
+ */
+export const useRescheduleCallback = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rescheduleCallback>>, TError,{id: number;data: BodyType<RescheduleCallbackBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rescheduleCallback>>,
+        TError,
+        {id: number;data: BodyType<RescheduleCallbackBody>},
+        TContext
+      > => {
+      return useMutation(getRescheduleCallbackMutationOptions(options));
     }
 

@@ -30,6 +30,7 @@ import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable, agentsTable, platformSettingsTable } from "@workspace/db";
+import { scheduleCallbackRequested } from "../services/autoRedial.js";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "../services/scheduling/slot-engine.js";
 import type { TimeSlot } from "../services/scheduling/slot-engine.js";
@@ -49,6 +50,25 @@ import {
   parsePreferredDate,
   writeTransferLeadDb,
 } from "../services/tool-executor.js";
+
+/** Built-in tool always injected into the LLM tool list (telephony calls only). */
+const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
+  name: "schedule_callback",
+  description: "Schedule a callback call for this caller. Call this when the caller asks to be called back later — either at a specific time they mention (e.g. 'call me at 3pm', 'tomorrow morning') or in general ('call me later', 'call me back'). If a specific time is mentioned, provide scheduled_at. Otherwise omit it and the system will call back in 1 hour.",
+  parameters: {
+    type: "object",
+    properties: {
+      scheduled_at: {
+        type: "string",
+        description: "ISO 8601 datetime to call back (e.g. '2026-06-23T15:00:00'). Omit if no specific time was mentioned — defaults to 1 hour from now.",
+      },
+      notes: {
+        type: "string",
+        description: "Brief note capturing why the callback was requested, in the caller's words.",
+      },
+    },
+  },
+};
 
 const VAD_SILENCE_MS          = 150;    // default silence window before STT flush (per-agent tunable via vadSilenceMs)
 const MIN_SPEECH_BYTES        = 3200;   // ~200ms @ 8kHz PCM — skip noise bursts shorter than this
@@ -1186,6 +1206,26 @@ export class OrchestrationPipeline {
         this.config.onCallEnd();
         return undefined;
       }
+      if (toolName === "schedule_callback") {
+        const toNumber = this.config.callerPhone ?? "";
+        const agentId = this.agent.id;
+        const callId = this.config.callId;
+        const scheduledAtRaw = args["scheduled_at"] as string | undefined;
+        const notes = args["notes"] as string | undefined;
+        const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : new Date(Date.now() + 60 * 60 * 1000);
+        logger.info({ callId, agentId, toNumber, scheduledAt, notes }, "Built-in schedule_callback invoked by LLM");
+        if (toNumber) {
+          await scheduleCallbackRequested({
+            agentId,
+            toNumber,
+            scheduledAt,
+            callId,
+            notes,
+          });
+          return "Callback scheduled successfully. I'll call you back at the requested time.";
+        }
+        return "Callback noted — I'll arrange for someone to call you back.";
+      }
       logger.warn({ callId: this.config.callId, toolName }, "LLM called unknown tool — ignoring");
       return undefined;
     }
@@ -1714,6 +1754,7 @@ export class OrchestrationPipeline {
 
     // ── Build tool definitions from agent config ──
     const toolDefs = buildToolDefs(this.agent.tools);
+    toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
 
     const llmStart = Date.now();
     let llmFirstTokenAt: number | null = null;
@@ -2610,6 +2651,7 @@ export class OrchestrationPipeline {
     // A depth cap forces a final tools-detached narration to prevent runaway loops.
     const MAX_TOOL_DEPTH = 5;
     const toolDefs = buildToolDefs(this.agent.tools);
+    toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
     const attachTools = depth < MAX_TOOL_DEPTH && toolDefs.length > 0;
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};

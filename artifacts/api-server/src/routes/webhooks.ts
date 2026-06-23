@@ -3,15 +3,48 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
-import { db, agentsTable, callsTable, phoneNumbersTable, providersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
+import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
 
 const router: IRouter = Router();
 
 const IS_PROD = process.env["NODE_ENV"] === "production";
+
+// ── Auto-redial: handle no-answer status callbacks ───────────────────────────
+
+const NO_ANSWER_STATUSES = new Set(["no-answer", "no_answer", "busy", "failed", "noanswer"]);
+
+async function handleNoAnswerStatus(opts: {
+  cbId: number | null;
+  agentId: number | null;
+  callStatus: string;
+  toNumber: string;
+}): Promise<void> {
+  if (!NO_ANSWER_STATUSES.has(opts.callStatus.toLowerCase())) return;
+
+  try {
+    if (opts.cbId) {
+      // This was a scheduler-fired callback — look up row and schedule next retry
+      const [cb] = await db
+        .select()
+        .from(scheduledCallbacksTable)
+        .where(eq(scheduledCallbacksTable.id, opts.cbId));
+      if (cb) await scheduleNextRedial(cb);
+      return;
+    }
+
+    // First outbound call (no cbId) — start a retry chain if we have agentId + toNumber
+    if (opts.agentId && opts.toNumber) {
+      await scheduleNoAnswerRedial({ agentId: opts.agentId, toNumber: opts.toNumber });
+    }
+  } catch (err) {
+    logger.error({ err, ...opts }, "handleNoAnswerStatus error");
+  }
+}
 
 /**
  * Fetch the decrypted provider auth token for a given agent + provider type.
@@ -286,6 +319,8 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   const inboundFrom = String(req.body?.From ?? req.body?.from ?? "").trim() || undefined;
   const inboundTo   = String(req.body?.To   ?? req.body?.to   ?? "").trim() || undefined;
+  // Cancel pending auto-redials when the caller rings us first (they're reachable)
+  if (inboundFrom) void cancelPendingRedials(agentId, inboundFrom);
   res.set("Content-Type", "text/xml").send(
     getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { campaignLeadId, from: inboundFrom, to: inboundTo })
   );
@@ -336,16 +371,28 @@ router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
 // ── VoBiz status callbacks ───────────────────────────────────────────────────
 
 router.post("/webhooks/vobiz/status", (req, res): void => {
-  req.log.info({ body: req.body }, "VoBiz status callback");
+  req.log.info({ body: req.body, query: req.query }, "VoBiz status callback");
   res.sendStatus(204);
+  // Auto-redial: fire-and-forget so the 204 is immediate
+  void handleNoAnswerStatus({
+    cbId:       parseInt(String(req.query["cbId"]   ?? "0"), 10) || null,
+    agentId:    parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10) || null,
+    callStatus: String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? ""),
+    toNumber:   String(req.body?.To ?? req.body?.to ?? ""),
+  });
 });
 
 // ── Twilio status callbacks ──────────────────────────────────────────────────
 
 router.post("/webhooks/twilio/status", (req, res): void => {
-  // Twilio posts call status updates here — log and acknowledge
-  req.log.info({ body: req.body }, "Twilio status callback");
+  req.log.info({ body: req.body, query: req.query }, "Twilio status callback");
   res.sendStatus(204);
+  void handleNoAnswerStatus({
+    cbId:       parseInt(String(req.query["cbId"]   ?? "0"), 10) || null,
+    agentId:    parseInt(String(req.query["agentId"] ?? "0"), 10) || null,
+    callStatus: String(req.body?.CallStatus ?? ""),
+    toNumber:   String(req.body?.To ?? ""),
+  });
 });
 
 // ── P2-B: AMD / Voicemail Detection callback ─────────────────────────────────

@@ -8,6 +8,11 @@
  * Two callback types:
  *  • toNumber starts with "webcall:" → push SSE notification to the browser
  *  • everything else → place an outbound telephony call
+ *
+ * Auto-redial:
+ *  After a no_answer call fires, if the outbound dial gets no response the
+ *  VoBiz/Twilio status webhook calls scheduleNextRedial() which creates the
+ *  next retry row automatically (up to maxAttempts / day).
  */
 
 import { db, scheduledCallbacksTable, agentsTable, providersTable } from "@workspace/db";
@@ -102,6 +107,9 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       : {} as Record<string, string>;
 
     const leadQs = cb.campaignLeadId ? `&campaignLeadId=${cb.campaignLeadId}` : "";
+    // Pass cbId + agentId in the status/hangup URL so no-answer detection
+    // can link back to this row and schedule the next retry.
+    const statusQs = `?cbId=${cb.id}&agentId=${cb.agentId}`;
 
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
@@ -109,7 +117,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
         accountSid: cfg["accountSid"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}${leadQs}`,
-        statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
+        statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status${statusQs}`,
       });
     } else if (provider === "plivo") {
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Plivo config missing authId or fromNumber");
@@ -123,8 +131,8 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialVobiz({
         authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}`,
-        hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+        answerUrl:  `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}`,
+        hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status${statusQs}`,
       });
     } else {
       throw new Error(`Outbound not supported for provider: ${provider}`);
@@ -135,7 +143,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       .where(eq(scheduledCallbacksTable.id, cb.id));
 
     logger.info(
-      { callbackId: cb.id, agentId: cb.agentId, toNumber: cb.toNumber },
+      { callbackId: cb.id, agentId: cb.agentId, toNumber: cb.toNumber, reason: cb.reason },
       "Scheduled callback triggered successfully",
     );
   } catch (err) {
