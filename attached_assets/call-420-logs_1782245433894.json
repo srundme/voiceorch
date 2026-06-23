@@ -1,0 +1,746 @@
+[
+  {
+    "id": 7679,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.233Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "sarvam",
+      "llmProvider": "qwen",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 420,
+      "sessionId": "webcall-420",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": true,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-23T20:09:38.225Z"
+    }
+  },
+  {
+    "id": 7681,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.233Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 7683,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.233Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "qwen",
+      "model": "qwen/qwen3-32b"
+    }
+  },
+  {
+    "id": 7682,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.233Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 7680,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.233Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    }
+  },
+  {
+    "id": 7685,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.263Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthikeyan",
+        "callCount": 74
+      },
+      "factCount": 53,
+      "facts": {
+        "open_to_receive_property_and_cost_details": "yes",
+        "asking_for_plot_details": "yes",
+        "confirmed_meeting_tomorrow": "yes",
+        "interested_in_site_visit": "yes",
+        "property_type": "villa",
+        "visit_scheduled_time_confirmed": "5:30 PM",
+        "reaffirmed_decision_timeline": "10 days",
+        "interested_in_swimming_pool": "yes",
+        "location_interest": "Janglpet",
+        "decision_timeline": "10 days",
+        "requested_callback_next_day": "yes",
+        "declined_senior_executive_now": "yes",
+        "request_for_full_details": "yes",
+        "property_approval_asked": "DTDC approved",
+        "information_only": "yes",
+        "site_visit_time": "5:30 PM",
+        "pickup_location": "Central",
+        "arrival_time": "3:00 PM",
+        "starting_city": "Coimbatore",
+        "arrival_time_approx": "2:00 PM",
+        "arrival_city": "Chennai",
+        "pickup_requested": "yes",
+        "visit_scheduled_day": "tomorrow",
+        "site_visit_location": "Madhavaram",
+        "site_visit_time_request": "5:30 PM",
+        "needs_time_to_decide_on_other_locations": "yes",
+        "no_changes_to_site_visit": "yes",
+        "preferred_site_visit_time": "5:30 PM",
+        "looking_for_property_in": "Chennai",
+        "visit_timing_comfortable": "yes",
+        "site_visit_time_confirmed": "5 PM",
+        "visit_scheduled_date": "tomorrow",
+        "visit_scheduled_time": "10 AM",
+        "budget": "75 lakhs",
+        "location": "Madhavaram",
+        "currently_searching_for_villa": "yes",
+        "interested_in_location": "Madhavaram",
+        "interested_in": "villa",
+        "call_back_time": "11 AM",
+        "call_back_day": "tomorrow",
+        "call_back_requested": "yes",
+        "name": "Karthikeyan",
+        "location_of_interest": "Madhavaram",
+        "interested_in_plots_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_for_villa": "75 lakhs",
+        "area_of_interest": "Vadapalani",
+        "interested_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_range": "7.5 lakh",
+        "looking_for_property_in_chennai": "yes",
+        "property_type_of_interest": "villa",
+        "looking_for_property": "yes",
+        "interested_in_property_in_chennai": "true",
+        "policy_interest": "வீடு"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 7686,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.263Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Tuesday, June 23, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 74  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to inquire about the swimming pool at the Jallpeth property and may follow up on villa details within the 75 lakhs budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• open_to_receive_property_and_cost_details: yes  [today]\n• asking_for_plot_details: yes  [today]\n• confirmed_meeting_tomorrow: yes  [today]\n• interested_in_site_visit: yes  [today]\n• property_type: villa  [today]\n• visit_scheduled_time_confirmed: 5:30 PM  [today]\n• re"
+    },
+    "metadata": null
+  },
+  {
+    "id": 7684,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:38.263Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "498dacd7bb9c",
+      "promptLength": 22905,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 74  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to inquire about the swimming pool at the Jallpeth proper"
+    }
+  },
+  {
+    "id": 7687,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:39.043Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 7688,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:46.799Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6310,
+      "turnNumber": 0,
+      "durationMs": 7758
+    }
+  },
+  {
+    "id": 7689,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:50.544Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "சரி டேய்",
+      "endDetectToFinalMs": 72,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 7690,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:50.746Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 1:39 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 74  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to inquire about the swimming pool at the Jallpeth property and may follow up on villa details within the 75 lakhs budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• open_to_receive_property_and_cost_details: yes  [today]\n• asking_for_plot_",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 7691,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:51.332Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 588,
+      "turnNumber": 1,
+      "durationMs": 588
+    }
+  },
+  {
+    "id": 7692,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:51.411Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 662,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "விரும்புவது எவ்வளவு?"
+    },
+    "metadata": {
+      "inputTokens": 6255,
+      "outputTokens": 25,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 1,
+      "durationMs": 662
+    }
+  },
+  {
+    "id": 7694,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:51.411Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "விரும்புவது எவ்வளவு?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 7693,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:51.411Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 7695,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:52.071Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 663,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 46080,
+      "textLength": 20,
+      "firstByteMs": 280
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 663
+    }
+  },
+  {
+    "id": 7696,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:09:53.625Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1920,
+      "turnNumber": 1,
+      "durationMs": 2215
+    }
+  },
+  {
+    "id": 7697,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:04.449Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started"
+    }
+  },
+  {
+    "id": 7698,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:08.480Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3670,
+      "durationMs": 4031
+    }
+  },
+  {
+    "id": 7699,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:11.094Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "என்ன Madam சொல்கிறீங்க? சொல்றீங்க Madam.",
+      "endDetectToFinalMs": 108,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 7700,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:11.198Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 1:40 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 74  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely to inquire about the swimming pool at the Jallpeth property and may follow up on villa details within the 75 lakhs budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• open_to_receive_property_and_cost_details: yes  [today]\n• asking_for_plot_",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 7701,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:11.930Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 736,
+      "turnNumber": 2,
+      "durationMs": 736
+    }
+  },
+  {
+    "id": 7702,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:12.054Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, ஜஞ்சல்பேட்டை வீட்டுல ஸ்விமிங் பூல் உள்ளது."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 7703,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:12.163Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 966,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, ஜஞ்சல்பேட்டை வீட்டுல ஸ்விமிங் பூல் உள்ளது. வீட்டு விவரம், பகுதி விவரம் தெரிய வேண்டுமா?"
+    },
+    "metadata": {
+      "inputTokens": 12577,
+      "outputTokens": 130,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 2,
+      "durationMs": 966
+    }
+  },
+  {
+    "id": 7704,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:12.163Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வீட்டு விவரம், பகுதி விவரம் தெரிய வேண்டுமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 7705,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:12.177Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 7706,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:12.792Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 740,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99838,
+      "textLength": 47,
+      "firstByteMs": 141
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 740
+    }
+  },
+  {
+    "id": 7707,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:13.025Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 865,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 43,
+      "firstByteMs": 305
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 865
+    }
+  },
+  {
+    "id": 7708,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:18.731Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6480,
+      "turnNumber": 2,
+      "durationMs": 6568
+    }
+  },
+  {
+    "id": 7709,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:19.690Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 7710,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:19.803Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/420"
+    }
+  },
+  {
+    "id": 7711,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:19.803Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/420"
+    }
+  },
+  {
+    "id": 7712,
+    "callId": 420,
+    "agentId": 5,
+    "ts": "2026-06-23T20:10:19.816Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 41,
+        "turns": 3,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "என்ன Madam சொல்கிறீங்க? சொல்றீங்க Madam.",
+        "lastAgentResponse": "சரி, ஜஞ்சல்பேட்டை வீட்டுல ஸ்விமிங் பூல் உள்ளது. வீட்டு விவரம், பகுதி விவரம் தெரிய வேண்டுமா?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 41,
+      "turns": 3
+    }
+  }
+]
