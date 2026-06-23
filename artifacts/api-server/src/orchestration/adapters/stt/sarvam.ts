@@ -243,18 +243,37 @@ export class SarvamSTT implements STTAdapter {
       if (/ய்$/.test(last) && last.length > 2) return true; // போய், வாய் — skip 2-char words like "ஒய்"
       // Tamil relative-participial / adverbial forms
       if (/ன்ற$|கிற$|வந்த$|போன$/.test(last)) return true;
-      // 2-word utterance where the FIRST word ends with a case marker → predicate is missing.
-      // e.g. "எனக்கு வந்து" — "எனக்கு" (to me) + "வந்து" (connector) → clearly incomplete.
+      // 2-word utterance where the FIRST word ends with a case marker AND the second
+      // word is NOT a complete verb form → predicate is missing.
+      // "எனக்கு வந்து" → incomplete ✓
+      // "நாளைக்கு வருவேன்" → complete (second=verb) — should NOT fire
       if (words.length === 2) {
         const first = words[0];
-        if (/க்கு$|கிட்ட$|கிட்டே$|ஐ$|னால$|ஆல$/.test(first)) return true;
+        const second = words[1];
+        // Tamil finite verb endings that make a 2-word sentence self-contained:
+        //   -வேன்/-ேன் (1ps past/future), -லாம் (hortative), -ல்ல/-ல்லை (negative),
+        //   -ஆம்/-ஆகும் (equative), -ார்/-ார்கள் (3p), -கும்/-கிறது (neuter/future)
+        const secondIsFiniteVerb = /ேன்$|வேன்$|ோம்$|லாம்$|ல்ல$|ல்லை$|ஆம்$|ார்$|ார்கள்$|கும்$|கிறது$|றேன்$|கிறேன்$/.test(second);
+        if (!secondIsFiniteVerb && /க்கு$|கிட்ட$|கிட்டே$|ஐ$|னால$|ஆல$/.test(first)) return true;
       }
+      // Also check if FIRST word (not just last) is a connector/incomplete form.
+      // e.g. "போய் சொல்லு" — "போய்" is conjunctive and signals more context.
+      const first = words[0];
+      if (/ந்து$|ட்டு$|ண்ணி$|ல்லி$/.test(first)) return true;
+      if (/ய்$/.test(first) && first.length > 2) return true;
       // Hindi/Hinglish possessives & case markers
       if (/\bका$|\bकी$|\bके$|\bको$|\bसे$|\bमें$|\bने$|\bपर$/u.test(last)) return true;
       // Generic English connectives that signal more is coming
       if (/^(and|or|but|also|with|for|of|to|the|a|an|in|on|at)$/i.test(last)) return true;
-      // All-caps token ≥ 2 chars (e.g. "DTDC", "KYC") often precedes more speech
-      if (/^[A-Z]{2,}$/.test(last)) return true;
+      // All-caps token ≥ 2 chars (e.g. "DTDC", "KYC") — check both first and last word
+      if (/^[A-Z]{2,}$/.test(last) || /^[A-Z]{2,}$/.test(first)) return true;
+      // Tamil interrogative words — ALWAYS require a predicate; can never end a sentence.
+      // எந்த (which), என்ன (what), எப்ப/எப்போ (when), எங்க/எங்கே (where),
+      // யாரு/யார் (who), எவ்வளவு (how much), எப்படி (how), ஏன் (why),
+      // எது (which one), எதுக்கு (for what), எதாவது (anything/which)
+      if (/^(எந்த|என்ன|எப்ப|எப்போ|எங்க|எங்கே|யாரு|யார்|எவ்வளவு|எப்படி|ஏன்|எது|எதுக்கு|எதாவது|எத்தனை|எத்தன|எவன்|எவள்|எவங்க)$/.test(last)) return true;
+      // Hindi interrogatives: क्या, कब, कहाँ, कैसे, कौन, कितना, क्यों
+      if (/^(क्या|कब|कहाँ|कैसे|कौन|कितना|क्यों|किसका|किसकी|किसके)$/.test(last)) return true;
       return false;
     }
 
