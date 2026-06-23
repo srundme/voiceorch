@@ -3766,10 +3766,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       asrLanguage:              agent.asrLanguage ?? "",
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
-      webhookUrl:               agent.webhookUrl ?? "",
-      // Note: legacy http:// values are kept so the user can see and correct them;
-      // an inline error is set below after reset so it surfaces on the Advanced tab.
-      webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
+      webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
+      webhookSecret:            (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? ((agent as any).agentConfig?.webhookSecret ?? "") : "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
