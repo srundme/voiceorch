@@ -1,0 +1,500 @@
+[
+  {
+    "id": 5815,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:18.776Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5816,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:18.781Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Tuesday, June 23, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• location_interest: Chennai  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller was asked by the agent if they were looking for property in Chennai. The caller responded affirmatively.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which ma"
+    },
+    "metadata": null
+  },
+  {
+    "id": 5817,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:18.781Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 1
+      },
+      "factCount": 1,
+      "facts": {
+        "location_interest": "Chennai"
+      },
+      "recentCallsCount": 1
+    },
+    "metadata": null
+  },
+  {
+    "id": 5818,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:29.100Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா மேடம் தேடிக்கிட்டுருக்க."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5820,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:29.203Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5819,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:29.203Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 2:15 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• location_interest: Chennai  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller was asked by the agent if they were looking for property in Chennai. The caller responded affirmatively.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"Thi",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5821,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:29.704Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 504,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20480,
+      "textLength": 6,
+      "firstByteMs": 160
+    },
+    "metadata": null
+  },
+  {
+    "id": 5822,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:30.119Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 916,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நீங்க எந்த ஏரியால property தேடுறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 4882,
+      "outputTokens": 15,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5823,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:30.119Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நீங்க எந்த ஏரியால property தேடுறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5824,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:30.881Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 762,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 97278,
+      "textLength": 42,
+      "firstByteMs": 153
+    },
+    "metadata": null
+  },
+  {
+    "id": 5825,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:52.256Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "நான் சென்னைல தான் தேடுறேன். மேடம்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5826,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:52.358Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "பாக்கறேன்..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5827,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:52.358Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 2:15 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• location_interest: Chennai  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller was asked by the agent if they were looking for property in Chennai. The caller responded affirmatively.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"Thi",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5828,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:52.869Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 513,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 23040,
+      "textLength": 12,
+      "firstByteMs": 174
+    },
+    "metadata": null
+  },
+  {
+    "id": 5829,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:53.369Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1009,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, உங்க பேர் என்னனு சொல்ல முடியுமா?"
+    },
+    "metadata": {
+      "inputTokens": 9793,
+      "outputTokens": 25,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5830,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:53.369Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்க பேர் என்னனு சொல்ல முடியுமா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5831,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:45:54.135Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 766,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81918,
+      "textLength": 37,
+      "firstByteMs": 218
+    },
+    "metadata": null
+  },
+  {
+    "id": 5832,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:00.579Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "என் பேரு குமார்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5833,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:00.682Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆமா, ஆமா..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5834,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:00.682Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 2:16 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 1  |  Last: today\n\nKNOWN FACTS:\n• location_interest: Chennai  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller was asked by the agent if they were looking for property in Chennai. The caller responded affirmatively.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"Thi",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5835,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:01.182Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 502,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 38400,
+      "textLength": 11,
+      "firstByteMs": 139
+    },
+    "metadata": null
+  },
+  {
+    "id": 5836,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:01.543Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி குமார்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5838,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:01.585Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 903,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "<emotion value=\"curious\">சரி குமார்.</emotion> <break time=\"100ms\"/> நீங்க apartment, villa-வா இல்ல plot-ஆ தேடுறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 14721,
+      "outputTokens": 64,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5837,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:01.585Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க apartment, villa-வா இல்ல plot-ஆ தேடுறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5839,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:02.088Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 547,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 28160,
+      "textLength": 11,
+      "firstByteMs": 166
+    },
+    "metadata": null
+  },
+  {
+    "id": 5840,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:02.506Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 922,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 115198,
+      "textLength": 48,
+      "firstByteMs": 172
+    },
+    "metadata": null
+  },
+  {
+    "id": 5842,
+    "callId": 337,
+    "agentId": 5,
+    "ts": "2026-06-23T08:46:08.451Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "disconnected",
+      "durationSeconds": 49,
+      "turns": 4
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]
