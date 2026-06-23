@@ -1,0 +1,632 @@
+[
+  {
+    "id": 6587,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:30.686Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "sarvam",
+      "llmProvider": "openai",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6588,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:30.705Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthikeyan",
+        "callCount": 64
+      },
+      "factCount": 28,
+      "facts": {
+        "preferred_site_visit_time": "5:30 PM",
+        "looking_for_property_in": "Chennai",
+        "visit_timing_comfortable": "yes",
+        "site_visit_time_confirmed": "5 PM",
+        "site_visit_time_request": "5 PM",
+        "visit_scheduled_date": "tomorrow",
+        "visit_scheduled_time": "10 AM",
+        "budget": "75 lakhs",
+        "location": "Madhavaram",
+        "currently_searching_for_villa": "yes",
+        "interested_in_location": "Madhavaram",
+        "interested_in": "villa",
+        "call_back_time": "11 AM",
+        "call_back_day": "tomorrow",
+        "call_back_requested": "yes",
+        "name": "Karthikeyan",
+        "location_of_interest": "Madhavaram",
+        "interested_in_plots_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_for_villa": "75 lakhs",
+        "area_of_interest": "Vadapalani",
+        "interested_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_range": "7.5 lakh",
+        "property_type": "plot",
+        "looking_for_property_in_chennai": "yes",
+        "property_type_of_interest": "villa",
+        "looking_for_property": "yes",
+        "interested_in_property_in_chennai": "true",
+        "policy_interest": "வீடு"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 6589,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:30.705Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Tuesday, June 23, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 64  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm or update details regarding his Madhavaram villa site visit or to request more information about available properties.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_site_visit_time: 5:30 PM  [today]\n• looking_for_property_in: Chennai  [today]\n• visit_timing_comfortable: yes  [today]\n• site_visit_time_confirmed: 5 PM  [today]\n• site_visit_time_request: 5 PM  [today]\n• visit_scheduled_date: tomorrow  [today]\n• visit_scheduled_time: 10"
+    },
+    "metadata": null
+  },
+  {
+    "id": 6590,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:49.524Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "எதுவுமே change பண்ண வேண்டாம் madam.",
+      "endDetectToFinalMs": 128
+    },
+    "metadata": null
+  },
+  {
+    "id": 6591,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:49.626Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 5:11 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 64  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm or update details regarding his Madhavaram villa site visit or to request more information about available properties.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_site_visit_time: 5:30 PM  [today]\n• looking_for_property_in: Chennai  [today]\n• ",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6592,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:51.146Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி Karthikeyan sir"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6593,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:51.259Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "okayy. Madhavaram area்ல villa site visit confirm ஆகி இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6594,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:51.439Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1812,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி Karthikeyan sir, okayy. Madhavaram area்ல villa site visit confirm ஆகி இருக்கு. உங்களுக்கு அதைவிட வேற எந்த locationல property interest இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 5548,
+      "outputTokens": 41,
+      "model": "gpt-4.1"
+    }
+  },
+  {
+    "id": 6595,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:51.439Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு அதைவிட வேற எந்த locationல property interest இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6596,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:51.840Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 694,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 53758,
+      "textLength": 19,
+      "firstByteMs": 260
+    },
+    "metadata": null
+  },
+  {
+    "id": 6597,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:52.228Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 971,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 115198,
+      "textLength": 62,
+      "firstByteMs": 279
+    },
+    "metadata": null
+  },
+  {
+    "id": 6598,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:41:52.401Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 964,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 110080,
+      "textLength": 63,
+      "firstByteMs": 312
+    },
+    "metadata": null
+  },
+  {
+    "id": 6599,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:01.066Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "சும்மா த காய்",
+      "endDetectToFinalMs": 284
+    },
+    "metadata": null
+  },
+  {
+    "id": 6600,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:01.268Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 5:12 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 64  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm or update details regarding his Madhavaram villa site visit or to request more information about available properties.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_site_visit_time: 5:30 PM  [today]\n• looking_for_property_in: Chennai  [today]\n• ",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6601,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:02.487Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1218,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, okayy Karthikeyan sir. இன்னும் உங்களுக்கு Chennai-ல வேற ஏதாவது area பத்தி ரொம்ப விருப்பம் இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 11152,
+      "outputTokens": 78,
+      "model": "gpt-4.1"
+    }
+  },
+  {
+    "id": 6602,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:02.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, okayy Karthikeyan sir. இன்னும் உங்களுக்கு Chennai-ல வேற ஏதாவது area பத்தி ரொம்ப விருப்பம் இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6603,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:03.625Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1139,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 184318,
+      "textLength": 103,
+      "firstByteMs": 159
+    },
+    "metadata": null
+  },
+  {
+    "id": 6604,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:34.396Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "நான் கொஞ்சம் யோசித்து விட்டு சொல்லவா",
+      "endDetectToFinalMs": 198
+    },
+    "metadata": null
+  },
+  {
+    "id": 6605,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:34.588Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "பாக்கறேன்..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6606,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:34.607Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 5:12 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 64  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm or update details regarding his Madhavaram villa site visit or to request more information about available properties.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_site_visit_time: 5:30 PM  [today]\n• looking_for_property_in: Chennai  [today]\n• ",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6607,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.063Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 482,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 23040,
+      "textLength": 12,
+      "firstByteMs": 176
+    },
+    "metadata": null
+  },
+  {
+    "id": 6608,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.631Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி sir, நீங்க யோசிச்சு பாக்குங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6609,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.795Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு நேரம் எடுத்துக்குங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6610,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.869Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வேணும் அப்புறம் contact பண்ணுங்க."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6611,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.897Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you so much!"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6612,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.925Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1341,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி sir, நீங்க யோசிச்சு பாக்குங்க. உங்களுக்கு நேரம் எடுத்துக்குங்க. வேணும் அப்புறம் contact பண்ணுங்க. Thank you so much! Have a nice day."
+    },
+    "metadata": {
+      "inputTokens": 16814,
+      "outputTokens": 124,
+      "model": "gpt-4.1"
+    }
+  },
+  {
+    "id": 6613,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:35.925Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Have a nice day."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6614,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:36.378Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 748,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 71678,
+      "textLength": 34,
+      "firstByteMs": 158
+    },
+    "metadata": null
+  },
+  {
+    "id": 6615,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:36.383Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 589,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 58878,
+      "textLength": 32,
+      "firstByteMs": 151
+    },
+    "metadata": null
+  },
+  {
+    "id": 6616,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:36.440Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 517,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 16,
+      "firstByteMs": 155
+    },
+    "metadata": null
+  },
+  {
+    "id": 6617,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:36.550Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 683,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 69118,
+      "textLength": 33,
+      "firstByteMs": 164
+    },
+    "metadata": null
+  },
+  {
+    "id": 6618,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:36.619Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 724,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 38400,
+      "textLength": 18,
+      "firstByteMs": 292
+    },
+    "metadata": null
+  },
+  {
+    "id": 6619,
+    "callId": 384,
+    "agentId": 5,
+    "ts": "2026-06-23T11:42:49.391Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "disconnected",
+      "durationSeconds": 78,
+      "turns": 4
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]
