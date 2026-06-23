@@ -514,7 +514,12 @@ export async function handleWebCallWebSocket(
             const semanticOverride = isSemanticInterrupt(text);
             const wc = text.trim().split(/\s+/).length;
             if (!semanticOverride && wc < wordsForInterruption) {
-              logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: ignoring short STT transcript during speaking");
+              // Too short to interrupt — save it so it can be replayed as the user's
+              // turn once the agent finishes speaking naturally. Without this, short
+              // affirmatives like "ஆமாங்க" / "சரி" said during the agent's speech are
+              // silently lost and the caller has to repeat themselves ("say it twice" bug).
+              pendingShortUtterance = text;
+              logger.info({ callId, text, wc, wordsForInterruption }, "Webcall: queuing short utterance for post-speech replay");
               return;
             }
             // Start echo-grace gate (parity with the energy-based path's inStartGrace).
@@ -921,6 +926,7 @@ export async function handleWebCallWebSocket(
   // agent's own speaker echo leaks past the (long-expired) start grace and trips a false
   // barge-in mid-utterance, clipping the response. Semantic interrupts ("stop") bypass it.
   let echoGraceUntil = 0;
+  let pendingShortUtterance: string | null = null; // short transcript discarded during speaking — replayed after agent finishes
   let interrupted = false;          // barge-in flag; checked inside audio loop
   let bargeInFrames = 0;           // high-RMS frames accumulated while agent is speaking
   let bargeInLowEnergyFrames = 0;  // consecutive LOW-energy frames since the last high-energy frame
@@ -2345,6 +2351,7 @@ export async function handleWebCallWebSocket(
 
       if (interrupted) {
         // Barge-in: immediately process whatever the user said
+        pendingShortUtterance = null; // barge-in supersedes any queued short utterance
         logger.info({ callId }, "Barge-in detected — processing user interruption");
         if (audioChunks.length > 0) void process();
       } else if (!closed) {
@@ -2355,6 +2362,15 @@ export async function handleWebCallWebSocket(
         if (audioChunks.length > 0) {
           logger.info({ callId, dropped: audioChunks.length }, "Discarding during-speech audio (no barge-in triggered)");
           audioChunks.splice(0);
+        }
+        // Replay any short utterance that was said during the agent's speech but was
+        // too short to trigger a barge-in. Process it now as the user's actual turn.
+        if (pendingShortUtterance) {
+          const queued = pendingShortUtterance;
+          pendingShortUtterance = null;
+          logger.info({ callId, text: queued }, "Webcall: replaying queued short utterance as user turn");
+          streamingTranscriptPending = queued;
+          void process();
         }
         // STEP 0b diag: natural turn-end ordering of (a) final-sentence TTS done,
         // (b) last audio frame handed to ws.send, (c) flip to "listening" — plus the
