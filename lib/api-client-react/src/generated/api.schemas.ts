@@ -217,6 +217,17 @@ export const AgentVersionStatus = {
 } as const;
 
 /**
+ * draft = auto-saved on every Save; published = manually published snapshot
+ */
+export type AgentVersionSnapshotType = typeof AgentVersionSnapshotType[keyof typeof AgentVersionSnapshotType];
+
+
+export const AgentVersionSnapshotType = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+/**
  * Full copy of all agent columns at publish time
  */
 export type AgentVersionSnapshot = { [key: string]: unknown };
@@ -225,13 +236,15 @@ export interface AgentVersion {
   id: number;
   agentId: number;
   userId: string;
-  /** Auto-assigned version label, e.g. v1, v2, v3 */
+  /** Auto-assigned version label, e.g. v1, v2, draft-1 */
   versionNumber: string;
   versionName: string;
   commitDescription: string;
   /** @nullable */
   releaseNotes?: string | null;
   status: AgentVersionStatus;
+  /** draft = auto-saved on every Save; published = manually published snapshot */
+  snapshotType: AgentVersionSnapshotType;
   /** Full copy of all agent columns at publish time */
   snapshot: AgentVersionSnapshot;
   /**

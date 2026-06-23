@@ -1051,6 +1051,78 @@ export const usePublishAgentVersion = <TError = ErrorType<void>,
       return useMutation(getPublishAgentVersionMutationOptions(options));
     }
 
+export const getDeleteAgentVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/agents/${id}/versions/${versionId}`
+}
+
+/**
+ * @summary Delete a draft version snapshot (draft snapshots only)
+ */
+export const deleteAgentVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAgentVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAgentVersionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAgentVersion>>, TError,{id: number;versionId: number}, TContext> => {
+
+const mutationKey = ['deleteAgentVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAgentVersion>>, {id: number;versionId: number}> = (props) => {
+          const {id,versionId} = props ?? {};
+
+          return  deleteAgentVersion(id,versionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAgentVersionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAgentVersion>>>
+
+    export type DeleteAgentVersionMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a draft version snapshot (draft snapshots only)
+ */
+export const useDeleteAgentVersion = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAgentVersion>>,
+        TError,
+        {id: number;versionId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAgentVersionMutationOptions(options));
+    }
+
 export const getGetAgentVersionUrl = (id: number,
     versionId: number,) => {
 

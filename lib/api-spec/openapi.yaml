@@ -283,6 +283,28 @@ paths:
           description: Agent not found
 
   /agents/{id}/versions/{versionId}:
+    delete:
+      operationId: deleteAgentVersion
+      tags: [agents]
+      summary: Delete a draft version snapshot (draft snapshots only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Draft version deleted
+        "400":
+          description: Cannot delete a published/production version
+        "404":
+          description: Not found
     get:
       operationId: getAgentVersion
       tags: [agents]
@@ -5964,7 +5986,7 @@ components:
 
     AgentVersion:
       type: object
-      required: [id, agentId, userId, versionNumber, versionName, commitDescription, status, snapshot, createdAt, updatedAt]
+      required: [id, agentId, userId, versionNumber, versionName, commitDescription, status, snapshotType, snapshot, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -5974,7 +5996,7 @@ components:
           type: string
         versionNumber:
           type: string
-          description: "Auto-assigned version label, e.g. v1, v2, v3"
+          description: "Auto-assigned version label, e.g. v1, v2, draft-1"
         versionName:
           type: string
         commitDescription:
@@ -5984,6 +6006,10 @@ components:
         status:
           type: string
           enum: [draft, published, production, archived, restored, deprecated]
+        snapshotType:
+          type: string
+          enum: [draft, published]
+          description: "draft = auto-saved on every Save; published = manually published snapshot"
         snapshot:
           type: object
           description: "Full copy of all agent columns at publish time"

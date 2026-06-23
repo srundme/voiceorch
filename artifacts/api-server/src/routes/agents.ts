@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
-import { eq, and, count, desc, isNull, inArray, max } from "drizzle-orm";
-import { db, agentsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, type AgentConfig } from "@workspace/db";
+import { eq, and, count, desc, asc, isNull, inArray, max } from "drizzle-orm";
+import { db, agentsTable, agentVersionsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, type AgentConfig } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -316,6 +316,93 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   }
   const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
   res.json(UpdateAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
+
+  // Fire-and-forget: auto-save a draft snapshot after every successful PATCH.
+  // Failures must never surface to the user or affect the save result.
+  void (async () => {
+    try {
+      const DRAFT_LIMIT = 100;
+      const DRAFT_TRACKED_FIELDS: Array<{ keys: string[]; label: string }> = [
+        { keys: ["systemPrompt"], label: "Prompt Modified" },
+        { keys: ["ttsVoice", "ttsProvider", "ttsModel"], label: "Voice Updated" },
+        { keys: ["llmProvider", "llmModel", "temperature"], label: "LLM Changed" },
+        { keys: ["asrProvider", "asrModel", "asrLanguage"], label: "ASR Changed" },
+        { keys: ["telephonyProvider"], label: "Telephony Changed" },
+        { keys: ["webhookUrl"], label: "Webhook Updated" },
+        { keys: ["tools"], label: "Tools Modified" },
+        { keys: ["knowledgeSourceIds"], label: "Knowledge Base Updated" },
+        { keys: ["greetingMessage", "endCallPhrases"], label: "Conversation Updated" },
+        { keys: ["maxDuration", "silenceTimeoutSeconds", "language"], label: "Call Settings Changed" },
+        { keys: ["agentConfig"], label: "Advanced Config Updated" },
+      ];
+
+      // Detect changes vs. the latest snapshot (any type)
+      const [latestVersion] = await db
+        .select()
+        .from(agentVersionsTable)
+        .where(eq(agentVersionsTable.agentId, agent.id))
+        .orderBy(desc(agentVersionsTable.createdAt))
+        .limit(1);
+
+      const prevSnap = latestVersion ? (latestVersion.snapshot as Record<string, unknown>) : {};
+      const curSnap: Record<string, unknown> = { ...agent };
+      const changedLabels: string[] = [];
+      for (const { keys, label } of DRAFT_TRACKED_FIELDS) {
+        for (const key of keys) {
+          if (JSON.stringify(prevSnap[key] ?? null) !== JSON.stringify(curSnap[key] ?? null)) {
+            changedLabels.push(label);
+            break;
+          }
+        }
+      }
+      const changeSummary = changedLabels.length === 0
+        ? "Saved"
+        : changedLabels.length === 1
+          ? changedLabels[0]!
+          : "Multiple Changes";
+
+      // Sequential draft number across all versions
+      const [{ totalCnt }] = await db
+        .select({ totalCnt: count() })
+        .from(agentVersionsTable)
+        .where(eq(agentVersionsTable.agentId, agent.id));
+      const draftNumber = Number(totalCnt) + 1;
+
+      await db
+        .insert(agentVersionsTable)
+        .values({
+          agentId: agent.id,
+          userId: clerkId,
+          versionNumber: `draft-${draftNumber}`,
+          versionName: changeSummary,
+          commitDescription: "Auto-saved draft",
+          status: "draft",
+          snapshotType: "draft",
+          snapshot: curSnap,
+          changedFields: changedLabels.length > 0 ? changedLabels : null,
+          publishedBy: null,
+        });
+
+      // Enforce 100-draft retention: delete oldest drafts beyond the limit
+      const draftRows = await db
+        .select({ id: agentVersionsTable.id })
+        .from(agentVersionsTable)
+        .where(and(
+          eq(agentVersionsTable.agentId, agent.id),
+          eq(agentVersionsTable.snapshotType, "draft"),
+        ))
+        .orderBy(asc(agentVersionsTable.createdAt));
+
+      if (draftRows.length > DRAFT_LIMIT) {
+        const toDelete = draftRows.slice(0, draftRows.length - DRAFT_LIMIT).map(r => r.id);
+        await db
+          .delete(agentVersionsTable)
+          .where(inArray(agentVersionsTable.id, toDelete));
+      }
+    } catch (err) {
+      req.log.warn({ err }, "auto-draft snapshot failed (non-fatal)");
+    }
+  })();
 });
 
 router.delete("/agents/:id", requireAuth, async (req, res): Promise<void> => {

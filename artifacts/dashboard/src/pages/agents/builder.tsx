@@ -23,7 +23,7 @@ import {
   useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
   useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
-  useArchiveAgentVersion,
+  useArchiveAgentVersion, useDeleteAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
 } from "@workspace/api-client-react";
 import type { AgentVersion } from "@workspace/api-client-react";
@@ -44,7 +44,7 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
@@ -3261,6 +3261,13 @@ function CompareView({
   });
 
   const otherVersions = allVersions.filter(v => v.id !== baseVersion.id);
+  const otherPublished = otherVersions.filter(v => (v as any).snapshotType !== "draft");
+  const otherDrafts = otherVersions.filter(v => (v as any).snapshotType === "draft");
+
+  const versionLabel = (v: VersionSummary) =>
+    (v as any).snapshotType === "draft"
+      ? `${v.versionNumber} · ${v.versionName}`
+      : `${v.versionNumber}: ${v.versionName}`;
 
   const renderValue = (val: unknown): string => {
     if (val === null || val === undefined) return "—";
@@ -3322,17 +3329,34 @@ function CompareView({
             <span className="text-[11px] text-muted-foreground">Ignore Formatting</span>
           </label>
           <span className="text-xs text-muted-foreground">Comparing</span>
-          <Badge variant="outline" className="text-[10px]">{baseVersion.versionNumber}: {baseVersion.versionName}</Badge>
+          <Badge variant="outline" className="text-[10px]">
+            {(baseVersion as any).snapshotType === "draft"
+              ? `${baseVersion.versionNumber} · ${baseVersion.versionName}`
+              : `${baseVersion.versionNumber}: ${baseVersion.versionName}`}
+          </Badge>
           <span className="text-xs text-muted-foreground">vs</span>
           <Select value={compareId != null ? String(compareId) : "__none__"} onValueChange={v => setCompareId(v === "__none__" ? null : parseInt(v, 10))}>
-            <SelectTrigger className="h-7 w-48 text-xs">
+            <SelectTrigger className="h-7 w-56 text-xs">
               <SelectValue placeholder="Pick version…" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__" className="text-xs">Pick version…</SelectItem>
-              {otherVersions.map(v => (
-                <SelectItem key={v.id} value={String(v.id)} className="text-xs">{v.versionNumber}: {v.versionName}</SelectItem>
-              ))}
+              {otherPublished.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-1">Published</SelectLabel>
+                  {otherPublished.map(v => (
+                    <SelectItem key={v.id} value={String(v.id)} className="text-xs">{versionLabel(v)}</SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {otherDrafts.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-1">Draft History</SelectLabel>
+                  {otherDrafts.map(v => (
+                    <SelectItem key={v.id} value={String(v.id)} className="text-xs">{versionLabel(v)}</SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -3467,13 +3491,34 @@ function VersionCard({
 
 /* ── Versions tab ────────────────────────────────────────────────────────────── */
 
+function groupDraftsByDate(drafts: VersionSummary[]): Array<{ label: string; items: VersionSummary[] }> {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const fmt = (d: Date) => d.toDateString();
+
+  const groups: Map<string, VersionSummary[]> = new Map();
+  for (const v of drafts) {
+    const d = new Date(v.createdAt);
+    let label: string;
+    if (fmt(d) === fmt(today)) label = "Today";
+    else if (fmt(d) === fmt(yesterday)) label = "Yesterday";
+    else label = format(d, "MMMM d, yyyy");
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(v);
+  }
+  return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
+}
+
 function VersionsTab({ agentId }: { agentId: number }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
+  const [activeSubTab, setActiveSubTab] = useState<"published" | "drafts">("published");
   const [compareVersion, setCompareVersion] = useState<AgentVersion | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<VersionSummary | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<VersionSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<VersionSummary | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
 
   const { data: listData, isLoading } = useListAgentVersions(agentId);
@@ -3483,10 +3528,17 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
   const restore = useRestoreAgentVersion();
   const archive = useArchiveAgentVersion();
+  const deleteDraft = useDeleteAgentVersion();
 
-  const activeVersions = versions.filter(v => v.status !== "archived");
-  const archivedVersions = versions.filter(v => v.status === "archived");
-  const productionVersion = versions.find(v => v.status === "production");
+  const publishedVersions = versions.filter(v => (v as any).snapshotType !== "draft");
+  const draftVersions = [...versions.filter(v => (v as any).snapshotType === "draft")]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const activePublished = publishedVersions.filter(v => v.status !== "archived");
+  const archivedVersions = publishedVersions.filter(v => v.status === "archived");
+  const productionVersion = publishedVersions.find(v => v.status === "production");
+
+  const draftGroups = groupDraftsByDate(draftVersions);
 
   const handleConfirmRestore = async () => {
     if (!restoreTarget) return;
@@ -3514,6 +3566,18 @@ function VersionsTab({ agentId }: { agentId: number }) {
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteDraft.mutateAsync({ id: agentId, versionId: deleteTarget.id });
+      queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
+      toast({ title: "Draft deleted", description: `${deleteTarget.versionNumber} has been permanently removed.` });
+      setDeleteTarget(null);
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
   const usagePct = Math.min((publishedCount / limit) * 100, 100);
   const isNearLimit = publishedCount >= 8;
 
@@ -3535,7 +3599,6 @@ function VersionsTab({ agentId }: { agentId: number }) {
         <div className="flex items-center gap-2 text-sm font-semibold">
           <History className="h-4 w-4 text-primary" />
           Version History
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5 ml-1">{versions.length}</Badge>
         </div>
         {productionVersion && (
           <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => setRestoreTarget(productionVersion)}>
@@ -3544,99 +3607,215 @@ function VersionsTab({ agentId }: { agentId: number }) {
         )}
       </div>
 
-      {/* Usage indicator */}
-      {!isLoading && versions.length > 0 && (
-        <div className="px-5 py-3 border-b border-border/40 shrink-0 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-muted-foreground font-medium">
-              <span className={cn("font-bold", publishedCount >= limit ? "text-destructive" : publishedCount >= 8 ? "text-amber-400" : "text-foreground")}>
-                {publishedCount}
-              </span>
-              {" / "}{limit} Versions Used
-            </span>
-            <span className="text-[10px] text-muted-foreground/60">{archivedVersions.length} archived</span>
-          </div>
-          <Progress value={usagePct} className={cn("h-1.5", publishedCount >= limit ? "[&>div]:bg-destructive" : publishedCount >= 8 ? "[&>div]:bg-amber-400" : "")} />
-        </div>
-      )}
+      {/* Sub-tabs */}
+      <div className="flex border-b border-border/60 shrink-0 px-1">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("published")}
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            activeSubTab === "published"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Published Versions
+          <Badge variant="outline" className="text-[10px] h-4 px-1">{activePublished.length}</Badge>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("drafts")}
+          className={cn(
+            "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            activeSubTab === "drafts"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Draft History
+          <Badge variant="outline" className="text-[10px] h-4 px-1">{draftVersions.length}</Badge>
+        </button>
+      </div>
 
-      {/* Warning banner */}
-      {isNearLimit && publishedCount < limit && (
-        <div className="mx-5 mt-3 shrink-0 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
-          <Info className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-amber-400/90 leading-relaxed">
-            <strong>Approaching limit:</strong> You have {publishedCount} of {limit} published versions used. Consider archiving older versions to keep publishing new ones.
-          </p>
-        </div>
-      )}
-
-      {/* Version list */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoading && (
-          <div className="flex items-center justify-center h-40">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        )}
-        {!isLoading && versions.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-60 gap-3 text-center px-6">
-            <div className="h-12 w-12 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-center">
-              <History className="h-6 w-6 text-muted-foreground/40" />
+      {/* Published Versions sub-tab */}
+      {activeSubTab === "published" && (
+        <>
+          {/* Usage indicator */}
+          {!isLoading && publishedVersions.length > 0 && (
+            <div className="px-5 py-3 border-b border-border/40 shrink-0 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  <span className={cn("font-bold", publishedCount >= limit ? "text-destructive" : publishedCount >= 8 ? "text-amber-400" : "text-foreground")}>
+                    {publishedCount}
+                  </span>
+                  {" / "}{limit} Versions Used
+                </span>
+                <span className="text-[10px] text-muted-foreground/60">{archivedVersions.length} archived</span>
+              </div>
+              <Progress value={usagePct} className={cn("h-1.5", publishedCount >= limit ? "[&>div]:bg-destructive" : publishedCount >= 8 ? "[&>div]:bg-amber-400" : "")} />
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">No versions yet</p>
-              <p className="text-xs text-muted-foreground">Click <strong>Publish</strong> in the toolbar to create your first stable snapshot.</p>
+          )}
+          {/* Warning banner */}
+          {isNearLimit && publishedCount < limit && (
+            <div className="mx-5 mt-3 shrink-0 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3.5 py-2.5">
+              <Info className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-400/90 leading-relaxed">
+                <strong>Approaching limit:</strong> You have {publishedCount} of {limit} published versions used. Consider archiving older versions to keep publishing new ones.
+              </p>
             </div>
-          </div>
-        )}
-        {!isLoading && activeVersions.length > 0 && (
-          <div className="divide-y divide-border/40">
-            {activeVersions.map((v) => (
-              <VersionCard
-                key={v.id}
-                v={v}
-                onCompare={() => setCompareVersion(v as AgentVersion)}
-                onRestore={() => setRestoreTarget(v)}
-                onArchive={() => setArchiveTarget(v)}
-                restorePending={restore.isPending}
-                archivePending={archive.isPending}
-                showArchiveAction={v.status !== "production"}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Archived versions section */}
-        {!isLoading && archivedVersions.length > 0 && (
-          <div className="mt-2">
-            <button
-              type="button"
-              onClick={() => setArchivedOpen(o => !o)}
-              className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border-t border-border/40 hover:bg-muted/10"
-            >
-              {archivedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              <Archive className="h-3 w-3" />
-              Archived Versions
-              <Badge variant="outline" className="text-[10px] h-4 px-1 ml-1">{archivedVersions.length}</Badge>
-              <span className="ml-auto text-[10px] text-muted-foreground/50">Don&apos;t count toward limit</span>
-            </button>
-            {archivedOpen && (
-              <div className="divide-y divide-border/30 border-t border-border/30 bg-muted/5">
-                {archivedVersions.map((v) => (
+          )}
+          <div className="flex-1 overflow-y-auto">
+            {isLoading && (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!isLoading && publishedVersions.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-60 gap-3 text-center px-6">
+                <div className="h-12 w-12 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-center">
+                  <History className="h-6 w-6 text-muted-foreground/40" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">No published versions yet</p>
+                  <p className="text-xs text-muted-foreground">Click <strong>Publish</strong> in the toolbar to create your first stable snapshot.</p>
+                </div>
+              </div>
+            )}
+            {!isLoading && activePublished.length > 0 && (
+              <div className="divide-y divide-border/40">
+                {activePublished.map((v) => (
                   <VersionCard
                     key={v.id}
                     v={v}
                     onCompare={() => setCompareVersion(v as AgentVersion)}
                     onRestore={() => setRestoreTarget(v)}
+                    onArchive={() => setArchiveTarget(v)}
                     restorePending={restore.isPending}
                     archivePending={archive.isPending}
-                    showArchiveAction={false}
+                    showArchiveAction={v.status !== "production"}
                   />
                 ))}
               </div>
             )}
+            {/* Archived versions section */}
+            {!isLoading && archivedVersions.length > 0 && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setArchivedOpen(o => !o)}
+                  className="w-full flex items-center gap-2 px-5 py-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border-t border-border/40 hover:bg-muted/10"
+                >
+                  {archivedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  <Archive className="h-3 w-3" />
+                  Archived Versions
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 ml-1">{archivedVersions.length}</Badge>
+                  <span className="ml-auto text-[10px] text-muted-foreground/50">Don&apos;t count toward limit</span>
+                </button>
+                {archivedOpen && (
+                  <div className="divide-y divide-border/30 border-t border-border/30 bg-muted/5">
+                    {archivedVersions.map((v) => (
+                      <VersionCard
+                        key={v.id}
+                        v={v}
+                        onCompare={() => setCompareVersion(v as AgentVersion)}
+                        onRestore={() => setRestoreTarget(v)}
+                        restorePending={restore.isPending}
+                        archivePending={archive.isPending}
+                        showArchiveAction={false}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
+
+      {/* Draft History sub-tab */}
+      {activeSubTab === "drafts" && (
+        <div className="flex-1 overflow-y-auto">
+          {isLoading && (
+            <div className="flex items-center justify-center h-40">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {!isLoading && draftVersions.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-60 gap-3 text-center px-6">
+              <div className="h-12 w-12 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-center">
+                <GitBranch className="h-6 w-6 text-muted-foreground/40" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">No draft history yet</p>
+                <p className="text-xs text-muted-foreground">Every time you save the agent, a draft snapshot is automatically created here.</p>
+              </div>
+            </div>
+          )}
+          {!isLoading && draftGroups.map(({ label, items }) => (
+            <div key={label} className="mb-1">
+              <div className="px-5 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 bg-muted/10 border-y border-border/30">
+                {label}
+              </div>
+              <div className="divide-y divide-border/30">
+                {items.map((v) => (
+                  <div key={v.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/10 transition-colors">
+                    <div className="shrink-0 text-[10px] font-mono text-muted-foreground/60 w-10 text-right">
+                      {format(new Date(v.createdAt), "HH:mm")}
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-medium truncate">{v.versionName}</span>
+                      {(v as any).changedFields && ((v as any).changedFields as string[]).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {((v as any).changedFields as string[]).slice(0, 3).map((label: string) => (
+                            <span key={label} className="inline-flex items-center rounded-full border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              {label}
+                            </span>
+                          ))}
+                          {((v as any).changedFields as string[]).length > 3 && (
+                            <span className="inline-flex items-center rounded-full border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              +{((v as any).changedFields as string[]).length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        type="button" variant="ghost" size="sm"
+                        className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2"
+                        onClick={() => setCompareVersion(v as AgentVersion)}
+                      >
+                        <ArrowLeftRight className="h-3 w-3" /> Compare
+                      </Button>
+                      <Button
+                        type="button" variant="ghost" size="sm"
+                        className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2"
+                        onClick={() => setRestoreTarget(v)}
+                        disabled={restore.isPending}
+                      >
+                        <RotateCcw className="h-3 w-3" /> Restore
+                      </Button>
+                      <Button
+                        type="button" variant="ghost" size="sm"
+                        className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-destructive px-2"
+                        onClick={() => setDeleteTarget(v)}
+                        disabled={deleteDraft.isPending}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {!isLoading && draftVersions.length > 0 && (
+            <p className="text-[10px] text-muted-foreground/40 text-center py-3 px-5">
+              Up to 100 drafts kept · oldest auto-deleted when limit is reached
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Restore confirmation dialog */}
       <Dialog open={!!restoreTarget} onOpenChange={open => { if (!open) setRestoreTarget(null); }}>
@@ -3675,6 +3854,27 @@ function VersionsTab({ agentId }: { agentId: number }) {
             <Button type="button" disabled={archive.isPending} onClick={handleConfirmArchive} className="gap-1.5">
               <Archive className="h-3.5 w-3.5" />
               {archive.isPending ? "Archiving…" : "Archive Version"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete draft confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-destructive" /> Delete Draft Snapshot
+            </DialogTitle>
+            <DialogDescription>
+              Permanently delete draft <strong>{deleteTarget?.versionNumber}</strong> ({deleteTarget?.versionName})? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button type="button" variant="destructive" disabled={deleteDraft.isPending} onClick={handleConfirmDelete} className="gap-1.5">
+              <Trash2 className="h-3.5 w-3.5" />
+              {deleteDraft.isPending ? "Deleting…" : "Delete Draft"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,6 +10,7 @@ export const agentVersionsTable = pgTable("agent_versions", {
   commitDescription: text("commit_description").notNull(),
   releaseNotes: text("release_notes"),
   status: text("status").notNull().default("draft"),
+  snapshotType: text("snapshot_type").notNull().default("published"),
   snapshot: jsonb("snapshot").notNull(),
   changedFields: jsonb("changed_fields"),
   publishedBy: text("published_by"),

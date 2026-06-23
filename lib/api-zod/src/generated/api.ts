@@ -713,11 +713,12 @@ export const ListAgentVersionsResponse = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "userId": zod.string(),
-  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, draft-1'),
   "versionName": zod.string(),
   "commitDescription": zod.string(),
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshotType": zod.enum(['draft', 'published']).describe('draft = auto-saved on every Save; published = manually published snapshot'),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
   "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),
@@ -753,6 +754,15 @@ export const PublishAgentVersionBody = zod.object({
 
 
 /**
+ * @summary Delete a draft version snapshot (draft snapshots only)
+ */
+export const DeleteAgentVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+
+/**
  * @summary Fetch a single agent version snapshot
  */
 export const GetAgentVersionParams = zod.object({
@@ -764,11 +774,12 @@ export const GetAgentVersionResponse = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "userId": zod.string(),
-  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, draft-1'),
   "versionName": zod.string(),
   "commitDescription": zod.string(),
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshotType": zod.enum(['draft', 'published']).describe('draft = auto-saved on every Save; published = manually published snapshot'),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
   "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),
@@ -799,11 +810,12 @@ export const ArchiveAgentVersionResponse = zod.object({
   "id": zod.number(),
   "agentId": zod.number(),
   "userId": zod.string(),
-  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, v3'),
+  "versionNumber": zod.string().describe('Auto-assigned version label, e.g. v1, v2, draft-1'),
   "versionName": zod.string(),
   "commitDescription": zod.string(),
   "releaseNotes": zod.string().nullish(),
   "status": zod.enum(['draft', 'published', 'production', 'archived', 'restored', 'deprecated']),
+  "snapshotType": zod.enum(['draft', 'published']).describe('draft = auto-saved on every Save; published = manually published snapshot'),
   "snapshot": zod.record(zod.string(), zod.unknown()).describe('Full copy of all agent columns at publish time'),
   "changedFields": zod.array(zod.string()).nullish().describe('Auto-detected list of changed field labels vs. previous production snapshot'),
   "publishedBy": zod.string().nullish(),

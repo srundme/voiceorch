@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count, desc, inArray } from "drizzle-orm";
+import { eq, and, count, desc, asc, inArray } from "drizzle-orm";
 import { db, agentsTable, agentVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
@@ -223,7 +223,8 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, async (req, 
       .select({ cnt: count() })
       .from(agentVersionsTable)
       .where(eq(agentVersionsTable.agentId, agentId));
-    const versionNumber = `v${Number(cnt) + 1}`;
+    const draftNumber = Number(cnt) + 1;
+    const versionNumber = `draft-${draftNumber}`;
 
     const restoredAgentSnap = { ...snap, updatedAt: new Date().toISOString() };
 
@@ -235,7 +236,8 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, async (req, 
         versionNumber,
         versionName: `Restored from ${sourceVersion.versionName}`,
         commitDescription: `Restored from ${sourceVersion.versionNumber} — ${sourceVersion.commitDescription}`,
-        status: "restored",
+        status: "draft",
+        snapshotType: "draft",
         snapshot: restoredAgentSnap,
         publishedBy: clerkId,
         restoredFromVersionId: versionId,
@@ -246,6 +248,37 @@ router.post("/agents/:id/versions/:versionId/restore", requireAuth, async (req, 
   });
 
   res.status(201).json(restoredDraft);
+});
+
+// ── Delete a draft version ────────────────────────────────────────────────────
+router.delete("/agents/:id/versions/:versionId", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  const versionId = parseInt(String(req.params["versionId"] ?? ""), 10);
+  if (isNaN(agentId) || isNaN(versionId)) { res.status(400).json({ error: "Invalid params" }); return; }
+
+  const [agent] = await db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const [version] = await db
+    .select()
+    .from(agentVersionsTable)
+    .where(and(eq(agentVersionsTable.id, versionId), eq(agentVersionsTable.agentId, agentId)));
+  if (!version) { res.status(404).json({ error: "Version not found" }); return; }
+
+  if (version.snapshotType !== "draft" && version.status !== "draft") {
+    res.status(400).json({ error: "Only draft snapshots can be deleted. Archive published versions instead." });
+    return;
+  }
+
+  await db
+    .delete(agentVersionsTable)
+    .where(eq(agentVersionsTable.id, versionId));
+
+  res.sendStatus(204);
 });
 
 // ── Archive a version ─────────────────────────────────────────────────────────
