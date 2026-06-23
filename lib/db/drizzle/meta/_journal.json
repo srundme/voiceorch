@@ -113,6 +113,13 @@
       "when": 1782700000000,
       "tag": "0015_bookings_fk_set_null",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782800000000,
+      "tag": "0016_agent_version_snapshot_type",
+      "breakpoints": true
     }
   ]
 }
