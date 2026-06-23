@@ -935,7 +935,7 @@ export async function handleWebCallWebSocket(
   // low-confidence), this timer fires batch STT on the audio we mirrored into
   // audioChunks while streaming was running.
   let streamingFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-  const STREAMING_BATCH_FALLBACK_MS = 1500; // ms of silence before triggering batch-STT fallback
+  const STREAMING_BATCH_FALLBACK_MS = 2500; // ms of silence before triggering batch-STT fallback
   const clearStreamingFallback = () => {
     if (streamingFallbackTimer) { clearTimeout(streamingFallbackTimer); streamingFallbackTimer = null; }
   };

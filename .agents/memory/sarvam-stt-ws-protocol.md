@@ -49,5 +49,19 @@ POST `https://api.sarvam.ai/speech-to-text`
 
 ## Best practices for voice agents
 - Use `saaras:v3` + `mode=codemix` for Tamil+English mixed speech
-- `high_vad_sensitivity=true` gives 0.5s silence boundary vs default ~1s
+- `high_vad_sensitivity=true` gives 0.5s silence boundary vs default ~1s — **use this; do NOT replace with fine-grained params**
 - No partials emitted — force-finalize safety net relies only on END_SPEECH timing
+
+## VAD tuning lessons (June 2026)
+
+**DO NOT** raise `negative_frames_count` / `negative_frames_window` above ~0.5s:
+- User-perceived latency = VAD silence boundary + Sarvam transcription time (100–700ms).
+  With 0.8s VAD: 0.8 + 0.7 = 1.5s total → user notices "1 second lag".
+  With 0.5s VAD: 0.5 + 0.2 = 0.7s → feels snappy.
+- The batch-STT fallback in webcall.ts fires after `STREAMING_BATCH_FALLBACK_MS` of silence.
+  If VAD silence ≥ that value, Sarvam's transcript races with the fallback.
+  Fallback wins → sets `processing=true` → Sarvam transcript arrives and is **discarded** →
+  user must repeat 2–3 times.  Keep `STREAMING_BATCH_FALLBACK_MS` well above VAD (currently 2500ms).
+- If VAD fires between two quick utterances (< VAD boundary gap), Sarvam concatenates them into one
+  transcript — user appears to "need to repeat". Fix: keep VAD short (0.5s) so each utterance fires independently.
+- The mid-sentence "thinking pause > 0.5s" case is an edge case; 0.5s VAD handled it well in practice.
