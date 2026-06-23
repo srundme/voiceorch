@@ -785,7 +785,13 @@ export async function createSession(params: {
     metricsCount: 0,
   }, redisTtl);
 
-  setTimeout(() => { void endSession(sessionId); }, agentConfig.maxDuration * 1000);
+  setTimeout(() => {
+    logger.info(
+      { sessionId, callId: callRecord.id, maxDurationSeconds: agentConfig.maxDuration, endReason: "max_duration" },
+      "Session reached configured max duration — ending call",
+    );
+    void endSession(sessionId);
+  }, agentConfig.maxDuration * 1000);
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 

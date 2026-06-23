@@ -149,7 +149,23 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
     if (pn) agentOutboundNumber = pn.number;
   }
 
-  // Balance gate + max call duration limiter
+  // Balance gate + max call duration limiter.
+  //
+  // The value passed to the telephony provider becomes a HARD PSTN-leg cut
+  // (Twilio `TimeLimit`, Plivo/Vobiz `time_limit`). It must only ever act as a
+  // safety backstop ABOVE the agent's configured max duration — NEVER as a
+  // billing enforcer. A low-but-positive wallet balance must not collapse this to
+  // ~1 minute, or a healthy call gets dropped mid-conversation. Billing is
+  // reconciled at call-end (the wallet is debited then); the `<= 0` balance gate
+  // below is the real safeguard against starting a call with no credit.
+  //
+  // Floor = max(agent's configured maxDuration, 600s) so a normal conversation is
+  // never cut short, plus a buffer so the app-level max-duration timer
+  // (session.ts / webcall.ts) ends the call gracefully BEFORE the provider's
+  // abrupt hard cut.
+  const PROVIDER_LIMIT_BUFFER_SECONDS = 120;
+  const agentMaxDurationSeconds = agent.maxDuration ?? 600;
+  const minProviderLimitSeconds = Math.max(agentMaxDurationSeconds, 600);
   let maxDurationSeconds: number | undefined;
   if (agent.userId) {
     const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
@@ -161,10 +177,25 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
     if (user && user.walletBalanceCents > 0) {
       const billingMode = await resolveAgentBillingMode(agent.userId, agent);
       const agentRate = getFlatRateCentsPerMin(billingMode);
-      if (agentRate > 0) {
-        const maxMinutes = Math.floor(user.walletBalanceCents / agentRate);
-        maxDurationSeconds = Math.max(60, maxMinutes * 60);
-      }
+      const creditSeconds = agentRate > 0
+        ? Math.floor((user.walletBalanceCents / agentRate) * 60)
+        : 0;
+      // Baseline floor never below the agent's configured max (+buffer); extend the
+      // hard cap only when there is plenty of credit. Crucially, a small credit
+      // amount can no longer drive this below the floor → no 60s cutoff.
+      const baseline = minProviderLimitSeconds + PROVIDER_LIMIT_BUFFER_SECONDS;
+      maxDurationSeconds = Math.max(baseline, creditSeconds);
+      req.log.info(
+        {
+          agentId,
+          walletBalanceCents: user.walletBalanceCents,
+          agentRateCentsPerMin: agentRate,
+          agentMaxDurationSeconds,
+          creditSeconds,
+          resolvedProviderLimitSeconds: maxDurationSeconds,
+        },
+        "Resolved provider call duration limit",
+      );
     }
   }
 

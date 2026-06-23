@@ -951,6 +951,12 @@ export async function handleWebCallWebSocket(
 
     processing  = true;
     interrupted = false;
+    // Caller has produced a turn — cancel the silence-hangup countdown so it can
+    // never fire mid-turn while we transcribe/think/respond. It is re-armed once
+    // the agent's reply finishes playing (playback_ended / fallback).
+    clearSilenceTimer();
+    if (hangupSilenceTimer) { clearTimeout(hangupSilenceTimer); hangupSilenceTimer = null; }
+    if (playbackSilenceTimer) { clearTimeout(playbackSilenceTimer); playbackSilenceTimer = null; }
     // Snapshot + reset the close reason for the turn_latency metric.
     const _closeReason = pendingCloseReason;
     pendingCloseReason = "stt_final";
