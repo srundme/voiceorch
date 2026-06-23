@@ -2799,10 +2799,18 @@ export async function handleWebCallWebSocket(
             await new Promise<void>(r => setTimeout(r, 40));
           }
         } catch (ttsErr) {
-          logger.error({ callId, ttsErr }, "Greeting TTS synthesis failed");
-          send({ type: "error", message: "TTS synthesis failed during greeting" });
-          if (!closed) void hangup("error", ttsErr instanceof Error ? ttsErr.message : String(ttsErr));
-          return;
+          // Recoverable: a transient greeting-TTS failure must NOT drop the call
+          // before the caller can speak. Surface the failing TTS provider and a
+          // human-readable reason (no silent swallowing), then re-throw to the
+          // outer greeting catch which flips the session into Listening and lets
+          // the call continue via the normal turn path. Mirrors the resilient
+          // telephony handling in pipeline.ts's greet() catch block.
+          logger.error(
+            { callId, agentId: agent.id, ttsProvider: agent.ttsProvider, err: ttsErr },
+            toReadableError(ttsErr, "Greeting TTS synthesis error") +
+              " — continuing call in listening state instead of dropping",
+          );
+          throw ttsErr;
         }
 
         speaking = false;
