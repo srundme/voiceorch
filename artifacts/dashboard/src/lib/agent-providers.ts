@@ -50,7 +50,16 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
-  openai:    [{ value: "gpt-4o-mini", label: "GPT-4o Mini" }, { value: "gpt-4o", label: "GPT-4o" }, { value: "gpt-4-turbo", label: "GPT-4 Turbo" }, { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }],
+  openai:    [
+    { value: "gpt-4.1-nano",  label: "GPT-4.1 Nano ⚡ — ultra-fast, lowest cost" },
+    { value: "gpt-4.1-mini",  label: "GPT-4.1 Mini ⚡ — fast, low cost" },
+    { value: "gpt-4.1",       label: "GPT-4.1 — flagship, best quality" },
+    { value: "gpt-4o-mini",   label: "GPT-4o Mini" },
+    { value: "gpt-4o",        label: "GPT-4o" },
+    { value: "o4-mini",       label: "o4-mini — fast reasoning" },
+    { value: "gpt-4-turbo",   label: "GPT-4 Turbo (legacy)" },
+    { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo (legacy)" },
+  ],
   anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
   google:    [{ value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (fastest)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (most capable)" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],

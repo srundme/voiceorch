@@ -26,8 +26,12 @@ const ASR_PRICING: Record<string, number> = {
 
 const LLM_PRICING: Record<string, number> = {
   // OpenAI — based on token pricing (~450 tokens/min voice conversation)
+  "openai/gpt-4.1":         0.0036,  // $2/$8 per 1M tokens
+  "openai/gpt-4.1-mini":    0.0007,  // $0.40/$1.60 per 1M tokens
+  "openai/gpt-4.1-nano":    0.0002,  // $0.10/$0.40 per 1M tokens
   "openai/gpt-4o":          0.0225,
   "openai/gpt-4o-mini":     0.0027,
+  "openai/o4-mini":         0.0060,  // $1.10/$4.40 per 1M tokens
   "openai/gpt-4-turbo":     0.0450,
   "openai/gpt-3.5-turbo":   0.0018,
   // Anthropic
