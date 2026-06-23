@@ -1619,10 +1619,34 @@ export async function handleWebCallWebSocket(
         const freq = (agent.backchannelingFrequency ?? 0.6) as number;
         if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.
-          const phrasePool = getBackchannelFillers(agent.asrLanguage ?? agent.language);
+          const fillerLang = agent.asrLanguage ?? agent.language;
+          const phrasePool = getBackchannelFillers(fillerLang);
           if (phrasePool.length > 0) {
             const phrase = phrasePool[Math.floor(Math.random() * phrasePool.length)]!;
+            logger.info(
+              {
+                callId,
+                fillerType: "backchannel",
+                language: fillerLang,
+                backchannelingEnabled: agent.backchannelingEnabled,
+                fillerListLength: phrasePool.length,
+                selectedFiller: phrase,
+                ttsText: phrase,
+              },
+              "Webcall: backchannel filler selected (language-aware)",
+            );
             queueSentence(phrase);
+          } else {
+            logger.info(
+              {
+                callId,
+                fillerType: "backchannel",
+                language: fillerLang,
+                backchannelingEnabled: agent.backchannelingEnabled,
+                fillerListLength: 0,
+              },
+              "Webcall: backchannel filler skipped — no filler set for language",
+            );
           }
         }
       }

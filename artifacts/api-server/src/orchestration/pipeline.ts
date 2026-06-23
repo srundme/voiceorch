@@ -18,7 +18,7 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
 import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
-import { getBackchannelFillers } from "./backchannel.js";
+import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
 import { performance } from "perf_hooks";
 import {
   computeEndpointMs,
@@ -79,11 +79,6 @@ const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 800;    // play a filler phrase if LLM has not returned a first
                                         // token within this window (and backchannel didn't fire)
-const FILLER_PHRASES = [
-  "One moment please...",
-  "Let me check that for you...",
-  "Sure, give me just a second...",
-];
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
                                          // prevents a hung Cartesia/ElevenLabs connection from
                                          // silencing the call until Vobiz times out and drops it
@@ -1885,11 +1880,35 @@ export class OrchestrationPipeline {
       const freq = this.agent.backchannelingFrequency ?? 0.5;
       if (Math.random() < freq) {
         // Strict, language-based fillers only — no cross-language fallback.
-        const pool = getBackchannelFillers(this.agent.sttConfig.language);
+        const fillerLang = this.agent.sttConfig.language;
+        const pool = getBackchannelFillers(fillerLang);
         if (pool.length > 0) {
           const phrase = pool[Math.floor(Math.random() * pool.length)]!;
+          logger.info(
+            {
+              callId: this.config.callId,
+              fillerType: "backchannel",
+              language: fillerLang,
+              backchannelingEnabled: this.agent.backchannelingEnabled,
+              fillerListLength: pool.length,
+              selectedFiller: phrase,
+              ttsText: phrase,
+            },
+            "Backchannel filler selected (language-aware)",
+          );
           enqueue(phrase);
           backchanneledThisTurn = true;
+        } else {
+          logger.info(
+            {
+              callId: this.config.callId,
+              fillerType: "backchannel",
+              language: fillerLang,
+              backchannelingEnabled: this.agent.backchannelingEnabled,
+              fillerListLength: 0,
+            },
+            "Backchannel filler skipped — no filler set for language",
+          );
         }
       }
     }
@@ -2099,11 +2118,38 @@ export class OrchestrationPipeline {
     if (!backchanneledThisTurn && !this.closed && !this.bargeInRequested) {
       fillerTimer = setTimeout(() => {
         if (!llmFirstTokenAt && !this.bargeInRequested && !this.closed) {
-          const phrase = FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)]!;
+          // Strict, language-based fillers only — no hardcoded English fallback.
+          const fillerLang = this.agent.sttConfig.language;
+          const pool = getBackchannelFillers(fillerLang);
+          const phrase = pickBackchannelFiller(fillerLang);
+          if (!phrase) {
+            logger.info(
+              {
+                callId: this.config.callId,
+                fillerType: "dead-air",
+                language: fillerLang,
+                backchannelingEnabled: this.agent.backchannelingEnabled,
+                fillerListLength: pool.length,
+              },
+              "Dead-air filler skipped — no filler set for language (LLM > 800 ms)",
+            );
+            return;
+          }
+          logger.info(
+            {
+              callId: this.config.callId,
+              fillerType: "dead-air",
+              language: fillerLang,
+              backchannelingEnabled: this.agent.backchannelingEnabled,
+              fillerListLength: pool.length,
+              selectedFiller: phrase,
+              ttsText: phrase,
+            },
+            "Dead-air filler enqueued (language-aware, LLM > 800 ms)",
+          );
           enqueue(phrase);
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
-          logger.info({ callId: this.config.callId, phrase }, "Dead-air filler enqueued (LLM > 800 ms)");
         }
       }, FILLER_THRESHOLD_MS);
     }
@@ -2310,9 +2356,25 @@ export class OrchestrationPipeline {
         es: "Un momento…", fr: "Un instant…", de: "Einen Moment…", ar: "لحظة…",
       };
       const langPrefix = (this.agent.language ?? "en").split("-")[0] ?? "en";
-      const filler = TOOL_FILLERS[langPrefix] ?? TOOL_FILLERS["en"]!;
-      if (!this.closed && !this.bargeInRequested) {
+      // Strict, language-based fillers only — no English fallback for non-English agents.
+      const filler = TOOL_FILLERS[langPrefix];
+      if (filler && !this.closed && !this.bargeInRequested) {
+        logger.info(
+          {
+            callId: this.config.callId,
+            fillerType: "tool",
+            language: langPrefix,
+            selectedFiller: filler,
+            ttsText: filler,
+          },
+          "Tool filler enqueued (language-aware)",
+        );
         enqueue(filler);
+      } else if (!filler) {
+        logger.info(
+          { callId: this.config.callId, fillerType: "tool", language: langPrefix },
+          "Tool filler skipped — no filler set for language",
+        );
       }
       allEnqueued = true;
       const finalWake = wakePlayer as (() => void) | null;
