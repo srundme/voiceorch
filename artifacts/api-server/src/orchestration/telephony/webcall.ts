@@ -65,10 +65,12 @@ const BARGE_IN_END_GRACE_MS    = 600;  // suppress barge-in for 600ms after the 
                                         // of the final word triggering a false barge-in and cutting it off
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
-const WEB_TAIL_ECHO_MARGIN_MS  = 500;  // extra echo-grace held PAST the tail-silence drain so the agent's own
+const WEB_TAIL_ECHO_MARGIN_MS  = 100;  // extra echo-grace held PAST the tail-silence drain so the agent's own
                                         // final-word echo — which returns through the mic LATER than we sent it
                                         // (client AudioContext buffering lag + network round-trip) — can't trip a
                                         // false barge-in that flushes the last word on the client
+                                        // Reduced from 500ms → 100ms: 500ms was too long and caused the "say it
+                                        // twice" bug (user's first utterance after agent stops got silently discarded)
 const TTS_TAIL_SILENCE_MS      = 150;  // PCM silence appended to every TTS buffer so the last word isn't clipped
                                         // by the client's AudioContext reaching the end of its scheduled queue
 const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum speech before processing
