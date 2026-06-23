@@ -7,7 +7,7 @@ import {
 } from "../endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "../transcriptQuality.js";
 import type { WebSocket } from "ws";
-import { db, agentsTable, callsTable, callEventsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable } from "@workspace/db";
+import { db, agentsTable, callsTable, callEventsTable, scheduledCallbacksTable, providersTable, usersTable, walletTransactionsTable, platformSettingsTable, knowledgeEntriesTable, utterancesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { createSTTAdapter } from "../adapters/stt/index.js";
 import { createLLMAdapter } from "../adapters/llm/index.js";
@@ -410,7 +410,7 @@ export async function handleWebCallWebSocket(
   // ── Streaming STT (saaras:v3, Deepgram) ─────────────────────────────────
   // Initialised below, after the call record exists and callId is known.
   let streamSTT: StreamSTT | null = null;
-  let pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number } | null = null;
+  let pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number; mergedSegments?: number; pauseCount?: number } | null = null;
   // Transcript received from streaming STT WebSocket — consumed by process()
   let streamingTranscriptPending: string | null = null;
   // Prefer asrLanguage over language for TTS — setting the Transcriber to
@@ -620,6 +620,17 @@ export async function handleWebCallWebSocket(
         },
       );
       logger.info({ callId, provider: agent.asrProvider }, "Webcall: streaming STT initialised");
+      // Hook dead-connection detector (Sarvam adapter). When it fires we skip
+      // the 8 s last-resort timer and invoke batch STT immediately.
+      if (streamSTT) {
+        streamSTT.onConnectionDead = () => {
+          logger.warn({ callId }, "Webcall: streaming STT WS dead — invoking batch STT immediately");
+          clearStreamingFallback();
+          if (!processing && !speaking && !closed && audioChunks.length > 0) {
+            void process();
+          }
+        };
+      }
     } catch (streamInitErr) {
       logger.warn({ callId, err: streamInitErr }, "Webcall: streaming STT init failed — falling back to batch");
       streamSTT = null;
@@ -935,7 +946,7 @@ export async function handleWebCallWebSocket(
   // low-confidence), this timer fires batch STT on the audio we mirrored into
   // audioChunks while streaming was running.
   let streamingFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-  const STREAMING_BATCH_FALLBACK_MS = 2500; // ms of silence before triggering batch-STT fallback
+  const STREAMING_BATCH_FALLBACK_MS = 8000; // last-resort only — WS dead-detection fires first via onConnectionDead
   const clearStreamingFallback = () => {
     if (streamingFallbackTimer) { clearTimeout(streamingFallbackTimer); streamingFallbackTimer = null; }
   };
@@ -945,6 +956,11 @@ export async function handleWebCallWebSocket(
   // bargeInFrames is NOT reset on a single low-energy frame — natural speech has brief
   // inter-syllable dips. Only reset after BARGE_IN_LOW_RESET consecutive low frames.
   const BARGE_IN_LOW_RESET = 5;    // ~200ms of silence resets the barge-in run
+  // Barge-in confidence gate: require sustained loud audio for at least this long
+  // before accepting an interruption. Filters out coughs, dog barks, keyboard clicks,
+  // and background TV bursts which are typically <100ms.
+  const BARGE_IN_MIN_DURATION_MS = 150;
+  let bargeInFirstFrameAt = 0;     // wall-clock when the current barge-in run's first loud frame arrived
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   let _webcallTurnIdx   = 0;
@@ -1075,6 +1091,17 @@ export async function handleWebCallWebSocket(
 
       safetyNet.onFinal();   // usable transcript — clear safety timers
       beganTurn = true;
+
+      // Persist utterance analytics (fire-and-forget — never blocks the pipeline).
+      db.insert(utterancesTable).values({
+        callId:         callId,
+        text:           userText.trim(),
+        provider:       agent.asrProvider,
+        latencyMs:      pendingSttMeta?.endDetectToFinalMs ?? null,
+        mergedSegments: pendingSttMeta?.mergedSegments ?? 1,
+        pauseCount:     pendingSttMeta?.pauseCount      ?? 0,
+        coalesced:      (pendingSttMeta?.mergedSegments ?? 1) > 1,
+      }).catch((err) => logger.warn({ callId, err }, "Webcall: utterance insert failed (non-fatal)"));
 
       // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
       {
@@ -3218,16 +3245,25 @@ export async function handleWebCallWebSocket(
       if (!bargeInEnabled) return;
       const inStartGrace = Date.now() < echoGraceUntil;
       if (!inStartGrace && rms > bargeInRmsThreshold) {
+        if (bargeInFrames === 0) bargeInFirstFrameAt = Date.now(); // start of this loud run
         bargeInFrames++;
         bargeInLowEnergyFrames = 0; // high-energy frame — reset the dip counter
         const bargeFrame = Buffer.from(data);
         audioChunks.push(bargeFrame); // accumulate speech for batch STT fallback
         streamSTT?.sendAudio(bargeFrame); // also feed streaming STT so it has the full utterance
-        if (!interrupted && bargeInFrames >= effectiveBargeInMinFrames) {
+        const durationMs     = Date.now() - bargeInFirstFrameAt;
+        const interruptScore = Math.min(bargeInFrames / effectiveBargeInMinFrames, 1)
+                             * Math.min(durationMs / BARGE_IN_MIN_DURATION_MS, 1);
+        // Confidence gate: require both sustained energy (min frames) AND minimum
+        // duration (150 ms) so brief noise bursts — cough, keyboard, background TV —
+        // can't interrupt mid-sentence. interruptScore=1.0 means both conditions met.
+        if (!interrupted
+            && bargeInFrames >= effectiveBargeInMinFrames
+            && durationMs    >= BARGE_IN_MIN_DURATION_MS) {
           interrupted = true;
           send({ type: "interrupted" }); // tell client to stop playing
           sendStatus("thinking");
-          logger.info({ callId, rms, bargeInFrames, effectiveBargeInMinFrames }, "Barge-in triggered");
+          logger.info({ callId, rms, bargeInFrames, effectiveBargeInMinFrames, durationMs, interruptScore: +interruptScore.toFixed(2) }, "Barge-in triggered");
         }
       } else if (!inStartGrace) {
         // Low-energy frame while outside start grace.
@@ -3235,15 +3271,17 @@ export async function handleWebCallWebSocket(
         // dips. Only reset after BARGE_IN_LOW_RESET consecutive low frames (~200ms silence).
         bargeInLowEnergyFrames++;
         if (bargeInLowEnergyFrames >= BARGE_IN_LOW_RESET) {
-          bargeInFrames = 0;
+          bargeInFrames       = 0;
           bargeInLowEnergyFrames = 0;
+          bargeInFirstFrameAt = 0; // reset the duration clock
         }
       }
       // Note: frames inside start grace are completely ignored (no counter changes)
       return; // don't touch silence timer while speaking
     }
-    bargeInFrames = 0;           // agent not speaking — reset
+    bargeInFrames       = 0;           // agent not speaking — reset
     bargeInLowEnergyFrames = 0;
+    bargeInFirstFrameAt = 0;
 
     // End grace: suppress new-turn detection for BARGE_IN_END_GRACE_MS after the last
     // TTS chunk was sent. This prevents the trailing echo of the agent's final word

@@ -348,6 +348,14 @@ export interface StreamSTT {
   /** Provider-specific: force the STT engine to flush its audio buffer and emit a transcript now. */
   flush?(): void;
   close(): void;
+  /**
+   * Set by the caller immediately after creation.
+   * Fired when the adapter detects that the WebSocket has silently died during
+   * an active speech segment (no messages for >3 s while inSpeech=true).
+   * The caller should fall back to batch STT immediately instead of waiting
+   * for STREAMING_BATCH_FALLBACK_MS.
+   */
+  onConnectionDead?: (() => void) | null;
 }
 
 export interface LLMUsage {

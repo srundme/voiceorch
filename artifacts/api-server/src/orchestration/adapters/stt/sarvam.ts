@@ -183,16 +183,27 @@ export class SarvamSTT implements STTAdapter {
     const audioQueue: Buffer[] = [];
     let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
 
-    // ── Transcript coalescing ────────────────────────────────────────────────
-    // Tamil speakers often pause briefly (< 0.5 s) mid-sentence to think.
-    // With high_vad_sensitivity=true the 0.5 s boundary fires on those pauses,
-    // splitting one logical utterance into two consecutive transcripts.
-    // Fix: hold each transcript for COALESCE_MS before emitting.  If speech_start
-    // fires within that window (user continued speaking), cancel the hold and wait
-    // for the next transcript to arrive, then merge them.  If the hold expires
-    // with no new speech, emit normally.  150 ms adds imperceptible latency while
-    // reliably catching the resume-speech signal.
-    const COALESCE_MS = 150;
+    // ── Adaptive transcript coalescing ───────────────────────────────────────
+    // The hold window self-calibrates to this caller's mid-sentence pause rhythm:
+    //   fast speaker → 120 ms · medium → 220 ms · slow / older caller → 350 ms
+    // Seeded at COALESCE_DEFAULT_MS until at least 2 real pauses are observed;
+    // converges within 2–3 turns of natural speech.
+    const COALESCE_MIN_MS     = 120;
+    const COALESCE_DEFAULT_MS = 220;
+    const COALESCE_MAX_MS     = 350;
+    const PAUSE_HISTORY_MAX   = 5;
+    const pauseHistory: number[] = [];
+    let transcriptArrivedAt    = 0;   // wall-clock ms when last transcript buffered
+    let coalesceMergedSegments = 0;   // # of Sarvam segments folded into current buf
+
+    function adaptiveHoldMs(): number {
+      if (pauseHistory.length < 2) return COALESCE_DEFAULT_MS;
+      const avg = pauseHistory.reduce((a, b) => a + b, 0) / pauseHistory.length;
+      if (avg < 150) return COALESCE_MIN_MS;
+      if (avg < 400) return COALESCE_DEFAULT_MS;
+      return COALESCE_MAX_MS;
+    }
+
     let coalesceBuf = "";
     let coalesceMeta: SttFinalMetadata | undefined;
     let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -200,16 +211,34 @@ export class SarvamSTT implements STTAdapter {
     const emitCoalesced = () => {
       coalesceTimer = null;
       if (!coalesceBuf) return;
-      const text = coalesceBuf;
-      const meta = coalesceMeta;
-      coalesceBuf = "";
-      coalesceMeta = undefined;
+      const text     = coalesceBuf;
+      const segments = coalesceMergedSegments;
+      const meta: SttFinalMetadata = {
+        ...coalesceMeta,
+        mergedSegments: segments,
+        pauseCount:     Math.max(0, segments - 1),
+      };
+      coalesceBuf            = "";
+      coalesceMeta           = undefined;
+      coalesceMergedSegments = 0;
+      transcriptArrivedAt    = 0;
       logger.info(
-        { text: text.slice(0, 120), coalesced: text.includes(" ") },
-        "Sarvam STT: emitting (possibly coalesced) transcript",
+        { text: text.slice(0, 120), segments, holdMs: adaptiveHoldMs(), pauseHistory: pauseHistory.slice() },
+        "Sarvam STT: emitting adaptive-coalesced transcript",
       );
       onTranscript(text, true, undefined, meta);
     };
+
+    // ── WebSocket health monitoring ───────────────────────────────────────────
+    // Sarvam sends speech_start / speech_end / transcript on every event.
+    // If >3 s pass with no message while we are inside an active speech segment,
+    // the connection has silently died. Fire onConnectionDead so webcall.ts can
+    // fall back to batch STT immediately rather than waiting for the last-resort
+    // 8 s fallback timer.
+    let lastMsgAt       = Date.now();
+    let inSpeechSegment = false;
+    const HEARTBEAT_MS  = 300;
+    const WS_DEAD_MS    = 3_000;
 
     const sendChunk = (chunk: Buffer) => {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
@@ -252,19 +281,33 @@ export class SarvamSTT implements STTAdapter {
 
         // VAD signals — official type values: "speech_start" / "speech_end"
         // (legacy guessed values "events" + signal_type also handled for safety)
+        lastMsgAt = Date.now();
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
+          inSpeechSegment = true;
           logger.debug({ langCode }, "Sarvam STT: speech start");
-          // If we are holding a transcript in the coalesce buffer and the user
-          // has resumed speaking, cancel the emit timer so the next transcript
-          // can be appended before we emit anything.
+          // If we are holding a transcript and the user resumed speaking, cancel
+          // the emit timer, record the pause length for adaptive calibration, and
+          // wait for the next transcript to append before emitting.
           if (coalesceTimer && coalesceBuf) {
             clearTimeout(coalesceTimer);
             coalesceTimer = null;
-            logger.debug({ langCode }, "Sarvam STT: coalesce hold cancelled — speech resumed");
+            if (transcriptArrivedAt > 0) {
+              const pauseMs = Date.now() - transcriptArrivedAt;
+              if (pauseMs > 40 && pauseMs < 1200) { // filter: ignore sub-40ms noise & >1.2s stale gaps
+                pauseHistory.push(pauseMs);
+                if (pauseHistory.length > PAUSE_HISTORY_MAX) pauseHistory.shift();
+              }
+              transcriptArrivedAt = 0;
+            }
+            logger.debug(
+              { langCode, pauseHistory: pauseHistory.slice(), nextHoldMs: adaptiveHoldMs() },
+              "Sarvam STT: coalesce hold cancelled — speech resumed, pause recorded",
+            );
           }
           return;
         }
         if (msg.type === "speech_end" || (msg.type === "events" && msg.data?.signal_type === "END_SPEECH")) {
+          inSpeechSegment = false;
           speechEndAt = Date.now();
           logger.debug({ langCode }, "Sarvam STT: speech end");
           return;
@@ -272,6 +315,7 @@ export class SarvamSTT implements STTAdapter {
 
         // Final transcript — official type: "transcript"; legacy: "data"
         if (msg.type === "transcript" || msg.type === "data") {
+          inSpeechSegment = false; // segment complete
           const text = (msg.data?.transcript ?? "").trim();
           if (!text) return;
           const meta: SttFinalMetadata = {
@@ -279,15 +323,17 @@ export class SarvamSTT implements STTAdapter {
           };
           logger.info(
             { text: text.slice(0, 80), model, mode, endDetectToFinalMs: meta.endDetectToFinalMs },
-            "Sarvam STT: final transcript (buffering for coalesce)",
+            "Sarvam STT: final transcript (buffering for adaptive coalesce)",
           );
           speechEndAt = 0;
           // Append to coalesce buffer (may already have a prior partial).
-          coalesceBuf = coalesceBuf ? coalesceBuf + " " + text : text;
-          coalesceMeta = meta; // always keep the latest endDetectToFinalMs
-          // (Re-)arm the emit timer.
+          coalesceBuf            = coalesceBuf ? coalesceBuf + " " + text : text;
+          coalesceMeta           = meta;         // keep latest latency measurement
+          coalesceMergedSegments++;
+          transcriptArrivedAt    = Date.now();   // start of the hold window
+          // (Re-)arm the emit timer with the caller-adapted hold duration.
           if (coalesceTimer) clearTimeout(coalesceTimer);
-          coalesceTimer = setTimeout(emitCoalesced, COALESCE_MS);
+          coalesceTimer = setTimeout(emitCoalesced, adaptiveHoldMs());
           return;
         }
 
@@ -337,7 +383,9 @@ export class SarvamSTT implements STTAdapter {
 
     openSocket();
 
-    return {
+    const sttObj: import("../../types.js").StreamSTT = {
+      onConnectionDead: null,
+
       sendAudio(chunk: Buffer): void {
         if (!wsReady || ws.readyState !== WebSocket.OPEN) {
           audioQueue.push(chunk);
@@ -367,6 +415,7 @@ export class SarvamSTT implements STTAdapter {
         // Drain the coalesce buffer before closing so no transcript is lost.
         if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
         intentionallyClosed = true;
+        clearInterval(heartbeatInterval);
         if (
           ws.readyState === WebSocket.OPEN ||
           ws.readyState === WebSocket.CONNECTING
@@ -375,5 +424,18 @@ export class SarvamSTT implements STTAdapter {
         }
       },
     };
+
+    // Start the heartbeat AFTER sttObj is created so the interval can reference it.
+    const heartbeatInterval = setInterval(() => {
+      if (!inSpeechSegment || intentionallyClosed) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const silenceMs = Date.now() - lastMsgAt;
+      if (silenceMs > WS_DEAD_MS) {
+        logger.warn({ langCode, silenceMs }, "Sarvam STT: WS silent during speech — connection dead, firing onConnectionDead");
+        sttObj.onConnectionDead?.();
+      }
+    }, HEARTBEAT_MS);
+
+    return sttObj;
   }
 }

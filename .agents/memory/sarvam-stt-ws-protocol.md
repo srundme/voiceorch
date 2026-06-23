@@ -58,10 +58,24 @@ POST `https://api.sarvam.ai/speech-to-text`
 - User-perceived latency = VAD silence boundary + Sarvam transcription time (100–700ms).
   With 0.8s VAD: 0.8 + 0.7 = 1.5s total → user notices "1 second lag".
   With 0.5s VAD: 0.5 + 0.2 = 0.7s → feels snappy.
-- The batch-STT fallback in webcall.ts fires after `STREAMING_BATCH_FALLBACK_MS` of silence.
-  If VAD silence ≥ that value, Sarvam's transcript races with the fallback.
-  Fallback wins → sets `processing=true` → Sarvam transcript arrives and is **discarded** →
-  user must repeat 2–3 times.  Keep `STREAMING_BATCH_FALLBACK_MS` well above VAD (currently 2500ms).
-- If VAD fires between two quick utterances (< VAD boundary gap), Sarvam concatenates them into one
-  transcript — user appears to "need to repeat". Fix: keep VAD short (0.5s) so each utterance fires independently.
-- The mid-sentence "thinking pause > 0.5s" case is an edge case; 0.5s VAD handled it well in practice.
+- `STREAMING_BATCH_FALLBACK_MS` is now **8000ms** (last resort only). Real dead-WS detection
+  is done by the heartbeat interval in sarvam.ts → `onConnectionDead` → immediate batch STT.
+  Keep VAD short (0.5s) and rely on the heartbeat rather than a short fallback timer.
+
+## Adaptive coalescing (June 2026)
+- Fixed-150ms hold replaced with adaptive hold that self-calibrates per caller:
+  fast speaker (<150ms avg pause) → 120ms, medium (<400ms) → 220ms, slow → 350ms.
+- pauseHistory: last 5 mid-sentence pause durations; calibrated within 2–3 turns.
+- SttFinalMetadata now carries `mergedSegments` and `pauseCount` — surfaced in utterances table.
+
+## WS heartbeat / dead-connection detection (June 2026)
+- Sarvam adapter tracks `lastMsgAt` + `inSpeechSegment`; 300ms interval checks for >3s silence during speech.
+- Fires `sttObj.onConnectionDead?.()` → webcall.ts hook → immediate `process()` (batch STT fallback).
+- StreamSTT interface has `onConnectionDead?: (() => void) | null` — set by caller after creation.
+- Heartbeat interval cleared in `close()` to prevent leaks.
+
+## Utterances table (June 2026)
+- `lib/db/src/schema/utterances.ts` — one row per user turn; call_id FK, coalesced bool,
+  mergedSegments, pauseCount, provider, latencyMs.
+- Insert is fire-and-forget in `process()` right after `safetyNet.onFinal()`.
+- Enables future analytics: avg pause per language, interruption rate, Tamil/English ratio.

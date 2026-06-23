@@ -43,3 +43,4 @@ export * from "./dpdp";
 export * from "./admin-audit-logs";
 export * from "./admin-impersonation-sessions";
 export * from "./password-reset-otps";
+export * from "./utterances";

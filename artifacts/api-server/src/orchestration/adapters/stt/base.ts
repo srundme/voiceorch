@@ -5,6 +5,10 @@ export interface SttFinalMetadata {
   endDetectToFinalMs?: number;
   /** ms from last speech.hypothesis → speech.phrase (total delay since caller last spoke) */
   lastPartialToFinalMs?: number;
+  /** How many raw STT segments were merged into this utterance (Sarvam coalescing). */
+  mergedSegments?: number;
+  /** Number of within-utterance pauses that were bridged (mergedSegments - 1). */
+  pauseCount?: number;
 }
 
 export interface STTAdapter {
