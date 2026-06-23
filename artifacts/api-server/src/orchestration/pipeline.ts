@@ -947,15 +947,16 @@ export class OrchestrationPipeline {
               ? this.ambientStream.mixIntoMulaw(chunk)
               : chunk;
             this.config.onAudioOut(outChunk);
-            // Re-arm echo grace with every chunk so the suppression window tracks
-            // real-time playback position.  Without this, a sentence longer than
-            // BARGE_IN_ECHO_GRACE_MS (600 ms) lets the grace expire mid-playback;
-            // the echoed tail then looks like real caller speech → false barge-in
-            // → clearAudio → last words clipped.
-            this.bargeInHoldUntil = Math.max(
-              this.bargeInHoldUntil,
-              Date.now() + this.bargeInEchoGraceMs,
-            );
+            // NOTE: do NOT re-arm the echo-grace window per chunk here. The start
+            // grace is armed once before playback begins (covers the sidetone/echo
+            // settle for the opening words) and the tail grace is re-armed at
+            // playback end (armTailEchoGrace — covers the closing word's returning
+            // echo). Continuously pushing bargeInHoldUntil to now+echoGraceMs on
+            // every 20 ms chunk kept the suppression window permanently active for
+            // the entire sentence, which suppressed BOTH barge-in detectors and
+            // made long replies un-interruptible. Mid-sentence self-echo is instead
+            // rejected by the elevated barge-in energy threshold (4× VAD) + min
+            // frames and by the streaming-STT word-count gate.
             // If TTS is already done and this was the last queued chunk, break
             // immediately WITHOUT the trailing 20ms sleep.  The sleep would create
             // a timing hole: VoBiz's playout buffer can underrun in that window
@@ -1103,10 +1104,9 @@ export class OrchestrationPipeline {
           if (this.closed || this.bargeInRequested) break;
           if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
           this.config.onAudioOut(ttsPcm8k.slice(i, i + PCM_CHUNK));
-          this.bargeInHoldUntil = Math.max(
-            this.bargeInHoldUntil,
-            Date.now() + this.bargeInEchoGraceMs,
-          );
+          // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
+          // the start grace + tail grace bound the self-echo window. A per-chunk
+          // re-arm would span the whole sentence and block mid-sentence barge-in.
           // Skip the trailing sleep on the last chunk so drainPlaybackTail can
           // start immediately — no setTimeout-jitter gap before silence frames.
           if (i + PCM_CHUNK < ttsPcm8k.length) {
@@ -1121,12 +1121,9 @@ export class OrchestrationPipeline {
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
           this.config.onAudioOut(outChunk);
-          // Re-arm echo grace per chunk so a sentence longer than bargeInEchoGraceMs
-          // doesn't lose barge-in protection mid-playback (mirrors the PCM branch).
-          this.bargeInHoldUntil = Math.max(
-            this.bargeInHoldUntil,
-            Date.now() + this.bargeInEchoGraceMs,
-          );
+          // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
+          // start grace + tail grace bound the self-echo window; a per-chunk
+          // re-arm would span the whole sentence and block mid-sentence barge-in.
           // Skip the trailing sleep on the last chunk — same reasoning as PCM branch.
           if (i + CHUNK_SIZE_MULAW < ttsMusaw.length) {
             await new Promise<void>((r) => setTimeout(r, 20));

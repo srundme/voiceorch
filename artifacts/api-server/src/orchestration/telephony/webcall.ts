@@ -2190,8 +2190,11 @@ export async function handleWebCallWebSocket(
           // Pipe PCM chunks directly to the browser as they arrive from the TTS
           // provider. First audio byte reaches the browser in ~150ms after the
           // TTS request fires — no full-buffer wait.
-          // echoGrace: open immediately on sentence start; we extend it on every
-          // frame so the window always covers the current playback position.
+          // echoGrace: arm a short start-grace at sentence start ONLY (covers the
+          // browser AEC settle for the opening words). We deliberately do NOT
+          // extend it per frame — that kept the window active for the whole
+          // sentence and blocked mid-sentence barge-in. The tail grace armed after
+          // playback covers the closing word's returning echo.
           echoGraceUntil = Date.now() + echoGraceMs;
           let frameBuf = Buffer.alloc(0);
           let bytesSent = 0;
@@ -2204,8 +2207,13 @@ export async function handleWebCallWebSocket(
                 const frame = frameBuf.subarray(0, AUDIO_CHUNK_BYTES);
                 frameBuf = frameBuf.subarray(AUDIO_CHUNK_BYTES);
                 bytesSent += AUDIO_CHUNK_BYTES;
-                // Keep echoGrace window alive: one 40ms frame + decay margin
-                echoGraceUntil = Date.now() + 40 + echoGraceMs;
+                // Do NOT re-arm echo grace per frame: the per-sentence start grace
+                // (armed above) + the tail grace (armed after playback) bound the
+                // self-echo window. Re-arming on every 40 ms frame kept it active
+                // for the entire sentence and suppressed both barge-in detectors,
+                // so a caller could not interrupt a long reply. Mid-sentence
+                // self-echo is rejected by the energy RMS threshold + STT
+                // word-count gate.
                 recording.addAgentChunk(frame);
                 sendSpeechAudio(frame);
                 await new Promise<void>(r => setTimeout(r, 40));
@@ -2253,11 +2261,11 @@ export async function handleWebCallWebSocket(
           }
           if (interrupted || closed) break;
 
-          // Re-arm echo-grace for full sentence duration
-          {
-            const sentenceDurationMs = Math.round((pcmOut.length / 2 / 16000) * 1000);
-            echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
-          }
+          // Arm a short start-grace ONLY (NOT the full sentence duration). A
+          // whole-sentence grace blocked mid-sentence barge-in; the tail grace
+          // armed after playback covers the closing word's echo. Mid-sentence
+          // self-echo is rejected by the energy RMS threshold + STT word-count gate.
+          echoGraceUntil = Date.now() + echoGraceMs;
 
           for (let j = 0; j < pcmOut.length; j += AUDIO_CHUNK_BYTES) {
             if (closed || interrupted) break;

@@ -27,3 +27,14 @@ parity: webcall = `echoGraceUntil`, pipeline = `bargeInHoldUntil` (re-armed in t
 playTask loop + every direct playback branch, and `armTailEchoGrace()` at exit).
 Note the web RMS barge-in threshold (800) is intentionally lower than telephony
 (1200) because web audio is already AEC'd by the browser — do not raise it to match.
+
+**CRITICAL boundary (do NOT cross):** the grace must be re-armed only at SENTENCE
+START + at playback END (tail grace), never per audio chunk/frame nor for the full
+sentence duration. Per-chunk re-arm (`bargeInHoldUntil = now + echoGraceMs` every
+20ms chunk in pipeline drain/buffered loops) and full-duration re-arm
+(`echoGraceUntil = now + sentenceDurationMs + echoGraceMs`, or per-40ms-frame in
+webcall) keep the window permanently active for the whole sentence and suppress
+BOTH detectors → long replies become un-interruptible. The short start grace is for
+the opening words only; mid-sentence self-echo is rejected by the elevated energy
+threshold (4× VAD) + min-frames and the streaming-STT word-count gate, NOT by
+extending the grace. See [barge-in echo-grace scoping](barge-in-echo-grace-scoping.md).
