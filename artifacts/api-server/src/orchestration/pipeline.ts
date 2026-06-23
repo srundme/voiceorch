@@ -218,6 +218,9 @@ export class OrchestrationPipeline {
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   private turnIndex = 0;
+  /** Mirror of the in-flight turn index, readable from non-turn-scoped methods
+   *  (handleToolCall, playSentence) so their execution-log rows carry turnNumber. */
+  private _activeTurnIndex = 0;
   private _tTurnVadFlush        = 0;   // when VAD silence window closed → audio sent to STT
   private _tTurnSttFinal        = 0;   // when STT returned the final transcript
   private _tTurnLlmFirstToken:  number | null = null; // first LLM token received
@@ -516,6 +519,10 @@ export class OrchestrationPipeline {
       if (isSemanticInterrupt(transcript)) {
         this.bargeInRequested = true;
         this.bargeInCallback?.();
+        this.logExec("Agent", "system", {
+          status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
+          metadata: { event: "Barge-in Detected", trigger: "semantic", transcriptPreview: transcript.slice(0, 80) },
+        });
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
       } else if (Date.now() < this.bargeInHoldUntil) {
         // Echo grace — suppress non-semantic barge-in while our own freshly
@@ -541,6 +548,10 @@ export class OrchestrationPipeline {
         if (this.streamingBargeInWordCount >= threshold) {
           this.bargeInRequested = true;
           this.bargeInCallback?.();
+          this.logExec("Agent", "system", {
+            status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
+            metadata: { event: "Barge-in Detected", trigger: "word_count", words: this.streamingBargeInWordCount, threshold },
+          });
           logger.info(
             { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
             "Barge-in detected (streaming STT)",
@@ -724,6 +735,10 @@ export class OrchestrationPipeline {
             this.bargeInRequested = true;
             this.bargeInCallback?.();
             this.audioBuffer = [];
+            this.logExec("Agent", "system", {
+              status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
+              metadata: { event: "Barge-in Detected", trigger: "energy", frames: this.bargeInSpeechFrames, effectiveMinFrames },
+            });
             logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames, effectiveMinFrames }, "Barge-in detected (batch STT)");
           }
           this.bargeInLowEnergyFrames = 0;
@@ -965,6 +980,7 @@ export class OrchestrationPipeline {
     this.logExec("TTS", "request", {
       provider: this.agent.ttsProvider,
       status: "info",
+      turnNumber: this._activeTurnIndex,
       requestPayload: { text },
     });
 
@@ -1130,6 +1146,8 @@ export class OrchestrationPipeline {
         provider: this.agent.ttsProvider,
         status: "success",
         latencyMs: Date.now() - _ttsReqStart,
+        turnNumber: this._activeTurnIndex,
+        durationMs: Date.now() - _ttsReqStart,
         responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
       });
     } else {
@@ -1139,6 +1157,8 @@ export class OrchestrationPipeline {
         provider: this.agent.ttsProvider,
         status: "success",
         latencyMs: Date.now() - _ttsReqStart,
+        turnNumber: this._activeTurnIndex,
+        durationMs: Date.now() - _ttsReqStart,
         responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length },
       });
       if (this.bargeInRequested) return;
@@ -1191,6 +1211,7 @@ export class OrchestrationPipeline {
     const _toolStart = Date.now();
     this.logExec("Tool", "request", {
       status: "info",
+      turnNumber: this._activeTurnIndex,
       requestPayload: { tool: toolName, args },
     });
     try {
@@ -1198,6 +1219,8 @@ export class OrchestrationPipeline {
       this.logExec("Tool", "response", {
         status: "success",
         latencyMs: Date.now() - _toolStart,
+        turnNumber: this._activeTurnIndex,
+        durationMs: Date.now() - _toolStart,
         requestPayload: { tool: toolName },
         responsePayload: { result: (result ?? "unavailable").substring(0, 800) },
       });
@@ -1206,6 +1229,8 @@ export class OrchestrationPipeline {
       this.logExec("Tool", "response", {
         status: "error",
         latencyMs: Date.now() - _toolStart,
+        turnNumber: this._activeTurnIndex,
+        errorMessage: toReadableError(err, "Tool error"),
         requestPayload: { tool: toolName },
         responsePayload: { error: toReadableError(err, "Tool error") },
       });
@@ -1677,6 +1702,7 @@ export class OrchestrationPipeline {
     this.streamingBargeInWordCount = 0;
     this.firstAudioSentAt = null;
     const _currentTurnIndex = ++this.turnIndex;
+    this._activeTurnIndex = _currentTurnIndex;
     this._tTurnLlmFirstToken  = null;
     this._tTurnLlmFirstClause = null;
     this._tTurnTtsFirstByte   = null;
@@ -1698,6 +1724,7 @@ export class OrchestrationPipeline {
       provider: this.agent.asrProvider,
       status: "success",
       latencyMs: _sttMeta?.lastPartialToFinalMs ? Math.round(_sttMeta.lastPartialToFinalMs) : (Math.round(sttLatencyMs) || undefined),
+      turnNumber: this._activeTurnIndex,
       responsePayload: { transcript, ...(_sttMeta ?? {}) },
     });
 
@@ -2200,6 +2227,7 @@ export class OrchestrationPipeline {
     this.logExec("LLM", "request", {
       provider: this.agent.llmProvider,
       status: "info",
+      turnNumber: _currentTurnIndex,
       requestPayload: {
         model: this.agent.llmModel ?? "",
         systemPromptPreview: systemPromptForTurn.substring(0, 800),
@@ -2218,6 +2246,13 @@ export class OrchestrationPipeline {
             this._tTurnLlmFirstToken = performance.now();
             // LLM responded in time — cancel the dead-air filler before it fires
             if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+            this.logExec("LLM", "system", {
+              provider: this.agent.llmProvider,
+              status: "info",
+              turnNumber: _currentTurnIndex,
+              durationMs: llmFirstTokenAt - llmStart,
+              metadata: { event: "First Token Received", ttftMs: llmFirstTokenAt - llmStart },
+            });
           }
           llmResponse += token;                  // keep raw response (incl. think blocks)
           const afterThink = filterThinkToken(token);
@@ -2279,6 +2314,19 @@ export class OrchestrationPipeline {
       // P0-B: LLM fallback — if primary failed before producing any tokens, retry with fallback adapter
       if (this.fallbackLlm && llmFirstTokenAt === null) {
         logger.warn({ callId: this.config.callId, err: llmErr, fallbackProvider: this.agent.fallbackLlmProvider }, "Primary LLM failed (no tokens) — retrying with fallback LLM");
+        this.logExec("LLM", "system", {
+          provider: this.agent.fallbackLlmProvider ?? undefined,
+          status: "info",
+          turnNumber: _currentTurnIndex,
+          retryCount: 1,
+          warningFlags: ["provider_fallback"],
+          errorMessage: toReadableError(llmErr, "LLM error"),
+          metadata: {
+            event: "Provider Fallback",
+            fromProvider: this.agent.llmProvider,
+            toProvider: this.agent.fallbackLlmProvider ?? null,
+          },
+        });
         llmResponse = "";
         pendingText  = "";
         try {
@@ -2322,6 +2370,8 @@ export class OrchestrationPipeline {
             provider: this.agent.fallbackLlmProvider ?? this.agent.llmProvider,
             status: "error",
             latencyMs: Date.now() - llmStart,
+            turnNumber: _currentTurnIndex,
+            errorMessage: reason,
             metadata: { error: reason },
           });
           this.config.onFatalError?.(reason);
@@ -2338,6 +2388,8 @@ export class OrchestrationPipeline {
           provider: this.agent.llmProvider,
           status: "error",
           latencyMs: Date.now() - llmStart,
+          turnNumber: _currentTurnIndex,
+          errorMessage: reason,
           metadata: { error: reason },
         });
         this.config.onFatalError?.(reason);
@@ -2363,6 +2415,7 @@ export class OrchestrationPipeline {
         provider: this.agent.llmProvider,
         status: "success",
         latencyMs: llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart,
+        turnNumber: _currentTurnIndex,
         responsePayload: { text: _llmLogText || (triggeredToolName ? `[calling tool: ${triggeredToolName}]` : "") },
         metadata: { inputTokens: turnInputTokens, outputTokens: turnOutputTokens, model: this.agent.llmModel ?? "" },
       });

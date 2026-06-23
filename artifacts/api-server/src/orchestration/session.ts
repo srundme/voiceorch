@@ -1,7 +1,7 @@
-import { createHmac } from "crypto";
+import { createHmac, createHash } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, executionLogsTable } from "@workspace/db";
-import { createExecutionLogger } from "../services/execution-log.js";
+import { createExecutionLogger, writeCallEndedLog, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
@@ -46,6 +46,7 @@ interface MetricsAcc {
 
 interface ActiveSession {
   callId: number;
+  agentId: number;
   pipeline: OrchestrationPipeline;
   startedAt: Date;
   metricsAcc: MetricsAcc;
@@ -597,6 +598,33 @@ export async function createSession(params: {
     });
   }
 
+  // ── Setup: provider-init / voice / prompt events (mirror the web-call path) ──
+  logExec(EXEC_COMPONENTS.STT, "system", {
+    status: "info",
+    metadata: { event: "Provider Initialized", provider: agent.asrProvider, language: agent.asrLanguage ?? agent.language ?? null },
+  });
+  logExec(EXEC_COMPONENTS.LLM, "system", {
+    status: "info",
+    metadata: { event: "Provider Initialized", provider: agent.llmProvider, model: agent.llmModel ?? null },
+  });
+  logExec(EXEC_COMPONENTS.TTS, "system", {
+    status: "info",
+    metadata: { event: "Provider Initialized", provider: agent.ttsProvider },
+  });
+  logExec(EXEC_COMPONENTS.TTS, "system", {
+    status: "info",
+    metadata: { event: "Voice Loaded", provider: agent.ttsProvider, voice: agent.ttsVoice ?? null },
+  });
+  logExec(EXEC_COMPONENTS.Agent, "system", {
+    status: "info",
+    metadata: {
+      event: "Prompt Generated",
+      promptHash: createHash("sha256").update(agentConfig.systemPrompt).digest("hex").slice(0, 12),
+      promptLength: agentConfig.systemPrompt.length,
+      preview: agentConfig.systemPrompt.substring(0, 200),
+    },
+  });
+
   const metricsAcc: MetricsAcc = { sttTotal: 0, llmTotal: 0, ttsTotal: 0, count: 0 };
   let wasTransferred = false;
   let transferredTo: string | null = null;
@@ -774,6 +802,7 @@ export async function createSession(params: {
 
   sessions.set(sessionId, {
     callId: callRecord.id,
+    agentId: params.agentId,
     pipeline,
     startedAt: new Date(),
     metricsAcc,
@@ -808,7 +837,7 @@ export async function createSession(params: {
       { sessionId, callId: callRecord.id, maxDurationSeconds: agentConfig.maxDuration, endReason: "max_duration" },
       "Session reached configured max duration — ending call",
     );
-    void endSession(sessionId);
+    void endSession(sessionId, "max_duration");
   }, agentConfig.maxDuration * 1000);
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
@@ -913,7 +942,7 @@ export async function triggerTransfer(
   return true;
 }
 
-export async function endSession(sessionId: string): Promise<void> {
+export async function endSession(sessionId: string, reason?: string): Promise<void> {
   const session = sessions.get(sessionId);
   if (!session) return;
 
@@ -1122,22 +1151,21 @@ export async function endSession(sessionId: string): Promise<void> {
           }
         }
 
-        // ── End-of-call execution log ─────────────────────────────────────────────
-        void db.insert(executionLogsTable).values({
-          callId:    session.callId,
-          agentId:   ag.id,
-          component: "Agent",
-          direction: "response",
-          status:    "info",
-          latencyMs: avgLlmMs,
-          metadata: {
-            durationSeconds,
-            turns:     metricsAcc.count,
-            avgSttMs,
-            avgLlmMs,
-            avgTtsMs,
-          },
-        }).catch(() => {});
+        // ── End-of-call execution log (structured Call Ended summary) ─────────────
+        // Always the final row: explains WHY the call ended. Reason is taken from
+        // the explicit `reason` arg (e.g. max-duration timer) when provided,
+        // otherwise derived from the session's end flags.
+        const endRawReason = reason
+          ?? (session.wasTransferred ? "transfer_completed"
+              : session.naturalEndTriggered ? "completed"
+              : "user_hangup");
+        writeCallEndedLog(session.callId, ag.id, {
+          rawReason: endRawReason,
+          durationSeconds,
+          turns: metricsAcc.count,
+          retryAttempted: false,
+          fallbackAttempted: false,
+        }, { avgSttMs, avgLlmMs, avgTtsMs });
 
         // ── Post-call AI summary + disposition + webhook (sequential, one async block) ──
         // Running them in sequence ensures the webhook payload includes the final
@@ -1411,6 +1439,15 @@ export async function failSession(sessionId: string, errorMessage: string): Prom
     endedAt: new Date(),
     errorMessage,
   }).where(eq(callsTable.id, session.callId)).catch(() => {});
+
+  // ── Structured Call Ended (failure) ───────────────────────────────────────
+  const failDurationSeconds = Math.max(0, Math.round((Date.now() - session.startedAt.getTime()) / 1000));
+  writeCallEndedLog(session.callId, session.agentId ?? null, {
+    rawReason: "failed",
+    durationSeconds: failDurationSeconds,
+    turns: session.metricsAcc.count,
+    errorMessage,
+  });
 
   logger.error({ sessionId, errorMessage }, "Session failed");
 }

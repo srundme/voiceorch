@@ -43,7 +43,8 @@ import {
   executeWebhookTool,
 } from "../../services/tool-executor.js";
 import { disposeCall } from "../../services/disposition.js";
-import { createExecutionLogger } from "../../services/execution-log.js";
+import { createExecutionLogger, writeCallEndedLog, EXEC_COMPONENTS } from "../../services/execution-log.js";
+import { createHash } from "crypto";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
 const activeCalls = new Map<string, number>();
@@ -479,6 +480,24 @@ export async function handleWebCallWebSocket(
     status: "info",
   });
 
+  // ── Setup: provider-init / voice events (mirror the telephony path) ────────
+  logExecution(EXEC_COMPONENTS.STT, "system", {
+    status: "info",
+    metadata: { event: "Provider Initialized", provider: agent.asrProvider, language: agent.asrLanguage ?? agent.language ?? null },
+  });
+  logExecution(EXEC_COMPONENTS.LLM, "system", {
+    status: "info",
+    metadata: { event: "Provider Initialized", provider: agent.llmProvider, model: agent.llmModel ?? null },
+  });
+  logExecution(EXEC_COMPONENTS.TTS, "system", {
+    status: "info",
+    metadata: { event: "Provider Initialized", provider: agent.ttsProvider },
+  });
+  logExecution(EXEC_COMPONENTS.TTS, "system", {
+    status: "info",
+    metadata: { event: "Voice Loaded", provider: agent.ttsProvider, voice: agent.ttsVoice ?? null },
+  });
+
   // ── Per-call usage accumulators (written to usage_events on hangup) ──────
   let llmInputTokensTotal  = 0;
   let llmOutputTokensTotal = 0;
@@ -539,6 +558,13 @@ export async function handleWebCallWebSocket(
             interrupted = true;
             send({ type: "interrupted" });
             sendStatus("thinking");
+            logExecution("STT", "system", {
+              provider: agent.asrProvider,
+              status: "info",
+              turnNumber: _webcallTurnIdx,
+              warningFlags: ["barge_in"],
+              metadata: { event: "Barge-in Detected", reason: semanticOverride ? "semantic" : "word_count", wordCount: wc },
+            });
             logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via streaming STT");
           } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS
                      && lastUserSpeechStartAt <= speakingEndedAt) {
@@ -601,6 +627,13 @@ export async function handleWebCallWebSocket(
                       interrupted = true;
                       send({ type: "interrupted" });
                       sendStatus("thinking");
+                      logExecution("STT", "system", {
+                        provider: agent.asrProvider,
+                        status: "info",
+                        turnNumber: _webcallTurnIdx,
+                        warningFlags: ["barge_in"],
+                        metadata: { event: "Barge-in Detected", reason: semanticOverride ? "semantic" : "word_count", wordCount: wc, path: "fallback_stt" },
+                      });
                       logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via fallback streaming STT");
                     } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS
                                && lastUserSpeechStartAt <= speakingEndedAt) {
@@ -800,6 +833,16 @@ export async function handleWebCallWebSocket(
   //    prompt outside session.ts). Forces one-step-at-a-time delivery, turn
   //    yielding on "wait for response" markers, and resume-after-objection.
   systemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
+
+  logExecution(EXEC_COMPONENTS.Agent, "system", {
+    status: "info",
+    metadata: {
+      event: "Prompt Generated",
+      promptHash: createHash("sha256").update(systemPrompt).digest("hex").slice(0, 12),
+      promptLength: systemPrompt.length,
+      preview: systemPrompt.substring(0, 200),
+    },
+  });
 
   // ── Agent config (agentConfig JSONB) ─────────────────────────────────────
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
@@ -1181,6 +1224,7 @@ export async function handleWebCallWebSocket(
         provider: agent.asrProvider,
         responsePayload: { transcript: userText, ...(_sttMeta ?? {}) },
         latencyMs: _sttMeta?.lastPartialToFinalMs ? Math.round(_sttMeta.lastPartialToFinalMs) : undefined,
+        turnNumber: _curTurnIdx,
         status: "success",
       });
       send({ type: "transcript", speaker: "user", text: userText });
@@ -1413,6 +1457,7 @@ export async function handleWebCallWebSocket(
         logExecution("TTS", "request", {
           provider: agent.ttsProvider,
           requestPayload: { text: t },
+          turnNumber: _curTurnIdx,
           status: "info",
         });
         // Kick off synthesis immediately so it runs in parallel with LLM streaming.
@@ -1450,6 +1495,8 @@ export async function handleWebCallWebSocket(
                 // latencyMs = time to LAST byte (full synthesis); firstByteMs = Cartesia TTFB (~40-90ms + network)
                 responsePayload: { audioBytes: totalBytes, textLength: t.length, firstByteMs: firstByteMs ?? null },
                 latencyMs: Date.now() - ttsReqStart,
+                turnNumber: _curTurnIdx,
+                durationMs: Date.now() - ttsReqStart,
                 status: "success",
               });
               synthFinished = true;
@@ -1479,6 +1526,8 @@ export async function handleWebCallWebSocket(
               provider: agent.ttsProvider,
               responsePayload: { audioBytes: audio.length, textLength: t.length },
               latencyMs: Date.now() - ttsReqStart,
+              turnNumber: _curTurnIdx,
+              durationMs: Date.now() - ttsReqStart,
               status: "success",
             });
             return withTailSilence(audio);
@@ -1792,6 +1841,7 @@ export async function handleWebCallWebSocket(
           historyLength: history.length,
           tools: attachTools ? toolDefs.map((t: any) => t.function?.name ?? t.name).filter(Boolean) : [],
         },
+        turnNumber: _curTurnIdx,
         status: "info",
       });
 
@@ -1800,7 +1850,16 @@ export async function handleWebCallWebSocket(
         historyForLlm,
         iterSystemPrompt,
         (token) => {
-          if (_tLlmFirstToken === null) { _tLlmFirstToken = performance.now(); _llmStreamActive = true; }
+          if (_tLlmFirstToken === null) {
+            _tLlmFirstToken = performance.now(); _llmStreamActive = true;
+            logExecution("LLM", "system", {
+              provider: agent.llmProvider,
+              status: "info",
+              turnNumber: _curTurnIdx,
+              durationMs: Date.now() - llmStartMs,
+              metadata: { event: "First Token Received", ttftMs: Date.now() - llmStartMs },
+            });
+          }
           fullReply += token;                         // keep raw (for cleaning later)
           const afterThink = filterThinkToken(token); // strip <think>…</think>
           if (!afterThink) return;                    // token was entirely inside a think block
@@ -1840,6 +1899,15 @@ export async function handleWebCallWebSocket(
           const fallbackKey = providerKeys.get(fallbackProvider.toLowerCase());
           if (fallbackKey) {
             logger.warn({ callId, err: llmErr, fallbackProvider }, "Webcall: primary LLM failed (no tokens) — retrying with fallback");
+            logExecution("LLM", "system", {
+              provider: fallbackProvider,
+              status: "info",
+              turnNumber: _curTurnIdx,
+              retryCount: 1,
+              warningFlags: ["provider_fallback"],
+              errorMessage: toReadableError(llmErr, "LLM error"),
+              metadata: { event: "Provider Fallback", fromProvider: agent.llmProvider, toProvider: fallbackProvider },
+            });
             tokenBuf = "";
             fullReply = "";
             filterThinkToken = makeThinkFilter(); stepGuard = makeFlowStepGuard();
@@ -1898,6 +1966,9 @@ export async function handleWebCallWebSocket(
             provider: agent.llmProvider,
             status: "error",
             latencyMs: Date.now() - llmStartMs,
+            turnNumber: _curTurnIdx,
+            durationMs: Date.now() - llmStartMs,
+            errorMessage: reason,
             metadata: { error: reason },
           });
           send({ type: "error", message: reason });
@@ -1915,6 +1986,8 @@ export async function handleWebCallWebSocket(
           text: stripReasoningBlocks(fullReply).replace(/<function[\s\S]*?>/g, "").trim().substring(0, 1500),
         },
         latencyMs: Date.now() - llmStartMs,
+        turnNumber: _curTurnIdx,
+        durationMs: Date.now() - llmStartMs,
         status: "success",
         metadata: {
           inputTokens: llmInputTokensTotal,
@@ -2016,6 +2089,7 @@ export async function handleWebCallWebSocket(
         const toolStartMs = Date.now();
         logExecution("Tool", "request", {
           requestPayload: { tool: triggeredToolName, args: triggeredToolArgs },
+          turnNumber: _curTurnIdx,
           status: "info",
         });
         try {
@@ -2095,6 +2169,9 @@ export async function handleWebCallWebSocket(
             requestPayload: { tool: triggeredToolName },
             responsePayload: { error: toolErr instanceof Error ? toolErr.message : String(toolErr) },
             latencyMs: Date.now() - toolStartMs,
+            turnNumber: _curTurnIdx,
+            durationMs: Date.now() - toolStartMs,
+            errorMessage: toolErr instanceof Error ? toolErr.message : String(toolErr),
             status: "error",
           });
           toolResult = "error: tool execution failed";
@@ -2105,6 +2182,8 @@ export async function handleWebCallWebSocket(
             requestPayload: { tool: triggeredToolName },
             responsePayload: { result: (toolResult ?? "unavailable").substring(0, 800) },
             latencyMs: Date.now() - toolStartMs,
+            turnNumber: _curTurnIdx,
+            durationMs: Date.now() - toolStartMs,
             status: "success",
           });
         }
@@ -2957,15 +3036,14 @@ export async function handleWebCallWebSocket(
 
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
-    logExecution("Agent", "system", {
-      requestPayload: {
-        event: "call.end",
-        reason,
-        durationSeconds,
-        turns: history.filter(t => t.role === "assistant").length,
-        ...(errorDetail ? { error: errorDetail instanceof Error ? errorDetail.message : String(errorDetail) } : {}),
-      },
-      status: reason === "error" ? "error" : "info",
+    // ── Structured Call Ended (final row) — mirrors the telephony teardown ────
+    writeCallEndedLog(callId, agentId, {
+      rawReason: reason,
+      durationSeconds,
+      turns: history.filter(t => t.role === "assistant").length,
+      errorMessage: errorDetail
+        ? (errorDetail instanceof Error ? errorDetail.message : String(errorDetail))
+        : null,
     });
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
@@ -3281,6 +3359,13 @@ export async function handleWebCallWebSocket(
           interrupted = true;
           send({ type: "interrupted" }); // tell client to stop playing
           sendStatus("thinking");
+          logExecution("STT", "system", {
+            provider: agent.asrProvider,
+            status: "info",
+            turnNumber: _webcallTurnIdx,
+            warningFlags: ["barge_in"],
+            metadata: { event: "Barge-in Detected", reason: "energy", rms, durationMs, interruptScore: +interruptScore.toFixed(2) },
+          });
           logger.info({ callId, rms, bargeInFrames, effectiveBargeInMinFrames, durationMs, interruptScore: +interruptScore.toFixed(2) }, "Barge-in triggered");
         }
       } else if (!inStartGrace) {

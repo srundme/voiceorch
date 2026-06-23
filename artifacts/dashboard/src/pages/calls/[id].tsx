@@ -270,11 +270,70 @@ const DIRECTION_COLORS: Record<string, string> = {
 
 const PREVIEW_MAX = 160;
 
+interface LogEnrichment {
+  turnNumber?: number;
+  relatedTurnId?: number;
+  durationMs?: number;
+  retryCount?: number;
+  warningFlags?: string[];
+  errorMessage?: string;
+  errorCode?: string | number;
+  event?: string;
+  callEnded?: CallEndedSummary;
+}
+
+interface CallEndedSummary {
+  reason: string;
+  reasonLabel: string;
+  component: string;
+  provider: string | null;
+  errorCode: string | number | null;
+  errorMessage: string | null;
+  expected: boolean;
+  retryAttempted: boolean;
+  fallbackAttempted: boolean;
+  recoverySucceeded: boolean | null;
+  outcome: string;
+  durationSeconds: number;
+  turns: number;
+}
+
+function getEnrichment(entry: ExecutionLogEvent): LogEnrichment {
+  const md = (entry.metadata ?? {}) as Record<string, unknown>;
+  return {
+    turnNumber: md["turnNumber"] as number | undefined,
+    relatedTurnId: md["relatedTurnId"] as number | undefined,
+    durationMs: md["durationMs"] as number | undefined,
+    retryCount: md["retryCount"] as number | undefined,
+    warningFlags: md["warningFlags"] as string[] | undefined,
+    errorMessage: (md["errorMessage"] as string | undefined) ?? (md["error"] as string | undefined),
+    errorCode: md["errorCode"] as string | number | undefined,
+    event: md["event"] as string | undefined,
+    callEnded: md["callEnded"] as CallEndedSummary | undefined,
+  };
+}
+
 function getLogPreview(entry: ExecutionLogEvent): string | null {
   const rq = entry.requestPayload as Record<string, unknown> | null;
   const rs = entry.responsePayload as Record<string, unknown> | null;
   const md = entry.metadata as Record<string, unknown> | null;
   const { component, direction } = entry;
+
+  // Named pipeline events (First Token Received, Provider Fallback, Barge-in
+  // Detected, Call Ended, Provider Initialized, Voice Loaded, Prompt Generated)
+  // carry a human label under metadata.event — surface it directly.
+  const evt = md?.event as string | undefined;
+  if (evt) {
+    const ce = md?.callEnded as CallEndedSummary | undefined;
+    if (ce) return `${ce.reasonLabel} · ${ce.outcome} · ${ce.durationSeconds.toFixed(1)}s · ${ce.turns} turns`;
+    const extras: string[] = [];
+    if (typeof md?.ttftMs === "number") extras.push(`${md.ttftMs}ms`);
+    if (typeof md?.fromProvider === "string" && typeof md?.toProvider === "string") extras.push(`${md.fromProvider} → ${md.toProvider}`);
+    if (typeof md?.reason === "string") extras.push(md.reason as string);
+    if (typeof md?.voice === "string") extras.push(md.voice as string);
+    if (typeof md?.promptHash === "string") extras.push(`sha256:${(md.promptHash as string).slice(0, 12)}`);
+    return [evt, extras.join(" · ")].filter(Boolean).join(" — ") || evt;
+  }
 
   if (component === "STT" && direction === "response")
     return (rs?.transcript as string) ?? null;
@@ -382,21 +441,109 @@ function JsonViewer({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+const LOG_GRID_COLUMNS = "120px 46px minmax(0,1fr) 80px 110px 90px 64px 56px 16px";
+
+const OUTCOME_STYLE: Record<string, { dot: string; text: string; ring: string }> = {
+  Completed:         { dot: "bg-emerald-400", text: "text-emerald-300", ring: "border-emerald-500/30 bg-emerald-500/[0.07]" },
+  Transferred:       { dot: "bg-sky-400",     text: "text-sky-300",     ring: "border-sky-500/30 bg-sky-500/[0.07]" },
+  "Call Terminated": { dot: "bg-slate-400",   text: "text-slate-300",   ring: "border-slate-500/30 bg-slate-500/[0.07]" },
+  Timeout:           { dot: "bg-amber-400",   text: "text-amber-300",   ring: "border-amber-500/30 bg-amber-500/[0.07]" },
+  Error:             { dot: "bg-red-400",     text: "text-red-300",     ring: "border-red-500/30 bg-red-500/[0.07]" },
+};
+
+function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
+  const st = OUTCOME_STYLE[summary.outcome] ?? OUTCOME_STYLE["Error"]!;
+  const chips: { label: string; value: string }[] = [
+    { label: "Outcome", value: summary.outcome },
+    { label: "Duration", value: `${summary.durationSeconds.toFixed(1)}s` },
+    { label: "Turns", value: String(summary.turns) },
+    ...(summary.component ? [{ label: "Triggered by", value: summary.component }] : []),
+    ...(summary.provider ? [{ label: "Provider", value: summary.provider }] : []),
+  ];
+  return (
+    <div className={`mx-3 my-3 rounded-lg border ${st.ring} p-3.5`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`h-2 w-2 rounded-full ${st.dot}`} />
+        <span className={`text-sm font-semibold ${st.text}`}>Call Ended — {summary.reasonLabel}</span>
+        {!summary.expected && (
+          <span className="ml-auto inline-flex items-center rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[9px] font-bold uppercase px-1.5 py-0.5">
+            Unexpected
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+        {chips.map(c => (
+          <div key={c.label} className="flex flex-col">
+            <span className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">{c.label}</span>
+            <span className="text-xs text-white/70 font-medium">{c.value}</span>
+          </div>
+        ))}
+      </div>
+      {(summary.errorMessage || summary.retryAttempted || summary.fallbackAttempted || summary.recoverySucceeded != null) && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+          {summary.errorMessage && (
+            <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">
+              {summary.errorCode != null ? `[${summary.errorCode}] ` : ""}{summary.errorMessage}
+            </span>
+          )}
+          {summary.retryAttempted && (
+            <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-300/80 border border-orange-500/25 text-[10px] font-medium px-1.5 py-0.5">↻ retry attempted</span>
+          )}
+          {summary.fallbackAttempted && (
+            <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[10px] font-medium px-1.5 py-0.5">⤳ fallback attempted</span>
+          )}
+          {summary.recoverySucceeded != null && (
+            <span className={`inline-flex items-center rounded text-[10px] font-medium px-1.5 py-0.5 border ${summary.recoverySucceeded ? "bg-emerald-500/15 text-emerald-300/80 border-emerald-500/25" : "bg-red-500/15 text-red-300/80 border-red-500/25"}`}>
+              {summary.recoverySucceeded ? "✓ recovered" : "✗ recovery failed"}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
   const [expanded, setExpanded] = useState(false);
   const ts = new Date(entry.ts).toISOString().replace("T", " ").substring(11, 23);
   const compCls = COMPONENT_COLORS[entry.component] ?? "bg-gray-500/15 text-gray-400 border-gray-500/25";
   const dirCls  = DIRECTION_COLORS[entry.direction] ?? "bg-gray-500/15 text-gray-400 border-gray-500/25";
   const hasPayload = !!(entry.requestPayload || entry.responsePayload || entry.metadata);
+  const en = getEnrichment(entry);
+  const durMs = en.durationMs ?? entry.latencyMs ?? null;
   return (
     <div className={`border-b border-white/5 ${hasPayload ? "cursor-pointer hover:bg-white/[0.03]" : ""}`}>
       <div
         className="grid items-start gap-2 px-3 py-2.5 text-xs select-none"
-        style={{ gridTemplateColumns: "130px minmax(0,1fr) 80px 120px 100px 70px 60px 16px" }}
+        style={{ gridTemplateColumns: LOG_GRID_COLUMNS }}
         onClick={() => { if (hasPayload) setExpanded(e => !e); }}
       >
         <span className="font-mono text-white/35 tabular-nums pt-0.5">{ts}</span>
-        <LogDataCell preview={getLogPreview(entry)} />
+        <span className="font-mono text-cyan-300/50 tabular-nums text-center pt-0.5">
+          {en.turnNumber != null ? `#${en.turnNumber}` : <span className="text-white/15">—</span>}
+        </span>
+        <div className="min-w-0">
+          <LogDataCell preview={getLogPreview(entry)} />
+          {(en.warningFlags?.length || en.retryCount || en.errorMessage) && (
+            <div className="flex flex-wrap items-center gap-1 mt-1">
+              {en.warningFlags?.map(f => (
+                <span key={f} className="inline-flex items-center rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[9px] font-medium px-1 py-px">
+                  ⚠ {f}
+                </span>
+              ))}
+              {en.retryCount != null && en.retryCount > 0 && (
+                <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-300/80 border border-orange-500/25 text-[9px] font-medium px-1 py-px">
+                  ↻ retry {en.retryCount}
+                </span>
+              )}
+              {en.errorMessage && (
+                <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[9px] font-medium px-1 py-px max-w-full truncate">
+                  {en.errorCode != null ? `[${en.errorCode}] ` : ""}{en.errorMessage}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         <span className={`inline-flex items-center justify-center border rounded text-[10px] font-medium px-1.5 py-0.5 mt-0.5 ${dirCls}`}>
           {entry.direction}
         </span>
@@ -405,7 +552,7 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
         </span>
         <span className="text-white/45 truncate pt-0.5">{entry.provider ?? <span className="text-white/20">—</span>}</span>
         <span className="font-mono text-white/35 tabular-nums text-right pt-0.5">
-          {entry.latencyMs != null ? (entry.latencyMs >= 1000 ? `${(entry.latencyMs / 1000).toFixed(1)}s` : `${entry.latencyMs}ms`) : <span className="text-white/15">—</span>}
+          {durMs != null ? (durMs >= 1000 ? `${(durMs / 1000).toFixed(1)}s` : `${durMs}ms`) : <span className="text-white/15">—</span>}
         </span>
         <span className={`inline-flex items-center justify-center text-[9px] font-bold uppercase rounded px-1 py-0.5 mt-0.5 ${
           entry.status === "error" ? "bg-red-500/20 text-red-400" :
@@ -1092,14 +1239,15 @@ export default function CallDetail() {
                   {callLogs && callLogs.length > 0 && (
                     <div
                       className="grid items-center gap-2 px-3 py-1.5 border-b border-white/8 bg-[#0f0f0f] shrink-0 text-[9px] uppercase tracking-widest text-white/20 font-semibold"
-                      style={{ gridTemplateColumns: "130px minmax(0,1fr) 80px 120px 100px 70px 60px 16px" }}
+                      style={{ gridTemplateColumns: LOG_GRID_COLUMNS }}
                     >
                       <span>Timestamp</span>
+                      <span className="text-center">Turn</span>
                       <span>Log data</span>
                       <span>Direction</span>
                       <span>Component</span>
                       <span>Provider</span>
-                      <span className="text-right">Latency</span>
+                      <span className="text-right">Duration</span>
                       <span>Status</span>
                       <span />
                     </div>
@@ -1121,6 +1269,9 @@ export default function CallDetail() {
                       </div>
                     ) : (() => {
                       const q = logSearch.toLowerCase();
+                      const callEndedSummary = callLogs
+                        .map(e => getEnrichment(e).callEnded)
+                        .find((s): s is CallEndedSummary => s != null);
                       const filtered = callLogs.filter(e => {
                         if (logComponent !== "all" && e.component !== logComponent) return false;
                         if (logDirection !== "all" && e.direction !== logDirection) return false;
@@ -1131,6 +1282,7 @@ export default function CallDetail() {
                         }
                         return true;
                       });
+                      const noFilters = logComponent === "all" && logDirection === "all" && logStatus === "all" && !q;
                       if (filtered.length === 0) {
                         return (
                           <div className="flex flex-col items-center justify-center h-full text-center py-10">
@@ -1138,7 +1290,12 @@ export default function CallDetail() {
                           </div>
                         );
                       }
-                      return filtered.map(entry => <ExecLogRow key={entry.id} entry={entry} />);
+                      return (
+                        <>
+                          {callEndedSummary && noFilters && <CallEndedCard summary={callEndedSummary} />}
+                          {filtered.map(entry => <ExecLogRow key={entry.id} entry={entry} />)}
+                        </>
+                      );
                     })()}
                   </div>
                 </Card>
