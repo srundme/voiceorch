@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, eventTypesTable, schedulingCalendarsTable } from "@workspace/db";
+import { eq, and, count } from "drizzle-orm";
+import { db, eventTypesTable, schedulingCalendarsTable, bookingsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
 import {
   CreateEventTypeBody,
@@ -78,6 +78,21 @@ router.delete("/scheduling/event-types/:id", requireAuth, async (req, res): Prom
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteEventTypeParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
+
+  const force = req.query.force === "true";
+
+  if (!force) {
+    const [countRow] = await db
+      .select({ total: count() })
+      .from(bookingsTable)
+      .where(eq(bookingsTable.eventTypeId, params.data.id));
+    const bookingCount = countRow?.total ?? 0;
+    if (bookingCount > 0) {
+      res.status(409).json({ error: "Event type has bookings", bookingCount });
+      return;
+    }
+  }
+
   const [row] = await db.delete(eventTypesTable)
     .where(and(eq(eventTypesTable.id, params.data.id), eq(eventTypesTable.userId, clerkId)))
     .returning();

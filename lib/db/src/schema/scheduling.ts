@@ -69,8 +69,8 @@ export const availabilityOverridesTable = pgTable("availability_overrides", {
 
 export const bookingsTable = pgTable("bookings", {
   id: serial("id").primaryKey(),
-  eventTypeId: integer("event_type_id").notNull().references(() => eventTypesTable.id, { onDelete: "restrict" }),
-  calendarId: integer("calendar_id").notNull().references(() => schedulingCalendarsTable.id, { onDelete: "restrict" }),
+  eventTypeId: integer("event_type_id").references(() => eventTypesTable.id, { onDelete: "set null" }),
+  calendarId: integer("calendar_id").references(() => schedulingCalendarsTable.id, { onDelete: "set null" }),
   callId: integer("call_id").references(() => callsTable.id, { onDelete: "set null" }),
   userId: text("user_id").notNull(),
   attendeeName: text("attendee_name").notNull(),

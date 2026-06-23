@@ -1002,11 +1002,12 @@ export async function executeNativeListBookings(
 
     // Resolve timezone: args → tool config → first booking's calendar → Asia/Kolkata
     let tz = (args["timezone"] != null ? String(args["timezone"]) : null) ?? tool.timezone ?? null;
-    if (!tz && owned[0]?.calendarId) {
+    const firstCalendarId = owned[0]?.calendarId;
+    if (!tz && firstCalendarId) {
       const [cal] = await db
         .select({ timezone: schedulingCalendarsTable.timezone })
         .from(schedulingCalendarsTable)
-        .where(eq(schedulingCalendarsTable.id, owned[0].calendarId));
+        .where(eq(schedulingCalendarsTable.id, firstCalendarId));
       tz = cal?.timezone ?? null;
     }
     const tzFallback = !tz;
@@ -1018,14 +1019,14 @@ export async function executeNativeListBookings(
     }
 
     // Resolve event type names in bulk
-    const etIds = [...new Set(owned.map((b) => b.eventTypeId))];
+    const etIds = [...new Set(owned.map((b) => b.eventTypeId).filter((id): id is number => id != null))];
     const etRows = etIds.length
       ? await db.select({ id: eventTypesTable.id, name: eventTypesTable.name }).from(eventTypesTable).where(sql`${eventTypesTable.id} in (${sql.join(etIds.map((id) => sql`${id}`), sql`, `)})`)
       : [];
     const etMap = new Map(etRows.map((e) => [e.id, e.name]));
 
     const list = owned.map((b) => {
-      const eventName = etMap.get(b.eventTypeId) ?? "Appointment";
+      const eventName = (b.eventTypeId != null ? etMap.get(b.eventTypeId) : undefined) ?? "Appointment";
       const dateStr = formatInTimeZone(b.slotStart, tz, "EEE MMM d 'at' h:mm a zzz");
       const endDateStr = formatInTimeZone(b.slotEnd, tz, "h:mm a zzz");
       logger.debug(
@@ -1108,15 +1109,16 @@ export async function executeNativeReschedule(
       return `error: no active booking found with reference ${bookingId}`;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
+    const [eventType] = existing.eventTypeId
+      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId))
+      : [];
     if (!eventType) {
       return "error: appointment type not found for this booking";
     }
 
-    const [calendar] = await db
-      .select()
-      .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.id, existing.calendarId));
+    const [calendar] = existing.calendarId
+      ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId))
+      : [];
     if (!calendar || !calendar.isActive) {
       return "error: calendar is unavailable";
     }
@@ -1445,11 +1447,12 @@ export async function executeNativeCancel(
       return `info: booking ${bookingId} was already cancelled`;
     }
 
-    const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
-    const [calendar] = await db
-      .select()
-      .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.id, existing.calendarId));
+    const [eventType] = existing.eventTypeId
+      ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId))
+      : [];
+    const [calendar] = existing.calendarId
+      ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId))
+      : [];
 
     const cancelledAt = new Date();
     await db.update(bookingsTable).set({ status: "cancelled", cancelledAt }).where(eq(bookingsTable.id, bookingId));

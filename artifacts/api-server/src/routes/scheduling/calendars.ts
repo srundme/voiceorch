@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count } from "drizzle-orm";
-import { db, schedulingCalendarsTable, agentsTable, googleCalendarConnectionsTable } from "@workspace/db";
+import { db, schedulingCalendarsTable, agentsTable, googleCalendarConnectionsTable, bookingsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
 import {
   CreateCalendarBody,
@@ -143,6 +143,21 @@ router.delete("/scheduling/calendars/:id", requireAuth, async (req, res): Promis
   const clerkId = (req as any).clerkUserId as string;
   const params = DeleteCalendarParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
+
+  const force = req.query.force === "true";
+
+  if (!force) {
+    const [countRow] = await db
+      .select({ total: count() })
+      .from(bookingsTable)
+      .where(eq(bookingsTable.calendarId, params.data.id));
+    const bookingCount = countRow?.total ?? 0;
+    if (bookingCount > 0) {
+      res.status(409).json({ error: "Calendar has bookings", bookingCount });
+      return;
+    }
+  }
+
   const [row] = await db.delete(schedulingCalendarsTable)
     .where(and(eq(schedulingCalendarsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)))
     .returning();

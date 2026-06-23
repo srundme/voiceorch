@@ -4,9 +4,9 @@ import { SchedulingTabNav } from "@/components/scheduling-tab-nav";
 import {
   useListEventTypes,
   useCreateEventType,
-  useDeleteEventType,
   useListCalendars,
   getListEventTypesQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import type { EventType } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -260,28 +260,58 @@ function EventTypeRow({ et, onDelete }: { et: EventType; onDelete: (id: number) 
   );
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API  = `${BASE}/api`;
+
 export default function EventTypesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
   const { data: calendars } = useListCalendars();
   const { data: eventTypes, isLoading } = useListEventTypes({}, { query: { queryKey: getListEventTypesQueryKey({}) } });
-  const deleteMut = useDeleteEventType();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [forceDeleteId, setForceDeleteId] = useState<number | null>(null);
+  const [bookingCount, setBookingCount] = useState(0);
+  const [deleting, setDeleting] = useState(false);
   const deleteTarget = eventTypes?.find(et => et.id === deleteId);
+  const forceDeleteTarget = eventTypes?.find(et => et.id === forceDeleteId);
 
   const defaultCalendarId = calendars?.[0]?.id ?? null;
 
   async function handleDelete(id: number) {
+    setDeleting(true);
     try {
-      await deleteMut.mutateAsync({ id });
+      await customFetch(`${API}/scheduling/event-types/${id}`, { method: "DELETE" });
       await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
       setDeleteId(null);
       toast({ title: "Event type deleted" });
+    } catch (e: any) {
+      if (e?.status === 409) {
+        const count = (e?.data as any)?.bookingCount ?? 0;
+        setBookingCount(count);
+        setDeleteId(null);
+        setForceDeleteId(id);
+      } else {
+        toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleForceDelete(id: number) {
+    setDeleting(true);
+    try {
+      await customFetch(`${API}/scheduling/event-types/${id}?force=true`, { method: "DELETE" });
+      await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
+      setForceDeleteId(null);
+      toast({ title: "Event type deleted" });
     } catch (e) {
       toast({ title: "Error", description: formatApiError(e), variant: "destructive" });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -374,9 +404,41 @@ export default function EventTypesPage() {
             <AlertDialogAction
               className="bg-destructive hover:bg-destructive/90"
               onClick={() => deleteId && void handleDelete(deleteId)}
-              disabled={deleteMut.isPending}
+              disabled={deleting}
             >
-              Delete
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Force-delete confirm (shown when event type has existing bookings) */}
+      <AlertDialog open={forceDeleteId !== null} onOpenChange={v => !v && setForceDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Event type has existing bookings</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">{forceDeleteTarget?.name}</strong> has{" "}
+                  <strong className="text-foreground">{bookingCount} booking{bookingCount !== 1 ? "s" : ""}</strong>{" "}
+                  associated with it.
+                </p>
+                <p>
+                  Deleting this event type will <strong className="text-foreground">preserve all past booking records</strong> — they will remain in your history but will no longer be linked to this event type.
+                </p>
+                <p>Are you sure you want to proceed?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => forceDeleteId && void handleForceDelete(forceDeleteId)}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Yes, delete event type"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

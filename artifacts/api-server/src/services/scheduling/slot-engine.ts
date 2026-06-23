@@ -93,7 +93,7 @@ export async function getAvailableSlots(
     );
 
   // Fetch each booking's own event type to get its buffers (so conflicts are symmetric).
-  const bookingEventTypeIds = [...new Set(existingBookings.map((b) => b.eventTypeId))];
+  const bookingEventTypeIds = [...new Set(existingBookings.map((b) => b.eventTypeId).filter((id): id is number => id != null))];
   const bookingEventTypes = bookingEventTypeIds.length
     ? await db
         .select({ id: eventTypesTable.id, bufferBeforeMins: eventTypesTable.bufferBeforeMins, bufferAfterMins: eventTypesTable.bufferAfterMins })
@@ -150,7 +150,7 @@ export async function getAvailableSlots(
         let bufferConflicts = 0;
         let exactConflicts = 0;
         for (const b of existingBookings) {
-          const bEt = etBufferMap.get(b.eventTypeId);
+          const bEt = b.eventTypeId != null ? etBufferMap.get(b.eventTypeId) : undefined;
           const bBefore = bEt?.bufferBeforeMins ?? 0;
           const bAfter = bEt?.bufferAfterMins ?? 0;
           const bEffectiveStart = addMinutes(b.slotStart, -bBefore);

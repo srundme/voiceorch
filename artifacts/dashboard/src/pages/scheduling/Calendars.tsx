@@ -363,18 +363,45 @@ function CalendarCard({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const del = useDeleteCalendar();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
+  const [bookingCount, setBookingCount] = useState(0);
+  const [deleting, setDeleting] = useState(false);
   const [linkingGcal, setLinkingGcal] = useState(false);
 
   async function confirmDelete() {
+    setDeleting(true);
     try {
-      await del.mutateAsync({ id: calendar.id });
+      await customFetch(`${API}/scheduling/calendars/${calendar.id}`, { method: "DELETE" });
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
       toast({ title: "Calendar deleted" });
+      setDeleteOpen(false);
+    } catch (e: any) {
+      if (e?.status === 409) {
+        const count = (e?.data as any)?.bookingCount ?? 0;
+        setBookingCount(count);
+        setDeleteOpen(false);
+        setForceDeleteOpen(true);
+      } else {
+        toast({ title: "Delete failed", description: formatApiError(e), variant: "destructive" });
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function forceDelete() {
+    setDeleting(true);
+    try {
+      await customFetch(`${API}/scheduling/calendars/${calendar.id}?force=true`, { method: "DELETE" });
+      await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
+      toast({ title: "Calendar deleted" });
+      setForceDeleteOpen(false);
     } catch (e) {
       toast({ title: "Delete failed", description: formatApiError(e), variant: "destructive" });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -544,13 +571,40 @@ function CalendarCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete calendar?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>{calendar.name}</strong> and all its event types, availability schedules, and bookings. This cannot be undone.
+              This will permanently delete <strong>{calendar.name}</strong> and all its event types and availability schedules. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmDelete()} className="bg-destructive hover:bg-destructive/90">
-              Delete
+            <AlertDialogAction onClick={() => void confirmDelete()} disabled={deleting} className="bg-destructive hover:bg-destructive/90">
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={forceDeleteOpen} onOpenChange={setForceDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Calendar has existing bookings</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">{calendar.name}</strong> has{" "}
+                  <strong className="text-foreground">{bookingCount} booking{bookingCount !== 1 ? "s" : ""}</strong>{" "}
+                  associated with it.
+                </p>
+                <p>
+                  Deleting this calendar will <strong className="text-foreground">preserve all past booking records</strong> — they will remain in your history but will no longer be linked to this calendar or its event types.
+                </p>
+                <p>Are you sure you want to proceed?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void forceDelete()} disabled={deleting} className="bg-destructive hover:bg-destructive/90">
+              {deleting ? "Deleting…" : "Yes, delete calendar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

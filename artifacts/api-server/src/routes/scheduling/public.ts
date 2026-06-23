@@ -374,10 +374,12 @@ router.get("/scheduling/public/bookings/by-token", async (req, res): Promise<voi
     .where(eq(bookingsTable.id, verified.bookingId));
   if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
 
-  const [eventType] = await db.select().from(eventTypesTable)
-    .where(eq(eventTypesTable.id, booking.eventTypeId));
-  const [calendar] = await db.select().from(schedulingCalendarsTable)
-    .where(eq(schedulingCalendarsTable.id, booking.calendarId));
+  const [eventType] = booking.eventTypeId != null
+    ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, booking.eventTypeId))
+    : [];
+  const [calendar] = booking.calendarId != null
+    ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, booking.calendarId))
+    : [];
 
   const meetLinkRow = await db.execute(
     sql`SELECT meet_link FROM bookings WHERE id = ${booking.id}`
@@ -416,10 +418,12 @@ router.post("/scheduling/public/bookings/cancel", async (req, res): Promise<void
     res.status(409).json({ error: "This booking has already been cancelled or rescheduled" }); return;
   }
 
-  const [eventType] = await db.select().from(eventTypesTable)
-    .where(eq(eventTypesTable.id, booking.eventTypeId));
-  const [calendar] = await db.select().from(schedulingCalendarsTable)
-    .where(eq(schedulingCalendarsTable.id, booking.calendarId));
+  const [eventType] = booking.eventTypeId != null
+    ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, booking.eventTypeId))
+    : [];
+  const [calendar] = booking.calendarId != null
+    ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, booking.calendarId))
+    : [];
 
   // Fetch google_event_id (not in Drizzle schema type)
   const gcalRow = await db.execute(
@@ -491,12 +495,15 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
     res.status(400).json({ error: "This appointment has already started and cannot be rescheduled" }); return;
   }
 
-  const [eventType] = await db.select().from(eventTypesTable)
-    .where(eq(eventTypesTable.id, booking.eventTypeId));
-  const [calendar] = await db.select().from(schedulingCalendarsTable)
-    .where(eq(schedulingCalendarsTable.id, booking.calendarId));
+  const [eventType] = booking.eventTypeId != null
+    ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, booking.eventTypeId))
+    : [];
+  const [calendar] = booking.calendarId != null
+    ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, booking.calendarId))
+    : [];
 
   if (!eventType || !calendar) { res.status(404).json({ error: "Event type or calendar not found" }); return; }
+  if (booking.eventTypeId == null || booking.calendarId == null) { res.status(422).json({ error: "This booking's event type or calendar has been deleted" }); return; }
 
   const newSlotStart = new Date(parsed.data.slotStart);
   const newSlotEnd = addMinutes(newSlotStart, eventType.durationMinutes);
@@ -540,7 +547,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
       .from(bookingsTable)
       .where(
         and(
-          eq(bookingsTable.calendarId, booking.calendarId),
+          sql`${bookingsTable.calendarId} = ${booking.calendarId}`,
           or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
           sql`${bookingsTable.slotStart} < ${newBufAfter}`,
           sql`${bookingsTable.slotEnd} > ${newBufBefore}`,
@@ -553,7 +560,7 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
       .from(bookingsTable)
       .where(
         and(
-          eq(bookingsTable.calendarId, booking.calendarId),
+          sql`${bookingsTable.calendarId} = ${booking.calendarId}`,
           or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
           sql`${bookingsTable.slotStart} < ${newSlotEnd}`,
           sql`${bookingsTable.slotEnd} > ${newSlotStart}`,

@@ -318,10 +318,18 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
 
   const existingGoogleEventId = existing.googleEventId ?? null;
 
-  const [eventType] = await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId));
-  const [calendar] = await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId));
+  const [eventType] = existing.eventTypeId != null
+    ? await db.select().from(eventTypesTable).where(eq(eventTypesTable.id, existing.eventTypeId))
+    : [];
+  const [calendar] = existing.calendarId != null
+    ? await db.select().from(schedulingCalendarsTable).where(eq(schedulingCalendarsTable.id, existing.calendarId))
+    : [];
 
   if (parsed.data.status === "rescheduled" && parsed.data.slotStart) {
+    if (existing.eventTypeId == null || existing.calendarId == null) {
+      res.status(422).json({ error: "This booking's event type or calendar has been deleted and cannot be rescheduled" });
+      return;
+    }
     const newSlotStart = new Date(parsed.data.slotStart);
     const newSlotEnd = addMinutes(newSlotStart, eventType?.durationMinutes ?? 30);
     const lockKey = buildSlotLockKey(existing.calendarId, newSlotStart);
@@ -365,7 +373,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
         .from(bookingsTable)
         .where(
           and(
-            eq(bookingsTable.calendarId, existing.calendarId),
+            sql`${bookingsTable.calendarId} = ${existing.calendarId}`,
             or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
             sql`${bookingsTable.slotStart} < ${newBufAfter}`,
             sql`${bookingsTable.slotEnd} > ${newBufBefore}`,
@@ -378,7 +386,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
         .from(bookingsTable)
         .where(
           and(
-            eq(bookingsTable.calendarId, existing.calendarId),
+            sql`${bookingsTable.calendarId} = ${existing.calendarId}`,
             or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
             sql`${bookingsTable.slotStart} < ${newSlotEnd}`,
             sql`${bookingsTable.slotEnd} > ${newSlotStart}`,
