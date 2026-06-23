@@ -1,0 +1,224 @@
+# Fix Version Comparison Direction & Diff Visualization
+
+The Version Compare screen is currently confusing because newly added content is appearing in red (removed) instead of green (added).
+
+## Objective
+
+Ensure the comparison system follows industry-standard version control behavior similar to GitHub, GitLab, Cursor, VS Code, and Retell AI.
+
+---
+
+## Expected Behavior
+
+When comparing:
+
+Current Version (V5)
+
+against
+
+Previous Version (V4)
+
+then:
+
+### Added Content
+
+Display in Green
+
+Example:
+
+```diff
++ THIS_LINE_WAS_ADDED_IN_V5
+```
+
+### Removed Content
+
+Display in Red
+
+Example:
+
+```diff
+- THIS_LINE_EXISTED_IN_V4
+```
+
+### Modified Content
+
+Display old value in red.
+
+Display new value in green.
+
+Example:
+
+```diff
+- model: gpt-4
++ model: gpt-5
+```
+
+---
+
+## Investigation Required
+
+Verify whether the compare engine is reversing the comparison order.
+
+Current UI:
+
+V5 vs V4
+
+Need to verify backend:
+
+```typescript
+compareVersions(currentVersion, previousVersion)
+```
+
+and NOT:
+
+```typescript
+compareVersions(previousVersion, currentVersion)
+```
+
+If the order is reversed, additions will incorrectly appear as removals.
+
+---
+
+## Validation Test
+
+Create a new version containing:
+
+```text
+THIS_IS_VERSION_5_ONLY
+```
+
+Compare:
+
+V5 vs V4
+
+Expected result:
+
+```diff
++ THIS_IS_VERSION_5_ONLY
+```
+
+in green.
+
+If it appears as:
+
+```diff
+- THIS_IS_VERSION_5_ONLY
+```
+
+in red,
+
+the comparison direction is reversed and must be fixed.
+
+---
+
+## UX Improvements
+
+### Add Clear Labels
+
+Above the comparison panel show:
+
+```text
+Current Version (V5)
+```
+
+and
+
+```text
+Previous Version (V4)
+```
+
+instead of generic left/right columns.
+
+---
+
+### Version Timeline Context
+
+Display:
+
+```text
+V5
+Created: Jun 23, 2026 11:15 PM
+Author: Gopi
+Status: Draft
+
+↓
+
+Compared Against
+
+↓
+
+V4
+Created: Jun 23, 2026 10:42 PM
+Author: Gopi
+Status: Draft
+```
+
+---
+
+### Diff Summary Header
+
+Show a summary card:
+
+```text
+Changes Summary
+
++ 12 additions
+- 3 removals
+~ 5 modifications
+```
+
+before rendering the full diff.
+
+---
+
+### JSON Compare Improvements
+
+For structured fields such as:
+
+* Prompt
+* Tools
+* Voice
+* LLM
+* Advanced Config
+* Compliance
+* Webhooks
+* Calendars
+
+perform object-level comparison instead of raw text comparison.
+
+Example:
+
+```json
+{
+  "temperature": 0.1
+}
+```
+
+changed to
+
+```json
+{
+  "temperature": 0.3
+}
+```
+
+should display:
+
+```diff
+- temperature: 0.1
++ temperature: 0.3
+```
+
+instead of marking the entire JSON block as changed.
+
+---
+
+## Success Criteria
+
+1. Added content always appears green.
+2. Removed content always appears red.
+3. Modified values show red old value and green new value.
+4. Version labels clearly indicate Current vs Previous.
+5. JSON configurations are compared structurally.
+6. Users can instantly understand what changed without reading entire prompts.
+7. Diff behavior matches GitHub/GitLab expectations.
