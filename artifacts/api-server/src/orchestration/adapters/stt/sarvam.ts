@@ -163,8 +163,15 @@ export class SarvamSTT implements STTAdapter {
       language_code:      langCode,
       sample_rate:        "16000",
       input_audio_codec:  "pcm_s16le",
-      high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappier for voice agents
-      vad_signals:        "true",    // emit START_SPEECH / END_SPEECH events
+      // Fine-grained VAD: 1 frame = 512 samples = 32 ms at 16 kHz.
+      // negative_frames_window=62 → 2-second sliding window.
+      // negative_frames_count=44  → end speech when 44 frames (1.4 s) of silence
+      //   occur within the last 2 s window.
+      // This handles Tamil speakers pausing 1–2 s mid-sentence to think, without
+      // the 0.5 s hair-trigger of high_vad_sensitivity=true.
+      negative_frames_window: "62",
+      negative_frames_count:  "44",
+      vad_signals:        "true",    // emit speech_start / speech_end events
       flush_signal:       "true",    // allow manual buffer flush via flush() call
     });
 
