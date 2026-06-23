@@ -1,0 +1,108 @@
+[
+  {
+    "id": 6137,
+    "callId": 361,
+    "agentId": 5,
+    "ts": "2026-06-23T10:33:49.628Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "sarvam",
+      "llmProvider": "openai",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 6138,
+    "callId": 361,
+    "agentId": 5,
+    "ts": "2026-06-23T10:33:49.658Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthikeyan",
+        "callCount": 60
+      },
+      "factCount": 21,
+      "facts": {
+        "location": "Madhavaram",
+        "currently_searching_for_villa": "yes",
+        "interested_in_location": "Madhavaram",
+        "interested_in": "villa",
+        "call_back_time": "11 AM",
+        "call_back_day": "tomorrow",
+        "call_back_requested": "yes",
+        "name": "Karthikeyan",
+        "budget": "1,00,00,000",
+        "location_of_interest": "Madhavaram",
+        "interested_in_plots_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_for_villa": "75 lakhs",
+        "area_of_interest": "Vadapalani",
+        "interested_in_other_locations": "Red Hills, Madhavaram, Thiruninravur",
+        "budget_range": "7.5 lakh",
+        "property_type": "plot",
+        "looking_for_property_in_chennai": "yes",
+        "property_type_of_interest": "villa",
+        "looking_for_property": "yes",
+        "interested_in_property_in_chennai": "true",
+        "policy_interest": "வீடு"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 6139,
+    "callId": 361,
+    "agentId": 5,
+    "ts": "2026-06-23T10:33:49.658Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "new 93",
+        "date": "Tuesday, June 23, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthikeyan  |  Calls: 60  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthikeyan is likely to call to discuss specific villa property options in Madhavaram or to finalize details with a senior executive.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• location: Madhavaram  [today]\n• currently_searching_for_villa: yes  [today]\n• interested_in_location: Madhavaram  [today]\n• interested_in: villa  [today]\n• call_back_time: 11 AM  [today]\n• call_back_day: tomorrow  [today]\n• call_back_requested: yes  [today]\n• budget: 1,00,00,"
+    },
+    "metadata": null
+  },
+  {
+    "id": 6140,
+    "callId": 361,
+    "agentId": 5,
+    "ts": "2026-06-23T10:34:26.167Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "disconnected",
+      "durationSeconds": 36,
+      "turns": 1
+    },
+    "responsePayload": null,
+    "metadata": null
+  }
+]

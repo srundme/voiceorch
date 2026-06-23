@@ -21,7 +21,10 @@
  *   Header: api-subscription-key: <key>
  *
  * ── Audio message (JSON text, sent as each PCM chunk arrives) ────────────────
- *   { audio: "<base64 raw PCM>", encoding: "pcm_s16le", sample_rate: 16000 }
+ *   { audio: { data: "<base64 raw PCM>", encoding: "audio/wav", sample_rate: 16000 } }
+ *   NOTE: encoding enum MUST be "audio/wav" — "pcm_s16le" is rejected by Sarvam's
+ *   Pydantic model even though the URL param `input_audio_codec=pcm_s16le` sets
+ *   the actual codec. Confirmed via live WebSocket probe (June 2026).
  *
  * ── Server → client messages (JSON text) ─────────────────────────────────────
  *   { type: "events", data: { signal_type: "START_SPEECH" | "END_SPEECH" } }
@@ -176,9 +179,11 @@ export class SarvamSTT implements STTAdapter {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
       ws.send(
         JSON.stringify({
-          audio:       chunk.toString("base64"),
-          encoding:    "pcm_s16le",
-          sample_rate: 16000,
+          audio: {
+            data:        chunk.toString("base64"),
+            encoding:    "audio/wav",   // enum must be "audio/wav"; actual codec is set via URL param
+            sample_rate: 16000,
+          },
         }),
       );
     };

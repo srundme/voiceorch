@@ -23,13 +23,12 @@ Query params:
 
 ## Audio message format (per chunk, JSON text)
 ```json
-{ "audio": "<base64 raw PCM>", "encoding": "pcm_s16le", "sample_rate": 16000 }
+{ "audio": { "data": "<base64 raw PCM>", "encoding": "audio/wav", "sample_rate": 16000 } }
 ```
-- Send raw PCM directly as base64 — NO WAV header wrapping needed (unlike old protocol)
-- `encoding` value is `"pcm_s16le"` (not `"audio/wav"`)
-- `audio` is a plain base64 string (not a nested object like the old AudioContent envelope)
-
-**Why changed:** Old adapter used WAV-wrapped AudioContent `{ audio: { data, encoding, sample_rate } }` based on probing the old API. Official docs (June 2026) show the new flat format with `pcm_s16le` codec.
+- `audio` is a **nested object** (AudioContent), NOT a plain base64 string
+- `encoding` enum MUST be `"audio/wav"` — `"pcm_s16le"` is rejected with Pydantic validation error
+- The actual codec is controlled by URL param `input_audio_codec=pcm_s16le`; send raw PCM as base64, no WAV header needed
+- Confirmed via live WebSocket probe (June 2026): flat format → "Input should be a valid dictionary or instance of AudioContent"; pcm_s16le encoding → "Input should be 'audio/wav'"
 
 ## Server → client messages (JSON text)
 ```json
