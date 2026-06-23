@@ -967,6 +967,21 @@ export class OrchestrationPipeline {
   private async playSentence(text: string): Promise<void> {
     if (this.bargeInRequested) return;
 
+    // Extend echo-grace to cover estimated sentence playback duration.
+    // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
+    // (observed: 56-char Tamil sentence ≈ 3600 ms = 64 ms/char). Without
+    // this, a 600 ms start-grace can expire while multi-second TTS audio is
+    // still playing; on speakerphone or poor-AEC setups the agent's own voice
+    // echoes back above the energy threshold and fires a false barge-in.
+    // Use Math.max so we never REDUCE a grace that was already set longer.
+    {
+      const estimatedMs = Math.round(text.length * 70);
+      this.bargeInHoldUntil = Math.max(
+        this.bargeInHoldUntil,
+        Date.now() + estimatedMs + this.bargeInEchoGraceMs,
+      );
+    }
+
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
     // completes.  Counting here ensures barge-in aborts and stream timeouts
