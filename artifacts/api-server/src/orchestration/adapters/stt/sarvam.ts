@@ -182,6 +182,10 @@ export class SarvamSTT implements STTAdapter {
 
     const audioQueue: Buffer[] = [];
     let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
+    // Closure variable for the onSpeechStart callback. Declared here (before openSocket)
+    // so the WS message handler — an async callback inside openSocket — can reference it
+    // safely. Exposed on sttObj via Object.defineProperty getter/setter below.
+    let _onSpeechStart: (() => void) | null = null;
 
     // ── Adaptive transcript coalescing ───────────────────────────────────────
     // The hold window self-calibrates to this caller's mid-sentence pause rhythm:
@@ -284,6 +288,7 @@ export class SarvamSTT implements STTAdapter {
         lastMsgAt = Date.now();
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
           inSpeechSegment = true;
+          _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
           // If we are holding a transcript and the user resumed speaking, cancel
           // the emit timer, record the pause length for adaptive calibration, and
@@ -424,6 +429,15 @@ export class SarvamSTT implements STTAdapter {
         }
       },
     };
+
+    // Expose _onSpeechStart via getter/setter so the WS handler (which closes over
+    // _onSpeechStart, declared before openSocket) stays in sync with what the caller assigns.
+    Object.defineProperty(sttObj, "onSpeechStart", {
+      get(): (() => void) | null { return _onSpeechStart; },
+      set(cb: (() => void) | null): void { _onSpeechStart = cb; },
+      configurable: true,
+      enumerable: true,
+    });
 
     // Start the heartbeat AFTER sttObj is created so the interval can reference it.
     const heartbeatInterval = setInterval(() => {

@@ -540,12 +540,15 @@ export async function handleWebCallWebSocket(
             send({ type: "interrupted" });
             sendStatus("thinking");
             logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via streaming STT");
-          } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
-            // Transcript arrived after speaking ended but within the end-grace window.
-            // It was produced from frames fed to the STT provider *during* barge-in detection
-            // (agent was still speaking, threshold not reached). Replaying this as a new user
-            // turn would make the agent answer speech that overlapped with its own output.
-            logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (leftover from barge-in detection)");
+          } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS
+                     && lastUserSpeechStartAt <= speakingEndedAt) {
+            // Transcript arrived after speaking ended but within the end-grace window,
+            // AND the user's speech_start VAD fired while the agent was still speaking.
+            // This means the user spoke DURING agent speech but didn't trigger barge-in —
+            // a true leftover that would make the agent answer its own echo.
+            // If speech_start fired AFTER speakingEndedAt, the user started speaking after
+            // the agent ended (new clean turn) — do NOT discard it.
+            logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt, lastUserSpeechStartAt, speakingEndedAt }, "Webcall: discarding post-speech transcript (leftover from barge-in detection)");
             // Discarded leftover — stay cleanly in Listening (re-arm stall, drop
             // any stale best-partial) instead of clearing the safety net.
             safetyNet.beginListening();
@@ -599,7 +602,11 @@ export async function handleWebCallWebSocket(
                       send({ type: "interrupted" });
                       sendStatus("thinking");
                       logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via fallback streaming STT");
-                    } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS) {
+                    } else if (speakingEndedAt > 0 && Date.now() - speakingEndedAt < BARGE_IN_END_GRACE_MS
+                               && lastUserSpeechStartAt <= speakingEndedAt) {
+                      // Same guard as primary STT: only discard if speech_start VAD fired
+                      // while the agent was speaking (true leftover). If the user started
+                      // speaking after the agent ended, let it through as a new turn.
                       logger.info({ callId, msSinceEnd: Date.now() - speakingEndedAt }, "Webcall: discarding post-speech transcript (fallback STT)");
                       safetyNet.beginListening(); // stay cleanly in Listening
                       return;
@@ -630,6 +637,13 @@ export async function handleWebCallWebSocket(
             void process();
           }
         };
+        // Track when the caller's VAD fires speech_start so we can tell whether
+        // a transcript arrived from audio spoken AFTER the agent (new turn) vs.
+        // audio that overlapped with agent speech but didn't trigger barge-in
+        // (leftover — should be discarded). Without this, the post-speech 600ms
+        // grace window discards every first user utterance whose Sarvam transcript
+        // lands within 600ms of speakingEndedAt — i.e. "always 2nd time" bug.
+        streamSTT.onSpeechStart = () => { lastUserSpeechStartAt = Date.now(); };
       }
     } catch (streamInitErr) {
       logger.warn({ callId, err: streamInitErr }, "Webcall: streaming STT init failed — falling back to batch");
@@ -961,6 +975,10 @@ export async function handleWebCallWebSocket(
   // and background TV bursts which are typically <100ms.
   const BARGE_IN_MIN_DURATION_MS = 150;
   let bargeInFirstFrameAt = 0;     // wall-clock when the current barge-in run's first loud frame arrived
+  // Timestamp (ms) of the most recent Sarvam speech_start VAD event.
+  // Used to distinguish "user started speaking after agent ended" (new turn, don't discard)
+  // from "user spoke during agent speech but didn't interrupt" (leftover, discard).
+  let lastUserSpeechStartAt = 0;
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   let _webcallTurnIdx   = 0;

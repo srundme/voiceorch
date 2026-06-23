@@ -356,6 +356,14 @@ export interface StreamSTT {
    * for STREAMING_BATCH_FALLBACK_MS.
    */
   onConnectionDead?: (() => void) | null;
+  /**
+   * Set by the caller immediately after creation.
+   * Fired when the adapter receives a VAD speech_start event — i.e., the moment
+   * the caller's mic picks up the start of a new utterance. Used by webcall.ts to
+   * distinguish "user spoke AFTER agent finished" (new turn) from "user spoke
+   * DURING agent speech but didn't trigger barge-in" (leftover — discard).
+   */
+  onSpeechStart?: (() => void) | null;
 }
 
 export interface LLMUsage {

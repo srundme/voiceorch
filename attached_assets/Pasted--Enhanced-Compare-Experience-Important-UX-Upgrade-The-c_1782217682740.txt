@@ -1,0 +1,339 @@
+# Enhanced Compare Experience (Important UX Upgrade)
+
+The current comparison screen displays raw configuration JSON side-by-side.
+
+While technically accurate, it is difficult for users to quickly understand what changed.
+
+Implement a modern GitHub / Retell / Cursor style comparison experience.
+
+---
+
+# Compare Page Redesign
+
+## Comparison Header
+
+Show:
+
+Comparing
+
+[V5 Production ▼]
+
+vs
+
+[V4 Published ▼]
+
+Created By
+Timestamp
+Change Summary
+
+Example:
+
+V5 Production
+Published by Gopi
+Jun 23, 2026 10:42 AM
+
+vs
+
+V4 Published
+Published by Rahul
+Jun 22, 2026 8:15 PM
+
+---
+
+# Change Summary Cards
+
+Before showing detailed differences, display:
+
+Changes Detected
+
+Prompt
+1 Change
+
+Tools
+3 Changes
+
+Voice
+0 Changes
+
+Knowledge Base
+2 Changes
+
+Advanced Settings
+5 Changes
+
+Scheduling
+1 Change
+
+Compliance
+4 Changes
+
+This allows users to instantly understand impact.
+
+---
+
+# Dual Compare Modes
+
+Add toggle:
+
+Visual Mode
+Technical Mode
+
+Default:
+
+Visual Mode
+
+---
+
+# Visual Mode
+
+Display only changed fields.
+
+Do not show unchanged sections.
+
+Example:
+
+Prompt
+
+Old:
+"Please introduce yourself."
+
+New:
+"Please introduce yourself as Nora from SnapServe AI."
+
+---
+
+Tools
+
+Added:
+book_appointment
+
+Removed:
+calendar_lookup
+
+Modified:
+check_availability
+
+---
+
+Knowledge Base
+
+Added:
+Pricing FAQ
+
+Removed:
+Old FAQ Document
+
+This mode should be readable by non-technical users.
+
+---
+
+# Technical Mode
+
+Current implementation.
+
+Show complete JSON diff.
+
+Support:
+
+Side-by-Side
+
+Inline
+
+Ignore Formatting
+
+Syntax Highlighting
+
+---
+
+# Section Navigation
+
+Add left navigation panel.
+
+Prompt
+
+Voice
+
+Tools
+
+Knowledge
+
+Scheduling
+
+Compliance
+
+Advanced
+
+Variables
+
+CRM
+
+Clicking section jumps directly to differences.
+
+---
+
+# Color System
+
+Green
+
+Added
+
+Red
+
+Removed
+
+Yellow
+
+Modified
+
+Grey
+
+Unchanged
+
+---
+
+# Restore Preview
+
+When user clicks Restore:
+
+Show summary first.
+
+Example:
+
+Restoring Snapshot
+
+Changes that will be restored:
+
+Prompt
+Tools
+Knowledge Base
+
+No changes to:
+
+Voice
+Scheduling
+
+Buttons:
+
+Cancel
+
+Restore Snapshot
+
+---
+
+# Snapshot Timeline View
+
+In Draft History:
+
+Show timeline cards.
+
+Example:
+
+Today
+
+10:42 AM
+
+Prompt Modified
+
+Tools Modified
+
+By Gopi
+
+[Compare]
+[Restore]
+
+---
+
+10:15 AM
+
+Knowledge Updated
+
+By Gopi
+
+[Compare]
+[Restore]
+
+---
+
+# Quick Compare
+
+Allow users to select any two snapshots.
+
+Compare Selected
+
+Snapshot 12
+
+vs
+
+Snapshot 7
+
+without requiring restore.
+
+---
+
+# Search Within Compare
+
+Search field:
+
+Search Changes...
+
+Examples:
+
+calendar
+
+meeting
+
+prompt
+
+knowledge
+
+Display only matching differences.
+
+---
+
+# AI Generated Change Summary
+
+When snapshot is created, automatically generate summary.
+
+Examples:
+
+Updated booking confirmation prompt.
+
+Added Google Calendar integration.
+
+Changed compliance settings.
+
+Modified voice configuration.
+
+Added appointment scheduling tool.
+
+Display these summaries throughout Version History.
+
+---
+
+# Restore Safety
+
+Never overwrite.
+
+When restoring:
+
+Create New Snapshot
+
+Restore Snapshot #12
+
+↓
+
+Create Snapshot #24
+
+↓
+
+Make Snapshot #24 Current Draft
+
+This guarantees zero data loss.
+
+---
+
+# Success Criteria
+
+Users should understand what changed within 5 seconds without reading raw JSON.
+
+The compare experience should feel similar to GitHub Pull Requests, Cursor History, and Retell AI version comparison while preserving full technical visibility for advanced users.
