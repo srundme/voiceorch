@@ -319,16 +319,13 @@ function SignInPage() {
 
   const logoIcon = (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28, gap: 14 }}>
-      <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #6d28d9 0%, #a855f7 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 32px rgba(168,85,247,0.4)" }}>
-        <svg width="28" height="22" viewBox="0 0 28 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="8" width="5" height="14" rx="2.5" fill="white" fillOpacity="0.75"/>
-          <rect x="7.5" y="4" width="5" height="18" rx="2.5" fill="white"/>
-          <rect x="15" y="0" width="5" height="14" rx="2.5" fill="white" fillOpacity="0.9"/>
-          <rect x="22.5" y="5" width="5" height="12" rx="2.5" fill="white" fillOpacity="0.65"/>
-        </svg>
+      <div style={{ width: 56, height: 56, borderRadius: 14, background: "linear-gradient(135deg, #6d28d9 0%, #a855f7 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "14px 12px", boxShadow: "0 8px 32px rgba(168,85,247,0.4)" }}>
+        <div style={{ width: "100%", height: 7, borderRadius: 4, background: "white", opacity: 1 }} />
+        <div style={{ width: "82%", height: 7, borderRadius: 4, background: "white", opacity: 0.65 }} />
+        <div style={{ width: "64%", height: 7, borderRadius: 4, background: "white", opacity: 0.4 }} />
       </div>
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "0.78rem", color: "rgba(168,85,247,0.8)", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>SnapServe AI</div>
+        <div style={{ fontSize: "0.78rem", color: "rgba(200,160,255,0.9)", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>SnapServe AI</div>
       </div>
     </div>
   );
@@ -404,7 +401,7 @@ function SignInPage() {
     // Google-only hint
     if (googleOnly) {
       return (
-        <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={cardStyle}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -423,7 +420,7 @@ function SignInPage() {
     // Step: enter email
     if (forgotStep === "email") {
       return (
-        <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={cardStyle}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -463,7 +460,7 @@ function SignInPage() {
     // Step: enter OTP
     if (forgotStep === "otp") {
       return (
-        <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+        <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
           <div style={cardStyle}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -530,7 +527,7 @@ function SignInPage() {
 
     // Step: set new password
     return (
-      <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+      <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
         <div style={cardStyle}>
           {logoIcon}
           <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -581,7 +578,7 @@ function SignInPage() {
 
   // ── Login / Register ──────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(ellipse at 50% -15%, rgba(168,85,247,0.2) 0%, transparent 60%), #06040e", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
+    <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
       <div style={cardStyle}>
         {logoIcon}
 
