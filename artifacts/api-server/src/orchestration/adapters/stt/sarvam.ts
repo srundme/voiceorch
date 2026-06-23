@@ -164,13 +164,15 @@ export class SarvamSTT implements STTAdapter {
       sample_rate:        "16000",
       input_audio_codec:  "pcm_s16le",
       // Fine-grained VAD: 1 frame = 512 samples = 32 ms at 16 kHz.
-      // negative_frames_window=62 → 2-second sliding window.
-      // negative_frames_count=44  → end speech when 44 frames (1.4 s) of silence
-      //   occur within the last 2 s window.
-      // This handles Tamil speakers pausing 1–2 s mid-sentence to think, without
-      // the 0.5 s hair-trigger of high_vad_sensitivity=true.
-      negative_frames_window: "62",
-      negative_frames_count:  "44",
+      // negative_frames_window=40 → 1.28-second sliding window.
+      // negative_frames_count=25  → end speech when 25 frames (0.8 s) of silence
+      //   occur within the 1.28 s window.
+      // 0.8 s silence boundary: tolerates short thinking pauses without the
+      // 0.5 s hair-trigger of high_vad_sensitivity=true, and stays well below
+      // the 1500 ms streaming-fallback timer (700 ms margin) so Sarvam always
+      // wins the race before the batch-STT fallback sets processing=true.
+      negative_frames_window: "40",
+      negative_frames_count:  "25",
       vad_signals:        "true",    // emit speech_start / speech_end events
       flush_signal:       "true",    // allow manual buffer flush via flush() call
     });
