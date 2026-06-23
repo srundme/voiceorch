@@ -91,7 +91,10 @@ export async function handleTwilioWebSocket(
           sessionId = sid;
           logger.info({ sessionId, callSid, agentId }, "Twilio session started");
         } catch (err) {
-          logger.error({ err, agentId }, "Failed to create Twilio session");
+          logger.error(
+            { err, agentId, externalCallId: callSid, streamSid, provider: "twilio", reason: toReadableError(err, "Twilio session setup failed") },
+            "Failed to create Twilio session — closing socket before greeting",
+          );
           ws.close();
         }
         break;

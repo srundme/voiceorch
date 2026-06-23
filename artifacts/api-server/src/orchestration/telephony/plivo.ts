@@ -100,7 +100,10 @@ export async function handlePlivoWebSocket(
           sessionId = sid;
           logger.info({ sessionId, agentId }, "Plivo session started");
         } catch (err) {
-          logger.error({ err, agentId }, "Failed to create Plivo session");
+          logger.error(
+            { err, agentId, externalCallId: callId, streamId, provider: "plivo", reason: toReadableError(err, "Plivo session setup failed") },
+            "Failed to create Plivo session — closing socket before greeting",
+          );
           ws.close();
         }
         break;

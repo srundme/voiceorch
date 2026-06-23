@@ -117,6 +117,26 @@ export function recoveryReprompt(lang?: string | null): string {
   return RECOVERY_REPROMPTS[prefix] ?? RECOVERY_REPROMPTS["en"]!;
 }
 
+// Language-aware minimal neutral opener — spoken when the greeting-generating
+// LLM call fails and the agent has no static greetingMessage to fall back on.
+// Keeps the call alive with a safe, generic hello instead of dropping it.
+const NEUTRAL_GREETINGS: Record<string, string> = {
+  en: "Hello, how can I help you today?",
+  hi: "नमस्ते, मैं आपकी कैसे मदद कर सकता हूँ?",
+  ta: "வணக்கம், நான் உங்களுக்கு எப்படி உதவ முடியும்?",
+  te: "నమస్కారం, నేను మీకు ఎలా సహాయం చేయగలను?",
+  kn: "ನಮಸ್ಕಾರ, ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+  mr: "नमस्कार, मी तुमची कशी मदत करू शकतो?",
+  gu: "નમસ્તે, હું તમારી કેવી રીતે મદદ કરી શકું?",
+  bn: "নমস্কার, আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+  ml: "നമസ്കാരം, എനിക്ക് നിങ്ങളെ എങ്ങനെ സഹായിക്കാം?",
+};
+/** Minimal neutral greeting for a BCP-47 / language code (falls back to English). */
+export function neutralGreeting(lang?: string | null): string {
+  const prefix = (lang ?? "en").split("-")[0] ?? "en";
+  return NEUTRAL_GREETINGS[prefix] ?? NEUTRAL_GREETINGS["en"]!;
+}
+
 export interface TurnSafetyNetOpts {
   forceFinalizeMs?: number;
   stallBackstopMs?: number;

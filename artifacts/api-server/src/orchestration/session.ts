@@ -7,6 +7,7 @@ import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
+import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
@@ -83,15 +84,24 @@ export async function createSession(params: {
   onBargeIn?: () => void;
 }): Promise<{ sessionId: string; callDbId: number }> {
 
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, params.agentId));
-  if (!agent) throw new Error(`Agent ${params.agentId} not found`);
+  const [agent] = await withDbRetry("load-agent", () =>
+    db.select().from(agentsTable).where(eq(agentsTable.id, params.agentId)),
+  );
+  if (!agent) {
+    // Genuinely missing agent — fatal, not transient. Surface clearly so the
+    // telephony handler logs an explicit reason instead of a bare ws.close().
+    logger.error({ agentId: params.agentId }, "Session setup aborted — agent not found");
+    throw new Error(`Agent ${params.agentId} not found`);
+  }
 
   // ── Concurrent call limit (per user, hard ceiling = 15) ──────────────────
   if (agent.userId) {
-    const [user] = await db
-      .select({ concurrentLimit: usersTable.concurrentLimit })
-      .from(usersTable)
-      .where(eq(usersTable.clerkId, agent.userId));
+    const [user] = await withDbRetry("load-user-concurrent-limit", () =>
+      db
+        .select({ concurrentLimit: usersTable.concurrentLimit })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, agent.userId!)),
+    );
     const effectiveLimit = user?.concurrentLimit ?? 15;
     const activeForUser = Array.from(sessions.values()).filter(
       s => s.agentUserId === agent.userId,
@@ -450,8 +460,10 @@ export async function createSession(params: {
 
   const settingsMap = new Map<string, string>();
   if (settingsKeysNeeded.size > 0) {
-    const settingsRows = await db.select().from(platformSettingsTable)
-      .where(inArray(platformSettingsTable.key, [...settingsKeysNeeded]));
+    const settingsRows = await withDbRetry("load-platform-settings", () =>
+      db.select().from(platformSettingsTable)
+        .where(inArray(platformSettingsTable.key, [...settingsKeysNeeded])),
+    );
     for (const r of settingsRows) settingsMap.set(r.key, r.value);
   }
 
@@ -494,35 +506,41 @@ export async function createSession(params: {
   // one DB row per call rather than two orphan in_progress records.
   const callRecord = await (async (): Promise<typeof callsTable.$inferSelect> => {
     if (params.externalCallId) {
-      const [existing] = await db.select().from(callsTable)
-        .where(and(
-          sql`${callsTable.metadata}::jsonb->>'providerCallId' = ${params.externalCallId}`,
-          eq(callsTable.status, "in_progress"),
-        ))
-        .limit(1);
+      const [existing] = await withDbRetry("find-existing-call-record", () =>
+        db.select().from(callsTable)
+          .where(and(
+            sql`${callsTable.metadata}::jsonb->>'providerCallId' = ${params.externalCallId}`,
+            eq(callsTable.status, "in_progress"),
+          ))
+          .limit(1),
+      );
       if (existing) {
-        await db.update(callsTable).set({
-          metadata: JSON.stringify({
-            providerCallId: params.externalCallId,
-            externalCallId: params.externalCallId,
-            ...(params.platformTelephony ? { platformTelephony: true } : {}),
-          }),
-        }).where(eq(callsTable.id, existing.id));
+        await withDbRetry("update-existing-call-record", () =>
+          db.update(callsTable).set({
+            metadata: JSON.stringify({
+              providerCallId: params.externalCallId,
+              externalCallId: params.externalCallId,
+              ...(params.platformTelephony ? { platformTelephony: true } : {}),
+            }),
+          }).where(eq(callsTable.id, existing.id)),
+        );
         logger.info({ callId: existing.id, externalCallId: params.externalCallId }, "Reusing existing exec_* call record");
         return existing;
       }
     }
-    const [inserted] = await db.insert(callsTable).values({
-      agentId: params.agentId,
-      userId: agent.userId ?? null,
-      status: "in_progress",
-      toNumber: params.toNumber,
-      fromNumber: params.fromNumber,
-      metadata: JSON.stringify({
-        ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
-        ...(params.platformTelephony ? { platformTelephony: true } : {}),
-      }) || null,
-    }).returning();
+    const [inserted] = await withDbRetry("insert-call-record", () =>
+      db.insert(callsTable).values({
+        agentId: params.agentId,
+        userId: agent.userId ?? null,
+        status: "in_progress",
+        toNumber: params.toNumber,
+        fromNumber: params.fromNumber,
+        metadata: JSON.stringify({
+          ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
+          ...(params.platformTelephony ? { platformTelephony: true } : {}),
+        }) || null,
+      }).returning(),
+    );
     if (!inserted) throw new Error("Failed to create call record");
     return inserted;
   })();

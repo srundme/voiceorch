@@ -162,7 +162,10 @@ export async function handleVobizWebSocket(
           }
         } catch (err) {
           stopSilence();
-          logger.error({ err, agentId }, "Failed to create Vobiz session");
+          logger.error(
+            { err, agentId, externalCallId: callId, streamId, provider: "vobiz", reason: toReadableError(err, "Vobiz session setup failed") },
+            "Failed to create Vobiz session — closing socket before greeting",
+          );
           ws.close();
         }
         break;

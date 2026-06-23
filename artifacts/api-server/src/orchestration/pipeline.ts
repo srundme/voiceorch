@@ -24,6 +24,7 @@ import {
   computeEndpointMs,
   TurnSafetyNet,
   recoveryReprompt,
+  neutralGreeting,
   type TurnCloseReason,
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "./transcriptQuality.js";
@@ -458,7 +459,10 @@ export class OrchestrationPipeline {
       );
       logger.info({ callId: this.config.callId, provider: this.agent.asrProvider }, "Streaming STT initialized");
     } catch (err) {
-      logger.error({ callId: this.config.callId, err }, "Streaming STT init failed — falling back to batch");
+      logger.error(
+        { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.asrProvider, err },
+        toReadableError(err, `Streaming STT init failed (${this.agent.asrProvider}) — falling back to batch`),
+      );
     }
   }
 
@@ -813,10 +817,17 @@ export class OrchestrationPipeline {
             }
           );
         } catch (llmErr) {
-          const reason = toReadableError(llmErr, "LLM error");
-          logger.error({ callId: this.config.callId, err: llmErr }, reason);
-          this.config.onFatalError?.(reason);
-          return;
+          // Recoverable: a transient greeting-LLM failure must NOT drop the call
+          // before the agent speaks. Fall back to the configured static greeting
+          // if present, otherwise a minimal neutral opener, and continue the call.
+          const reason = toReadableError(llmErr, "Greeting LLM error");
+          const fallback = (this.agent.greetingMessage ?? "").trim()
+            || neutralGreeting(this.agent.language);
+          logger.error(
+            { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.llmProvider, err: llmErr },
+            `${reason} — falling back to a safe spoken opener instead of dropping the call`,
+          );
+          greeting = fallback;
         }
         // Strip <think> reasoning blocks and any <emotion>/<break> markup tags
         // that some models emit — TTS must receive plain text only.
@@ -847,7 +858,15 @@ export class OrchestrationPipeline {
       // First entry into Listening — arm the stall backstop.
       if (!this.closed) this.safetyNet.beginListening();
     } catch (err) {
-      logger.error({ callId: this.config.callId, err }, "Greeting error");
+      // Greeting TTS synthesis / playback failed. Surface the TTS provider and a
+      // human-readable reason so the failing dependency is identifiable, but do
+      // NOT fail the session — the call stays up and listening so the caller can
+      // speak (and the agent can respond via the normal turn path).
+      logger.error(
+        { callId: this.config.callId, agentId: this.agent.id, ttsProvider: this.agent.ttsProvider, err },
+        toReadableError(err, "Greeting playback/TTS error"),
+      );
+      if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
     }
