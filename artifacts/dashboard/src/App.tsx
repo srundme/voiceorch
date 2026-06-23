@@ -318,14 +318,17 @@ function SignInPage() {
   });
 
   const logoIcon = (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28, gap: 14 }}>
-      <div style={{ width: 56, height: 56, borderRadius: 14, background: "linear-gradient(135deg, #6d28d9 0%, #a855f7 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "14px 12px", boxShadow: "0 8px 32px rgba(168,85,247,0.4)" }}>
-        <div style={{ width: "100%", height: 7, borderRadius: 4, background: "white", opacity: 1 }} />
-        <div style={{ width: "82%", height: 7, borderRadius: 4, background: "white", opacity: 0.65 }} />
-        <div style={{ width: "64%", height: 7, borderRadius: 4, background: "white", opacity: 0.4 }} />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28, gap: 16 }}>
+      {/* Three-bar mark — left-aligned, proportions matching the SnapServe brand */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 7, width: 52 }}>
+        <div style={{ width: "100%", height: 11, borderRadius: 6, background: "white", opacity: 1 }} />
+        <div style={{ width: "78%",  height: 11, borderRadius: 6, background: "white", opacity: 0.6 }} />
+        <div style={{ width: "58%",  height: 11, borderRadius: 6, background: "white", opacity: 0.35 }} />
       </div>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "0.78rem", color: "rgba(200,160,255,0.9)", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>SnapServe AI</div>
+      {/* Wordmark */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 0, letterSpacing: "-0.02em" }}>
+        <span style={{ fontWeight: 700, fontSize: "1.15rem", color: "#fff" }}>Snap</span>
+        <span style={{ fontWeight: 400, fontSize: "1.15rem", color: "rgba(255,255,255,0.55)" }}>Serve</span>
       </div>
     </div>
   );
