@@ -52,6 +52,8 @@ import {
   TTS_MODELS,
   TTS_VOICES,
   getModelError,
+  isTamilLanguage,
+  defaultGeminiModel,
 } from "@/lib/agent-providers";
 
 export type { AgentFormValues } from "./edit.schema";
@@ -767,7 +769,13 @@ export default function AgentEdit() {
                       <FormField control={form.control} name="language" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Language</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                          <Select onValueChange={(v) => {
+                            field.onChange(v);
+                            if (isTamilLanguage(v)) {
+                              form.setValue("llmProvider", "google");
+                              form.setValue("llmModel", defaultGeminiModel());
+                            }
+                          }} value={field.value ?? ""}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Select language" /></SelectTrigger></FormControl>
                             <SelectContent>
                               {LANGUAGES.map(l => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}

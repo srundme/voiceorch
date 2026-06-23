@@ -68,6 +68,7 @@ import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/li
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
+  isTamilLanguage, defaultGeminiModel,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -555,7 +556,13 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <FormField control={form.control} name="language" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
-                    <SmallSelect value={field.value} onChange={field.onChange}
+                    <SmallSelect value={field.value} onChange={(v) => {
+                      field.onChange(v);
+                      if (isTamilLanguage(v)) {
+                        form.setValue("llmProvider", "google");
+                        form.setValue("llmModel", defaultGeminiModel());
+                      }
+                    }}
                       options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                   </FormItem>
                 )} />

@@ -408,3 +408,14 @@ export const LANGUAGES = [
   { value: "gn-PY",  label: "Guaraní (Paraguay)" },
   { value: "ht-HT",  label: "Haitian Creole" },
 ];
+
+/** True for any Tamil language variant (base language `ta`, e.g. ta-IN, ta-SG). */
+export function isTamilLanguage(language: string | undefined | null): boolean {
+  if (!language) return false;
+  return language.toLowerCase().split("-")[0] === "ta";
+}
+
+/** The default Gemini model — first entry of the `google` LLM list. */
+export function defaultGeminiModel(): string {
+  return LLM_MODELS.google?.[0]?.value ?? "gemini-2.5-flash-lite";
+}
