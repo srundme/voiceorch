@@ -746,8 +746,6 @@ function AppRoutes() {
         <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
         <Route path="/app/scheduling/conferencing" component={SchedulingConferencingPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
-        <Route path="/app/settings/calendar" component={Settings} />
-        <Route path="/app/settings/conferencing" component={Settings} />
         <Route path="/app/settings" component={Settings} />
         <Route path="/app/usage" component={UsagePage} />
         <Route path="/app/kyc" component={KycPage} />

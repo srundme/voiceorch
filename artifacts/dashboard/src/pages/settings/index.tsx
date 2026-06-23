@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import {
   Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
-  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Calendar, Video, Timer,
+  RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Timer,
   Sun, Moon, Monitor, Palette, Lock,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +18,6 @@ import { useTheme } from "@/components/theme-provider";
 import { formatApiError } from "@/lib/format-api-error";
 import { useAuth } from "@/lib/auth";
 import type { ProviderConfigProviderType } from "@workspace/api-client-react";
-import CalendarsPage from "@/pages/scheduling/Calendars";
-import ConferencingPage from "@/pages/settings/Conferencing";
 
 const BASE_DOMAIN = window.location.hostname;
 const BASE_URL = `https://${BASE_DOMAIN}`;
@@ -649,59 +647,15 @@ function GeneralTab() {
   );
 }
 
-type SettingsTab = "general" | "calendar" | "conferencing";
-
-const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  { id: "general",       label: "General",       icon: <Settings2 className="h-4 w-4" /> },
-  { id: "calendar",      label: "Calendar",      icon: <Calendar  className="h-4 w-4" /> },
-  { id: "conferencing",  label: "Conferencing",  icon: <Video     className="h-4 w-4" /> },
-];
-
 export default function SettingsPage() {
-  const [location, navigate] = useLocation();
-
-  const activeTab: SettingsTab =
-    location.includes("/settings/calendar")     ? "calendar"
-    : location.includes("/settings/conferencing") ? "conferencing"
-    : "general";
-
-  function goTab(tab: SettingsTab) {
-    if (tab === "general")       navigate("/app/settings");
-    else if (tab === "calendar") navigate("/app/settings/calendar");
-    else                         navigate("/app/settings/conferencing");
-  }
-
   return (
     <div className="h-full overflow-y-auto">
       <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
-        {/* Page header */}
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
           <p className="text-muted-foreground">Configure your SnapServe integration and go live.</p>
         </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-1 border-b border-border/60">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => goTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                activeTab === tab.id
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        {activeTab === "general"      && <GeneralTab />}
-        {activeTab === "calendar"     && <CalendarsPage embedded />}
-        {activeTab === "conferencing" && <ConferencingPage embedded />}
+        <GeneralTab />
       </div>
     </div>
   );
