@@ -9,22 +9,37 @@
  *   rec.addAgentChunk(pcm);                   // on every outbound TTS frame
  *   const url = await rec.finalize(callId);   // at call end → serving URL
  *
- * Time alignment (wall-clock anchored, per-track):
+ * Time alignment (audio-cursor primary, wall-clock only for genuine gaps):
  *   Each track (caller / agent) is laid down on a SHARED timeline anchored to
- *   the first chunk seen on EITHER side (`startMs`). When a chunk arrives we
- *   compute where it belongs on its own track from the elapsed wall-clock time
- *   (`(now - startMs) * sampleRate`); if that position is ahead of what we have
- *   already written for that track, we fill the gap with per-track silence,
- *   then append the chunk. Chunks arriving faster than real time (provider
- *   bursts) simply append contiguously.
+ *   the first chunk seen on EITHER side (`startMs`). The PRIMARY cursor for a
+ *   track is the count of audio samples already written to it: back-to-back
+ *   streamed frames are appended contiguously with ZERO padding, so a
+ *   continuous stream produces gap-free samples.
  *
- *   This replaces the previous scheme that padded the *opposite* track with
- *   silence on every append. That scheme assumed only one side ever appended
- *   at a time; once both sides capture continuously (the caller is now recorded
- *   even while the agent speaks, so talk-over is preserved) it double-stretched
- *   the timeline and serialized overlapping speech instead of mixing it. The
- *   wall-clock model keeps both tracks on one timeline with no progressive
- *   drift, so overlapping caller/agent speech mixes correctly into L/R.
+ *   Wall-clock is consulted only in two cases:
+ *     1. A track's FIRST chunk — padded so it begins at its real start offset
+ *        relative to the call start (keeps caller/agent in the right relative
+ *        positions).
+ *     2. A GENUINE idle gap — when this track has not been written for longer
+ *        than `GAP_RESYNC_MS` (a real conversational pause, not the sub-frame
+ *        jitter of a continuous stream), we re-sync it to the shared wall-clock
+ *        timeline by inserting silence up to the current timeline position.
+ *
+ *   This fixes the buzzing / helicopter / fluttering artifact heard on the
+ *   agent (TTS) channel. The agent playback loop paces frames with
+ *   `await setTimeout(40)` per 40 ms frame, so each iteration takes slightly
+ *   MORE than 40 ms wall-clock while carrying exactly 40 ms of audio. The
+ *   previous scheme padded every track to the wall-clock position on EVERY
+ *   append, so a few ms of silence was injected before nearly every agent
+ *   frame — a periodic ~40 ms-cadence silence chop (~10-25 Hz modulation)
+ *   audible only in the recording. Aligning to the track's own audio cursor
+ *   removes those per-frame gaps; live playback is untouched.
+ *
+ *   It also avoids the older bug of padding the *opposite* track on every
+ *   append (which serialized overlapping speech): silence is only ever added to
+ *   the SAME track, and only on a genuine gap, so talk-over still mixes into
+ *   L/R and there is no progressive cross-track drift across a long call (each
+ *   genuine gap re-anchors the track to wall-clock).
  *
  * Storing in Postgres (already running in both dev and prod) removes the
  * dependency on Replit Object Storage, which is unavailable in the Railway
@@ -37,12 +52,30 @@ import { logger } from "../lib/logger.js";
 
 const BYTES_PER_SAMPLE = 2; // LINEAR16
 
+/**
+ * A write gap on a track longer than this (ms) is treated as a GENUINE
+ * conversational pause and re-synced to the shared wall-clock timeline. Shorter
+ * gaps are the sub-frame jitter of a continuous 40 ms-frame stream and are
+ * appended contiguously (no padding) — this is what removes the per-frame
+ * silence chop that buzzed on the agent track. The value is comfortably above
+ * the ~40 ms frame cadence (and ordinary event-loop jitter) yet below a real
+ * inter-sentence / inter-turn pause.
+ */
+const GAP_RESYNC_MS = 120;
+
+/** Per-track capture state. */
+interface Track {
+  chunks: Buffer[];
+  /** Audio samples already written to this track, in bytes (the primary cursor). */
+  bytes: number;
+  /** Wall-clock time of the last write to this track; null until first write. */
+  lastWriteMs: number | null;
+}
+
 export class RecordingBuffer {
   private readonly sampleRate: number;
-  private callerChunks: Buffer[] = [];
-  private agentChunks: Buffer[] = [];
-  private callerBytes = 0;
-  private agentBytes = 0;
+  private caller: Track = { chunks: [], bytes: 0, lastWriteMs: null };
+  private agent: Track = { chunks: [], bytes: 0, lastWriteMs: null };
   /** Wall-clock anchor for the shared timeline; set by the first chunk seen. */
   private startMs: number | null = null;
 
@@ -58,19 +91,27 @@ export class RecordingBuffer {
   }
 
   /**
-   * Place a chunk on its track at its real wall-clock position, filling any
-   * gap since the last write on THIS track with per-track silence. Returns the
-   * new byte length of the track.
+   * Append a chunk to its track using the track's own audio cursor as the
+   * primary position. Silence is inserted ONLY to anchor the track's first
+   * chunk to its real start offset, or to re-sync after a genuine idle gap
+   * (> {@link GAP_RESYNC_MS}); back-to-back streamed frames are concatenated
+   * with zero padding so a continuous stream has no per-frame silence gaps.
    */
-  private appendAligned(chunks: Buffer[], writtenBytes: number, pcm: Buffer): number {
-    const target = this.timelineBytes(Date.now());
-    if (target > writtenBytes) {
-      const pad = target - writtenBytes;
-      chunks.push(Buffer.alloc(pad));
-      writtenBytes += pad;
+  private append(track: Track, pcm: Buffer): void {
+    const now = Date.now();
+    const target = this.timelineBytes(now); // also seeds startMs on first chunk
+    const isFirstWrite = track.lastWriteMs === null;
+    const idleMs = isFirstWrite ? Infinity : now - track.lastWriteMs!;
+
+    if ((isFirstWrite || idleMs >= GAP_RESYNC_MS) && target > track.bytes) {
+      const pad = target - track.bytes;
+      track.chunks.push(Buffer.alloc(pad));
+      track.bytes += pad;
     }
-    chunks.push(pcm);
-    return writtenBytes + pcm.length;
+
+    track.chunks.push(pcm);
+    track.bytes += pcm.length;
+    track.lastWriteMs = now;
   }
 
   /**
@@ -80,17 +121,17 @@ export class RecordingBuffer {
    */
   addCallerChunk(pcm: Buffer): void {
     if (!pcm.length) return;
-    this.callerBytes = this.appendAligned(this.callerChunks, this.callerBytes, pcm);
+    this.append(this.caller, pcm);
   }
 
   /** Called for every outbound PCM frame sent to the caller (TTS audio). */
   addAgentChunk(pcm: Buffer): void {
     if (!pcm.length) return;
-    this.agentBytes = this.appendAligned(this.agentChunks, this.agentBytes, pcm);
+    this.append(this.agent, pcm);
   }
 
   get hasData(): boolean {
-    return this.callerBytes > 0 || this.agentBytes > 0;
+    return this.caller.bytes > 0 || this.agent.bytes > 0;
   }
 
   /**
@@ -112,8 +153,8 @@ export class RecordingBuffer {
     }
 
     try {
-      const callerPcm = Buffer.concat(this.callerChunks);
-      const agentPcm  = Buffer.concat(this.agentChunks);
+      const callerPcm = Buffer.concat(this.caller.chunks);
+      const agentPcm  = Buffer.concat(this.agent.chunks);
       // Tracks may differ in length (e.g. a long agent tail with no caller
       // frames, or vice-versa). Span the longer one; the encoder reads the
       // shorter track as silence past its end.
