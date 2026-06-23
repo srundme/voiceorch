@@ -91,7 +91,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
-  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 400) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
+  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 100) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
@@ -324,7 +324,7 @@ export default function AgentEdit() {
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
-      asrEndpointingSilenceMs: 400,
+      asrEndpointingSilenceMs: 100,
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
@@ -531,7 +531,7 @@ export default function AgentEdit() {
       stagedPromptEnabled: (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages: (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
-      asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 400,
+      asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 100,
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
@@ -1065,13 +1065,22 @@ export default function AgentEdit() {
                   <FormItem>
                     <FormLabel>STT Endpointing Silence (ms)</FormLabel>
                     <FormControl>
-                      <Input type="number" min={100} max={2000} step={50}
-                        value={field.value ?? 400}
+                      <Input type="number" min={50} max={2000} step={25}
+                        value={field.value ?? 100}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      How long Azure waits after the last spoken word before sending the transcript. <strong>Lower = faster response.</strong> Default: 400ms. Range: 100–2000ms. Try 200ms for fast speakers.
+                      Silence after caller's last word before transcript fires. <strong>Lower = faster.</strong> Presets: 50ms ultra-fast · 100ms fast · 200ms normal · 400ms slow.
                     </FormDescription>
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                      {([50, 100, 200, 400] as const).map(v => (
+                        <button key={v} type="button"
+                          onClick={() => field.onChange(v)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${field.value === v ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border hover:border-primary/50"}`}>
+                          {v === 50 ? "⚡ Ultra" : v === 100 ? "🚀 Fast" : v === 200 ? "Normal" : "Slow"} {v}ms
+                        </button>
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )} />

@@ -2029,7 +2029,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
               </p>
             </div>
             <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
-              <AdvSlider form={form} name="asrEndpointingSilenceMs"  label="STT Endpointing Silence"     hint="How long Azure waits after last spoken word before sending transcript. Lower = faster. Default: 400ms" min={100} max={2000} step={50}  fmt={v => `${v}ms`} />
+              <AdvSlider form={form} name="asrEndpointingSilenceMs"  label="STT Endpointing Silence"     hint="Silence after last spoken word before Azure sends the transcript. Lower = faster response. Ultra-fast: 50ms · Fast: 100ms (default) · Normal: 200ms · Slow: 400ms" min={50} max={2000} step={25}  fmt={v => `${v}ms`} />
               <AdvSlider form={form} name="ttsMinSentenceChars"       label="TTS Early Dispatch Threshold" hint="Min characters before a comma-clause fires an early TTS request mid-stream. Lower = TTS fires earlier. Default: 15" min={5}   max={200}  step={5}   fmt={v => `${v}ch`} />
               <AdvSlider form={form} name="linearDelayMs"             label="Post-Transcript Buffer"       hint="Extra wait after transcript arrives before LLM starts — helps callers who pause mid-sentence. Default: 0ms" min={0}   max={2000} step={50}  fmt={v => v === 0 ? "off" : `${v}ms`} />
               <FormField control={form.control} name="llmMaxTokens" render={({ field }) => (
@@ -3873,7 +3873,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       inboundPhoneNumberId: undefined,
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
-      asrEndpointingSilenceMs: 400,
+      asrEndpointingSilenceMs: 100,
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
@@ -3944,7 +3944,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       inboundPhoneNumberId:            (agent as any).inboundPhoneNumberId ?? undefined,
       outboundPhoneNumberId:           (agent as any).outboundPhoneNumberId ?? undefined,
       preferredManagedNumber:          ((agent as any).agentConfig?.preferredManagedNumber as string | undefined) ?? null,
-      asrEndpointingSilenceMs:         (agent as any).agentConfig?.asrEndpointingSilenceMs ?? 400,
+      asrEndpointingSilenceMs:         (agent as any).agentConfig?.asrEndpointingSilenceMs ?? 100,
       llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       linearDelayMs:                   (agent as any).agentConfig?.incrementalDelay ?? 0,

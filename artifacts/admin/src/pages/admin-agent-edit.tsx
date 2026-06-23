@@ -123,7 +123,7 @@ const agentFormSchema = z.object({
   stagedPromptEnabled: z.boolean().optional(),
   stagedPromptStages: z.array(z.object({ name: z.string(), content: z.string() })).optional(),
   stagedPromptCoreIdentity: z.string().optional(),
-  asrEndpointingSilenceMs: z.number().min(100).max(2000).optional(),
+  asrEndpointingSilenceMs: z.number().min(50).max(2000).optional(),
   llmMaxTokens: z.number().min(1).max(16000).optional().nullable(),
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
   linearDelayMs: z.number().min(0).max(2000).optional(),
@@ -334,7 +334,7 @@ export default function AdminAgentEdit() {
       tools: [], genderDetectionEnabled: false, recordingEnabled: false,
       snapserveAgentId: "", contextWindowTurns: undefined, summarizationEnabled: false,
       stagedPromptEnabled: false, stagedPromptStages: [], stagedPromptCoreIdentity: "",
-      asrEndpointingSilenceMs: 400, llmMaxTokens: undefined, ttsMinSentenceChars: 15, linearDelayMs: 0,
+      asrEndpointingSilenceMs: 100, llmMaxTokens: undefined, ttsMinSentenceChars: 15, linearDelayMs: 0,
     },
   });
 
@@ -395,7 +395,7 @@ export default function AdminAgentEdit() {
       stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
       stagedPromptStages: agent.stagedPromptStages ?? [],
       stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? "",
-      asrEndpointingSilenceMs: (agent.agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 400,
+      asrEndpointingSilenceMs: (agent.agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 100,
       llmMaxTokens: (agent.agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: (agent.agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: (agent.agentConfig?.incrementalDelay as number | undefined) ?? 0,

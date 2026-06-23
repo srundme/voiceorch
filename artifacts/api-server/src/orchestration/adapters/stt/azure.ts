@@ -170,8 +170,8 @@ export class AzureSTT implements STTAdapter {
 
     // Clamp to Azure's accepted range [100, 5000].
     // STTConfig.endpointingSilenceMs (from agent UI) takes priority over extraConfig.
-    const raw = cfg.endpointingSilenceMs ?? extra.endpointingSilenceMs ?? 400;
-    this.endpointingSilenceMs = Math.max(100, Math.min(5000, raw));
+    const raw = cfg.endpointingSilenceMs ?? extra.endpointingSilenceMs ?? 100;
+    this.endpointingSilenceMs = Math.max(50, Math.min(5000, raw));
   }
 
   // ── Batch REST ────────────────────────────────────────────────────────────
