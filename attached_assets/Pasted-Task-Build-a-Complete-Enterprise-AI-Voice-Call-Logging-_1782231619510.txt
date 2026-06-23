@@ -1,0 +1,91 @@
+Task: Build a Complete Enterprise AI Voice Call Logging & Observability System
+Goal
+Redesign the existing Call Log into a complete enterprise-grade AI Voice
+Observability System.
+The Call Log should provide complete end-to-end visibility into every
+call from start to finish and make debugging simple for developers,
+support teams, prompt engineers and customers.
+Requirements
+Preserve all existing APIs and backend functionality.
+Do not remove any existing logs.
+Extend the current implementation.
+Organize the Call Log into:
+Call Overview
+Disconnect Details
+Provider Chain
+Recording Metadata
+Conversation Timeline
+STT
+Memory
+Knowledge
+Variable Resolution
+LLM
+Tool Calls
+TTS
+Playback
+Interruption
+Audio Diagnostics
+Compliance
+Timeline Events
+Agent Summary
+Advanced Debug
+Call Overview
+Include: - Call ID - Agent ID - Agent Name - Campaign ID - Web Call /
+Live Call - Inbound / Outbound - Masked Caller Number - Called Number -
+Call Start Time - Call End Time - Duration - Language - Language
+Switch - Call Health - Health Reasons - Call Outcome - Estimated Cost
+Conversation Timeline
+Every turn must include: Caller Speech → STT → Memory → Knowledge →
+Variable Resolution → LLM → Tool Calls → Tool Results → LLM Response →
+TTS → Playback → Agent Response
+Each turn should contain: - Turn ID - Turn Number - Timestamp - Status -
+Latency - Warnings
+STT
+Transcript, confidence, detected language, final/partial, VAD reason,
+barge-in, provider, fallback tier and latency.
+Memory
+Facts retrieved, episodes retrieved, facts stored and episodes stored.
+Knowledge
+Knowledge sources, chunks retrieved and injection status.
+Variable Resolution
+Resolved variables, unresolved variables and prompt preview.
+LLM
+Provider, model, tokens, history tokens, prompt hash, knowledge
+injection, tool calls, flow state, timestamps, TTFT, generation
+duration, retries, fallback provider/model and reasons.
+Tool Calls
+Tool name, arguments, execution time, output, retries, errors and
+status.
+TTS
+Voice, provider, text, bytes, TTFB, chunks, filler flag, interruption
+flag and stream status.
+Playback
+Playback start, completion, interruption, cancellation and duration.
+Interruption
+Caller speech detected, interruption time, TTS stop time, barge latency
+and interrupted component.
+Audio Diagnostics
+Sample rate, bitrate, packet loss, jitter, RMS, noise, echo, clipping
+and audio warnings.
+Compliance
+Consent, disclosure, recording consent, opt-out, PII detection and PII
+types.
+Timeline Events
+Log every major event with timestamp, component, duration, status and
+metadata: Call Started, Greeting Played, STT Started/Completed, Memory
+Retrieved, Knowledge Injected, Variables Resolved, LLM Started, First
+Token, LLM Completed, Tool Started/Completed, TTS Started, Playback
+Started/Completed, Barge-in, Language Switch, Transfer, Recording Saved
+and Call Ended.
+Agent Summary
+Average and peak STT/LLM/TTS latency, tool latency, turn duration, idle
+time, active time, total tokens, fallback counts, interruption count,
+unresolved variable count, risk score and sentiment timeline.
+Advanced Debug
+Include Session ID, Request IDs, Trace IDs, Provider Request IDs, Raw
+Request Payloads, Raw Response Payloads and Raw JSON.
+Final Objective
+Build a production-grade AI Voice Observability platform comparable to
+Retell AI, Bland AI, Vapi and Bolna. The default UI should remain clean
+while Advanced Debug provides complete diagnostics. Every event from
+call start until call end must be fully traceable.

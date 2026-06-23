@@ -1,0 +1,163 @@
+Task: Build a Complete End-to-End Call Execution Log
+
+The current Logs tab only shows a few high-level events (Memory, STT, LLM, TTS, Tool calls). It is not sufficient for debugging production AI voice calls.
+
+I want the Logs tab to become a complete execution trace of the entire call.
+
+The goal is that a developer should be able to understand everything that happened during a call without opening server logs or inspecting raw JSON.
+
+The log should capture every stage of the pipeline from the moment the call starts until it ends.
+
+The log should include every important event, including but not limited to:
+Call Started
+Agent Loaded
+Agent Configuration Loaded
+STT Provider Initialized
+LLM Provider Initialized
+TTS Provider Initialized
+Voice Loaded
+Memory Retrieved
+Memory Saved
+Knowledge Retrieved
+Knowledge Injected
+Variables Resolved
+Prompt Generated
+Prompt Hash
+LLM Request Started
+First Token Received
+LLM Streaming Started
+LLM Completed
+Tool Requested
+Tool Executed
+Tool Failed
+Tool Retry
+Tool Response
+TTS Started
+First Audio Generated
+Audio Chunks Generated
+Playback Started
+Playback Completed
+Playback Interrupted
+Filler Spoken
+Barge-in Detected
+STT Restarted
+Language Detection
+Language Switch
+Retry Started
+Retry Completed
+Provider Fallback
+Recording Started
+Recording Completed
+Recording Saved
+Recording Failed
+Audio Diagnostics
+Network Warnings
+Latency Metrics
+Performance Metrics
+Compliance Events
+Consent Events
+Transfer Started
+Transfer Completed
+End Call Tool Triggered
+Call Ended
+Every log entry should contain
+Timestamp
+Turn Number
+Component
+Direction
+Provider
+Status
+Latency
+Duration
+Retry Count
+Warning Flags
+Error Message (if applicable)
+Metadata
+Related Turn ID
+Call End Information
+
+The final log entry must always explain why the call ended.
+
+Do not simply show "Call Ended."
+
+Instead include:
+
+Disconnect Reason
+Component that triggered the disconnect
+Provider involved
+Error Code
+Error Message
+Whether it was expected or unexpected
+Whether a retry or fallback was attempted
+Whether recovery succeeded
+Final Call Outcome
+
+Example:
+
+Call Ended
+
+Reason:
+Google Gemini returned HTTP 503
+
+Component:
+LLM
+
+Provider:
+Gemini Flash
+
+Retry:
+Attempted (1)
+
+Fallback:
+Not Configured
+
+Outcome:
+Call Terminated
+
+or
+
+Call Ended
+
+Reason:
+Caller Hung Up
+
+Component:
+Telephony
+
+Outcome:
+Completed
+
+or
+
+Call Ended
+
+Reason:
+Silence Timeout
+
+Component:
+STT
+
+Last Caller Speech:
+19 seconds ago
+
+Outcome:
+Timeout
+
+or
+
+Call Ended
+
+Reason:
+Tool Failure
+
+Tool:
+Schedule Appointment
+
+Retry:
+2 Attempts
+
+Outcome:
+Error
+Goal
+
+The Logs tab should act as a complete execution timeline for the call. Every important action, transition, retry, fallback, warning, interruption, provider event, and error should be recorded in chronological order so that developers can identify the exact root cause of any issue without needing backend logs or raw JSON.
