@@ -2289,10 +2289,24 @@ export class OrchestrationPipeline {
     // extractSentences on the full clean reply and prefer its remainder over the
     // possibly-truncated pendingText buffer. Enqueue any non-empty trailing text —
     // a length gate would silently drop very short final fragments (e.g. "Ok").
-    const { remainder: trueRemainder } = extractSentences(cleanResponse);
-    const flushText = trueRemainder.trim().length > pendingText.trim().length
-      ? trueRemainder
-      : pendingText;
+    //
+    // Edge case: when the last sentence ends with a sentence-boundary character
+    // (e.g. "?"), extractSentences returns remainder="" but captures it in
+    // `sentences`. If the final token(s) arrived only in onComplete, pendingText
+    // is a truncated prefix of that sentence. Detect this and use the full sentence.
+    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse);
+    const pendingTrim = pendingText.trim();
+    let flushText: string;
+    if (trueRemainder.trim().length > pendingTrim.length) {
+      flushText = trueRemainder;
+    } else if (pendingTrim) {
+      const lastSentence = (allSentences.at(-1) ?? "").trim();
+      flushText = (lastSentence.startsWith(pendingTrim) && lastSentence.length > pendingTrim.length)
+        ? lastSentence
+        : pendingText;
+    } else {
+      flushText = pendingText;
+    }
     if (flushText.trim()) enqueue(flushText);
     allEnqueued = true;
     const finalWake = wakePlayer as (() => void) | null;
@@ -2713,10 +2727,21 @@ export class OrchestrationPipeline {
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
     // gate would silently drop very short final fragments.
-    const { remainder: trueRemainder } = extractSentences(cleanResponse);
-    const flushText = trueRemainder.trim().length > pendingText.trim().length
-      ? trueRemainder
-      : pendingText;
+    // Edge case: last sentence ends with "?" → remainder="" but pendingText may
+    // be a truncated prefix; fall back to the full captured sentence.
+    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse);
+    const pendingTrim = pendingText.trim();
+    let flushText: string;
+    if (trueRemainder.trim().length > pendingTrim.length) {
+      flushText = trueRemainder;
+    } else if (pendingTrim) {
+      const lastSentence = (allSentences.at(-1) ?? "").trim();
+      flushText = (lastSentence.startsWith(pendingTrim) && lastSentence.length > pendingTrim.length)
+        ? lastSentence
+        : pendingText;
+    } else {
+      flushText = pendingText;
+    }
     if (flushText.trim()) enqueue(flushText);
     allEnqueued = true;
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
