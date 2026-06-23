@@ -151,9 +151,16 @@ export class SarvamSTT implements STTAdapter {
     ) => void,
     onClose?: () => void,
   ): StreamSTT {
+    // Capture class fields as locals so closures (plain object methods, nested
+    // functions) can reference them without relying on `this` binding.
+    const langCode = this.langCode;
+    const model    = this.model;
+    const mode     = this.mode;
+    const key      = this.key;
+
     const params = new URLSearchParams({
-      model:              this.model,
-      language_code:      this.langCode,
+      model:              model,
+      language_code:      langCode,
       sample_rate:        "16000",
       input_audio_codec:  "pcm_s16le",
       high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappier for voice agents
@@ -161,8 +168,8 @@ export class SarvamSTT implements STTAdapter {
       flush_signal:       "true",    // allow manual buffer flush via flush() call
     });
 
-    if (MODE_CAPABLE.has(this.model)) {
-      params.set("mode", this.mode);
+    if (MODE_CAPABLE.has(model)) {
+      params.set("mode", mode);
     }
 
     const wsUrl = `${WS_BASE}?${params.toString()}`;
@@ -193,14 +200,14 @@ export class SarvamSTT implements STTAdapter {
       wsReady = false;
 
       ws = new WebSocket(wsUrl, {
-        headers: { "api-subscription-key": this.key },
+        headers: { "api-subscription-key": key },
       });
 
       ws.on("open", () => {
         wsReady = true;
         reconnectAttempts = 0;
         logger.info(
-          { langCode: this.langCode, model: this.model, mode: this.mode },
+          { langCode, model, mode },
           "Sarvam streaming STT: WebSocket opened",
         );
         // Flush any audio that arrived before the socket was ready.
@@ -237,8 +244,8 @@ export class SarvamSTT implements STTAdapter {
           logger.info(
             {
               text: text.slice(0, 80),
-              model: this.model,
-              mode: this.mode,
+              model,
+              mode,
               endDetectToFinalMs: meta.endDetectToFinalMs,
             },
             "Sarvam STT: final transcript",
