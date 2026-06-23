@@ -829,7 +829,8 @@ export default function CallDetail() {
   const updateDisposition = useUpdateCallDisposition();
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState("logs");
+  const initialTab = new URLSearchParams(window.location.search).get("tab") || "logs";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const dispositionSchema = Array.isArray((agent as any)?.dispositionSchema)
     ? (agent as any).dispositionSchema as Array<{ key: string; label: string; type: string; options?: string[] }>
