@@ -3835,8 +3835,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     },
     (errors) => {
       const fieldTabMap: Record<string, TabId> = {
-        webhookUrl:               "advanced",
-        webhookSecret:            "advanced",
+        webhookUrl:               "analysis",
+        webhookSecret:            "analysis",
         noiseCancellationEnabled: "advanced",
         ambientNoiseEnabled:      "advanced",
         ambientNoiseTrack:        "advanced",
