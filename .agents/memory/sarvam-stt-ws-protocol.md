@@ -31,12 +31,16 @@ Query params:
 - Confirmed via live WebSocket probe (June 2026): flat format → "Input should be a valid dictionary or instance of AudioContent"; pcm_s16le encoding → "Input should be 'audio/wav'"
 
 ## Server → client messages (JSON text)
+Per official docs (confirmed June 2026):
 ```json
-{ "type": "events", "data": { "signal_type": "START_SPEECH" | "END_SPEECH" } }
-{ "type": "data",   "data": { "transcript": "..." } }
+{ "type": "speech_start" }
+{ "type": "speech_end" }
+{ "type": "transcript", "data": { "transcript": "..." } }
+{ "type": "error",      "data": { "message": "..." } }
 ```
-- Only `type: "data"` is a final transcript — there are NO interim/partial messages
-- `type: "events"` carries VAD signals (useful for latency tracking, not needed for barge-in)
+- `"transcript"` is the final — no partials. Adapter also handles legacy `"data"` type as fallback.
+- `"speech_start"` / `"speech_end"` are VAD signals when `vad_signals=true`. Adapter also handles legacy `"events"` + `signal_type`.
+- **Do NOT use `"events"`/`"data"` as primary type strings** — those were guessed wrong in the initial implementation and produced zero transcripts.
 
 ## Batch API
 POST `https://api.sarvam.ai/speech-to-text`

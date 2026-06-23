@@ -77,7 +77,7 @@ function normaliseLang(code: string | null | undefined): string {
 
 interface SarvamMsg {
   type: string;
-  data?: { transcript?: string; signal_type?: string };
+  data?: { transcript?: string; signal_type?: string; message?: string };
 }
 
 export class SarvamSTT implements STTAdapter {
@@ -215,18 +215,20 @@ export class SarvamSTT implements STTAdapter {
           return; // ignore non-JSON frames
         }
 
-        if (msg.type === "events") {
-          const signal = msg.data?.signal_type;
-          if (signal === "END_SPEECH") {
-            speechEndAt = Date.now();
-            logger.debug({ langCode: this.langCode }, "Sarvam STT: END_SPEECH");
-          } else if (signal === "START_SPEECH") {
-            logger.debug({ langCode: this.langCode }, "Sarvam STT: START_SPEECH");
-          }
+        // VAD signals — official type values: "speech_start" / "speech_end"
+        // (legacy guessed values "events" + signal_type also handled for safety)
+        if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
+          logger.debug({ langCode }, "Sarvam STT: speech start");
+          return;
+        }
+        if (msg.type === "speech_end" || (msg.type === "events" && msg.data?.signal_type === "END_SPEECH")) {
+          speechEndAt = Date.now();
+          logger.debug({ langCode }, "Sarvam STT: speech end");
           return;
         }
 
-        if (msg.type === "data") {
+        // Final transcript — official type: "transcript"; legacy: "data"
+        if (msg.type === "transcript" || msg.type === "data") {
           const text = (msg.data?.transcript ?? "").trim();
           if (!text) return;
           const meta: SttFinalMetadata = {
@@ -243,6 +245,11 @@ export class SarvamSTT implements STTAdapter {
           );
           speechEndAt = 0;
           onTranscript(text, true, undefined, meta);
+          return;
+        }
+
+        if (msg.type === "error") {
+          logger.error({ msg: msg.data?.message, langCode }, "Sarvam STT: server error");
         }
       });
 
