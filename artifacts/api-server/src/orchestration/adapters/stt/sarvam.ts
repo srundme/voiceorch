@@ -233,8 +233,22 @@ export class SarvamSTT implements STTAdapter {
       if (/[ஓோ]ட$|உடைய$|களோட$/.test(last)) return true;
       // Tamil dative, locative, instrumental markers
       if (/க்கு$|கிட்ட$|கிட்டே$|னால$|னாலே$|ஐ$/.test(last)) return true;
+      // Tamil conjunctive participial (connector) forms — ALWAYS signal more is coming:
+      //   -ந்து  : வந்து (having come), போந்து, கொண்டு (with)
+      //   -ட்டு  : போட்டு (having placed), விட்டு (having let), ஆட்டு…
+      //   -ணி/-ல்லி/-ண்ணி : சொல்லி (having said), பண்ணி (having done)
+      //   -ய்    : போய் (having gone), வாய்
+      //   -ட்டு also covers viṭṭu (விட்டு) and poṭṭu (போட்டு) naturally
+      if (/ந்து$|ட்டு$|ண்ணி$|ல்லி$|ணி$|னி$/.test(last)) return true;
+      if (/ய்$/.test(last) && last.length > 2) return true; // போய், வாய் — skip 2-char words like "ஒய்"
       // Tamil relative-participial / adverbial forms
       if (/ன்ற$|கிற$|வந்த$|போன$/.test(last)) return true;
+      // 2-word utterance where the FIRST word ends with a case marker → predicate is missing.
+      // e.g. "எனக்கு வந்து" — "எனக்கு" (to me) + "வந்து" (connector) → clearly incomplete.
+      if (words.length === 2) {
+        const first = words[0];
+        if (/க்கு$|கிட்ட$|கிட்டே$|ஐ$|னால$|ஆல$/.test(first)) return true;
+      }
       // Hindi/Hinglish possessives & case markers
       if (/\bका$|\bकी$|\bके$|\bको$|\bसे$|\bमें$|\bने$|\bपर$/u.test(last)) return true;
       // Generic English connectives that signal more is coming
