@@ -1,0 +1,27 @@
+; Zone file for snapserve.ai
+; Generated on 2026-06-23 07:21:44 UTC
+
+$ORIGIN snapserve.ai
+$TTL 3600
+
+@                              3600 IN SOA   ns1.dns-parking.com. dns.hostinger.com. 2026062303 10000 2400 604800 600
+@                              14400 IN ALIAS ijmobs17.up.railway.app.
+@                              14400 IN MX    5 mx1.hostinger.com
+                               14400 IN MX    10 mx2.hostinger.com
+@                              86400 IN NS    ns2.dns-parking.com.
+                               86400 IN NS    ns1.dns-parking.com.
+@                              3600 IN TXT   "google-site-verification=rRXOh5xk8ErbCMtQNCs-CzCBXduNSTWiv9eFVT2zAjk"
+                               3600 IN TXT   "replit-verify=1f1d5cdd-6046-4254-b385-d6ab8aaa85be"
+                               3600 IN TXT   "v=spf1 include:_spf.mail.hostinger.com ~all"
+_dmarc                         3600 IN TXT   "v=DMARC1; p=none"
+_railway-verify                14400 IN TXT   "railway-verify=e2cf941a4b83ee6e57438589b80acfcedafd43d8a6110e72efc16d3b775494ff"
+_railway-verify.app            14400 IN TXT   "railway-verify=d112223fb50fc02e20570de3d815ef1df200f2324923677527d63ad015b8dd88"
+app                            14400 IN CNAME 4p2j09hq.up.railway.app.
+autoconfig                     300 IN CNAME autoconfig.mail.hostinger.com.
+autodiscover                   300 IN CNAME autodiscover.mail.hostinger.com.
+clk._domainkey                 14400 IN CNAME dkim1.ndgrzwrnrgj6.clerk.services.
+clk2._domainkey                14400 IN CNAME dkim2.ndgrzwrnrgj6.clerk.services.
+clkmail                        14400 IN CNAME mail.ndgrzwrnrgj6.clerk.services.
+hostingermail-a._domainkey     300 IN CNAME hostingermail-a.dkim.mail.hostinger.com.
+hostingermail-b._domainkey     300 IN CNAME hostingermail-b.dkim.mail.hostinger.com.
+hostingermail-c._domainkey     300 IN CNAME hostingermail-c.dkim.mail.hostinger.com.
