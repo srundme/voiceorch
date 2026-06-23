@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API  = `${BASE}/api`;
 
 function toSlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -259,9 +260,6 @@ function EventTypeRow({ et, onDelete }: { et: EventType; onDelete: (id: number) 
     </div>
   );
 }
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-const API  = `${BASE}/api`;
 
 export default function EventTypesPage() {
   const qc = useQueryClient();
