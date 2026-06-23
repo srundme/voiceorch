@@ -361,6 +361,18 @@ function LatencyBar({ agentId }: { agentId: number }) {
   );
 }
 
+function LatencyE2E({ agentId }: { agentId: number }) {
+  const { data, isLoading } = useQuery<LatencyStats>({
+    queryKey: ["agent-latency-stats", agentId],
+    queryFn: () => customFetch<LatencyStats>(`${DASH_API}/agents/${agentId}/latency-stats`),
+    staleTime: 2 * 60 * 1000,
+    enabled: !!agentId,
+  });
+  if (isLoading) return <span className="text-[10px] text-muted-foreground animate-pulse">…</span>;
+  if (!data || data.callCount === 0 || data.e2eMs === null) return <span className="text-[10px] text-muted-foreground/50">—</span>;
+  return <span className="text-sm font-bold tabular-nums">{data.e2eMs}ms</span>;
+}
+
 /* ── Tab: Overview (Vapi-style) ─────────────────────────────────────────────── */
 
 type CardSection = "transcriber" | "model" | "voice";
@@ -531,6 +543,29 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 {ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}
               </div>
             </button>
+          </div>
+
+          {/* ── Cost + Latency bar ───────────────────────────────────────────── */}
+          <div className="rounded-lg bg-muted/30 border border-border/40 px-4 py-3 space-y-2.5">
+            <div className="flex items-center gap-4">
+              {costCents != null && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Avg Cost</span>
+                    <div className="flex items-baseline gap-0.5">
+                      <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
+                      <span className="text-[10px] text-muted-foreground">/min</span>
+                    </div>
+                  </div>
+                  <div className="h-3 w-px bg-border/40 shrink-0" />
+                </>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Avg Latency</span>
+                <LatencyE2E agentId={agent.id} />
+              </div>
+            </div>
+            <LatencyBar agentId={agent.id} />
           </div>
 
           {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
@@ -811,23 +846,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <FormMessage className="text-[10px]" />
               </FormItem>
             )} />
-          </div>
-
-          {/* ── Bottom strip: cost + latency ─────────────────────────────────── */}
-          <div className="rounded-lg bg-muted/30 border border-border/40 px-4 py-3 space-y-3">
-            {/* Cost row */}
-            {costCents != null && (
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">Avg Cost</span>
-                <div className="flex-1" />
-                <div className="flex items-baseline gap-1 shrink-0">
-                  <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
-                  <span className="text-[10px] text-muted-foreground">/min</span>
-                </div>
-              </div>
-            )}
-            {/* Latency bar */}
-            <LatencyBar agentId={agent.id} />
           </div>
 
         </div>
