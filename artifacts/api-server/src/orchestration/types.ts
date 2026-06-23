@@ -345,6 +345,8 @@ export interface STTAdapter {
 
 export interface StreamSTT {
   sendAudio(chunk: Buffer): void;
+  /** Provider-specific: force the STT engine to flush its audio buffer and emit a transcript now. */
+  flush?(): void;
   close(): void;
 }
 

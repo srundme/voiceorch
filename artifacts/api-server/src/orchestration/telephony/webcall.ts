@@ -3273,8 +3273,18 @@ export async function handleWebCallWebSocket(
           streamingFallbackTimer = setTimeout(() => {
             streamingFallbackTimer = null;
             if (!processing && !speaking && !closed && audioChunks.length > 0 && !streamingTranscriptPending) {
-              logger.warn({ callId, chunks: audioChunks.length }, "Webcall: streaming STT gave no final — falling back to batch STT");
-              void process();
+              // Nudge the streaming provider to finalize its buffer before we fall back.
+              streamSTT?.flush?.();
+              // Give the flush a short window to return a transcript; if it does,
+              // onFinal will cancel the batch fallback. Otherwise batch STT runs.
+              setTimeout(() => {
+                if (!processing && !speaking && !closed && audioChunks.length > 0 && !streamingTranscriptPending) {
+                  logger.warn({ callId, chunks: audioChunks.length }, "Webcall: streaming STT gave no final — falling back to batch STT");
+                  void process();
+                } else {
+                  audioChunks.splice(0);
+                }
+              }, 400);
             } else {
               audioChunks.splice(0); // streaming handled it or call ended — discard backup
             }

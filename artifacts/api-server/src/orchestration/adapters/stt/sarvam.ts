@@ -158,6 +158,7 @@ export class SarvamSTT implements STTAdapter {
       input_audio_codec:  "pcm_s16le",
       high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappier for voice agents
       vad_signals:        "true",    // emit START_SPEECH / END_SPEECH events
+      flush_signal:       "true",    // allow manual buffer flush via flush() call
     });
 
     if (MODE_CAPABLE.has(this.model)) {
@@ -293,6 +294,24 @@ export class SarvamSTT implements STTAdapter {
         } else {
           sendChunk(chunk);
         }
+      },
+      flush(): void {
+        // Ask Sarvam to immediately finalize its internal audio buffer.
+        // Useful when we know the caller has finished speaking and want a
+        // transcript without waiting for VAD silence detection.
+        if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
+        const emptyData = Buffer.alloc(0);
+        ws.send(
+          JSON.stringify({
+            audio: {
+              data:        emptyData.toString("base64"),
+              encoding:    "audio/wav",
+              sample_rate: 16000,
+            },
+            flush: true,
+          }),
+        );
+        logger.debug({ langCode }, "Sarvam STT: flush signal sent");
       },
       close(): void {
         intentionallyClosed = true;
