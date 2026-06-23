@@ -956,6 +956,14 @@ export class OrchestrationPipeline {
               this.bargeInHoldUntil,
               Date.now() + this.bargeInEchoGraceMs,
             );
+            // If TTS is already done and this was the last queued chunk, break
+            // immediately WITHOUT the trailing 20ms sleep.  The sleep would create
+            // a timing hole: VoBiz's playout buffer can underrun in that window
+            // (Node.js setTimeout jitter is typically 5-15ms under load) and clip
+            // the final word before drainPlaybackTail starts sending silence.
+            // drainPlaybackTail sends its first silence frame synchronously, so
+            // starting it right after the last audio chunk keeps the buffer full.
+            if (ttsDone && queue.length === 0) break;
             const delay = Math.max(0, nextTick - Date.now());
             nextTick += 20;
             // Prevent large accumulated debt (e.g. after a long pause or barge-in)
@@ -1099,7 +1107,11 @@ export class OrchestrationPipeline {
             this.bargeInHoldUntil,
             Date.now() + this.bargeInEchoGraceMs,
           );
-          await new Promise<void>((r) => setTimeout(r, 20));
+          // Skip the trailing sleep on the last chunk so drainPlaybackTail can
+          // start immediately — no setTimeout-jitter gap before silence frames.
+          if (i + PCM_CHUNK < ttsPcm8k.length) {
+            await new Promise<void>((r) => setTimeout(r, 20));
+          }
         }
       } else {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
@@ -1109,7 +1121,16 @@ export class OrchestrationPipeline {
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
           this.config.onAudioOut(outChunk);
-          await new Promise<void>((r) => setTimeout(r, 20));
+          // Re-arm echo grace per chunk so a sentence longer than bargeInEchoGraceMs
+          // doesn't lose barge-in protection mid-playback (mirrors the PCM branch).
+          this.bargeInHoldUntil = Math.max(
+            this.bargeInHoldUntil,
+            Date.now() + this.bargeInEchoGraceMs,
+          );
+          // Skip the trailing sleep on the last chunk — same reasoning as PCM branch.
+          if (i + CHUNK_SIZE_MULAW < ttsMusaw.length) {
+            await new Promise<void>((r) => setTimeout(r, 20));
+          }
         }
       }
     }

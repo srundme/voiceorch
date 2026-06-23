@@ -15,6 +15,18 @@ ends the call (`onCallEnd`) or stops audio immediately after will clip whatever
 is still buffered downstream. Terminal/one-shot paths bypass the normal loop's
 tail handling, so they each have to replicate it.
 
+**Timing-hole root cause (found after repeated drain fixes):** All three
+playback paths (streaming drainLoop, batch PCM, batch mulaw) do a trailing
+20ms `setTimeout` sleep AFTER the last audio chunk, BEFORE `drainPlaybackTail`
+starts. Node.js `setTimeout` jitter is typically 5-15ms under load, so the
+first silence frame can arrive AFTER VoBiz's playout buffer has already
+underrun — clipping the last word even with drain in place. Fix: skip the
+trailing sleep on the last chunk in all three paths so `drainPlaybackTail`
+starts immediately:
+- Streaming drainLoop: `if (ttsDone && queue.length === 0) break;` before the delay.
+- Batch PCM: `if (i + PCM_CHUNK < ttsPcm8k.length) await sleep(20);`
+- Batch mulaw: same, plus add missing per-chunk echo-grace re-arm.
+
 **Both paths need real silence frames — a passive sleep is NOT enough for either:**
 - **Telephony (Vobiz):** Vobiz detects "no audio" and closes its playout window
   early even while PCM is buffered. A passive sleep does NOT work. Must send real
