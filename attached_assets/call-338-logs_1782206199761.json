@@ -1,0 +1,504 @@
+[
+  {
+    "id": 5843,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:07.322Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 26,
+      "agentName": "Ravilla",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5844,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:07.328Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "கிருத்திகா",
+        "callCount": 9
+      },
+      "factCount": 8,
+      "facts": {
+        "preferred_area": "Tambaram, Pallavaram",
+        "budget": "1 crore",
+        "name": "கிருத்திகா",
+        "location": "Chennai",
+        "property_type": "plots",
+        "caller_stated_agent_called_them": "true",
+        "property_searcher": "self",
+        "property_search_status": "looking"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 5845,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:07.328Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "agent_name": "Ravilla",
+        "date": "Tuesday, June 23, 2026",
+        "caller_number": "browser"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: கிருத்திகா  |  Calls: 9  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To discuss specific plot options in Tambaram and Pallavaram within their budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_area: Tambaram, Pallavaram  [today]\n• budget: 1 crore  [today]\n• location: Chennai  [today]\n• property_type: plots  [today]\n• caller_stated_agent_called_them: true  [today]\n• property_searcher: self  [today]\n• property_search_status: looking  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, previously known as Riddles, c"
+    },
+    "metadata": null
+  },
+  {
+    "id": 5846,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:25.174Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5847,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:25.876Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ம்ம்ம்..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5848,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:25.876Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 2:22 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கிருத்திகா  |  Calls: 9  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To discuss specific plot options in Tambaram and Pallavaram within their budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_area: Tambaram, Pallavaram  [today]\n• budget: 1 crore  [today]\n• location: Chennai  [today]\n• property_type: plots  [today]\n• calle",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5849,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:26.249Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 374,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 7680,
+      "textLength": 9,
+      "firstByteMs": 147
+    },
+    "metadata": null
+  },
+  {
+    "id": 5850,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:28.094Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "கிருத்திகா, உங்க பட்ஜெட் ஒரு கோடிக்குள்ள நம்பரம் மற்றும் பல்லாவரம் பகுதிகள்ல வீட்டு மனைகள் பத்தி உங்ககிட்ட பேசணும்னு நினைச்சேன்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5851,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:28.096Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2219,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "கிருத்திகா, உங்க பட்ஜெட் ஒரு கோடிக்குள்ள நம்பரம் மற்றும் பல்லாவரம் பகுதிகள்ல வீட்டு மனைகள் பத்தி உங்ககிட்ட பேசணும்னு நினைச்சேன். உங்களுக்கு இது சரியா இருக்குமா?"
+    },
+    "metadata": {
+      "inputTokens": 1776,
+      "outputTokens": 46,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5852,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:28.096Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு இது சரியா இருக்குமா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5853,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:28.928Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 833,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 56318,
+      "textLength": 31,
+      "firstByteMs": 381
+    },
+    "metadata": null
+  },
+  {
+    "id": 5854,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:29.453Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1359,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 217598,
+      "textLength": 128,
+      "firstByteMs": 154
+    },
+    "metadata": null
+  },
+  {
+    "id": 5855,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:57.566Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "வேற எந்த ஏரியாவுல உங்ககிட்ட ப்ராப்பர்டீஸ் இருக்கு."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5856,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:58.270Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ம்ம்ம்..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5857,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:58.270Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 2:22 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கிருத்திகா  |  Calls: 9  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To discuss specific plot options in Tambaram and Pallavaram within their budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_area: Tambaram, Pallavaram  [today]\n• budget: 1 crore  [today]\n• location: Chennai  [today]\n• property_type: plots  [today]\n• calle",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5858,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:58.644Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 378,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 5118,
+      "textLength": 9,
+      "firstByteMs": 159
+    },
+    "metadata": null
+  },
+  {
+    "id": 5859,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:59.972Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "[Callback Scheduling]\n\n\nகிருத்திகா, இப்போதைக்கு நம்பரம் மற்றும் பல்லாவரத்துல இருக்கிற மனைகள் மேலதான் நாங்க கவனம் செலுத்திட்டு இருக்கோம்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5860,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:59.975Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1706,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[Callback Scheduling]\n[Flow Reminder: Address the customer's question about other areas, then RESUME the flow at the last known point. You last confirmed their interest in plots in Tambaram and Pallavaram within their budget of one crore. The next step in the flow is to provide details about properties in Tambaram and Pallavaram.]\n\nகிருத்திகா, இப்போதைக்கு நம்பரம் மற்றும் பல்லாவரத்துல இருக்கிற மனைகள் மேலதான் நாங்க கவனம் செலுத்திட்டு இருக்கோம். அந்த மனைகள் பத்தி உங்களுக்கு ஏதாவது தெரிஞ்சுக்கணுமா?"
+    },
+    "metadata": {
+      "inputTokens": 3617,
+      "outputTokens": 165,
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 5861,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:52:59.975Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அந்த மனைகள் பத்தி உங்களுக்கு ஏதாவது தெரிஞ்சுக்கணுமா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5862,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:00.662Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 688,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79358,
+      "textLength": 52,
+      "firstByteMs": 152
+    },
+    "metadata": null
+  },
+  {
+    "id": 5863,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:01.234Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1262,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 171518,
+      "textLength": 136,
+      "firstByteMs": 146
+    },
+    "metadata": null
+  },
+  {
+    "id": 5864,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:12.276Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "சைஸ் என்ன?"
+    },
+    "metadata": null
+  },
+  {
+    "id": 5866,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:12.977Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆமா, ஆமா..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5865,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:12.977Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 2:23 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கிருத்திகா  |  Calls: 9  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To discuss specific plot options in Tambaram and Pallavaram within their budget.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• preferred_area: Tambaram, Pallavaram  [today]\n• budget: 1 crore  [today]\n• location: Chennai  [today]\n• property_type: plots  [today]\n• calle",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5867,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:13.560Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 583,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 11,
+      "firstByteMs": 165
+    },
+    "metadata": null
+  },
+  {
+    "id": 5869,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:16.290Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "error",
+    "latencyMs": null,
+    "requestPayload": {
+      "event": "call.end",
+      "reason": "error",
+      "durationSeconds": 68,
+      "turns": 3,
+      "error": "LLM error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse: [503 Service Unavailable] This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5868,
+    "callId": 338,
+    "agentId": 26,
+    "ts": "2026-06-23T08:53:16.290Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "error",
+    "latencyMs": 3286,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "error": "LLM error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse: [503 Service Unavailable] This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+    }
+  }
+]
