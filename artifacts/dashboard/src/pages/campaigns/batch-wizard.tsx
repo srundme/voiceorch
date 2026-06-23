@@ -6,6 +6,7 @@ import {
   useGetCampaign, useListLeadSources, useCreateLeadSource,
   useListAgentVariables, useCreateCampaignBatch,
   getGetCampaignQueryKey, getListLeadSourcesQueryKey, getListAgentVariablesQueryKey,
+  customFetch,
 } from "@workspace/api-client-react";
 import type {
   LeadSource, AgentVariable, CampaignBatch,
@@ -425,6 +426,263 @@ function Step2({
   );
 }
 
+// ── Meta Form Integration step ────────────────────────────────────────────────
+
+type MetaIntegrationRow = {
+  id: number;
+  pageName: string | null;
+  formId: string;
+  formName: string | null;
+  webhookToken: string;
+  active: boolean;
+  createdAt: string;
+};
+
+function MetaFormStep({ toast }: { toast: ReturnType<typeof useToast>["toast"] }) {
+  const [integrations, setIntegrations] = useState<MetaIntegrationRow[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [creating, setCreating]       = useState(false);
+  const [showNew, setShowNew]         = useState(false);
+  const [formId, setFormId]           = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [pageName, setPageName]       = useState("");
+  const [formName, setFormName]       = useState("");
+  const [showToken, setShowToken]     = useState(false);
+  const [justCreated, setJustCreated] = useState<{ webhookUrl: string; verifyToken: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  function copy(text: string, field: string) {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 1500);
+    });
+  }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await customFetch<{ integrations: MetaIntegrationRow[] }>(`${BASE}/api/meta/integrations`);
+      setIntegrations(data.integrations);
+      if (data.integrations.length === 0) setShowNew(true);
+    } catch {
+      setIntegrations([]);
+      setShowNew(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function handleCreate() {
+    if (!formId.trim() || !accessToken.trim()) {
+      toast({ title: "Form ID and Access Token are required", variant: "destructive" });
+      return;
+    }
+    setCreating(true);
+    try {
+      const result = await customFetch<{ id: number; webhookUrl: string; verifyToken: string }>(
+        `${BASE}/api/meta/integrations`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            formId:      formId.trim(),
+            accessToken: accessToken.trim(),
+            pageName:    pageName.trim() || undefined,
+            formName:    formName.trim() || undefined,
+          }),
+        },
+      );
+      setJustCreated({ webhookUrl: result.webhookUrl, verifyToken: result.verifyToken });
+      setShowNew(false);
+      setFormId(""); setAccessToken(""); setPageName(""); setFormName("");
+      await load();
+    } catch {
+      toast({ title: "Failed to create integration", variant: "destructive" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3 max-w-xl">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-20 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5 max-w-xl">
+      <div>
+        <h2 className="text-lg font-semibold">Meta Lead Form</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Connect a Meta Lead Ads form. Leads arrive automatically via webhook and trigger outbound calls.
+        </p>
+      </div>
+
+      {/* Existing integrations */}
+      {integrations.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Connected Forms</p>
+          {integrations.map(ig => (
+            <div key={ig.id} className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-orange-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{ig.formName ?? ig.formId}</p>
+                  {ig.pageName && <p className="text-xs text-muted-foreground">{ig.pageName}</p>}
+                </div>
+                <span className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0",
+                  ig.active
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-muted text-muted-foreground border-border",
+                )}>
+                  {ig.active ? "Active" : "Inactive"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-[10px] font-mono bg-background border border-border px-2 py-1.5 rounded truncate text-muted-foreground">
+                  {`${window.location.origin}${BASE}/api/meta/webhook/${ig.webhookToken}`}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => copy(`${window.location.origin}${BASE}/api/meta/webhook/${ig.webhookToken}`, `url-${ig.id}`)}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  {copiedField === `url-${ig.id}` ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          ))}
+          {!showNew && (
+            <button
+              type="button"
+              onClick={() => setShowNew(true)}
+              className="text-xs text-primary hover:underline"
+            >
+              + Connect another form
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Just-created success banner */}
+      {justCreated && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <p className="text-sm text-emerald-400 font-medium">Integration created — configure your Meta webhook:</p>
+          </div>
+          {[
+            { label: "Webhook URL",   value: justCreated.webhookUrl,   field: "url"   },
+            { label: "Verify Token",  value: justCreated.verifyToken,  field: "token" },
+          ].map(({ label, value, field }) => (
+            <div key={field} className="space-y-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase">{label}</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-[10px] font-mono bg-background border border-emerald-500/20 px-2 py-1.5 rounded truncate">
+                  {value}
+                </code>
+                <button type="button" onClick={() => copy(value, field)} className="text-muted-foreground hover:text-foreground shrink-0">
+                  {copiedField === field ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* New integration form */}
+      {showNew && (
+        <div className="space-y-4 border border-border rounded-xl p-4 bg-muted/10">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">New Integration</p>
+            {integrations.length > 0 && (
+              <button type="button" onClick={() => setShowNew(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Form ID <span className="text-destructive">*</span></Label>
+            <Input
+              value={formId}
+              onChange={e => setFormId(e.target.value)}
+              placeholder="e.g. 1234567890123456"
+              className="h-9 text-sm font-mono"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Found in Meta Business Manager → Lead Ads → Forms Library
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Page Access Token <span className="text-destructive">*</span></Label>
+            <div className="flex gap-2">
+              <Input
+                type={showToken ? "text" : "password"}
+                value={accessToken}
+                onChange={e => setAccessToken(e.target.value)}
+                placeholder="Long-lived page access token"
+                className="h-9 text-sm font-mono flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken(v => !v)}
+                className="text-xs text-muted-foreground hover:text-foreground px-2.5 border border-border rounded-md shrink-0"
+              >
+                {showToken ? "Hide" : "Show"}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Stored encrypted. Generate from Meta Developers → Graph API Explorer → Page token.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Page Name <span className="text-muted-foreground/60">(optional)</span></Label>
+              <Input value={pageName} onChange={e => setPageName(e.target.value)} placeholder="My Business Page" className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Form Name <span className="text-muted-foreground/60">(optional)</span></Label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Q3 Lead Gen Form" className="h-9 text-sm" />
+            </div>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={() => void handleCreate()}
+            disabled={creating || !formId.trim() || !accessToken.trim()}
+            className="gap-1.5"
+          >
+            {creating
+              ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Creating…</>
+              : <><Building2 className="w-3.5 h-3.5" />Connect Meta Form</>}
+          </Button>
+        </div>
+      )}
+
+      {/* Setup guide */}
+      <div className="bg-muted/20 border border-border rounded-xl p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2.5">Setup in Meta Business Manager</p>
+        <ol className="text-xs text-muted-foreground space-y-1.5 leading-relaxed">
+          <li>1. Go to <strong>Meta Business Suite → Integrations → Leads Centre</strong></li>
+          <li>2. Select your Facebook Page → <strong>Connect new CRM</strong></li>
+          <li>3. Paste the <strong>Webhook URL</strong> and <strong>Verify Token</strong> shown above</li>
+          <li>4. Subscribe to the <code className="bg-muted px-1 rounded text-[10px]">leadgen</code> field event</li>
+          <li>5. Submit a test lead — an outbound call fires automatically within seconds</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 // ── Step 3: Source Configuration ──────────────────────────────────────────────
 
 function Step3({
@@ -632,19 +890,7 @@ function Step3({
   }
 
   // Meta form ──────────────────────────────────────────────────────────────────
-  return (
-    <div className="space-y-5 max-w-xl">
-      <div>
-        <h2 className="text-lg font-semibold">Meta Lead Form</h2>
-        <p className="text-sm text-muted-foreground mt-1">Connect your Meta Lead Ads form.</p>
-      </div>
-      <div className="bg-muted/30 border border-border rounded-xl p-10 text-center">
-        <Building2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-        <p className="text-sm font-medium text-muted-foreground">Coming Soon</p>
-        <p className="text-xs text-muted-foreground mt-1">Connect your Meta Business account to pull leads directly from Lead Ads.</p>
-      </div>
-    </div>
-  );
+  return <MetaFormStep toast={toast} />;
 }
 
 // ── Step 4: Variable Mapping ───────────────────────────────────────────────────
