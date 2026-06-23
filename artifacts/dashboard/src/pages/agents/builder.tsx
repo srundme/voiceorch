@@ -290,89 +290,6 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
   );
 }
 
-/* ── LatencyBar — Vapi-style segmented latency display ─────────────────────── */
-
-interface LatencyStats {
-  callCount: number;
-  sttMs: number | null;
-  ttftMs: number | null;
-  ttsMs: number | null;
-  e2eMs: number | null;
-}
-
-function LatencyBar({ agentId }: { agentId: number }) {
-  const { data, isLoading } = useQuery<LatencyStats>({
-    queryKey: ["agent-latency-stats", agentId],
-    queryFn: () => customFetch<LatencyStats>(`${DASH_API}/agents/${agentId}/latency-stats`),
-    staleTime: 2 * 60 * 1000,
-    enabled: !!agentId,
-  });
-
-  if (isLoading) {
-    return <div className="h-1.5 w-full rounded-full bg-muted/40 animate-pulse" />;
-  }
-  if (!data || data.callCount === 0 || data.e2eMs === null) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="h-1.5 flex-1 rounded-full bg-muted/30" />
-        <span className="text-[10px] text-muted-foreground/50">No call data yet</span>
-      </div>
-    );
-  }
-
-  const { sttMs, ttftMs, ttsMs, e2eMs } = data;
-  const dispatch = 100;
-  const total = (sttMs ?? 0) + dispatch + (ttftMs ?? 0) + (ttsMs ?? 0);
-
-  const segments = [
-    { label: "STT",      ms: sttMs ?? 0,    color: "bg-cyan-400",   desc: "Transcription (end-detect → final transcript)" },
-    { label: "Dispatch", ms: dispatch,        color: "bg-slate-500",  desc: "STT→LLM handoff overhead" },
-    { label: "LLM TTFT", ms: ttftMs ?? 0,    color: "bg-orange-400", desc: "LLM time-to-first-token" },
-    { label: "TTS",      ms: ttsMs ?? 0,     color: "bg-purple-400", desc: "TTS first audio byte" },
-  ];
-
-  return (
-    <div className="space-y-1.5">
-      {/* Segmented bar */}
-      <div className="flex h-1.5 w-full overflow-hidden rounded-full gap-[2px]">
-        {segments.map(s => (
-          <div
-            key={s.label}
-            className={cn(s.color, "rounded-full shrink-0")}
-            style={{ width: `${Math.max((s.ms / total) * 100, 2)}%` }}
-            title={`${s.label}: ${s.ms}ms — ${s.desc}`}
-          />
-        ))}
-      </div>
-      {/* Legend */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {segments.filter(s => s.label !== "Dispatch").map(s => (
-          <div key={s.label} className="flex items-center gap-1">
-            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", s.color)} />
-            <span className="text-[9px] text-muted-foreground">{s.label}</span>
-            <span className="text-[9px] font-mono text-foreground/60">{s.ms}ms</span>
-          </div>
-        ))}
-        <span className="text-[9px] text-muted-foreground ml-auto">
-          avg over {data.callCount} call{data.callCount !== 1 ? "s" : ""}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function LatencyE2E({ agentId }: { agentId: number }) {
-  const { data, isLoading } = useQuery<LatencyStats>({
-    queryKey: ["agent-latency-stats", agentId],
-    queryFn: () => customFetch<LatencyStats>(`${DASH_API}/agents/${agentId}/latency-stats`),
-    staleTime: 2 * 60 * 1000,
-    enabled: !!agentId,
-  });
-  if (isLoading) return <span className="text-[10px] text-muted-foreground animate-pulse">…</span>;
-  if (!data || data.callCount === 0 || data.e2eMs === null) return <span className="text-[10px] text-muted-foreground/50">—</span>;
-  return <span className="text-sm font-bold tabular-nums">{data.e2eMs}ms</span>;
-}
-
 /* ── Tab: Overview (Vapi-style) ─────────────────────────────────────────────── */
 
 type CardSection = "transcriber" | "model" | "voice";
@@ -467,8 +384,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsVoiceLabel  = (!ttsVoice || ttsVoice === "__custom__") ? "" : (curatedVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice);
   const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
-  const costCents = agent ? computeAgentRateCents(rateMap, agent as any, userProviderNames) : null;
-
   const toggle = (c: CardSection) => setOpenCard(prev => prev === c ? null : c);
 
   return (
@@ -543,29 +458,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 {ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}
               </div>
             </button>
-          </div>
-
-          {/* ── Cost + Latency bar ───────────────────────────────────────────── */}
-          <div className="rounded-lg bg-muted/30 border border-border/40 px-4 py-3 space-y-2.5">
-            <div className="flex items-center gap-4">
-              {costCents != null && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Avg Cost</span>
-                    <div className="flex items-baseline gap-0.5">
-                      <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
-                      <span className="text-[10px] text-muted-foreground">/min</span>
-                    </div>
-                  </div>
-                  <div className="h-3 w-px bg-border/40 shrink-0" />
-                </>
-              )}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Avg Latency</span>
-                <LatencyE2E agentId={agent.id} />
-              </div>
-            </div>
-            <LatencyBar agentId={agent.id} />
           </div>
 
           {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
