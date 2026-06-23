@@ -183,6 +183,34 @@ export class SarvamSTT implements STTAdapter {
     const audioQueue: Buffer[] = [];
     let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
 
+    // ── Transcript coalescing ────────────────────────────────────────────────
+    // Tamil speakers often pause briefly (< 0.5 s) mid-sentence to think.
+    // With high_vad_sensitivity=true the 0.5 s boundary fires on those pauses,
+    // splitting one logical utterance into two consecutive transcripts.
+    // Fix: hold each transcript for COALESCE_MS before emitting.  If speech_start
+    // fires within that window (user continued speaking), cancel the hold and wait
+    // for the next transcript to arrive, then merge them.  If the hold expires
+    // with no new speech, emit normally.  150 ms adds imperceptible latency while
+    // reliably catching the resume-speech signal.
+    const COALESCE_MS = 150;
+    let coalesceBuf = "";
+    let coalesceMeta: SttFinalMetadata | undefined;
+    let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const emitCoalesced = () => {
+      coalesceTimer = null;
+      if (!coalesceBuf) return;
+      const text = coalesceBuf;
+      const meta = coalesceMeta;
+      coalesceBuf = "";
+      coalesceMeta = undefined;
+      logger.info(
+        { text: text.slice(0, 120), coalesced: text.includes(" ") },
+        "Sarvam STT: emitting (possibly coalesced) transcript",
+      );
+      onTranscript(text, true, undefined, meta);
+    };
+
     const sendChunk = (chunk: Buffer) => {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
       ws.send(
@@ -226,6 +254,14 @@ export class SarvamSTT implements STTAdapter {
         // (legacy guessed values "events" + signal_type also handled for safety)
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
           logger.debug({ langCode }, "Sarvam STT: speech start");
+          // If we are holding a transcript in the coalesce buffer and the user
+          // has resumed speaking, cancel the emit timer so the next transcript
+          // can be appended before we emit anything.
+          if (coalesceTimer && coalesceBuf) {
+            clearTimeout(coalesceTimer);
+            coalesceTimer = null;
+            logger.debug({ langCode }, "Sarvam STT: coalesce hold cancelled — speech resumed");
+          }
           return;
         }
         if (msg.type === "speech_end" || (msg.type === "events" && msg.data?.signal_type === "END_SPEECH")) {
@@ -242,16 +278,16 @@ export class SarvamSTT implements STTAdapter {
             endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
           };
           logger.info(
-            {
-              text: text.slice(0, 80),
-              model,
-              mode,
-              endDetectToFinalMs: meta.endDetectToFinalMs,
-            },
-            "Sarvam STT: final transcript",
+            { text: text.slice(0, 80), model, mode, endDetectToFinalMs: meta.endDetectToFinalMs },
+            "Sarvam STT: final transcript (buffering for coalesce)",
           );
           speechEndAt = 0;
-          onTranscript(text, true, undefined, meta);
+          // Append to coalesce buffer (may already have a prior partial).
+          coalesceBuf = coalesceBuf ? coalesceBuf + " " + text : text;
+          coalesceMeta = meta; // always keep the latest endDetectToFinalMs
+          // (Re-)arm the emit timer.
+          if (coalesceTimer) clearTimeout(coalesceTimer);
+          coalesceTimer = setTimeout(emitCoalesced, COALESCE_MS);
           return;
         }
 
@@ -310,9 +346,9 @@ export class SarvamSTT implements STTAdapter {
         }
       },
       flush(): void {
+        // Emit any held coalesced transcript immediately (don't wait for the timer).
+        if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
         // Ask Sarvam to immediately finalize its internal audio buffer.
-        // Useful when we know the caller has finished speaking and want a
-        // transcript without waiting for VAD silence detection.
         if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
         const emptyData = Buffer.alloc(0);
         ws.send(
@@ -328,6 +364,8 @@ export class SarvamSTT implements STTAdapter {
         logger.debug({ langCode }, "Sarvam STT: flush signal sent");
       },
       close(): void {
+        // Drain the coalesce buffer before closing so no transcript is lost.
+        if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
         intentionallyClosed = true;
         if (
           ws.readyState === WebSocket.OPEN ||
