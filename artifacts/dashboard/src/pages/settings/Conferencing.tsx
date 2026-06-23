@@ -21,7 +21,7 @@ type GoogleConnection = {
 
 type TestStatus = "idle" | "testing" | "ok" | "failed";
 
-export default function ConferencingPage({ embedded = false }: { embedded?: boolean }) {
+export default function ConferencingPage({ embedded = false, returnPath = "conferencing" }: { embedded?: boolean; returnPath?: string }) {
   const [connections, setConnections] = useState<GoogleConnection[]>([]);
   const [loading, setLoading]         = useState(true);
   const [connecting, setConnecting]   = useState(false);
@@ -111,7 +111,7 @@ export default function ConferencingPage({ embedded = false }: { embedded?: bool
     setConnecting(true);
     try {
       const qs = new URLSearchParams({
-        returnTo: "conferencing",
+        returnTo: returnPath,
         returnOrigin: window.location.origin,
         ...(connectionId ? { connection_id: connectionId } : {}),
       });

@@ -6,7 +6,7 @@ export default function SchedulingConferencingPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <SchedulingTabNav />
       <div className="flex-1 overflow-y-auto p-6">
-        <ConferencingContent embedded />
+        <ConferencingContent returnPath="scheduling-conferencing" />
       </div>
     </div>
   );

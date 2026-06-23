@@ -202,8 +202,13 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   }
 
   // The Calendars page lives at /app/scheduling/calendars (where the BroadcastChannel
-  // handler lives); the Conferencing tab lives at /app/settings/conferencing.
-  const redirectPath = returnTo === "calendar" ? "/app/scheduling/calendars" : "/app/settings/conferencing";
+  // handler lives); the Conferencing tab lives at /app/settings/conferencing or
+  // /app/scheduling/conferencing depending on which page initiated the OAuth flow.
+  const redirectPath = returnTo === "calendar"
+    ? "/app/scheduling/calendars"
+    : returnTo === "scheduling-conferencing"
+      ? "/app/scheduling/conferencing"
+      : "/app/settings/conferencing";
   // If the request came from a dev preview, redirect the popup back to that origin
   // instead of the production domain so BroadcastChannel fires on the right page.
   const base = returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : DASHBOARD_BASE();
