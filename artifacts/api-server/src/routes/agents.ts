@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, isNull, inArray, max } from "drizzle-orm";
-import { db, agentsTable, agentVersionsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, type AgentConfig } from "@workspace/db";
+import { db, agentsTable, agentVersionsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, type AgentConfig } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -826,6 +826,77 @@ router.patch("/agents/:id/toggle", requireAuth, async (req, res): Promise<void> 
     .returning();
   await logActivity({ userId: clerkId, eventType: "agent.toggled", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" set to ${newStatus}` });
   res.json(ToggleAgentResponse.parse(agent));
+});
+
+/* ── GET /agents/:id/latency-stats ─────────────────────────────────────────── */
+router.get("/agents/:id/latency-stats", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  const recentCalls = await db.select({ id: callsTable.id })
+    .from(callsTable)
+    .where(eq(callsTable.agentId, agentId))
+    .orderBy(desc(callsTable.createdAt))
+    .limit(20);
+
+  if (recentCalls.length === 0) {
+    res.json({ callCount: 0, sttMs: null, ttftMs: null, ttsMs: null, e2eMs: null });
+    return;
+  }
+
+  const callIds = recentCalls.map(c => c.id);
+  const rows = await db.select()
+    .from(executionLogsTable)
+    .where(and(
+      inArray(executionLogsTable.callId, callIds),
+      inArray(executionLogsTable.component, ["STT", "LLM", "TTS"]),
+    ));
+
+  const sttVals: number[] = [];
+  const ttftVals: number[] = [];
+  const ttsVals: number[] = [];
+
+  for (const row of rows) {
+    const rp = row.responsePayload as Record<string, unknown> | null;
+    const meta = row.metadata as Record<string, unknown> | null;
+
+    if (row.component === "STT" && row.direction === "response" && row.status === "success") {
+      const v = rp?.["endDetectToFinalMs"];
+      if (typeof v === "number") sttVals.push(v);
+    }
+    if (row.component === "LLM" && meta?.["event"] === "First Token Received") {
+      const v = meta?.["ttftMs"];
+      if (typeof v === "number") ttftVals.push(v);
+    }
+    if (row.component === "TTS" && row.direction === "response" && row.status === "success") {
+      const fb = rp?.["firstByteMs"];
+      const textLen = rp?.["textLength"];
+      // Skip filler phrases (very short text — "ஆமா...", "ம்ம்ம்..." etc.)
+      if (typeof fb === "number" && typeof textLen === "number" && textLen > 20) {
+        ttsVals.push(fb);
+      }
+    }
+  }
+
+  const avg = (arr: number[]) =>
+    arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+
+  const sttMs  = avg(sttVals);
+  const ttftMs = avg(ttftVals);
+  const ttsMs  = avg(ttsVals);
+  // Dispatch overhead (STT→LLM processing) is ~100ms fixed — not separately logged
+  const DISPATCH_MS = 100;
+  const e2eMs = (sttMs !== null && ttftMs !== null && ttsMs !== null)
+    ? sttMs + DISPATCH_MS + ttftMs + ttsMs
+    : null;
+
+  res.json({ callCount: recentCalls.length, sttMs, ttftMs, ttsMs, e2eMs });
 });
 
 export default router;

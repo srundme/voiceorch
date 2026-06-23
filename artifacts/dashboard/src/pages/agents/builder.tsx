@@ -742,16 +742,22 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             )} />
           </div>
 
-          {/* ── Bottom strip: cost ───────────────────────────────────────────── */}
-          {costCents != null && (
-            <div className="flex items-center gap-3 rounded-lg bg-muted/30 border border-border/40 px-4 py-2.5">
-              <span className="text-[10px] text-muted-foreground shrink-0">Estimated cost</span>
-              <div className="flex items-baseline gap-1 ml-auto shrink-0">
-                <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
-                <span className="text-[10px] text-muted-foreground">/min</span>
+          {/* ── Bottom strip: cost + latency ─────────────────────────────────── */}
+          <div className="rounded-lg bg-muted/30 border border-border/40 px-4 py-3 space-y-3">
+            {/* Cost row */}
+            {costCents != null && (
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">Avg Cost</span>
+                <div className="flex-1" />
+                <div className="flex items-baseline gap-1 shrink-0">
+                  <span className="text-sm font-bold">~${(costCents / 100).toFixed(3)}</span>
+                  <span className="text-[10px] text-muted-foreground">/min</span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {/* Latency bar */}
+            <AgentLatencyBar agentId={agent.id} />
+          </div>
 
         </div>
       </div>
