@@ -1,0 +1,1397 @@
+[
+  {
+    "id": 5146,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:39.318Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "telephonyProvider": "vobiz",
+      "asrProvider": "azure",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5147,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:39.318Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "new 93",
+        "caller_number": "917971442376",
+        "date": "Tuesday, June 23, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakhs  [today]\n• property_type: apartment  [today]\n• interested_area: Vadapalani  [today]\n• looking_for_property_in: Chennai  [today]\n• looking_for_property: Chennai  [today]\n\nRECENT EPISODES:\n[to"
+    },
+    "metadata": null
+  },
+  {
+    "id": 5148,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:39.318Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "கார்த்திக்",
+        "callCount": 4
+      },
+      "factCount": 7,
+      "facts": {
+        "looking_for": "apartment",
+        "budget_range": "10 lakhs",
+        "property_type": "apartment",
+        "interested_area": "Vadapalani",
+        "looking_for_property_in": "Chennai",
+        "name": "கார்த்திக்",
+        "looking_for_property": "Chennai"
+      },
+      "recentCallsCount": 4
+    },
+    "metadata": null
+  },
+  {
+    "id": 5149,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:40.794Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரி, கால் கட் ஆயிடுச்சு. கார்த்திக், நீங்க அபார்ட்மெண்ட் பார்க்குறீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5150,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:45.657Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4867,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145918,
+      "textLength": 74,
+      "firstByteMs": 245
+    },
+    "metadata": null
+  },
+  {
+    "id": 5151,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:49.624Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமாங்க பார்க்குறேங்க."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5152,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:49.749Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆமா, ஆமா..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5153,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:49.754Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:23 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 2,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5154,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:51.272Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1499,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சாரி, கால் கட் ஆயிடுச்சு. கார்த்திக், நீங்க அபார்ட்மெண்ட் பார்க்குறீங்களா?"
+    },
+    "metadata": {
+      "inputTokens": 5136,
+      "outputTokens": 36,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5155,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:51.410Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1662,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 11,
+      "firstByteMs": 159
+    },
+    "metadata": null
+  },
+  {
+    "id": 5156,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:51.410Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரி, கால் கட் ஆயிடுச்சு."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5157,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:53.735Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2325,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 69118,
+      "textLength": 25,
+      "firstByteMs": 140
+    },
+    "metadata": null
+  },
+  {
+    "id": 5158,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:53.736Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "கார்த்திக், நீங்க அபார்ட்மெண்ட் பார்க்குறீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5159,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:56.514Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2779,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81918,
+      "textLength": 48,
+      "firstByteMs": 175
+    },
+    "metadata": null
+  },
+  {
+    "id": 5160,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:59.337Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா மேடம்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5161,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:53:59.452Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:23 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 4,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5162,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:00.251Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sure, give me just a second..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5163,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:00.760Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1224,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, இப்போதைக்கு Ravilla Homes-ல வடபழனில properties இல்லை. நாங்க Red Hills, Madhavaram, Thiruninravur இந்த area-ல properties வச்சிருக்கோம். நீங்க இந்த areas-ல பார்க்கலாமா?"
+    },
+    "metadata": {
+      "inputTokens": 5171,
+      "outputTokens": 60,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5164,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:02.480Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2229,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 66558,
+      "textLength": 30,
+      "firstByteMs": 149
+    },
+    "metadata": null
+  },
+  {
+    "id": 5165,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:02.480Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, இப்போதைக்கு Ravilla Homes-ல வடபழனில properties இல்லை."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5166,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:06.967Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4486,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 135678,
+      "textLength": 58,
+      "firstByteMs": 145
+    },
+    "metadata": null
+  },
+  {
+    "id": 5167,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:06.967Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நாங்க Red Hills, Madhavaram, Thiruninravur இந்த area-ல properties வச்சிருக்கோம்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5168,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:12.127Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5159,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 156158,
+      "textLength": 80,
+      "firstByteMs": 158
+    },
+    "metadata": null
+  },
+  {
+    "id": 5169,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:12.127Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க இந்த areas-ல பார்க்கலாமா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5170,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:14.210Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2084,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 61438,
+      "textLength": 31,
+      "firstByteMs": 141
+    },
+    "metadata": null
+  },
+  {
+    "id": 5171,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:17.274Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "பாக்கலாமே மேடம்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5172,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:17.378Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ம்ம்ம்..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5173,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:17.378Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:24 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 6,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5174,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:17.881Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 505,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 5118,
+      "textLength": 9,
+      "firstByteMs": 281
+    },
+    "metadata": null
+  },
+  {
+    "id": 5175,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:19.229Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓகே கார்த்திக்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5176,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:19.361Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1807,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ஓகே கார்த்திக். நீங்க அபார்ட்மெண்ட், இல்ல பிளாட், இல்ல வில்லா, எது பார்க்குறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 5232,
+      "outputTokens": 38,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5178,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:20.524Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1295,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 35840,
+      "textLength": 15,
+      "firstByteMs": 154
+    },
+    "metadata": null
+  },
+  {
+    "id": 5177,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:20.524Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க அபார்ட்மெண்ட், இல்ல பிளாட், இல்ல வில்லா"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5179,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:23.703Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3178,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94718,
+      "textLength": 45,
+      "firstByteMs": 175
+    },
+    "metadata": null
+  },
+  {
+    "id": 5180,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:23.703Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "எது பார்க்குற"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5181,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:24.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1284,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 13,
+      "firstByteMs": 260
+    },
+    "metadata": null
+  },
+  {
+    "id": 5182,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:29.437Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "அபார்ட்மெண்ட்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5183,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:29.543Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:24 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 8,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5184,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:30.343Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5185,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:30.676Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1135,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, உங்க பட்ஜெட் எவ்வளவு இருக்கு கார்த்திக்?"
+    },
+    "metadata": {
+      "inputTokens": 5269,
+      "outputTokens": 21,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5186,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:31.949Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1605,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 46080,
+      "textLength": 20,
+      "firstByteMs": 142
+    },
+    "metadata": null
+  },
+  {
+    "id": 5187,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:31.949Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்க பட்ஜெட் எவ்வளவு இருக்கு கார்த்திக்?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5188,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:34.786Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2838,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 84478,
+      "textLength": 45,
+      "firstByteMs": 155
+    },
+    "metadata": null
+  },
+  {
+    "id": 5189,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:39.643Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "எனது பட்ஜெட் வந்து 75,000 மேடம்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5190,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:39.747Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:24 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 10,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5191,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:40.546Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5192,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:41.250Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1397,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சாரி கார்த்திக், நீங்க செவன்டி ஃபைவ் தசண்ட் சொல்றீங்களா?"
+    },
+    "metadata": {
+      "inputTokens": 5299,
+      "outputTokens": 31,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5193,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:41.982Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1436,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 20,
+      "firstByteMs": 154
+    },
+    "metadata": null
+  },
+  {
+    "id": 5194,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:41.982Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரி கார்த்திக், நீங்க செவன்டி ஃபைவ் தசண்ட் சொல்றீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5195,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:45.113Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3132,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94718,
+      "textLength": 56,
+      "firstByteMs": 146
+    },
+    "metadata": null
+  },
+  {
+    "id": 5196,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:48.837Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "20 ஃபைவ் லாக்ஸ்."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5197,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:48.940Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:24 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 12,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5198,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:49.739Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Let me check that for you..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5199,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:49.936Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 823,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ஓகே கார்த்திக். உங்க பட்ஜெட் செவன்டி ஃபைவ் லாக்ஸ் அபார்ட்மெண்ட்க்கு இருக்கு, சரிங்களா?"
+    },
+    "metadata": {
+      "inputTokens": 5332,
+      "outputTokens": 40,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5200,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:51.511Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1772,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 28,
+      "firstByteMs": 272
+    },
+    "metadata": null
+  },
+  {
+    "id": 5201,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:51.511Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓகே கார்த்திக்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5202,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:52.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1475,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 15,
+      "firstByteMs": 153
+    },
+    "metadata": null
+  },
+  {
+    "id": 5203,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:52.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்க பட்ஜெட் செவன்டி ஃபைவ் லாக்ஸ் அபார்ட்மெண்ட்க்கு இருக்கு"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5205,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:55.990Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3004,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89598,
+      "textLength": 59,
+      "firstByteMs": 143
+    },
+    "metadata": null
+  },
+  {
+    "id": 5204,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:55.990Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரிங"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5206,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:54:56.894Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 905,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20480,
+      "textLength": 4,
+      "firstByteMs": 263
+    },
+    "metadata": null
+  },
+  {
+    "id": 5207,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:01.269Z",
+    "component": "STT",
+    "provider": "azure",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமாங்க."
+    },
+    "metadata": null
+  },
+  {
+    "id": 5208,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:01.377Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Tuesday, June 23, 2026 at 11:25 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 4  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: Karthik will likely call to inquire further about properties in the alternative areas suggested, or to clarify his budget and preferred location.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• looking_for: apartment  [today]\n• budget_range: 10 lakh",
+      "historyLength": 14,
+      "tools": [
+        "end_call"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5209,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:02.178Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment please..."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5210,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:02.775Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1260,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ஓகே கார்த்திக். இப்போ, வடபழனில Ravilla Homes-ல properties இல்லை. நாங்க Red Hills, Madhavaram, Thiruninravur இந்த area-ல properties வச்சிருக்கோம். இந்த areas-ல நீங்க பார்க்கலாமா?"
+    },
+    "metadata": {
+      "inputTokens": 5369,
+      "outputTokens": 64,
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 5211,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:03.770Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1593,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 46080,
+      "textLength": 20,
+      "firstByteMs": 151
+    },
+    "metadata": null
+  },
+  {
+    "id": 5212,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:03.770Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓகே கார்த்திக்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5213,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:05.118Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1347,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 15,
+      "firstByteMs": 284
+    },
+    "metadata": null
+  },
+  {
+    "id": 5214,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:05.118Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இப்போ, வடபழனில Ravilla Homes-ல properties இல்லை."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5216,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:09.039Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3920,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117758,
+      "textLength": 48,
+      "firstByteMs": 156
+    },
+    "metadata": null
+  },
+  {
+    "id": 5215,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:09.039Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நாங்க Red Hills, Madhavaram, Thiruninravur இந்த area-ல properties வச்சிருக்கோம்."
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5217,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:14.248Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5209,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 158718,
+      "textLength": 80,
+      "firstByteMs": 146
+    },
+    "metadata": null
+  },
+  {
+    "id": 5218,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:14.248Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இந்த areas-ல நீங்க பார்க்கலாமா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5219,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:16.353Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2105,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 61438,
+      "textLength": 31,
+      "firstByteMs": 143
+    },
+    "metadata": null
+  },
+  {
+    "id": 5220,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:27.154Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "மன்னிக்கவும், எனக்கு புரியவில்லை — மீண்டும் சொல்ல முடியுமா?"
+    },
+    "responsePayload": null,
+    "metadata": null
+  },
+  {
+    "id": 5221,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:30.883Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3730,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112640,
+      "textLength": 59,
+      "firstByteMs": 146
+    },
+    "metadata": null
+  },
+  {
+    "id": 5222,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:32.041Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 1306,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "durationSeconds": 112,
+      "turns": 7,
+      "avgSttMs": 0,
+      "avgLlmMs": 1306,
+      "avgTtsMs": 762
+    }
+  },
+  {
+    "id": 5223,
+    "callId": 293,
+    "agentId": 5,
+    "ts": "2026-06-23T05:55:34.067Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false
+    }
+  }
+]

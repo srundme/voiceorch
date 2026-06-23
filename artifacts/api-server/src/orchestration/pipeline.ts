@@ -2290,20 +2290,41 @@ export class OrchestrationPipeline {
     // possibly-truncated pendingText buffer. Enqueue any non-empty trailing text —
     // a length gate would silently drop very short final fragments (e.g. "Ok").
     //
-    // Edge case: when the last sentence ends with a sentence-boundary character
-    // (e.g. "?"), extractSentences returns remainder="" but captures it in
-    // `sentences`. If the final token(s) arrived only in onComplete, pendingText
-    // is a truncated prefix of that sentence. Detect this and use the full sentence.
+    // Universal final-flush: resolve the correct pending text using cleanResponse
+    // (the authoritative full reply set by onComplete) as source of truth.
+    //
+    // Three cases where pendingText is wrong at stream end:
+    // Case A — trueRemainder is longer (non-sentence-boundary tail, normal case).
+    // Case B — Gemini held back final token(s): pendingText is a truncated PREFIX
+    //   of the last sentence (e.g. "பார்க்க" vs "பார்க்கலாமா?"). remainder="" because
+    //   "?" was a sentence boundary, full sentence captured in allSentences.
+    // Case C — 60-char comma-split fired mid-sentence: pendingText is a mid-sentence
+    //   FRAGMENT (e.g. "எது பார்க்குற" after split emitted "நீங்க...வில்லா"). Not a
+    //   prefix of allSentences[-1], but IS a substring of it — emit the suffix.
     const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse);
     const pendingTrim = pendingText.trim();
     let flushText: string;
     if (trueRemainder.trim().length > pendingTrim.length) {
+      // Case A
       flushText = trueRemainder;
     } else if (pendingTrim) {
       const lastSentence = (allSentences.at(-1) ?? "").trim();
-      flushText = (lastSentence.startsWith(pendingTrim) && lastSentence.length > pendingTrim.length)
-        ? lastSentence
-        : pendingText;
+      if (lastSentence.startsWith(pendingTrim) && lastSentence.length > pendingTrim.length) {
+        // Case B: pendingText is a prefix of the last sentence
+        flushText = lastSentence;
+      } else {
+        // Case C: search all sentences for one containing pendingTrim as a substring;
+        // emit the tail of that sentence from pendingTrim onward (recovers the truncated suffix).
+        let found = "";
+        for (const s of allSentences) {
+          const idx = s.indexOf(pendingTrim);
+          if (idx !== -1 && s.length > idx + pendingTrim.length) {
+            found = s.slice(idx);
+            break;
+          }
+        }
+        flushText = found || pendingText;
+      }
     } else {
       flushText = pendingText;
     }
@@ -2727,8 +2748,7 @@ export class OrchestrationPipeline {
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
     // gate would silently drop very short final fragments.
-    // Edge case: last sentence ends with "?" → remainder="" but pendingText may
-    // be a truncated prefix; fall back to the full captured sentence.
+    // Universal final-flush (mirrors processTurn logic — see Case A/B/C comment there).
     const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse);
     const pendingTrim = pendingText.trim();
     let flushText: string;
@@ -2736,9 +2756,19 @@ export class OrchestrationPipeline {
       flushText = trueRemainder;
     } else if (pendingTrim) {
       const lastSentence = (allSentences.at(-1) ?? "").trim();
-      flushText = (lastSentence.startsWith(pendingTrim) && lastSentence.length > pendingTrim.length)
-        ? lastSentence
-        : pendingText;
+      if (lastSentence.startsWith(pendingTrim) && lastSentence.length > pendingTrim.length) {
+        flushText = lastSentence;
+      } else {
+        let found = "";
+        for (const s of allSentences) {
+          const idx = s.indexOf(pendingTrim);
+          if (idx !== -1 && s.length > idx + pendingTrim.length) {
+            found = s.slice(idx);
+            break;
+          }
+        }
+        flushText = found || pendingText;
+      }
     } else {
       flushText = pendingText;
     }
