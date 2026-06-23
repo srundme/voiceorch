@@ -296,6 +296,14 @@ interface CallEndedSummary {
   outcome: string;
   durationSeconds: number;
   turns: number;
+  lastComponent?: string | null;
+  lastUserTranscript?: string | null;
+  lastAgentResponse?: string | null;
+  recordingStatus?: string | null;
+  warningCount?: number;
+  errorCount?: number;
+  retryCount?: number;
+  fallbackCount?: number;
 }
 
 function getEnrichment(entry: ExecutionLogEvent): LogEnrichment {
@@ -459,7 +467,16 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
     { label: "Turns", value: String(summary.turns) },
     ...(summary.component ? [{ label: "Triggered by", value: summary.component }] : []),
     ...(summary.provider ? [{ label: "Provider", value: summary.provider }] : []),
+    ...(summary.lastComponent ? [{ label: "Last active", value: summary.lastComponent }] : []),
+    ...(summary.recordingStatus && summary.recordingStatus !== "disabled"
+      ? [{ label: "Recording", value: summary.recordingStatus }]
+      : []),
   ];
+  const warningCount = summary.warningCount ?? 0;
+  const errorCount = summary.errorCount ?? 0;
+  const retryCount = summary.retryCount ?? 0;
+  const fallbackCount = summary.fallbackCount ?? 0;
+  const hasHealth = warningCount > 0 || errorCount > 0 || retryCount > 0 || fallbackCount > 0;
   return (
     <div className={`mx-3 my-3 rounded-lg border ${st.ring} p-3.5`}>
       <div className="flex items-center gap-2 mb-2">
@@ -496,6 +513,38 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
             <span className={`inline-flex items-center rounded text-[10px] font-medium px-1.5 py-0.5 border ${summary.recoverySucceeded ? "bg-emerald-500/15 text-emerald-300/80 border-emerald-500/25" : "bg-red-500/15 text-red-300/80 border-red-500/25"}`}>
               {summary.recoverySucceeded ? "✓ recovered" : "✗ recovery failed"}
             </span>
+          )}
+        </div>
+      )}
+      {hasHealth && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+          {errorCount > 0 && (
+            <span className="inline-flex items-center rounded bg-red-500/15 text-red-300/90 border border-red-500/25 text-[10px] font-medium px-1.5 py-0.5">{errorCount} error{errorCount === 1 ? "" : "s"}</span>
+          )}
+          {warningCount > 0 && (
+            <span className="inline-flex items-center rounded bg-yellow-500/15 text-yellow-300/90 border border-yellow-500/25 text-[10px] font-medium px-1.5 py-0.5">{warningCount} warning{warningCount === 1 ? "" : "s"}</span>
+          )}
+          {retryCount > 0 && (
+            <span className="inline-flex items-center rounded bg-orange-500/15 text-orange-300/80 border border-orange-500/25 text-[10px] font-medium px-1.5 py-0.5">↻ {retryCount} retr{retryCount === 1 ? "y" : "ies"}</span>
+          )}
+          {fallbackCount > 0 && (
+            <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[10px] font-medium px-1.5 py-0.5">⤳ {fallbackCount} fallback{fallbackCount === 1 ? "" : "s"}</span>
+          )}
+        </div>
+      )}
+      {(summary.lastUserTranscript || summary.lastAgentResponse) && (
+        <div className="mt-2.5 pt-2.5 border-t border-white/5 space-y-1.5">
+          {summary.lastUserTranscript && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Last caller</span>
+              <span className="text-xs text-white/60 italic">"{summary.lastUserTranscript}"</span>
+            </div>
+          )}
+          {summary.lastAgentResponse && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-widest text-white/25 font-semibold">Last agent</span>
+              <span className="text-xs text-white/60 italic">"{summary.lastAgentResponse}"</span>
+            </div>
           )}
         </div>
       )}

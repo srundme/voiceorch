@@ -1,7 +1,7 @@
 import { createHmac, createHash } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, executionLogsTable } from "@workspace/db";
-import { createExecutionLogger, writeCallEndedLog, EXEC_COMPONENTS } from "../services/execution-log.js";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable } from "@workspace/db";
+import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
 import { decryptKey } from "../lib/crypto.js";
@@ -546,22 +546,28 @@ export async function createSession(params: {
     return inserted;
   })();
 
-  // ── Seed execution log (enables Logs tab for telephony calls) ─────────────────
-  void db.insert(executionLogsTable).values({
-    callId:    callRecord.id,
-    agentId:   params.agentId,
-    component: "Agent",
-    direction: "system",
-    status:    "info",
-    requestPayload: {
-      agentId:           params.agentId,
-      telephonyProvider: params.telephonyProvider,
-      asrProvider:       agent.asrProvider,
-      llmProvider:       agent.llmProvider,
-      ttsProvider:       agent.ttsProvider,
-      ttsVoice:          agent.ttsVoice ?? null,
-    },
-  }).catch(() => {});
+  // ── Call Started lifecycle row (enables Logs tab for telephony calls) ─────────
+  writeCallStartedLog(callRecord.id, params.agentId, {
+    callType: "Live Call",
+    direction: params.externalCallId ? "Outbound" : "Inbound",
+    recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
+    sessionId: (() => {
+      try {
+        const md = JSON.parse(callRecord.metadata ?? "{}");
+        return (md.externalCallId ?? md.providerCallId ?? `live-${callRecord.id}`) as string;
+      } catch {
+        return `live-${callRecord.id}`;
+      }
+    })(),
+    webrtcConnected: false,
+    mediaStreamStarted: true,
+    agentName: agent.name ?? null,
+    asrProvider: agent.asrProvider,
+    llmProvider: agent.llmProvider,
+    ttsProvider: agent.ttsProvider,
+    ttsVoice: agent.ttsVoice ?? null,
+    extra: { telephonyProvider: params.telephonyProvider },
+  });
 
   // ── Setup-time execution-log rows (mirror the web-call timeline) ─────────────
   // Memory / VariableResolver / Knowledge are computed BEFORE the call record
@@ -971,7 +977,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     const recordingEnabled = (session.pipeline as any).config?.agentConfig?.recordingEnabled === true;
     let recordingUrl: string | null = null;
     let recordingError: string | null = null;
+    let recordingStatus: "disabled" | "saved" | "failed" = "disabled";
+    const recLog = createExecutionLogger(session.callId, session.agentId ?? null);
     if (recordingEnabled) {
+      logRecordingEvent(recLog, "Recording Started");
       const result = await session.pipeline.getRecording().finalize(session.callId)
         .catch((err) => {
           logger.error({ sessionId, callId: session.callId, err }, "Recording finalize threw");
@@ -981,6 +990,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       recordingError = result.error;
       if (recordingError) {
         logger.error({ sessionId, callId: session.callId, recordingError }, "Recording finalize failed");
+        recordingStatus = "failed";
+        logRecordingEvent(recLog, "Recording Failed", { error: recordingError });
+      } else {
+        recordingStatus = "saved";
+        logRecordingEvent(recLog, "Recording Saved", { url: recordingUrl });
+        logRecordingEvent(recLog, "Recording Uploaded", { url: recordingUrl });
       }
     }
 
@@ -1159,12 +1174,16 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           ?? (session.wasTransferred ? "transfer_completed"
               : session.naturalEndTriggered ? "completed"
               : "user_hangup");
+        const { lastUser: endLastUser, lastAgent: endLastAgent } = session.pipeline.getLastTurnTexts();
         writeCallEndedLog(session.callId, ag.id, {
           rawReason: endRawReason,
           durationSeconds,
           turns: metricsAcc.count,
           retryAttempted: false,
           fallbackAttempted: false,
+          lastUserTranscript: endLastUser,
+          lastAgentResponse: endLastAgent,
+          recordingStatus,
         }, { avgSttMs, avgLlmMs, avgTtsMs });
 
         // ── Post-call AI summary + disposition + webhook (sequential, one async block) ──
@@ -1442,11 +1461,14 @@ export async function failSession(sessionId: string, errorMessage: string): Prom
 
   // ── Structured Call Ended (failure) ───────────────────────────────────────
   const failDurationSeconds = Math.max(0, Math.round((Date.now() - session.startedAt.getTime()) / 1000));
+  const { lastUser: failLastUser, lastAgent: failLastAgent } = session.pipeline.getLastTurnTexts();
   writeCallEndedLog(session.callId, session.agentId ?? null, {
     rawReason: "failed",
     durationSeconds: failDurationSeconds,
     turns: session.metricsAcc.count,
     errorMessage,
+    lastUserTranscript: failLastUser,
+    lastAgentResponse: failLastAgent,
   });
 
   logger.error({ sessionId, errorMessage }, "Session failed");

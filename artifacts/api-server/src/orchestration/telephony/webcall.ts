@@ -43,7 +43,18 @@ import {
   executeWebhookTool,
 } from "../../services/tool-executor.js";
 import { disposeCall } from "../../services/disposition.js";
-import { createExecutionLogger, writeCallEndedLog, EXEC_COMPONENTS } from "../../services/execution-log.js";
+import {
+  createExecutionLogger,
+  writeCallEndedLog,
+  writeCallStartedLog,
+  logPlaybackEvent,
+  logRecordingEvent,
+  logToolExecutionStarted,
+  logWarningEvent,
+  EXEC_COMPONENTS,
+  type ExecLogFn,
+  type PlaybackEvent,
+} from "../../services/execution-log.js";
 import { createHash } from "crypto";
 
 // ── Per-user concurrent call rate limit ──────────────────────────────────────
@@ -452,6 +463,10 @@ export async function handleWebCallWebSocket(
     onForceFinalize: (transcript) => {
       if (closed) return;
       logger.warn({ callId, chars: transcript.length }, "Safety net: force-finalizing stuck turn from best partial");
+      logWarningEvent(logExecution, EXEC_COMPONENTS.STT, "STT Timeout", ["stt_timeout"], {
+        provider: agent.asrProvider,
+        detail: { reason: "force-finalized stuck turn from best partial" },
+      });
       pendingCloseReason = "force_finalized";
       streamingTranscriptPending = transcript;
       void process();
@@ -470,16 +485,18 @@ export async function handleWebCallWebSocket(
   // ── Per-call execution logger (fire-and-forget, never blocks the call) ────
   const logExecution = createExecutionLogger(callId, agentId);
 
-  logExecution("Agent", "system", {
-    requestPayload: {
-      agentId,
-      agentName: agent.name,
-      asrProvider: agent.asrProvider,
-      llmProvider: agent.llmProvider,
-      ttsProvider: agent.ttsProvider,
-      ttsVoice: agent.ttsVoice ?? null,
-    },
-    status: "info",
+  writeCallStartedLog(callId, agentId, {
+    callType: "Webcall",
+    direction: "Inbound",
+    recordingEnabled: (agentCfgWc["recordingEnabled"] as boolean | undefined) ?? false,
+    webrtcConnected: true,
+    mediaStreamStarted: true,
+    sessionId: `webcall-${callId}`,
+    agentName: agent.name,
+    asrProvider: agent.asrProvider,
+    llmProvider: agent.llmProvider,
+    ttsProvider: agent.ttsProvider,
+    ttsVoice: agent.ttsVoice ?? null,
   });
 
   // ── Setup: provider-init / voice events (mirror the telephony path) ────────
@@ -653,6 +670,10 @@ export async function handleWebCallWebSocket(
                   () => { streamSTT = null; },
                 );
                 logger.info({ callId, provider: fb.provider }, "Webcall: streaming STT fallback reconnected");
+                logWarningEvent(logExecution, EXEC_COMPONENTS.STT, "Provider Reconnected", ["provider_reconnect"], {
+                  provider: fb.provider,
+                  detail: { reason: "primary streaming STT dropped — reconnected via fallback provider" },
+                });
                 break;
               } catch (fbInitErr) {
                 logger.warn({ callId, provider: fb.provider, err: fbInitErr }, "Webcall: streaming STT fallback init failed");
@@ -1181,9 +1202,12 @@ export async function handleWebCallWebSocket(
               // terminal-utterance paths) so the client's AudioContext has samples
               // queued past the final word.
               const audio = withTailSilence(rawAudio);
+              const _audioDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
               sendStatus("speaking");
               speaking = true;
               speakingStartedAt = Date.now();
+              const _clarPbStart = Date.now();
+              logPlaybackEvent(logExecution, "Playback Started", { provider: agent.ttsProvider, turnNumber: _curTurnIdx });
               {
                 const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
                 echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
@@ -1211,6 +1235,18 @@ export async function handleWebCallWebSocket(
                   await new Promise<void>((r) => setTimeout(r, 40));
                 }
               }
+              const _clarEvent: PlaybackEvent = closed
+                ? "Playback Cancelled"
+                : interrupted
+                  ? "Playback Interrupted"
+                  : "Playback Completed";
+              logPlaybackEvent(logExecution, _clarEvent, {
+                provider: agent.ttsProvider,
+                turnNumber: _curTurnIdx,
+                playbackDurationMs: Date.now() - _clarPbStart,
+                audioDurationMs: _audioDurationMs,
+                stopReason: closed ? "call_closed" : interrupted ? "barge_in" : "completed",
+              });
               speaking = false;
               speakingEndedAt = Date.now();
             }
@@ -1901,14 +1937,15 @@ export async function handleWebCallWebSocket(
           const fallbackKey = providerKeys.get(fallbackProvider.toLowerCase());
           if (fallbackKey) {
             logger.warn({ callId, err: llmErr, fallbackProvider }, "Webcall: primary LLM failed (no tokens) — retrying with fallback");
-            logExecution("LLM", "system", {
+            logWarningEvent(logExecution, EXEC_COMPONENTS.LLM, "LLM Retry", ["llm_retry"], {
               provider: fallbackProvider,
-              status: "info",
-              turnNumber: _curTurnIdx,
               retryCount: 1,
-              warningFlags: ["provider_fallback"],
-              errorMessage: toReadableError(llmErr, "LLM error"),
-              metadata: { event: "Provider Fallback", fromProvider: agent.llmProvider, toProvider: fallbackProvider },
+              detail: {
+                event: "LLM Retry",
+                fromProvider: agent.llmProvider,
+                toProvider: fallbackProvider,
+                error: toReadableError(llmErr, "LLM error"),
+              },
             });
             tokenBuf = "";
             fullReply = "";
@@ -2094,6 +2131,8 @@ export async function handleWebCallWebSocket(
           turnNumber: _curTurnIdx,
           status: "info",
         });
+        logToolExecutionStarted(logExecution, { tool: triggeredToolName, turnNumber: _curTurnIdx });
+        let _toolExecStart = Date.now();
         try {
           const tool = matchToolByName(agentTools, triggeredToolName);
           if (!tool) {
@@ -2167,19 +2206,33 @@ export async function handleWebCallWebSocket(
         } catch (toolErr) {
           logger.error({ callId, err: toolErr, triggeredToolName }, "Webcall: tool execution error");
           toolHadError = true;
+          const _err = toolErr instanceof Error ? toolErr.message : String(toolErr);
+          logExecution("Tool", "system", {
+            status: "error",
+            durationMs: Date.now() - _toolExecStart,
+            turnNumber: _curTurnIdx,
+            errorMessage: _err,
+            metadata: { event: "Execution Completed", error: _err, failureReason: _err },
+          });
           logExecution("Tool", "response", {
             requestPayload: { tool: triggeredToolName },
-            responsePayload: { error: toolErr instanceof Error ? toolErr.message : String(toolErr) },
+            responsePayload: { error: _err },
             latencyMs: Date.now() - toolStartMs,
             turnNumber: _curTurnIdx,
             durationMs: Date.now() - toolStartMs,
-            errorMessage: toolErr instanceof Error ? toolErr.message : String(toolErr),
+            errorMessage: _err,
             status: "error",
           });
           toolResult = "error: tool execution failed";
         }
 
         if (!toolHadError) {
+          logExecution("Tool", "system", {
+            status: "success",
+            durationMs: Date.now() - _toolExecStart,
+            turnNumber: _curTurnIdx,
+            metadata: { event: "Execution Completed", result: (toolResult ?? "unavailable").substring(0, 800) },
+          });
           logExecution("Tool", "response", {
             requestPayload: { tool: triggeredToolName },
             responsePayload: { result: (toolResult ?? "unavailable").substring(0, 800) },
@@ -2327,6 +2380,8 @@ export async function handleWebCallWebSocket(
       sendStatus("speaking");
       speaking = true;
       speakingStartedAt = Date.now();
+      const _turnPbStart = Date.now();
+      logPlaybackEvent(logExecution, "Playback Started", { provider: agent.ttsProvider, turnNumber: _curTurnIdx });
       // Arm the start echo-grace for the gap before the first sentence's audio
       // streams; it is re-armed per sentence inside the playback loop below.
       echoGraceUntil = Date.now() + echoGraceMs;
@@ -2347,6 +2402,7 @@ export async function handleWebCallWebSocket(
       // streaming, so each job is likely already resolved by now.
       let transcriptSent = false;
       let lastPlayedIndex = -1; // STEP 0b diag: highest sentence index whose audio fully streamed
+      let _totalAudioBytes = 0; // accumulated audio bytes across all sentences for duration
       logger.info({ callId, evt: "sentences_queued", sentenceCount: sentenceTexts.length, sentenceTexts }, "STEP 0b sentences_queued: full per-turn TTS job list (does the final clause appear?)");
 
       for (let i = 0; i < sentenceJobs.length; i++) {
@@ -2398,6 +2454,14 @@ export async function handleWebCallWebSocket(
                 const frame = frameBuf.subarray(0, AUDIO_CHUNK_BYTES);
                 frameBuf = frameBuf.subarray(AUDIO_CHUNK_BYTES);
                 bytesSent += AUDIO_CHUNK_BYTES;
+                _totalAudioBytes += AUDIO_CHUNK_BYTES;
+                // Do NOT re-arm echo grace per frame: the per-sentence start grace
+                // (armed above) + the tail grace (armed after playback) bound the
+                // self-echo window. Re-arming on every 40 ms frame kept it active
+                // for the entire sentence and suppressed both barge-in detectors,
+                // so a caller could not interrupt a long reply. Mid-sentence
+                // self-echo is rejected by the energy RMS threshold + STT
+                // word-count gate.
                 recording.addAgentChunk(frame);
                 sendSpeechAudio(frame);
                 await new Promise<void>(r => setTimeout(r, 40));
@@ -2407,6 +2471,12 @@ export async function handleWebCallWebSocket(
             const reason = toReadableError(ttsErr, "TTS error");
             logger.error({ callId, err: ttsErr }, reason);
             send({ type: "error", message: reason });
+            logPlaybackEvent(logExecution, "Playback Cancelled", {
+              provider: agent.ttsProvider,
+              turnNumber: _curTurnIdx,
+              playbackDurationMs: Date.now() - _turnPbStart,
+              stopReason: "tts_error",
+            });
             speaking = false; speakingEndedAt = Date.now(); processing = false;
             if (!closed) void hangup("error", reason);
             return;
@@ -2417,6 +2487,7 @@ export async function handleWebCallWebSocket(
             frameBuf.copy(padded);
             recording.addAgentChunk(padded);
             sendSpeechAudio(padded);
+            _totalAudioBytes += frameBuf.length;
             await new Promise<void>(r => setTimeout(r, 40));
           }
           // Append per-sentence tail silence (same as withTailSilence on buffered path)
@@ -2427,6 +2498,7 @@ export async function handleWebCallWebSocket(
             for (let s = 0; s < tsFrames && !interrupted && !closed; s++) {
               recording.addAgentChunk(tsFrame);
               sendSpeechAudio(tsFrame);
+              _totalAudioBytes += AUDIO_CHUNK_BYTES;
               await new Promise<void>(r => setTimeout(r, 40));
             }
           }
@@ -2439,6 +2511,12 @@ export async function handleWebCallWebSocket(
             const reason = toReadableError(ttsErr, "TTS error");
             logger.error({ callId, err: ttsErr }, reason);
             send({ type: "error", message: reason });
+            logPlaybackEvent(logExecution, "Playback Cancelled", {
+              provider: agent.ttsProvider,
+              turnNumber: _curTurnIdx,
+              playbackDurationMs: Date.now() - _turnPbStart,
+              stopReason: "tts_error",
+            });
             speaking = false; speakingEndedAt = Date.now(); processing = false;
             if (!closed) void hangup("error", reason);
             return;
@@ -2458,6 +2536,7 @@ export async function handleWebCallWebSocket(
             const chunk = pcmOut.slice(j, j + AUDIO_CHUNK_BYTES);
             recording.addAgentChunk(chunk);
             sendSpeechAudio(chunk);
+            _totalAudioBytes += Math.min(AUDIO_CHUNK_BYTES, pcmOut.length - j);
             await new Promise<void>(r => setTimeout(r, 40));
           }
         }
@@ -2487,10 +2566,24 @@ export async function handleWebCallWebSocket(
         const silenceFrames = Math.ceil(AUDIO_TAIL_SILENCE_MS / 40);
         for (let s = 0; s < silenceFrames && !interrupted && !closed; s++) {
           sendAudio(silenceChunk);
+          _totalAudioBytes += AUDIO_CHUNK_BYTES;
           await new Promise<void>(r => setTimeout(r, 40));
         }
       }
 
+      const _turnPbEvent: PlaybackEvent = closed
+        ? "Playback Cancelled"
+        : interrupted
+          ? "Playback Interrupted"
+          : "Playback Completed";
+      const _audioDurationMs = Math.round((_totalAudioBytes / 2 / 16000) * 1000);
+      logPlaybackEvent(logExecution, _turnPbEvent, {
+        provider: agent.ttsProvider,
+        turnNumber: _curTurnIdx,
+        playbackDurationMs: Date.now() - _turnPbStart,
+        audioDurationMs: _audioDurationMs,
+        stopReason: closed ? "call_closed" : interrupted ? "barge_in" : "completed",
+      });
       speaking = false;
       speakingEndedAt = Date.now();
 
@@ -2795,6 +2888,8 @@ export async function handleWebCallWebSocket(
     sendStatus("speaking");
     speaking = true;
     speakingStartedAt = Date.now();
+    const _pbStart = Date.now();
+    logPlaybackEvent(logExecution, "Playback Started", { provider: agent.ttsProvider });
     {
       const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
       echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
@@ -2814,6 +2909,18 @@ export async function handleWebCallWebSocket(
         await new Promise<void>((r) => setTimeout(r, 40));
       }
     }
+    const _pbEvent: PlaybackEvent = closed
+      ? "Playback Cancelled"
+      : interrupted
+        ? "Playback Interrupted"
+        : "Playback Completed";
+    const _audioDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+    logPlaybackEvent(logExecution, _pbEvent, {
+      provider: agent.ttsProvider,
+      playbackDurationMs: Date.now() - _pbStart,
+      audioDurationMs: _audioDurationMs,
+      stopReason: closed ? "call_closed" : interrupted ? "barge_in" : "completed",
+    });
     speaking = false;
     speakingEndedAt = Date.now();
   }
@@ -2932,6 +3039,8 @@ export async function handleWebCallWebSocket(
         sendStatus("speaking");
         speaking = true;
         speakingStartedAt = Date.now();
+        const _greetPbStart = Date.now();
+        logPlaybackEvent(logExecution, "Playback Started", { provider: agent.ttsProvider, turnNumber: 0 });
 
         let greetAudio: Buffer;
         try {
@@ -2974,9 +3083,28 @@ export async function handleWebCallWebSocket(
             toReadableError(ttsErr, "Greeting TTS synthesis error") +
               " — continuing call in listening state instead of dropping",
           );
+          logPlaybackEvent(logExecution, "Playback Cancelled", {
+            provider: agent.ttsProvider,
+            turnNumber: 0,
+            playbackDurationMs: Date.now() - _greetPbStart,
+            stopReason: "tts_error",
+          });
           throw ttsErr;
         }
 
+        const _greetPbEvent: PlaybackEvent = closed
+          ? "Playback Cancelled"
+          : interrupted
+            ? "Playback Interrupted"
+            : "Playback Completed";
+        const _greetAudioDurationMs = Math.round((greetAudio.length / 2 / 16000) * 1000);
+        logPlaybackEvent(logExecution, _greetPbEvent, {
+          provider: agent.ttsProvider,
+          turnNumber: 0,
+          playbackDurationMs: Date.now() - _greetPbStart,
+          audioDurationMs: _greetAudioDurationMs,
+          stopReason: closed ? "call_closed" : interrupted ? "barge_in" : "completed",
+        });
         speaking = false;
         speakingEndedAt = Date.now();
         history.push({ role: "assistant", content: greetingText });
@@ -3044,6 +3172,44 @@ export async function handleWebCallWebSocket(
 
     const endedAt         = new Date();
     const durationSeconds = Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000);
+
+    // ── Finalize recording (only when "Record Calls" is on) — must precede the
+    // Call Ended row so its recordingStatus is accurate. recordingUrl/Error stay
+    // in scope for the callsTable update below. ──────────────────────────────
+    const recordingEnabled = (agentCfg["recordingEnabled"] as boolean | undefined) ?? false;
+    let recordingUrl: string | null = null;
+    let recordingError: string | null = null;
+    let recordingStatus: "disabled" | "saved" | "failed" = "disabled";
+    if (recordingEnabled) {
+      logRecordingEvent(logExecution, "Recording Started");
+      const result = await recording.finalize(callId).catch((err) => {
+        logger.error({ callId, err }, "WebCall recording finalize threw");
+        return { url: null, error: err instanceof Error ? err.message : String(err) };
+      });
+      recordingUrl = result.url;
+      recordingError = result.error;
+      if (recordingError) {
+        logger.error({ callId, recordingError }, "WebCall recording finalize failed");
+        recordingStatus = "failed";
+        logRecordingEvent(logExecution, "Recording Failed", { error: recordingError });
+      } else {
+        recordingStatus = "saved";
+        logRecordingEvent(logExecution, "Recording Saved", { url: recordingUrl });
+        logRecordingEvent(logExecution, "Recording Uploaded", { url: recordingUrl });
+      }
+    }
+
+    // Last spoken user + agent turns (skip synthetic tool markers).
+    let lastUserTxt: string | null = null;
+    let lastAgentTxt: string | null = null;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const t = history[i]!;
+      if (typeof t.content !== "string" || t.content.startsWith("[")) continue;
+      if (lastAgentTxt === null && t.role === "assistant" && t.content) lastAgentTxt = t.content;
+      if (lastUserTxt === null && t.role === "user" && t.content) lastUserTxt = t.content;
+      if (lastUserTxt !== null && lastAgentTxt !== null) break;
+    }
+
     // ── Structured Call Ended (final row) — mirrors the telephony teardown ────
     writeCallEndedLog(callId, agentId, {
       rawReason: reason,
@@ -3052,6 +3218,9 @@ export async function handleWebCallWebSocket(
       errorMessage: errorDetail
         ? (errorDetail instanceof Error ? errorDetail.message : String(errorDetail))
         : null,
+      lastUserTranscript: lastUserTxt,
+      lastAgentResponse: lastAgentTxt,
+      recordingStatus,
     });
     const transcript      = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
@@ -3072,22 +3241,6 @@ export async function handleWebCallWebSocket(
     }
 
     try {
-      // Finalize recording — only when the "Record Calls" toggle is on
-      const recordingEnabled = (agentCfg["recordingEnabled"] as boolean | undefined) ?? false;
-      let recordingUrl: string | null = null;
-      let recordingError: string | null = null;
-      if (recordingEnabled) {
-        const result = await recording.finalize(callId).catch((err) => {
-          logger.error({ callId, err }, "WebCall recording finalize threw");
-          return { url: null, error: err instanceof Error ? err.message : String(err) };
-        });
-        recordingUrl = result.url;
-        recordingError = result.error;
-        if (recordingError) {
-          logger.error({ callId, recordingError }, "WebCall recording finalize failed");
-        }
-      }
-
       await db.update(callsTable).set({
         status: isFailed ? "failed" : "completed",
         endedAt,

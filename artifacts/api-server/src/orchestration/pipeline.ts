@@ -39,7 +39,18 @@ import type { TimeSlot } from "../services/scheduling/slot-engine.js";
 import { buildSlotLockKey } from "../services/scheduling/lock.js";
 import { sendBookingCreatedEmail, sendBookingCancelledEmail, sendBookingRescheduledEmail } from "../services/scheduling/notifications.js";
 import { dispatchSchedulingWebhooks } from "../routes/scheduling/webhooks.js";
-import { writeExecutionLog, type ExecDirection, type ExecLogOpts } from "../services/execution-log.js";
+import {
+  writeExecutionLog,
+  logPlaybackEvent,
+  logRecordingEvent,
+  logToolExecutionStarted,
+  logWarningEvent,
+  EXEC_COMPONENTS,
+  type ExecDirection,
+  type ExecLogOpts,
+  type ExecLogFn,
+  type PlaybackEvent,
+} from "../services/execution-log.js";
 import {
   buildToolDefs,
   matchToolByName,
@@ -394,6 +405,11 @@ export class OrchestrationPipeline {
           { callId: this.config.callId, chars: transcript.length },
           "Safety net: force-finalizing stuck turn from best partial",
         );
+        logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "STT Timeout", ["stt_timeout"], {
+          turnNumber: this._activeTurnIndex,
+          provider: this.agent.asrProvider,
+          detail: { reason: "force-finalized stuck turn from best partial" },
+        });
         void this.handleStreamingTranscript(transcript, Date.now(), "force_finalized");
       },
       onStallReprompt: () => {
@@ -458,6 +474,11 @@ export class OrchestrationPipeline {
             { callId: this.config.callId, attempt: this.streamSTTReconnectAttempts, backoffMs },
             "Streaming STT disconnected — scheduling reconnect"
           );
+          logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Provider Reconnected", ["provider_reconnect"], {
+            provider: this.agent.asrProvider,
+            retryCount: this.streamSTTReconnectAttempts,
+            detail: { reason: "streaming STT disconnected — reconnecting", backoffMs },
+          });
           this.streamSTTReconnectTimer = setTimeout(() => {
             if (!this.closed) this.initStreamingSTT();
           }, backoffMs);
@@ -609,6 +630,10 @@ export class OrchestrationPipeline {
       { evt: "turn_latency", path: "pipeline", callId: this.config.callId, turn_close_reason: "stall_reprompt" },
       "turn_latency",
     );
+    logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Silence Reprompt", ["silence_reprompt"], {
+      turnNumber: this._activeTurnIndex,
+      detail: { reason: "no usable transcript — prompting caller again" },
+    });
     const text = recoveryReprompt(this.currentLang ?? this.agent.language);
     this.firstAudioSentAt = null;
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
@@ -964,7 +989,56 @@ export class OrchestrationPipeline {
     writeExecutionLog(this.config.callId, this.agent.id, component, direction, opts);
   }
 
+  /** Bound logger shaped as `ExecLogFn` so shared lifecycle helpers can drive
+   *  the telephony path identically to the web-call path. */
+  private readonly logFn: ExecLogFn = (component, direction, opts = {}): void =>
+    writeExecutionLog(this.config.callId, this.agent.id, component, direction, opts);
+
+  /** Final user + agent utterances, for the Call-Ended summary card. */
+  getLastTurnTexts(): { lastUser: string | null; lastAgent: string | null } {
+    let lastUser: string | null = null;
+    let lastAgent: string | null = null;
+    for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
+      const t = this.conversationHistory[i]!;
+      if (lastAgent === null && t.role === "assistant" && t.content) lastAgent = t.content;
+      if (lastUser === null && t.role === "user" && t.content) lastUser = t.content;
+      if (lastUser !== null && lastAgent !== null) break;
+    }
+    return { lastUser, lastAgent };
+  }
+
+  /**
+   * Public playback wrapper — emits the Playback Started/Completed/Interrupted/
+   * Cancelled lifecycle rows around the real synthesis+send. ALL telephony
+   * playback (greeting, turns, stall reprompts, goodbye) funnels through here,
+   * mirroring the web-call playback lifecycle.
+   */
   private async playSentence(text: string): Promise<void> {
+    if (this.bargeInRequested) return;
+    const _pbStart = Date.now();
+    const _pbTurn = this._activeTurnIndex;
+    logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
+    let _audioDurationMs: number | undefined;
+    try {
+      _audioDurationMs = await this._playSentenceImpl(text);
+    } finally {
+      const _pbEvent: PlaybackEvent = this.closed
+        ? "Playback Cancelled"
+        : this.bargeInRequested
+          ? "Playback Interrupted"
+          : "Playback Completed";
+      logPlaybackEvent(this.logFn, _pbEvent, {
+        provider: this.agent.ttsProvider,
+        turnNumber: _pbTurn,
+        playbackDurationMs: Date.now() - _pbStart,
+        audioDurationMs: _audioDurationMs,
+        stopReason: this.closed ? "call_closed" : this.bargeInRequested ? "barge_in" : "completed",
+      });
+    }
+  }
+
+  /** Returns the audio duration in milliseconds (from TTS bytes), or undefined. */
+  private async _playSentenceImpl(text: string): Promise<number | undefined> {
     if (this.bargeInRequested) return;
 
     // Extend echo-grace to cover estimated sentence playback duration.
@@ -1007,6 +1081,7 @@ export class OrchestrationPipeline {
       // glitches or stuttering.
       const queue: Buffer[] = [];
       let ttsDone = false;
+      let _ttsAccumBytes = 0; // raw PCM bytes accumulated before downsampling
 
       const drainLoop = async (): Promise<void> => {
         // Drift-compensated pacing: track the "ideal" next send time and adjust
@@ -1084,6 +1159,7 @@ export class OrchestrationPipeline {
           : Buffer.alloc(0);
         if (alignedLen === 0) return;
         const pcm16k = combined.slice(0, alignedLen);
+        _ttsAccumBytes += pcm16k.length;
         const pcm8k = downsample16to8(pcm16k);
         // Record agent audio (downsampled to match recording sample rate)
         this.recording.addAgentChunk(pcm8k);
@@ -1157,6 +1233,7 @@ export class OrchestrationPipeline {
 
       ttsDone = true;
       await drainPromise;
+      const _audioDurationMs = Math.round((_ttsAccumBytes / 2 / 16000) * 1000);
       this.logExec("TTS", "response", {
         provider: this.agent.ttsProvider,
         status: "success",
@@ -1165,6 +1242,7 @@ export class OrchestrationPipeline {
         durationMs: Date.now() - _ttsReqStart,
         responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
       });
+      return _audioDurationMs;
     } else {
       const { audio: ttsPcm16k } = await this.tts.synthesize(text);
       _ttsTotalBytes = ttsPcm16k.length;
@@ -1179,6 +1257,7 @@ export class OrchestrationPipeline {
       if (this.bargeInRequested) return;
       const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
+      const _audioDurationMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
       if (this.config.rawPcmOutput) {
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
         for (let i = 0; i < ttsPcm8k.length; i += PCM_CHUNK) {
@@ -1211,6 +1290,7 @@ export class OrchestrationPipeline {
           }
         }
       }
+      return _audioDurationMs;
     }
   }
 
@@ -1229,8 +1309,15 @@ export class OrchestrationPipeline {
       turnNumber: this._activeTurnIndex,
       requestPayload: { tool: toolName, args },
     });
+    logToolExecutionStarted(this.logFn, { tool: toolName, turnNumber: this._activeTurnIndex });
     try {
       const result = await this.handleToolCallInner(toolName, args);
+      this.logFn("Tool", "system", {
+        status: "success",
+        durationMs: Date.now() - _toolStart,
+        turnNumber: this._activeTurnIndex,
+        metadata: { event: "Execution Completed", result: (result ?? "unavailable").substring(0, 800) },
+      });
       this.logExec("Tool", "response", {
         status: "success",
         latencyMs: Date.now() - _toolStart,
@@ -1241,13 +1328,22 @@ export class OrchestrationPipeline {
       });
       return result;
     } catch (err) {
+      const _reason = toReadableError(err, "Tool error");
+      this.logFn("Tool", "system", {
+        status: "error",
+        durationMs: Date.now() - _toolStart,
+        turnNumber: this._activeTurnIndex,
+        errorMessage: _reason,
+        metadata: { event: "Execution Completed", error: _reason, failureReason: _reason },
+      });
       this.logExec("Tool", "response", {
         status: "error",
         latencyMs: Date.now() - _toolStart,
         turnNumber: this._activeTurnIndex,
-        errorMessage: toReadableError(err, "Tool error"),
+        durationMs: Date.now() - _toolStart,
+        errorMessage: _reason,
         requestPayload: { tool: toolName },
-        responsePayload: { error: toReadableError(err, "Tool error") },
+        responsePayload: { error: _reason, failureReason: _reason },
       });
       throw err;
     }
@@ -2329,17 +2425,14 @@ export class OrchestrationPipeline {
       // P0-B: LLM fallback — if primary failed before producing any tokens, retry with fallback adapter
       if (this.fallbackLlm && llmFirstTokenAt === null) {
         logger.warn({ callId: this.config.callId, err: llmErr, fallbackProvider: this.agent.fallbackLlmProvider }, "Primary LLM failed (no tokens) — retrying with fallback LLM");
-        this.logExec("LLM", "system", {
+        logWarningEvent(this.logFn, EXEC_COMPONENTS.LLM, "LLM Retry", ["llm_retry"], {
           provider: this.agent.fallbackLlmProvider ?? undefined,
-          status: "info",
-          turnNumber: _currentTurnIndex,
           retryCount: 1,
-          warningFlags: ["provider_fallback"],
-          errorMessage: toReadableError(llmErr, "LLM error"),
-          metadata: {
-            event: "Provider Fallback",
+          detail: {
+            event: "LLM Retry",
             fromProvider: this.agent.llmProvider,
             toProvider: this.agent.fallbackLlmProvider ?? null,
+            error: toReadableError(llmErr, "LLM error"),
           },
         });
         llmResponse = "";

@@ -76,6 +76,49 @@ function buildMetadata(opts: ExecLogOpts): Record<string, unknown> | null {
   return Object.keys(md).length > 0 ? md : null;
 }
 
+// ── Per-call lifecycle stat accumulator ─────────────────────────────────────
+//
+// Counts of warnings / errors / retries / fallbacks (and the last component to
+// execute) are folded into the final "Call Ended" summary. They are tracked
+// *synchronously* at row-write time — keyed by callId in a module-level Map —
+// so BOTH pipeline paths and EVERY emit site contribute with zero plumbing.
+// `writeCallEndedLog` reads-then-clears the entry for the call. The Call-Ended
+// row itself is excluded from tracking (it carries `metadata.callEnded`).
+
+interface CallStats {
+  warnings: number;
+  errors: number;
+  retries: number;
+  fallbacks: number;
+  lastComponent: string | null;
+}
+
+const callStats = new Map<number, CallStats>();
+
+function blankStats(): CallStats {
+  return { warnings: 0, errors: 0, retries: 0, fallbacks: 0, lastComponent: null };
+}
+
+function trackStats(callId: number, component: string, opts: ExecLogOpts): void {
+  const s = callStats.get(callId) ?? blankStats();
+  s.lastComponent = component;
+  const flags = opts.warningFlags;
+  if (flags && flags.length > 0) {
+    s.warnings += 1;
+    if (flags.includes("provider_fallback")) s.fallbacks += 1;
+  }
+  if (opts.status === "error") s.errors += 1;
+  if (typeof opts.retryCount === "number" && opts.retryCount > 0) s.retries += opts.retryCount;
+  callStats.set(callId, s);
+}
+
+/** Read-and-clear the accumulated stats for a call (called once at call end). */
+function consumeCallStats(callId: number): CallStats {
+  const s = callStats.get(callId) ?? blankStats();
+  callStats.delete(callId);
+  return s;
+}
+
 /**
  * Write a single execution-log row. Fire-and-forget — never throws, never
  * blocks the caller, and warns (not console.log) on failure.
@@ -87,6 +130,11 @@ export function writeExecutionLog(
   direction: ExecDirection,
   opts: ExecLogOpts = {},
 ): void {
+  // Accumulate lifecycle stats synchronously (the Call-Ended summary row is
+  // excluded — it reports the totals, it doesn't contribute to them).
+  if (!(opts.metadata && (opts.metadata as Record<string, unknown>)["callEnded"])) {
+    trackStats(callId, component, opts);
+  }
   void db
     .insert(executionLogsTable)
     .values({
@@ -114,6 +162,15 @@ export function createExecutionLogger(callId: number, agentId: number | null) {
   return (component: string, direction: ExecDirection, opts: ExecLogOpts = {}): void =>
     writeExecutionLog(callId, agentId, component, direction, opts);
 }
+
+/**
+ * The minimal logging-function shape shared by both pipeline paths:
+ * the telephony pipeline's `this.logExec` and the web-call path's
+ * `logExecution` (from `createExecutionLogger`) both match this signature.
+ * Lifecycle helpers below accept it so a single implementation drives both
+ * paths identically (webcall ≡ telephony parity).
+ */
+export type ExecLogFn = (component: string, direction: ExecDirection, opts?: ExecLogOpts) => void;
 
 /**
  * Format an unknown thrown value into a human-readable failure reason for the
@@ -161,6 +218,20 @@ export interface CallEndedInput {
   retryAttempted?: boolean;
   fallbackAttempted?: boolean;
   recoverySucceeded?: boolean | null;
+  // ── Lifecycle-trace enrichment (folded into the summary card) ───────────────
+  /** Last pipeline component to execute before teardown. */
+  lastComponent?: string | null;
+  /** Last thing the caller said (final user turn). */
+  lastUserTranscript?: string | null;
+  /** Last thing the agent said (final assistant turn). */
+  lastAgentResponse?: string | null;
+  /** Human-readable recording outcome (e.g. "Saved", "Failed: …", "Disabled"). */
+  recordingStatus?: string | null;
+  /** Counts during the call — default to the per-call stat accumulator. */
+  warningCount?: number;
+  errorCount?: number;
+  retryCount?: number;
+  fallbackCount?: number;
 }
 
 export interface CallEndedSummary {
@@ -177,6 +248,15 @@ export interface CallEndedSummary {
   outcome: CallOutcome;
   durationSeconds: number;
   turns: number;
+  // ── Lifecycle-trace enrichment ──────────────────────────────────────────────
+  lastComponent: string | null;
+  lastUserTranscript: string | null;
+  lastAgentResponse: string | null;
+  recordingStatus: string | null;
+  warningCount: number;
+  errorCount: number;
+  retryCount: number;
+  fallbackCount: number;
 }
 
 interface ReasonMapping {
@@ -231,20 +311,30 @@ function normalizeDisconnectReason(raw: string): ReasonMapping {
 /** Build the structured Call-Ended summary payload from a raw reason + context. */
 export function buildCallEndedSummary(input: CallEndedInput): CallEndedSummary {
   const m = normalizeDisconnectReason(input.rawReason);
+  const retryCount = input.retryCount ?? 0;
+  const fallbackCount = input.fallbackCount ?? 0;
   return {
     reason: m.reason,
     reasonLabel: m.label,
-    component: input.component ?? m.component,
+    component: input.component ?? input.lastComponent ?? m.component,
     provider: input.provider ?? null,
     errorCode: input.errorCode ?? null,
     errorMessage: input.errorMessage ?? null,
     expected: m.expected,
-    retryAttempted: input.retryAttempted ?? false,
-    fallbackAttempted: input.fallbackAttempted ?? false,
+    retryAttempted: (input.retryAttempted ?? false) || retryCount > 0,
+    fallbackAttempted: (input.fallbackAttempted ?? false) || fallbackCount > 0,
     recoverySucceeded: input.recoverySucceeded ?? null,
     outcome: m.outcome,
     durationSeconds: input.durationSeconds,
     turns: input.turns,
+    lastComponent: input.lastComponent ?? null,
+    lastUserTranscript: input.lastUserTranscript ?? null,
+    lastAgentResponse: input.lastAgentResponse ?? null,
+    recordingStatus: input.recordingStatus ?? null,
+    warningCount: input.warningCount ?? 0,
+    errorCount: input.errorCount ?? 0,
+    retryCount,
+    fallbackCount,
   };
 }
 
@@ -260,7 +350,18 @@ export function writeCallEndedLog(
   input: CallEndedInput,
   extraMetadata: Record<string, unknown> = {},
 ): void {
-  const summary = buildCallEndedSummary(input);
+  // Read-and-clear the per-call lifecycle counters; explicit input fields win
+  // over the accumulator when a caller passes them.
+  const stats = consumeCallStats(callId);
+  const merged: CallEndedInput = {
+    ...input,
+    lastComponent: input.lastComponent ?? stats.lastComponent ?? null,
+    warningCount: input.warningCount ?? stats.warnings,
+    errorCount: input.errorCount ?? stats.errors,
+    retryCount: input.retryCount ?? stats.retries,
+    fallbackCount: input.fallbackCount ?? stats.fallbacks,
+  };
+  const summary = buildCallEndedSummary(merged);
   writeExecutionLog(callId, agentId, EXEC_COMPONENTS.Agent, "system", {
     status: summary.expected ? "success" : "error",
     provider: summary.provider ?? undefined,
@@ -272,5 +373,169 @@ export function writeCallEndedLog(
       turns: summary.turns,
       ...extraMetadata,
     },
+  });
+}
+
+// ── Lifecycle-event helpers (shared, drive BOTH pipeline paths identically) ──
+//
+// Each helper writes a recognisable, labelled `metadata.event` row so the Logs
+// tab renders it via its existing generic event branch (no frontend change
+// needed). They accept an `ExecLogFn` so the telephony pipeline (`this.logExec`)
+// and the web-call path (`logExecution`) emit identical rows.
+
+/** Connection/handshake info for the opening "Call Started" row. */
+export interface CallStartedInfo {
+  sessionId?: string | null;
+  /** "Webcall" (browser WebRTC) or "Live Call" (telephony). */
+  callType: "Webcall" | "Live Call";
+  direction?: "Inbound" | "Outbound" | null;
+  recordingEnabled?: boolean;
+  webrtcConnected?: boolean | null;
+  mediaStreamStarted?: boolean | null;
+  agentName?: string | null;
+  asrProvider?: string | null;
+  llmProvider?: string | null;
+  ttsProvider?: string | null;
+  ttsVoice?: string | null;
+  /** Optional extra metadata (e.g. telephonyProvider). */
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * Opening lifecycle row: the call session/connection is established. Replaces
+ * each path's bare "seed" Agent row so the timeline starts with a labelled
+ * "Call Started" event carrying connection + pipeline-config context.
+ */
+export function writeCallStartedLog(callId: number, agentId: number | null, info: CallStartedInfo): void {
+  writeExecutionLog(callId, agentId, EXEC_COMPONENTS.Agent, "system", {
+    status: "info",
+    requestPayload: {
+      agentId,
+      agentName: info.agentName ?? null,
+      asrProvider: info.asrProvider ?? null,
+      llmProvider: info.llmProvider ?? null,
+      ttsProvider: info.ttsProvider ?? null,
+      ttsVoice: info.ttsVoice ?? null,
+    },
+    metadata: {
+      event: "Call Started",
+      callId,
+      sessionId: info.sessionId ?? null,
+      callType: info.callType,
+      direction: info.direction ?? null,
+      recordingEnabled: info.recordingEnabled ?? false,
+      webrtcConnected: info.webrtcConnected ?? null,
+      mediaStreamStarted: info.mediaStreamStarted ?? null,
+      connectionEstablishedAt: new Date().toISOString(),
+      ...(info.extra ?? {}),
+    },
+  });
+}
+
+export type PlaybackEvent =
+  | "Playback Started"
+  | "Playback Completed"
+  | "Playback Interrupted"
+  | "Playback Cancelled";
+
+export interface PlaybackInfo {
+  provider?: string;
+  turnNumber?: number;
+  playbackDurationMs?: number;
+  audioDurationMs?: number;
+  /** Why playback stopped — surfaced in the row preview via the `reason` key. */
+  stopReason?: string;
+  sentenceIndex?: number;
+}
+
+/** TTS playback lifecycle row. "Playback Interrupted" is flagged as a warning. */
+export function logPlaybackEvent(log: ExecLogFn, event: PlaybackEvent, info: PlaybackInfo = {}): void {
+  const interrupted = event === "Playback Interrupted";
+  log(EXEC_COMPONENTS.TTS, "system", {
+    status: "info",
+    provider: info.provider,
+    turnNumber: info.turnNumber,
+    durationMs: info.playbackDurationMs,
+    warningFlags: interrupted ? ["playback_interrupted"] : undefined,
+    metadata: {
+      event,
+      ...(info.stopReason ? { reason: info.stopReason } : {}),
+      ...(info.audioDurationMs != null ? { audioDurationMs: info.audioDurationMs } : {}),
+      ...(info.sentenceIndex != null ? { sentenceIndex: info.sentenceIndex } : {}),
+    },
+  });
+}
+
+export type RecordingEvent = "Recording Started" | "Recording Saved" | "Recording Uploaded" | "Recording Failed";
+
+export interface RecordingInfo {
+  durationMs?: number;
+  byteSize?: number;
+  url?: string | null;
+  error?: string | null;
+  sampleRate?: number;
+}
+
+/** Call-recording buffer/upload lifecycle row. "Recording Failed" is an error. */
+export function logRecordingEvent(log: ExecLogFn, event: RecordingEvent, info: RecordingInfo = {}): void {
+  const failed = event === "Recording Failed";
+  log(EXEC_COMPONENTS.Recording, "system", {
+    status: failed ? "error" : "info",
+    durationMs: info.durationMs,
+    errorMessage: failed ? info.error ?? undefined : undefined,
+    warningFlags: failed ? ["recording_failed"] : undefined,
+    metadata: {
+      event,
+      ...(info.url ? { url: info.url } : {}),
+      ...(info.byteSize != null ? { byteSize: info.byteSize } : {}),
+      ...(info.sampleRate != null ? { sampleRate: info.sampleRate } : {}),
+      ...(failed && info.error ? { error: info.error } : {}),
+    },
+  });
+}
+
+/**
+ * Middle tool-lifecycle row, emitted between the existing Tool request
+ * ("Requested") and Tool response ("Completed") rows so the Logs tab shows the
+ * full Requested → Started → Completed sequence. The request/response rows are
+ * deliberately left unlabelled so their rich arg/result previews still render.
+ */
+export function logToolExecutionStarted(log: ExecLogFn, info: { tool: string; turnNumber?: number }): void {
+  log(EXEC_COMPONENTS.Tool, "system", {
+    status: "info",
+    turnNumber: info.turnNumber,
+    metadata: { event: "Execution Started", tool: info.tool },
+  });
+}
+
+export interface WarningInfo {
+  turnNumber?: number;
+  provider?: string;
+  retryCount?: number;
+  errorMessage?: string;
+  /** Extra detail merged into metadata (use `reason` to surface in the preview). */
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * Generic warning/error lifecycle row (STT Timeout, Provider Reconnected,
+ * Silence Reprompt, …). `flags` populate `warningFlags` so the row is counted
+ * by the per-call accumulator and badged in the UI.
+ */
+export function logWarningEvent(
+  log: ExecLogFn,
+  component: string,
+  event: string,
+  flags: string[],
+  info: WarningInfo = {},
+): void {
+  log(component, "system", {
+    status: "info",
+    provider: info.provider,
+    turnNumber: info.turnNumber,
+    retryCount: info.retryCount,
+    errorMessage: info.errorMessage,
+    warningFlags: flags,
+    metadata: { event, ...(info.detail ?? {}) },
   });
 }
