@@ -1,9 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { randomUUID } from "crypto";
-import { execFile, spawn } from "child_process";
-import { promisify } from "util";
-import { Storage } from "@google-cloud/storage";
+import { spawn } from "child_process";
 import { db, ambientSoundsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
@@ -11,64 +9,20 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { invalidatePcmCache } from "../orchestration/ambient.js";
 
-const execFileAsync = promisify(execFile);
-
-const SIDECAR = "http://127.0.0.1:1106";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function makeGcsClient(): Storage {
-  return new Storage({
-    credentials: {
-      audience: "replit",
-      subject_token_type: "access_token",
-      token_url: `${SIDECAR}/token`,
-      type: "external_account",
-      credential_source: {
-        url: `${SIDECAR}/credential`,
-        format: { type: "json", subject_token_field_name: "access_token" },
-      },
-      universe_domain: "googleapis.com",
-    } as any,
-    projectId: "",
-  });
-}
-
-function getBucket() {
-  const bucketId = process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"];
-  if (!bucketId) throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID not set");
-  return makeGcsClient().bucket(bucketId);
-}
-
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
 });
 
 const ALLOWED_MIME = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/wave", "audio/ogg", "audio/x-m4a", "audio/mp4", "audio/aac"]);
-const EXT_MAP: Record<string, string> = {
-  "audio/mpeg": "mp3",
-  "audio/mp3": "mp3",
-  "audio/wav": "wav",
-  "audio/wave": "wav",
-  "audio/ogg": "ogg",
-  "audio/x-m4a": "m4a",
-  "audio/mp4": "m4a",
-  "audio/aac": "aac",
-};
 
-async function getDurationSeconds(buffer: Buffer): Promise<number | null> {
-  try {
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v", "error",
-      "-show_entries", "format=duration",
-      "-of", "default=noprint_wrappers=1:nokey=1",
-      "-i", "pipe:0",
-    ], { input: buffer, encoding: "utf8" } as Parameters<typeof execFileAsync>[2]);
-    const d = parseFloat((stdout as string).trim());
-    return isNaN(d) ? null : d;
-  } catch {
-    return null;
-  }
+// Transcode output format — raw s16le 8 kHz mono PCM.
+const PCM_SAMPLE_RATE = 8000;
+const PCM_BYTES_PER_SAMPLE = 2;
+
+/** Exact playback duration of the transcoded 8 kHz mono PCM, in seconds. */
+function pcmDurationSeconds(pcm: Buffer): number {
+  return pcm.length / PCM_BYTES_PER_SAMPLE / PCM_SAMPLE_RATE;
 }
 
 async function transcode(inputBuffer: Buffer): Promise<Buffer> {
@@ -103,6 +57,51 @@ async function transcode(inputBuffer: Buffer): Promise<Buffer> {
     } catch {
     }
   });
+}
+
+/**
+ * Stream raw audio bytes (from a Postgres bytea column) with HTTP Range support
+ * so <audio> players can seek/scrub. Mirrors the call-recording serving route.
+ */
+function serveAudioBytes(
+  req: { headers: Record<string, string | string[] | undefined> },
+  res: import("express").Response,
+  audio: Buffer,
+  mimeType: string,
+  cacheControl: string,
+): void {
+  const total = audio.length;
+  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Cache-Control", cacheControl);
+
+  const rangeHeader = req.headers["range"];
+  const range = Array.isArray(rangeHeader) ? rangeHeader[0] : rangeHeader;
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (match) {
+      const startStr = match[1] ?? "";
+      const endStr = match[2] ?? "";
+      let start = startStr ? Number.parseInt(startStr, 10) : 0;
+      let end = endStr ? Number.parseInt(endStr, 10) : total - 1;
+      if (Number.isNaN(start)) start = 0;
+      if (Number.isNaN(end) || end >= total) end = total - 1;
+      if (start > end || start >= total) {
+        res.status(416).setHeader("Content-Range", `bytes */${total}`);
+        res.end();
+        return;
+      }
+      const chunk = audio.subarray(start, end + 1);
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+      res.setHeader("Content-Length", String(chunk.length));
+      res.end(chunk);
+      return;
+    }
+  }
+
+  res.setHeader("Content-Length", String(total));
+  res.end(audio);
 }
 
 const router = Router();
@@ -147,28 +146,28 @@ router.post("/admin/ambient-sounds", requireAdmin, upload.single("file"), async 
     }
 
     const id = randomUUID();
-    const ext = EXT_MAP[mimeType] ?? "mp3";
-    const storageKey = `ambient-sounds/${id}/original.${ext}`;
-    const pcmStorageKey = `ambient-sounds/${id}/loop.pcm`;
 
-    const bucket = getBucket();
-
-    // 1. Upload original to storage immediately — fast, unblocks the response
-    await bucket.file(storageKey).save(file.buffer, { contentType: mimeType });
-
-    // 2. Insert the DB record right away (pcmStorageKey is null until transcoding finishes)
+    // 1. Store the original audio bytes directly in Postgres and insert the row.
+    //    pcmData stays null until the background transcode finishes.
     const [record] = await db
       .insert(ambientSoundsTable)
       .values({
         id,
         name,
-        storageKey,
+        audioData: file.buffer,
         mimeType,
         fileSize: file.size,
       })
-      .returning();
+      .returning({
+        id: ambientSoundsTable.id,
+        name: ambientSoundsTable.name,
+        mimeType: ambientSoundsTable.mimeType,
+        fileSize: ambientSoundsTable.fileSize,
+        durationSeconds: ambientSoundsTable.durationSeconds,
+        createdAt: ambientSoundsTable.createdAt,
+      });
 
-    // 3. Respond immediately — proxy timeout will never be hit
+    // 2. Respond immediately — proxy timeout will never be hit.
     res.status(201).json({
       id: record!.id,
       name: record!.name,
@@ -179,16 +178,14 @@ router.post("/admin/ambient-sounds", requireAdmin, upload.single("file"), async 
       processing: true,
     });
 
-    // 4. Transcode + upload PCM in background; update the record when done
+    // 3. Transcode to 8 kHz PCM in the background; update the row when done.
+    //    Duration is derived exactly from the resampled PCM length (the original
+    //    and the resample have identical wall-clock length), avoiding ffprobe.
     void (async () => {
       try {
-        const [durationSeconds, pcmBuffer] = await Promise.all([
-          getDurationSeconds(file.buffer),
-          transcode(file.buffer),
-        ]);
-        await bucket.file(pcmStorageKey).save(pcmBuffer, { contentType: "audio/pcm" });
+        const pcmBuffer = await transcode(file.buffer);
         await db.update(ambientSoundsTable)
-          .set({ pcmStorageKey, durationSeconds: durationSeconds ?? undefined })
+          .set({ pcmData: pcmBuffer, durationSeconds: pcmDurationSeconds(pcmBuffer) })
           .where(eq(ambientSoundsTable.id, id));
         logger.info({ id }, "ambient-sounds: background transcode complete");
       } catch (bgErr) {
@@ -214,17 +211,15 @@ router.get("/admin/ambient-sounds/:id/audio", async (req, res): Promise<void> =>
   }
   try {
     const { id } = req.params;
-    const [sound] = await db.select().from(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));
+    const [sound] = await db
+      .select({ audioData: ambientSoundsTable.audioData, mimeType: ambientSoundsTable.mimeType })
+      .from(ambientSoundsTable)
+      .where(eq(ambientSoundsTable.id, id));
     if (!sound) { res.status(404).json({ error: "Not found" }); return; }
-    const bucket = getBucket();
-    const file = bucket.file(sound.storageKey);
-    const [exists] = await file.exists();
-    if (!exists) { res.status(404).json({ error: "Audio file not found in storage" }); return; }
-    res.setHeader("Content-Type", sound.mimeType);
-    res.setHeader("Cache-Control", "private, max-age=3600");
-    file.createReadStream().pipe(res);
+    if (!sound.audioData) { res.status(404).json({ error: "Audio data not found" }); return; }
+    serveAudioBytes(req, res, sound.audioData, sound.mimeType, "private, max-age=3600");
   } catch (err) {
-    req.log.error({ err }, "ambient-sounds: admin audio proxy failed");
+    req.log.error({ err }, "ambient-sounds: admin audio serve failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -232,14 +227,11 @@ router.get("/admin/ambient-sounds/:id/audio", async (req, res): Promise<void> =>
 router.delete("/admin/ambient-sounds/:id", requireAdmin, async (req, res): Promise<void> => {
   try {
     const id = req.params["id"] as string;
-    const [sound] = await db.select().from(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));
+    const [sound] = await db
+      .select({ id: ambientSoundsTable.id })
+      .from(ambientSoundsTable)
+      .where(eq(ambientSoundsTable.id, id));
     if (!sound) { res.status(404).json({ error: "Not found" }); return; }
-
-    const bucket = getBucket();
-    await Promise.allSettled([
-      bucket.file(sound.storageKey).delete(),
-      ...(sound.pcmStorageKey ? [bucket.file(sound.pcmStorageKey).delete()] : []),
-    ]);
 
     await db.delete(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));
     invalidatePcmCache(id);
@@ -269,19 +261,15 @@ userRouter.get("/ambient-sounds", requireAuth, async (req, res): Promise<void> =
 userRouter.get("/ambient-sounds/:id/audio", requireAuth, async (req, res): Promise<void> => {
   try {
     const id = req.params["id"] as string;
-    const [sound] = await db.select().from(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));
+    const [sound] = await db
+      .select({ audioData: ambientSoundsTable.audioData, mimeType: ambientSoundsTable.mimeType })
+      .from(ambientSoundsTable)
+      .where(eq(ambientSoundsTable.id, id));
     if (!sound) { res.status(404).json({ error: "Not found" }); return; }
-
-    const bucket = getBucket();
-    const file = bucket.file(sound.storageKey);
-    const [exists] = await file.exists();
-    if (!exists) { res.status(404).json({ error: "Audio file not found in storage" }); return; }
-
-    res.setHeader("Content-Type", sound.mimeType);
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    file.createReadStream().pipe(res);
+    if (!sound.audioData) { res.status(404).json({ error: "Audio data not found" }); return; }
+    serveAudioBytes(req, res, sound.audioData, sound.mimeType, "public, max-age=3600");
   } catch (err) {
-    req.log.error({ err }, "ambient-sounds: audio proxy failed");
+    req.log.error({ err }, "ambient-sounds: audio serve failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

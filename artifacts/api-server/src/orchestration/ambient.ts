@@ -5,9 +5,9 @@
  * track.  No external audio files are required — everything is computed from
  * a seeded PRNG + simple IIR filter shaping at construction time.
  *
- * Also supports file-based ambient tracks loaded from GCS (FileAmbientNoiseStream).
+ * Also supports file-based ambient tracks loaded from Postgres (FileAmbientNoiseStream).
  * When an ambientNoiseTrack value does NOT match a key in TRACK_PARAMS, it is
- * treated as an uploaded sound ID and loaded from GCS via loadPcmLoop().
+ * treated as an uploaded sound ID and loaded from the DB via loadPcmLoop().
  *
  * PCM format throughout: 8 kHz, 16-bit signed little-endian (same as the
  * rest of the pipeline).  mulaw helpers mirror what audio.ts exposes so we
@@ -22,7 +22,6 @@
  */
 
 import { linearToMulaw, mulawToLinear, upsample8to16 } from "./audio.js";
-import { Storage } from "@google-cloud/storage";
 import { db, ambientSoundsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { spawn } from "child_process";
@@ -233,7 +232,7 @@ function mixAmbientIntoPcm16k(
   return out;
 }
 
-// ── FileAmbientNoiseStream — uploaded PCM from GCS ────────────────────────────
+// ── FileAmbientNoiseStream — uploaded PCM from Postgres ──────────────────────
 // Shares the equalised SILENCE_VOL / SPEECH_VOL and RMS normalisation used by
 // the built-in tracks, so uploaded ambience is audible at the same background
 // level regardless of the original file's recording volume.
@@ -291,109 +290,74 @@ export class FileAmbientNoiseStream {
   }
 }
 
-// ── GCS PCM cache ─────────────────────────────────────────────────────────────
-
-const SIDECAR = "http://127.0.0.1:1106";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function makeGcsClient(): Storage {
-  return new Storage({
-    credentials: {
-      audience: "replit",
-      subject_token_type: "access_token",
-      token_url: `${SIDECAR}/token`,
-      type: "external_account",
-      credential_source: {
-        url: `${SIDECAR}/credential`,
-        format: { type: "json", subject_token_field_name: "access_token" },
-      },
-      universe_domain: "googleapis.com",
-    } as any,
-    projectId: "",
-  });
-}
+// ── PCM cache (Postgres-backed) ──────────────────────────────────────────────
 
 /** In-memory cache: id → PCM Buffer.  Keyed by ambient sound UUID. */
 const pcmCache = new Map<string, Buffer>();
 
 /**
- * Download the pre-converted PCM loop for an uploaded ambient sound from GCS.
- * Results are cached in-process for the lifetime of the server process.
- * Call invalidatePcmCache(id) when a sound is deleted.
+ * Load the pre-converted 8 kHz PCM loop for an uploaded ambient sound from the
+ * `ambient_sounds.pcm_data` Postgres column. Results are cached in-process for
+ * the lifetime of the server process. Call invalidatePcmCache(id) when a sound
+ * is deleted.
  *
- * Self-healing: if the `loop.pcm` object is missing or empty (e.g. the upload's
+ * Self-healing: if the `pcm_data` column is missing or empty (e.g. the upload's
  * background transcode failed, or the sound predates PCM generation), the
- * original file is re-transcoded on demand and the loop is written back to GCS
- * so subsequent calls hit the fast path. Throws (with a logged reason) only when
- * neither the PCM loop nor a usable original can be produced.
+ * original audio bytes are re-transcoded on demand and written back to
+ * `pcm_data` so subsequent calls hit the fast path. Throws (with a logged
+ * reason) only when neither the PCM loop nor a usable original can be produced.
  */
 export async function loadPcmLoop(id: string): Promise<Buffer> {
   const cached = pcmCache.get(id);
   if (cached) return cached;
 
-  const bucketId = process.env["DEFAULT_OBJECT_STORAGE_BUCKET_ID"];
-  if (!bucketId) throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID not set");
+  const [row] = await db
+    .select({ pcmData: ambientSoundsTable.pcmData })
+    .from(ambientSoundsTable)
+    .where(eq(ambientSoundsTable.id, id));
+  if (!row) throw new Error(`ambient: sound ${id} not found in DB — cannot load PCM loop`);
 
-  const bucket = makeGcsClient().bucket(bucketId);
-  const pcmKey = `ambient-sounds/${id}/loop.pcm`;
-
-  // 1. Fast path — try the pre-converted PCM loop.
-  try {
-    const [exists] = await bucket.file(pcmKey).exists();
-    if (exists) {
-      const [data] = await bucket.file(pcmKey).download();
-      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as Uint8Array);
-      if (buf.length >= 2) {
-        pcmCache.set(id, buf);
-        logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
-        return buf;
-      }
-      logger.warn({ id, pcmKey, bytes: buf.length }, "ambient: PCM loop is empty — regenerating from original");
-    } else {
-      logger.warn({ id, pcmKey }, "ambient: PCM loop missing in storage — regenerating from original");
-    }
-  } catch (err) {
-    logger.warn({ id, pcmKey, err }, "ambient: PCM loop download failed — attempting regeneration from original");
+  // 1. Fast path — the pre-converted PCM loop already lives in the DB.
+  if (row.pcmData && row.pcmData.length >= 2) {
+    const buf = Buffer.isBuffer(row.pcmData) ? row.pcmData : Buffer.from(row.pcmData as Uint8Array);
+    pcmCache.set(id, buf);
+    logger.info({ id, bytes: buf.length }, "ambient: PCM loop loaded and cached");
+    return buf;
   }
+  logger.warn({ id }, "ambient: PCM loop missing or empty in DB — regenerating from original");
 
-  // 2. Self-heal — re-transcode from the stored original.
-  const buf = await regeneratePcmLoop(id, bucket, pcmKey);
+  // 2. Self-heal — re-transcode from the stored original bytes.
+  const buf = await regeneratePcmLoop(id);
   pcmCache.set(id, buf);
   return buf;
 }
 
-/** Re-transcode an uploaded sound's original file into the 8 kHz PCM loop. */
-async function regeneratePcmLoop(
-  id: string,
-  bucket: ReturnType<ReturnType<typeof makeGcsClient>["bucket"]>,
-  pcmKey: string,
-): Promise<Buffer> {
-  const [sound] = await db.select().from(ambientSoundsTable).where(eq(ambientSoundsTable.id, id));
+/** Re-transcode an uploaded sound's original bytes into the 8 kHz PCM loop. */
+async function regeneratePcmLoop(id: string): Promise<Buffer> {
+  const [sound] = await db
+    .select({ audioData: ambientSoundsTable.audioData })
+    .from(ambientSoundsTable)
+    .where(eq(ambientSoundsTable.id, id));
   if (!sound) throw new Error(`ambient: sound ${id} not found in DB — cannot regenerate PCM loop`);
-
-  const originalKey = sound.storageKey;
-  const [origExists] = await bucket.file(originalKey).exists();
-  if (!origExists) {
-    throw new Error(`ambient: original audio missing in storage (${originalKey}) — cannot regenerate PCM loop`);
+  if (!sound.audioData || sound.audioData.length === 0) {
+    throw new Error(`ambient: original audio missing in DB (${id}) — cannot regenerate PCM loop`);
   }
 
-  logger.info({ id, originalKey }, "ambient: downloading original to regenerate PCM loop");
-  const [origData] = await bucket.file(originalKey).download();
-  const origBuf = Buffer.isBuffer(origData) ? origData : Buffer.from(origData as Uint8Array);
+  const origBuf = Buffer.isBuffer(sound.audioData) ? sound.audioData : Buffer.from(sound.audioData as Uint8Array);
+  logger.info({ id, bytes: origBuf.length }, "ambient: re-transcoding original to regenerate PCM loop");
 
   const pcmBuf = await transcodeToPcm8k(origBuf);
   if (pcmBuf.length < 2) {
-    throw new Error(`ambient: transcode of ${originalKey} produced empty PCM — cannot regenerate PCM loop`);
+    throw new Error(`ambient: transcode of ${id} produced empty PCM — cannot regenerate PCM loop`);
   }
 
-  // Write the loop back so future calls hit the fast path, and record the key.
+  // Write the loop back so future calls hit the fast path.
   try {
-    await bucket.file(pcmKey).save(pcmBuf, { contentType: "audio/pcm" });
-    await db.update(ambientSoundsTable).set({ pcmStorageKey: pcmKey }).where(eq(ambientSoundsTable.id, id));
-    logger.info({ id, pcmKey, bytes: pcmBuf.length }, "ambient: PCM loop regenerated and persisted to storage");
+    await db.update(ambientSoundsTable).set({ pcmData: pcmBuf }).where(eq(ambientSoundsTable.id, id));
+    logger.info({ id, bytes: pcmBuf.length }, "ambient: PCM loop regenerated and persisted to DB");
   } catch (saveErr) {
     // Even if persistence fails, return the freshly transcoded buffer for this call.
-    logger.warn({ id, pcmKey, saveErr }, "ambient: regenerated PCM loop but failed to persist — using in-memory copy");
+    logger.warn({ id, saveErr }, "ambient: regenerated PCM loop but failed to persist — using in-memory copy");
   }
   return pcmBuf;
 }

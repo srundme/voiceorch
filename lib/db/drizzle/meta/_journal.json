@@ -120,6 +120,13 @@
       "when": 1782800000000,
       "tag": "0016_agent_version_snapshot_type",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782900000000,
+      "tag": "0017_ambient_sounds_blobs",
+      "breakpoints": true
     }
   ]
 }
