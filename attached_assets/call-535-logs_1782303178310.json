@@ -1,0 +1,726 @@
+[
+  {
+    "id": 12130,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.880Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 31,
+      "agentName": "galaxy",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "9fb23d39-9ff7-4c13-b320-cb01421d9142"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 535,
+      "sessionId": "live-535",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-24T12:08:53.870Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 12129,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.880Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-31",
+        "from_number": "webcall-user-google:104843180913508370916",
+        "agent_name": "galaxy",
+        "caller_number": "webcall-user-google:104843180913508370916",
+        "date": "Wednesday, June 24, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_Health_Insurance_Knowledge_Base.pdf (part 1)\nContent: Galaxy Health Insurance Company Limited  |  IRDAI Reg. No. 167  |  Toll Free: 1800 203 0007  |  Page 1\nGALAXY HEALTH INSURANCE\nCompany Limited\nFormerly Galaxy Health and Allied Insurance Company Limited\nPOLICY KNOWLEDGE BASE\n13 Active ProductsIRDAI Reg. No. 167CIN: U65120TN2023PLC165765\nThis  document  provides  a  structured  reference  of  all  Galaxy  Health  Insurance  products,  thei"
+    },
+    "metadata": null
+  },
+  {
+    "id": 12133,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.880Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "sourceIds": [
+        3
+      ],
+      "injected": true,
+      "preview": "Title: Galaxy_Health_Insurance_Knowledge_Base.pdf (part 1)\nContent: Galaxy Health Insurance Company Limited  |  IRDAI Reg. No. 167  |  Toll Free: 1800 203 0007  |  Page 1\nGALAXY HEALTH INSURANCE\nCompany Limited\nFormerly Galaxy Health and Allied Insurance Company Limited\nPOLICY KNOWLEDGE BASE\n13 Active ProductsIRDAI Reg. No. 167CIN: U65120TN2023PLC165765\nThis  document  provides  a  structured  ref"
+    },
+    "metadata": null
+  },
+  {
+    "id": 12131,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.880Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 12132,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.880Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 12135,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.881Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "9fb23d39-9ff7-4c13-b320-cb01421d9142"
+    }
+  },
+  {
+    "id": 12134,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.881Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 12136,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.881Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "b5836b530098",
+      "promptLength": 52456,
+      "preview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_Health_Insurance_Knowledge_Base.pdf (part 1)\n"
+    }
+  },
+  {
+    "id": 12137,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.881Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 12138,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:53.881Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 12139,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:54.739Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 861,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17920,
+      "textLength": 5,
+      "firstByteMs": 317
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 861
+    }
+  },
+  {
+    "id": 12140,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:54.739Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 560,
+      "turnNumber": 0,
+      "durationMs": 863
+    }
+  },
+  {
+    "id": 12141,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:58.159Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 97,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12142,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:08:59.677Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 5:38 PM GMT+5:30 (Asia/Kolkata)\n\n=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_Health_Insurance_Knowledge_Base.pdf (part 1)\nContent: Galaxy Health Insurance Company Limited  |  IRDAI Reg. No. 167  |  Toll Free: 1800 203 0007  |  Page 1\nGALAXY HEALTH INSURANCE\nCompany Limited\nFormerly Galaxy Health and Allied Insurance Company Lim",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12143,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:00.474Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "பாக்கறேன்..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12144,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:00.474Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12145,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:01.376Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 902,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 23040,
+      "textLength": 12,
+      "firstByteMs": 160
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 902
+    }
+  },
+  {
+    "id": 12146,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:01.376Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 720,
+      "turnNumber": 1,
+      "durationMs": 903
+    }
+  },
+  {
+    "id": 12147,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:01.813Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 2153,
+      "turnNumber": 1,
+      "durationMs": 2153
+    }
+  },
+  {
+    "id": 12149,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:01.956Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12148,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:01.956Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம் karthik ஐயா."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12150,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:02.531Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2153,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "வணக்கம் karthik ஐயா. நா வர்ஷா பேசறேன், Galaxy Health Insurance-ல இருந்து. நீங்க ஜூன் இருபது மூன்று, இருபதுஇருபத்தாறு Galaxy Marvel போலிசி எடுத்திருந்தீங்க இல்லையா?"
+    },
+    "metadata": {
+      "inputTokens": 21060,
+      "outputTokens": 174,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12151,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:03.702Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1744,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 51198,
+      "textLength": 20,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1744
+    }
+  },
+  {
+    "id": 12152,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:03.702Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1600,
+      "turnNumber": 1,
+      "durationMs": 1745
+    }
+  },
+  {
+    "id": 12154,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:03.702Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12153,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:03.702Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நா வர்ஷா பேசறேன், Galaxy Health Insurance-ல இருந்து."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12155,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:06.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2960,
+      "turnNumber": 1,
+      "durationMs": 3286
+    }
+  },
+  {
+    "id": 12157,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:06.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3285,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94718,
+      "textLength": 52,
+      "firstByteMs": 281
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3285
+    }
+  },
+  {
+    "id": 12156,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:06.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12158,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:06.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க ஜூன் இருபது மூன்று, இருபதுஇருபத்தாறு Galaxy Marvel போலிசி எடுத்திருந்தீங்க இல்லையா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12159,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:10.797Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 12161,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:10.802Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 4400,
+      "turnNumber": 1,
+      "durationMs": 3815
+    }
+  },
+  {
+    "id": 12160,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:10.802Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3815,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 140798,
+      "textLength": 90,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3815
+    }
+  },
+  {
+    "id": 12162,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:10.872Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/535"
+    }
+  },
+  {
+    "id": 12163,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:10.872Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/535"
+    }
+  },
+  {
+    "id": 12164,
+    "callId": 535,
+    "agentId": 31,
+    "ts": "2026-06-24T12:09:10.915Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 16,
+        "turns": 1,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "Hello",
+        "lastAgentResponse": "வணக்கம் karthik ஐயா. நா வர்ஷா பேசறேன், Galaxy Health Insurance-ல இருந்து. நீங்க ஜூன் இருபது மூன்று, இருபதுஇருபத்தாறு Galaxy Marvel போலிசி எடுத்திருந்தீங்க இல்லையா?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 16,
+      "turns": 1,
+      "avgSttMs": null,
+      "avgLlmMs": null,
+      "avgTtsMs": null
+    }
+  }
+]
