@@ -144,3 +144,9 @@ id = "R6f_5jZw6BApElUrKI9EL"
 uri = "file://beta-report.md"
 type = "text"
 title = "VoiceOrch — Member-wise Contribution Report"
+
+[[outputs]]
+id = "E0zvrLeWQTVec7iOkUQRy"
+uri = "file://webcall-architecture-brief.md"
+type = "text"
+title = "Webcall Architecture & Speech Capture Problem Brief"
