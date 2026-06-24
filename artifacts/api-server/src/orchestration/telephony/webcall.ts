@@ -809,10 +809,17 @@ export async function handleWebCallWebSocket(
   // BOTH the system prompt here and the static greeting later.
   const greetingVars: Record<string, string> = (() => {
     const now = new Date();
+    // Agent-config prompt-variable defaults (same shape as session.ts telephony
+    // path). Built-ins first, then agent-config defaults, then URL-supplied vars
+    // override last — matching the precedence used on real telephony calls.
+    const configPromptVars = Array.isArray(agentCfgWc["promptVariables"])
+      ? (agentCfgWc["promptVariables"] as Array<{ key: string; defaultValue: string; description?: string }>)
+      : [];
     return {
       agent_name:    agent.name,
       date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
       caller_number: "browser",
+      ...Object.fromEntries(configPromptVars.map(v => [v.key, v.defaultValue])),
       ...promptVariables,
     };
   })();
