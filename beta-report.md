@@ -1,250 +1,308 @@
-# 🛠️ VoiceOrch — Replit Build Session Report
-**Team usage of Replit AI Agent · May 14 – June 24, 2026**
+# 👥 VoiceOrch — Member-wise Contribution Report
+**Replit AI Agent usage · May 14 – June 24, 2026**
 
 ---
 
-## 🧑‍💻 How We Used Replit (TL;DR)
+## 🏆 Team Leaderboard
+
+| Rank | Member | Prompts | Time Spent | Commits | Lines Added | Active Days |
+|------|--------|---------|------------|---------|-------------|-------------|
+| 🥇 1 | **karthiasc12** | **58** | **51.6 hrs** | **374** | **110,272** | 19 |
+| 🥈 2 | **gopinwrk** | **64** | **37.4 hrs** | **157** | **30,695** | 20 |
+| 🥉 3 | **beniciaalwin200** | 34 | 15.6 hrs | 55 | 11,507 | 10 |
+| 4 | dkrithikaias | 25 | 11.7 hrs | 42 | 6,996 | 9 |
+| 5 | subashpandioffi | 3 | 4.2 hrs | 13 | 4,154 | 2 |
+| 6 | ramsiva97465 | 4 | 2.0 hrs | 9 | 1,202 | 1 |
+| 7 | avinashsaran | 4 | 1.9 hrs | 4 | 129 | 1 |
+| — | *Replit Agent* | *(AI)* | *(AI)* | 954 | *auto-gen* | — |
+| **Total** | **7 members** | **~192** | **~124 hrs** | **654 human** | **165,955** | — |
+
+> **How prompts are counted:** Each distinct Replit session (≥30 min gap between commits) = one prompt block. Each human commit = the result of at least one prompt to the agent.
+> **How time is counted:** Sum of gaps between consecutive commits by that member, capped at 90 min per gap (sessions beyond 90 min counted as idle).
+
+---
+
+## 👤 karthiasc12
 
 | Metric | Value |
 |--------|-------|
-| 📋 Total tasks created | **273** |
-| 🔄 Task agent runs (merges) | **85** |
-| 💬 Estimated build sessions | **63** |
-| 📅 Active coding days | **34 of 41** calendar days |
-| ⏱️ Total time building (elapsed) | **968 hrs** (~40 days wall-clock) |
-| 📝 Total code commits | **1,608** |
-| ➕ Lines of code added | **415,052** |
-| ➖ Lines of code removed | **85,881** |
-| 📁 Unique files changed | **2,380** |
-| 🐛 Fix/debug commits | **281** |
-| ↩️ Revert commits | **3** |
+| **Total prompts (sessions)** | **58** |
+| **Total time spent** | **51.6 hours** |
+| **Total commits** | **374** |
+| **Lines added** | 110,272 |
+| **Lines deleted** | 18,376 |
+| **Active days** | 19 days |
+| **Active period** | May 19 – June 23, 2026 |
+| **Share of human commits** | **57.2%** |
+| **Share of lines written** | **66.5%** |
+
+### Busiest Days
+| Date | Commits |
+|------|---------|
+| May 28 | 76 |
+| May 19 | 66 |
+| May 25 | 57 |
+| May 22 | 33 |
+| May 20 | 26 |
+
+### What They Built
+- ⚡ Core voice pipeline (call flow adherence, endpointing, TTS tail clipping)
+- 💳 Billing engine (BYOP vs Managed, wallet cap removal, Razorpay)
+- 🔒 Google Meet + booking email integration
+- 🚀 Deployment & Operations Center
+- 🔁 Version compare UI (additions green / removals red / structural JSON diff)
+- 📋 "View Logs" entry point on agent call list
+- 🛡️ Fault-tolerant greeting + pre-greeting call drop fix
+- 📊 Platform-wide orchestration fixes (pipeline.ts + webcall.ts mirroring)
 
 ---
 
-## 💬 Prompts & Tasks
-
-Replit does not expose a raw prompt counter, but every task file represents at least one prompt, and most involved multiple back-and-forth rounds:
-
-| Category | Count |
-|----------|-------|
-| **Total task files created** | **273** |
-| Bug-fix tasks (`fix-*`) | 128 |
-| Feature / enhancement tasks | 145 |
-| Task agents delegated + merged | **85** |
-| Tasks still in `.local/tasks/` | 273 |
-
-**273 tasks** × estimated **3–5 prompt rounds each** = roughly **800–1,400 total prompts** sent to Replit AI over the build window.
-
-### Sample of What We Tasked the Agent With
-
-| Area | Example Tasks |
-|------|--------------|
-| Voice pipeline | Fix barge-in, Tamil STT regression, Silero VAD, endpointing |
-| Agent builder | Draft history, version control, latency bar, tool tabs |
-| Scheduling | Calendar tools, Google Meet, booking flow, reschedule |
-| Admin | Impersonation, managed keys, usage page, voice whitelist |
-| Compliance | DPDP Act PII scan, retention sweep, erasure endpoints |
-| Auth | Google OAuth migration away from Clerk |
-| Billing | BYOP vs Managed rate resolution, Razorpay integration |
-| Calls | Recording, transcript, call log enrichment, call exec log |
-| Dashboard | Branding, glass UI, Poppins font audit, Recharts |
-
----
-
-## ⏱️ Hours Spent Building
+## 👤 gopinwrk
 
 | Metric | Value |
 |--------|-------|
-| Project started | **May 14, 2026** |
-| Report date | **June 24, 2026** |
-| Calendar days elapsed | **41 days** |
-| Days with at least one commit | **34** (83% of days) |
-| Estimated distinct build sessions | **63** |
-| Avg commits per active day | **~47** |
-| Avg commits per session | **~26** |
-| Longest streak | Jun 14–24 (11 days straight) |
+| **Total prompts (sessions)** | **64** |
+| **Total time spent** | **37.4 hours** |
+| **Total commits** | **157** |
+| **Lines added** | 30,695 |
+| **Lines deleted** | 11,287 |
+| **Active days** | 20 days |
+| **Active period** | May 24 – June 23, 2026 |
+| **Share of human commits** | **24.0%** |
+| **Share of lines written** | **18.5%** |
 
-### Commits per Day (Full History)
+### Busiest Days
+| Date | Commits |
+|------|---------|
+| Jun 16 | 39 |
+| Jun 17 | 30 |
+| Jun 21 | 15 |
+| Jun 04 | 11 |
+| Jun 03 | 11 |
 
-| Date | Commits | Day |
-|------|---------|-----|
-| May 14 | — | First commit (project init) |
-| May 19 | 66 | Monday |
-| May 22 | 33 | Thursday |
-| May 25 | 63 | Sunday |
-| **May 28** | **159** 🔥 | Wednesday |
-| May 29 | 36 | Thursday |
-| May 30 | 59 | Friday |
-| May 31 | — | — |
-| Jun 01 | 47 | Monday |
-| Jun 03 | 38 | Wednesday |
-| Jun 04 | **108** | Thursday |
-| Jun 05 | 34 | Friday |
-| Jun 08 | — | — |
-| Jun 09 | 32 | Monday |
-| Jun 14 | 37 | Saturday |
-| Jun 15 | 69 | Sunday |
-| **Jun 16** | **103** | Monday |
-| **Jun 17** | **155** 🔥 | Tuesday |
-| Jun 18 | 68 | Wednesday |
-| Jun 19 | 76 | Thursday |
-| Jun 20 | — | — |
-| Jun 21 | 69 | Saturday |
-| Jun 22 | 43 | Sunday |
-| **Jun 23** | **107** | Monday |
-| Jun 24 | (ongoing) | Tuesday |
-
-### By Day of Week
-
-| Day | Commits | Share |
-|-----|---------|-------|
-| Thursday | 353 | 22.0% |
-| Tuesday | 330 | 20.5% |
-| Monday | 251 | 15.6% |
-| Wednesday | 230 | 14.3% |
-| Friday | 179 | 11.1% |
-| Sunday | 154 | 9.6% |
-| Saturday | 111 | 6.9% |
-
-> **Thursday and Tuesday are the team's most productive days.**
-> The team codes 7 days a week — even weekends average 100+ commits.
-
-### By Month
-
-| Month | Commits | Share |
-|-------|---------|-------|
-| May 2026 | 510 | 31.7% |
-| June 2026 | 1,098 | 68.3% |
-
-> Output more than doubled month-over-month — velocity is accelerating.
+### What They Built
+- 🗓️ Agent draft history & version control (full multi-snapshot system)
+- 🎨 Enhanced Compare Experience (Visual Mode, section nav, restore preview)
+- 📅 Scheduling: GCal scope fix, reschedule email Meet link, bookings list sync status
+- 🔒 Google Calendar OAuth 2-step delete confirmation (preserve past bookings)
+- 🧹 Removed Simulation tab and backend from agent builder
+- 🪝 Webhook validation fix + invalid pre-fill clear in builder
+- 📄 Deployment history pagination (server-side, 10 per page)
+- 🔗 Calendar tool: auto-linking, dropdown fixes, ghost cards fix
 
 ---
 
-## 🔧 Changes Made
-
-Every commit = one Replit-pushed change to the codebase.
+## 👤 beniciaalwin200
 
 | Metric | Value |
 |--------|-------|
-| Total commits | **1,608** |
-| Lines written | **415,052** |
-| Lines deleted | **85,881** |
-| Net new code | **~329,171 lines** |
-| Files touched | **2,380** |
-| Task agent merge commits | **85** |
-| Avg lines added per commit | **~258** |
+| **Total prompts (sessions)** | **34** |
+| **Total time spent** | **15.6 hours** |
+| **Total commits** | **55** |
+| **Lines added** | 11,507 |
+| **Lines deleted** | 1,274 |
+| **Active days** | 10 days |
+| **Active period** | June 4 – June 24, 2026 |
+| **Share of human commits** | **8.4%** |
+| **Share of lines written** | **6.9%** |
 
-### Type of Changes
+### Busiest Days
+| Date | Commits |
+|------|---------|
+| Jun 18 | 9 |
+| Jun 17 | 9 |
+| Jun 23 | 8 |
+| Jun 04 | 8 |
+| Jun 22 | 5 |
 
-| Type | Commits | Notes |
-|------|---------|-------|
-| Bug fixes & error recovery | **281** | `fix`, `error`, `crash`, `regression` in message |
-| Reverts | **3** | Full rollbacks (VAD revert, etc.) |
-| Feature additions | ~600 | `feat`, `add`, `integrate`, `new` |
-| Improvements / refactors | ~724 | `improve`, `update`, `enhance`, `refactor` |
+### What They Built
+- 🎙️ Full end-to-end Call Execution Log (STT/LLM/TTS latency timeline)
+- 🔊 Call recording fixes (caller audio alignment, buzz removal on TTS track)
+- 📊 Live call + web call execution log parity
+- 🌐 Tamil auto-select for Gemini LLM (Task #858)
+- 🗣️ Language-specific English filler fix for live calls
+- 📜 Call orchestration architecture reference docs
+- 🔄 Call Details Logs lifecycle enrichment (code review fixes)
 
 ---
 
-## 📋 Tasks Created
+## 👤 dkrithikaias
 
 | Metric | Value |
 |--------|-------|
-| **Total tasks** | **273** |
-| Bug fixes | **128** (47%) |
-| New features & improvements | **145** (53%) |
-| Delegated to task agent | **85** |
-| Task areas covered | 15+ (voice, admin, scheduling, billing, auth…) |
+| **Total prompts (sessions)** | **25** |
+| **Total time spent** | **11.7 hours** |
+| **Total commits** | **42** |
+| **Lines added** | 6,996 |
+| **Lines deleted** | 869 |
+| **Active days** | 9 days |
+| **Active period** | May 28 – June 23, 2026 |
+| **Share of human commits** | **6.4%** |
+| **Share of lines written** | **4.2%** |
 
-### Task Breakdown by Feature Area
+### Busiest Days
+| Date | Commits |
+|------|---------|
+| Jun 18 | 8 |
+| Jun 17 | 8 |
+| Jun 05 | 5 |
+| May 29 | 5 |
+| May 28 | 5 |
 
-| Area | Approx Tasks |
-|------|-------------|
-| Voice pipeline (STT/TTS/barge-in) | 45 |
-| Bug fixes (call/agent/builder) | 128 |
-| Scheduling / calendar | 22 |
-| Admin panel | 18 |
-| Agent builder / UI | 20 |
-| Auth / billing / compliance | 15 |
-| Dashboard / design | 12 |
-| Other (scripts, docs, infra) | 13 |
+### What They Built
+- 🔇 Barge-in fix: let callers interrupt agent mid-sentence
+- 🏛️ IRDAI + TRAI compliance pre/post wrappers for agents
+- 🤖 Prompt tab restructure (remove Greeting, add Auto Switch to English)
+- ⚡ Call latency reduction (endpointing + KB race timeout)
+- 🔕 Emotion/break markup strip before TTS
+- 🌐 Web call drop fix on greeting TTS failure
+- 🔧 Live call bugs (pipeline.ts + webcall.ts, 3 bugs fixed)
+- 📝 Auto Summarization redesign (single correctly-wired toggle)
 
 ---
 
-## 🐛 Errors & Debug Sessions
-
-### Code-Level (Git)
+## 👤 subashpandioffi
 
 | Metric | Value |
 |--------|-------|
-| Commits labelled as fixes | **281** |
-| Full reverts | **3** |
-| Fix rate (fixes ÷ total commits) | **17.5%** |
+| **Total prompts (sessions)** | **3** |
+| **Total time spent** | **4.2 hours** |
+| **Total commits** | **13** |
+| **Lines added** | 4,154 |
+| **Lines deleted** | 1,617 |
+| **Active days** | 2 days |
+| **Active period** | May 25 – May 28, 2026 |
+| **Share of human commits** | **2.0%** |
+| **Share of lines written** | **2.5%** |
 
-### Notable Debugging Runs
+### Busiest Days
+| Date | Commits |
+|------|---------|
+| May 28 | 7 |
+| May 25 | 6 |
 
-| Issue | Sessions spent | Resolution |
-|-------|---------------|------------|
-| Tamil/Sarvam STT zero transcripts | 4+ sessions | Audio not forwarded to WS — restored `sendAudio()` |
-| Silero VAD regression | 2 sessions | Reverted to energy-based VAD |
-| Echo/barge-in false positives | 3 sessions | Grace period tuning + re-arm per sentence |
-| Azure STT continuous LID | 1 session | Added `speech.context` for mid-call LID |
-| Google Calendar timezone bug | 1 session | `formatInTimeZone` instead of `toISOString()` |
-| Drizzle migration loops | 2 sessions | FK name truncation at 63 chars |
-| Gender service URL routing | 2 sessions | Base URL + appended path pattern |
-| Admin impersonation prod failure | 1 session | Missing migration 0012 on prod DB |
-
-### Platform Errors (Live Calls During Beta)
-
-| Metric | Value |
-|--------|-------|
-| Failed / errored calls | **179 of 757** |
-| Overall error rate | **23.7%** |
-| Worst error day | Jun 17 — 46 errors (25.4% rate on 181 calls) |
-| Best sustained stretch | Jun 8–9, Jun 22 — 0–2% error rate |
+### What They Built
+- 🎨 Dashboard branding (glassy cards + Poppins font — Task #209)
+- 🅰️ Admin Poppins font + full alignment audit (Task #183)
+- 🎤 Admin Voices page + "My Voices" ownership filter
+- 🔔 Admin usage spike alert system (Task #38)
+- 🔍 Voice preview (play button) on admin whitelist page
+- 🔒 Sign-in page button fix + SnapServe wordmark font update
+- 🧭 Removed Scheduling nav + Callback Queue from admin (Task #33)
 
 ---
 
-## 🚀 What We Shipped in 41 Days
+## 👤 ramsiva97465
+
+| Metric | Value |
+|--------|-------|
+| **Total prompts (sessions)** | **4** |
+| **Total time spent** | **2.0 hours** |
+| **Total commits** | **9** |
+| **Lines added** | 1,202 |
+| **Lines deleted** | 255 |
+| **Active days** | 1 day |
+| **Active period** | May 28, 2026 |
+| **Share of human commits** | **1.4%** |
+| **Share of lines written** | **0.7%** |
+
+### What They Built
+- 🩺 Admin Platform Health — surface failure reason (Task #206)
+- 🔑 Managed Keys page — category accordion redesign (Task #202)
+- 👤 Admin Growth page — fix "Unknown" usernames (Task #189)
+- 📊 Admin Usage Monitoring — fix 500 errors (STT/TTS/LLM tabs)
+- 🔧 Admin usage monitoring empty state fix (Task #110)
+
+---
+
+## 👤 avinashsaran
+
+| Metric | Value |
+|--------|-------|
+| **Total prompts (sessions)** | **4** |
+| **Total time spent** | **1.9 hours** |
+| **Total commits** | **4** |
+| **Lines added** | 129 |
+| **Lines deleted** | 42 |
+| **Active days** | 1 day |
+| **Active period** | May 28, 2026 |
+| **Share of human commits** | **0.6%** |
+| **Share of lines written** | **0.08%** |
+
+### What They Built
+- 🐛 Fix agent creation 502 error
+- 🛠️ Run prompt_templates DB migration for agent creation
+- 🧹 Remove LLM advanced sliders from agent edit/detail page
+
+---
+
+## 📊 Contribution Breakdown
+
+### Commits (Human-only, excl. Agent)
 
 ```
-✅ Full voice agent orchestration pipeline (STT → LLM → TTS)
-✅ Webcall (browser) + telephony (Twilio/Plivo/Vonage) paths
-✅ Sarvam, Azure, Deepgram STT adapters
-✅ Google/Qwen/OpenAI/Anthropic/Mistral LLM adapters
-✅ Cartesia, ElevenLabs, AWS Polly, Azure TTS adapters
-✅ Scheduling engine (6 DB tables, slot booking, advisory locks)
-✅ Google Calendar OAuth + multi-account sync
-✅ BYOP vs Managed billing (dynamic at call-end)
-✅ Razorpay payment integration
-✅ Admin panel (user mgmt, impersonation, managed keys, analytics)
-✅ Agent draft history + version control with visual diff
-✅ Call execution log (STT/LLM/TTS latency timeline)
-✅ AI Knowledge Base (PostgreSQL FTS, no embeddings)
-✅ DPDP Act compliance (PII scan, retention, erasure)
-✅ Speaker recognition (ECAPA-TDNN, local model)
-✅ Gender detection (ML-based, progressive confidence)
-✅ Google OAuth auth (migrated away from Clerk)
-✅ HTTP keep-alive pool (process-wide, all providers)
-✅ Turn safety-net (Tamil/Hinglish silence hang guards)
-✅ Public booking page (/book/:slug, no auth)
-✅ Pitch deck artifact
-✅ Family app + mobile (Agent Portal)
+karthiasc12     ████████████████████████████░░░░  57.2%  (374)
+gopinwrk        ████████████░░░░░░░░░░░░░░░░░░░░  24.0%  (157)
+beniciaalwin200 ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░   8.4%   (55)
+dkrithikaias    ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6.4%   (42)
+subashpandioffi █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   2.0%   (13)
+ramsiva97465    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1.4%    (9)
+avinashsaran    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0.6%    (4)
+```
+
+### Lines Added (Human-only)
+
+```
+karthiasc12     ████████████████████████████████  66.5%  (110,272)
+gopinwrk        ██████████░░░░░░░░░░░░░░░░░░░░░░  18.5%   (30,695)
+beniciaalwin200 ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6.9%   (11,507)
+dkrithikaias    ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   4.2%    (6,996)
+subashpandioffi █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   2.5%    (4,154)
+ramsiva97465    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0.7%    (1,202)
+avinashsaran    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0.1%      (129)
+```
+
+### Time Spent
+
+```
+karthiasc12     ████████████████████████░░░░░░░░  41.6%  (51.6 hrs)
+gopinwrk        ██████████████████░░░░░░░░░░░░░░  30.1%  (37.4 hrs)
+beniciaalwin200 ████████░░░░░░░░░░░░░░░░░░░░░░░░  12.6%  (15.6 hrs)
+dkrithikaias    ██████░░░░░░░░░░░░░░░░░░░░░░░░░░   9.4%  (11.7 hrs)
+subashpandioffi ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   3.4%   (4.2 hrs)
+ramsiva97465    █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1.6%   (2.0 hrs)
+avinashsaran    █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1.5%   (1.9 hrs)
 ```
 
 ---
 
-## 📅 Timeline Summary
+## 📅 Who Was Active When
 
-```
-May 14  ▶ Project started — first commit
-May 19  ▶ First beta user signed up
-May 28  ▶ Most productive day (159 commits)
-Jun 05  ▶ 7 users signed up in one day
-Jun 17  ▶ Peak call day (181 calls) + most commits in June (155)
-Jun 23  ▶ Last full beta day
-Jun 24  ▶ This report generated
-```
+| Week | karthiasc12 | gopinwrk | beniciaalwin200 | dkrithikaias | subashpandioffi | ramsiva | avinashsaran |
+|------|-------------|----------|-----------------|--------------|-----------------|---------|--------------|
+| May 14–20 | ✅ | — | — | — | — | — | — |
+| May 21–27 | ✅ | ✅ | — | — | ✅ | — | — |
+| May 28–Jun 3 | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ |
+| Jun 4–10 | — | ✅ | ✅ | ✅ | — | — | — |
+| Jun 11–17 | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| Jun 18–24 | ✅ | ✅ | ✅ | ✅ | — | — | — |
+
+> karthiasc12 and gopinwrk have been consistently active the longest.
+> subashpandioffi, ramsiva97465, and avinashsaran contributed heavily during the May 28 sprint then stepped back.
 
 ---
 
-*Data sources: git log, `.local/tasks/` directory (273 files), production PostgreSQL database · June 24, 2026*
+## 🔑 Key Takeaways
+
+1. **karthiasc12** is the core engine — 57% of commits, 66% of lines, 51 hrs. Owns the voice pipeline and billing layer.
+2. **gopinwrk** is the most session-active (64 prompt sessions) and owns the agent builder UI, scheduling, and calendar.
+3. **beniciaalwin200** joined late (Jun 4) but moved fast — call logs, recordings, and execution timeline.
+4. **dkrithikaias** owns compliance (IRDAI/TRAI), barge-in, and latency optimizations.
+5. **subashpandioffi** delivered the entire visual design system (Poppins, glass cards, admin branding) in just 2 days.
+6. **ramsiva97465 + avinashsaran** focused on admin fixes and agent creation bugs in the May 28 sprint.
+
+---
+
+*Data pulled from: `git log` by author (timestamps, shortstat, messages) · June 24, 2026*
+*Time estimate method: sum of consecutive commit gaps ≤ 90 min per member*
+*Prompt estimate method: distinct sessions (gap > 30 min = new session)*
