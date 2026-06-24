@@ -1,0 +1,1270 @@
+[
+  {
+    "id": 12302,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 5,
+      "agentName": "new 93",
+      "asrProvider": "sarvam",
+      "llmProvider": "qwen",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "35026ba5-ac7e-4d6b-8285-52042bd55267"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 540,
+      "sessionId": "ee43dfda-10d9-4baf-ae04-dcdc5dee2e19",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-24T12:25:17.646Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 12305,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "கார்த்திக்",
+        "callCount": 12
+      },
+      "factCount": 20,
+      "facts": {
+        "consent_for_call_transfer": "அனுமதி தந்தது",
+        "health_insurance_interest": "மேலும் தெரிந்து கொள்ள விரும்பவில்லை",
+        "call_transfer_consent": "ஜி Madam call transfer கர்தோ",
+        "preferred_language": "Hindi",
+        "property_type": "அபார்ட்மெண்ட்",
+        "interested_area": "திருவென்னூர்",
+        "preferred_contact_method": "தொலைபேசி",
+        "agreed_to_visit": "ஆமாங்க வரோங்க",
+        "agent_greeting": "ஹலோ கார்த்திக்!",
+        "contact_method": "தொலைபேசி",
+        "scheduled_visit_date": "அடுத்த நாள்",
+        "scheduled_visit_time": "மாலை 2 மணி",
+        "preferred_visit_method": "நேரில்",
+        "preferred_visit_time": "மாலை 5:30",
+        "budget_range": "85 லேக்ஸ்",
+        "open_to_areas": "Red Hills, Madhavaram, Thiruninravur",
+        "looking_for": "apartment",
+        "looking_for_property_in": "Chennai",
+        "name": "கார்த்திக்",
+        "looking_for_property": "Chennai"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 12303,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "new 93",
+        "caller_number": "917971442376",
+        "date": "Wednesday, June 24, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 12  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: கார்த்திக் அடுத்த நாள் மாலை திருவென்னூரில் அபார்ட்மெண்ட் பார்வைக்குச் செல்லும் போது மேலும் தகவல் கேட்டு ஏதேனும் கேள்விகளைக் கேட்கலாம்.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• consent_for_call_transfer: அனுமதி தந்தது  [today]\n• health_insurance_interest: மேலும் தெரிந்து கொள்ள விரும்பவில்லை  [today]\n• call_transfer_consent: ஜி Madam call transfer கர்தோ  [today]\n• preferred_language: Hindi  [today]\n• property_type: அபார்ட்மெண்ட்  [today]\n• interested_"
+    },
+    "metadata": null
+  },
+  {
+    "id": 12304,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 12306,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "qwen",
+      "model": "qwen/qwen3-32b"
+    }
+  },
+  {
+    "id": 12307,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 12309,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "35026ba5-ac7e-4d6b-8285-52042bd55267"
+    }
+  },
+  {
+    "id": 12308,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:17.653Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "b152b933e134",
+      "promptLength": 14917,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 12  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: கார்த்திக் அடுத்த நாள் மாலை திருவென்னூரில் அபார்ட்மெண்ட் பார்வைக்குச் செல்லும் "
+    }
+  },
+  {
+    "id": 12315,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:18.756Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 12316,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:18.756Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஹலோ கார்த்திக்! உங்களைத் திருவென்னூரிலுள்ள அபார்ட்மெண்ட் ஒன்றை பார்க்க ஏற்பாடு செய்வதாக நேற்று பேசிய போது உங்களுடன் பேசினேனே! \nஇன்று இது தொடர்பாக ஏதாவது கேள்விகள் இருக்கின்றதா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 12328,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:28.353Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 9598,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 291838,
+      "textLength": 176,
+      "firstByteMs": 334
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 9598
+    }
+  },
+  {
+    "id": 12327,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:28.353Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 9120,
+      "turnNumber": 0,
+      "durationMs": 9598
+    }
+  },
+  {
+    "id": 12337,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:30.797Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "In the event வாத் காரா Madam",
+      "endDetectToFinalMs": 90,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12338,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:31.017Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 5:55 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 12  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: கார்த்திக் அடுத்த நாள் மாலை திருவென்னூரில் அபார்ட்மெண்ட் பார்வைக்குச் செல்லும் போது மேலும் தகவல் கேட்டு ஏதேனும் கேள்விகளைக் கேட்கலாம்.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• consent_for_call_transfer: அனுமதி தந்தது  [today]\n• health_insurance_interest: மேலும",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12341,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:31.475Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 460,
+      "turnNumber": 1,
+      "durationMs": 460
+    }
+  },
+  {
+    "id": 12343,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:31.573Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12342,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:31.573Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "[laughter]Aapke jaisa samajhdaar customer milta hai"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12344,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:31.626Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 460,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[laughter]Aapke jaisa samajhdaar customer milta hai, woh bahut kam log hote hai. Main Dhivya, main policyfy se..."
+    },
+    "metadata": {
+      "inputTokens": 5651,
+      "outputTokens": 44,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12350,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:33.930Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2356,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 69118,
+      "textLength": 51,
+      "firstByteMs": 153
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2356
+    }
+  },
+  {
+    "id": 12349,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:33.930Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2160,
+      "turnNumber": 1,
+      "durationMs": 2356
+    }
+  },
+  {
+    "id": 12351,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:33.930Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12352,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:33.930Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "woh bahut kam log hote hai. Main Dhivya, main policyfy se..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 12362,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:37.838Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3520,
+      "turnNumber": 1,
+      "durationMs": 3910
+    }
+  },
+  {
+    "id": 12363,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:37.838Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3908,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112640,
+      "textLength": 60,
+      "firstByteMs": 304
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3908
+    }
+  },
+  {
+    "id": 12378,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:40.672Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Achha ப்ரோ",
+      "endDetectToFinalMs": 84,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 12379,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:40.875Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 5:55 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 12  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: கார்த்திக் அடுத்த நாள் மாலை திருவென்னூரில் அபார்ட்மெண்ட் பார்வைக்குச் செல்லும் போது மேலும் தகவல் கேட்டு ஏதேனும் கேள்விகளைக் கேட்கலாம்.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• consent_for_call_transfer: அனுமதி தந்தது  [today]\n• health_insurance_interest: மேலும",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 12383,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:41.469Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 596,
+      "turnNumber": 2,
+      "durationMs": 596
+    }
+  },
+  {
+    "id": 12384,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:41.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 12385,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:41.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "[laughter]Main Dhivya, main policyfy se insuranse ke bare mein aapke saath baat kar rahi hoon. Aapke health ko protect karne wala insurance hain?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 12386,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:41.633Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 596,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[laughter]Main Dhivya, main policyfy se insuranse ke bare mein aapke saath baat kar rahi hoon. Aapke health ko protect karne wala insurance hain?"
+    },
+    "metadata": {
+      "inputTokens": 5709,
+      "outputTokens": 59,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 12403,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:48.814Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 7184,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 217598,
+      "textLength": 145,
+      "firstByteMs": 162
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 7184
+    }
+  },
+  {
+    "id": 12404,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:48.814Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6800,
+      "turnNumber": 2,
+      "durationMs": 7186
+    }
+  },
+  {
+    "id": 12409,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:52.496Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "insurance இருக்கு",
+      "endDetectToFinalMs": 146,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12410,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:52.700Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 5:55 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 12  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: கார்த்திக் அடுத்த நாள் மாலை திருவென்னூரில் அபார்ட்மெண்ட் பார்வைக்குச் செல்லும் போது மேலும் தகவல் கேட்டு ஏதேனும் கேள்விகளைக் கேட்கலாம்.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• consent_for_call_transfer: அனுமதி தந்தது  [today]\n• health_insurance_interest: மேலும",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12411,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:53.135Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 438,
+      "turnNumber": 3,
+      "durationMs": 438
+    }
+  },
+  {
+    "id": 12412,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:53.233Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12413,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:53.233Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Achha, aapki purani insurance policy ka naam bata sakte ho"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12414,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:53.261Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 438,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Achha, aapki purani insurance policy ka naam bata sakte ho, aur aapki policy renewal kab hai?"
+    },
+    "metadata": {
+      "inputTokens": 5773,
+      "outputTokens": 33,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12420,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:57.148Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3914,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117758,
+      "textLength": 58,
+      "firstByteMs": 168
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 3914
+    }
+  },
+  {
+    "id": 12419,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:57.148Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3680,
+      "turnNumber": 3,
+      "durationMs": 3915
+    }
+  },
+  {
+    "id": 12422,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:57.148Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12421,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:57.148Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "aur aapki policy renewal kab hai?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 12425,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:59.189Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2041,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 56318,
+      "textLength": 33,
+      "firstByteMs": 278
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 2041
+    }
+  },
+  {
+    "id": 12426,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:25:59.189Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1760,
+      "turnNumber": 3,
+      "durationMs": 2041
+    }
+  },
+  {
+    "id": 12428,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:06.860Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ICICI Lambo பாலிச என்ன ஆகுது Next month 25",
+      "endDetectToFinalMs": 67,
+      "mergedSegments": 4,
+      "pauseCount": 3
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12429,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:07.363Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "qwen/qwen3-32b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances.\n\n[CURRENT DATE & TIME] Wednesday, June 24, 2026 at 5:56 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: கார்த்திக்  |  Calls: 12  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: கார்த்திக் அடுத்த நாள் மாலை திருவென்னூரில் அபார்ட்மெண்ட் பார்வைக்குச் செல்லும் போது மேலும் தகவல் கேட்டு ஏதேனும் கேள்விகளைக் கேட்கலாம்.\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• consent_for_call_transfer: அனுமதி தந்தது  [today]\n• health_insurance_interest: மேலும",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12430,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:07.811Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 450,
+      "turnNumber": 4,
+      "durationMs": 450
+    }
+  },
+  {
+    "id": 12431,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:07.917Z",
+    "component": "LLM",
+    "provider": "qwen",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 450,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Thik hai, aapke ICICI Lombard health insurance mei aapko current koi shikayat hai?"
+    },
+    "metadata": {
+      "inputTokens": 5838,
+      "outputTokens": 32,
+      "model": "qwen/qwen3-32b",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12432,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:07.917Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12433,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:07.917Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thik hai, aapke ICICI Lombard health insurance mei aapko current koi shikayat hai?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12444,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:12.722Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4805,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 143358,
+      "textLength": 82,
+      "firstByteMs": 222
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 4805
+    }
+  },
+  {
+    "id": 12443,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:12.722Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4480,
+      "turnNumber": 4,
+      "durationMs": 4807
+    }
+  },
+  {
+    "id": 12466,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:23.525Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 4,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 12464,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:23.525Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12465,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:23.525Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप दोबारा कह सकते हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 12467,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:27.076Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3550,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 107520,
+      "textLength": 59,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 3550
+    }
+  },
+  {
+    "id": 12468,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:27.076Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3360,
+      "turnNumber": 4,
+      "durationMs": 3551
+    }
+  },
+  {
+    "id": 12469,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:36.937Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 12470,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:37.031Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/540"
+    }
+  },
+  {
+    "id": 12471,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:37.031Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/540"
+    }
+  },
+  {
+    "id": 12472,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:37.051Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "completed",
+        "reasonLabel": "Conversation completed",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Completed",
+        "durationSeconds": 79,
+        "turns": 4,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "ICICI Lambo பாலிச என்ன ஆகுது Next month 25",
+        "lastAgentResponse": "Thik hai, aapke ICICI Lombard health insurance mei aapko current koi shikayat hai?",
+        "recordingStatus": "saved",
+        "warningCount": 1,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 79,
+      "turns": 4,
+      "avgSttMs": 0,
+      "avgLlmMs": 486,
+      "avgTtsMs": 781
+    }
+  },
+  {
+    "id": 12473,
+    "callId": 540,
+    "agentId": 5,
+    "ts": "2026-06-24T12:26:37.872Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false
+    }
+  }
+]
