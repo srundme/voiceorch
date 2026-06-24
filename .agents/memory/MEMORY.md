@@ -39,3 +39,4 @@
 - [Webcall 2.0 thin adapter](webcall-pipeline-split.md) — browser webcall is a thin WS transport over the shared createSession/pipeline core; never re-fork conversation logic into webcall.ts
 - [Web-call mic capture anti-aliasing](webcall-capture-aliasing.md) — browser ignores requested 16k AudioContext rate; band-limit (biquad) before decimating to 16k or the caller channel buzzes
 - [AMD / voicemail-detection config shapes](amd-voicemail-config-shapes.md) — outbound AMD gates synchronously on the answer webhook; two agentConfig shapes normalized by resolveAmdConfig
+- [Identity relink targets](identity-relink-targets.md) — adding a user-scoped table? add it to IDENTITY_RELINK_TARGETS or account merges orphan that data; canonical id = bare Google sub

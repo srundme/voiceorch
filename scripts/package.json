@@ -8,6 +8,7 @@
     "push-migration-fix": "tsx ./src/push-to-github.ts",
     "seed-provider-pricing": "tsx ./src/seed-provider-pricing.ts",
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
+    "merge-user-identities": "tsx ./src/merge-user-identities.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
     "loadtest-calls": "tsx ./src/loadtest-calls.ts",
     "loadtest-api": "tsx ./src/loadtest-api.ts",

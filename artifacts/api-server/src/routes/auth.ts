@@ -14,7 +14,7 @@
 import { Router, type IRouter } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { db } from "@workspace/db";
+import { db, linkLegacyIdentitiesAtLogin } from "@workspace/db";
 import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSettingsTable } from "@workspace/db/schema";
 import { eq, and, isNull, gt, desc } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
@@ -488,35 +488,63 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       return;
     }
 
-    const googleSub = `google:${profile.sub}`;
+    // Canonical identity = the bare Google sub (no `google:` prefix). This is
+    // exactly what `attachSession` puts on `req.clerkUserId` and what every
+    // ownership-scoped query compares against, so the survivor row must be keyed
+    // this way. A prefixed form would be a third id format the app never matches.
+    const googleSub = profile.sub;
     const normalizedEmail = profile.email?.trim().toLowerCase() ?? null;
 
-    // Look up by google sub first
+    // Link any still-orphaned legacy data onto this Google identity. The
+    // Clerk→Google migration left pre-migration data owned by a legacy
+    // `user_…` row; merge it (and any duplicate rows) onto the canonical Google
+    // sub. Matching is by verified email (Google emails are verified, so this is
+    // safe). Shares the exact relink + wallet-merge logic the one-off
+    // `merge-user-identities` script uses, so they can never drift apart.
+    // Safe to run on every login: a no-op once consolidated.
+    if (normalizedEmail) {
+      try {
+        const linked = await linkLegacyIdentitiesAtLogin(db, {
+          email: normalizedEmail,
+          canonicalClerkId: googleSub,
+          name: profile.name,
+        });
+        if (linked.merged > 0) {
+          logger.info(
+            { email: normalizedEmail, merged: linked.merged, createdSurvivor: linked.createdSurvivor },
+            "Google Sign-In: linked legacy identities onto Google sub",
+          );
+        }
+      } catch (linkErr) {
+        logger.error({ linkErr, email: normalizedEmail }, "Google Sign-In: legacy identity link failed (continuing)");
+      }
+    }
+
+    // Look up by canonical google sub.
     let [user] = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.clerkId, googleSub));
 
     if (!user && normalizedEmail) {
-      // Check for existing email-based account with the same address
+      // Legacy/duplicate rows were merged above, so any remaining same-email row
+      // is a separate email+password account (kept as a parallel login method).
       const [emailUser] = await db
         .select()
         .from(usersTable)
         .where(eq(usersTable.email, normalizedEmail));
 
-      if (emailUser) {
-        if (!emailUser.passwordHash) {
-          // Pure Google-only or social user — adopt the google sub
-          await db
-            .update(usersTable)
-            .set({ clerkId: googleSub })
-            .where(eq(usersTable.id, emailUser.id));
-          user = { ...emailUser, clerkId: googleSub };
-          logger.info({ id: emailUser.id, email: normalizedEmail }, "Google Sign-In: migrated email account to google sub");
-        } else {
-          // Email+password account — create a separate google: row (both login methods allowed)
-          logger.info({ email: normalizedEmail }, "Google Sign-In: email+password account found; creating parallel google: entry");
-        }
+      if (emailUser && !emailUser.passwordHash) {
+        // Social-only account on a non-canonical id — adopt the canonical sub.
+        await db
+          .update(usersTable)
+          .set({ clerkId: googleSub })
+          .where(eq(usersTable.id, emailUser.id));
+        user = { ...emailUser, clerkId: googleSub };
+        logger.info({ id: emailUser.id, email: normalizedEmail }, "Google Sign-In: adopted canonical sub for social account");
+      } else if (emailUser) {
+        // Email+password account — create a separate google row (both login methods allowed).
+        logger.info({ email: normalizedEmail }, "Google Sign-In: email+password account found; creating parallel google entry");
       }
     }
 
