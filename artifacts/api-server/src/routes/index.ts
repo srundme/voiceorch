@@ -52,13 +52,11 @@ import metaRouter from "./meta.js";
 import callTransfersRouter from "./call-transfers.js";
 import billingRouter from "./billing.js";
 import utilsRouter from "./utils.js";
-import webcallNotifyRouter from "./webcall-notify.js";
 import voicesRouter from "./voices.js";
 import testToolRouter from "./test-tool.js";
 import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
 import docsRouter from "./docs.js";
-import webcallTicketRouter from "./webcall-ticket.js";
 import callbacksRouter from "./callbacks.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
@@ -135,11 +133,9 @@ router.use(userApiKeysRouter);
 router.use(metaRouter);
 router.use(callTransfersRouter);
 router.use(billingRouter);
-router.use(webcallNotifyRouter);
 router.use(testToolRouter);
 router.use(dispositionRouter);
 router.use(agentVersionsRouter);
-router.use(webcallTicketRouter);
 router.use(callbacksRouter);
 
 export default router;

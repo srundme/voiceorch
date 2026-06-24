@@ -5,9 +5,7 @@
  * Uses optimistic locking (status = "triggering") to prevent double-fires
  * in case multiple server instances are running.
  *
- * Two callback types:
- *  • toNumber starts with "webcall:" → push SSE notification to the browser
- *  • everything else → place an outbound telephony call
+ * Fires outbound telephony calls whose scheduledAt has passed.
  *
  * Auto-redial:
  *  After a no_answer call fires, if the outbound dial gets no response the
@@ -18,7 +16,6 @@
 import { db, scheduledCallbacksTable, agentsTable, providersTable } from "@workspace/db";
 import { and, eq, lte } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz } from "./telephony/dial.js";
-import { pushWebcallCallback } from "../services/webcall-notify.js";
 import { logger } from "../lib/logger.js";
 import { decryptKey } from "../lib/crypto.js";
 
@@ -72,26 +69,6 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
   try {
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, cb.agentId));
     if (!agent) throw new Error(`Agent ${cb.agentId} not found`);
-
-    // ── Webcall (browser) callback ─────────────────────────────────────────
-    if (cb.toNumber.startsWith("webcall:")) {
-      const userId = cb.userId ?? cb.toNumber.slice("webcall:".length);
-      pushWebcallCallback(userId, {
-        callbackId: cb.id,
-        agentId: cb.agentId,
-        agentName: agent.name,
-      });
-
-      await db.update(scheduledCallbacksTable)
-        .set({ status: "triggered", triggeredAt: new Date() })
-        .where(eq(scheduledCallbacksTable.id, cb.id));
-
-      logger.info(
-        { callbackId: cb.id, agentId: cb.agentId, userId },
-        "Webcall callback notified via SSE",
-      );
-      return;
-    }
 
     // ── Telephony (outbound phone call) callback ───────────────────────────
     const provider = agent.telephonyProvider.toLowerCase();

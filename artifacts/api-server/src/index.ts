@@ -17,8 +17,6 @@ import { startDpdpRetentionSweep } from "./services/dpdpRetention.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
-import { handleWebCallWebSocket } from "./orchestration/telephony/webcall.js";
-import { consumeTicket } from "./lib/webcall-ticket.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -82,7 +80,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const url = request.url ?? "";
 
   // Match /api/ws/<provider>/<agentId>[?pt=1]
-  const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
+  const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz)\/(\d+)/);
   if (!match) {
     socket.destroy();
     return;
@@ -102,55 +100,19 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     return;
   }
 
-  const provider          = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
+  const provider          = match[1] as "twilio" | "plivo" | "vobiz";
   const agentId           = parseInt(match[2]!, 10);
   const platformTelephony = url.includes("pt=1");
   const qs                = new URLSearchParams(url.split("?")[1] ?? "");
   const campaignLeadId    = qs.has("campaignLeadId") ? parseInt(qs.get("campaignLeadId")!, 10) : undefined;
   const vobizFrom         = qs.get("from") ?? undefined;
   const vobizTo           = qs.get("to")   ?? undefined;
-  // callerId: Clerk userId of the dashboard user initiating the webcall.
-  // Passed as ?callerId=<clerkId> so the callback poller can ring the right browser tab.
-  const callerId          = qs.get("callerId") ?? undefined;
-  const callbackId        = qs.has("callbackId") ? parseInt(qs.get("callbackId")!, 10) : undefined;
-  const promptVariables: Record<string, string> | undefined = qs.has("variables")
-    ? (() => { try { return JSON.parse(qs.get("variables")!) as Record<string, string>; } catch { return undefined; } })()
-    : undefined;
-
-  // ── Webcall ticket authentication ─────────────────────────────────────────
-  // Twilio/Plivo/VoBiz upgrades come from the telephony provider (server-to-server)
-  // and are not user-initiated — no ticket required for those providers.
-  //
-  // Webcall connections are initiated directly from a user's browser and MUST
-  // present a short-lived single-use ticket (issued via POST /api/webcall/ticket).
-  // Using a ticket instead of a raw JWT keeps the session token out of the WS
-  // URL and therefore out of server access logs.
-  //
-  // Ownership is already verified when the ticket is issued; we only need to
-  // consume it here. If consumption fails (expired, wrong agentId, already used)
-  // the upgrade is rejected.
-  //
-  // NOTE: platform-managed agents have userId = null and correctly fail ticket
-  // issuance. If public/demo agents are ever needed, add an explicit allow path
-  // (e.g. agent.webcallPublic flag or admin-role bypass) in webcall-ticket.ts.
-  if (provider === "webcall") {
-    const ticket = qs.get("ticket") ?? "";
-    const result = ticket ? consumeTicket(ticket, agentId) : null;
-    if (!result) {
-      logger.warn({ agentId, remoteIp }, "Webcall WebSocket rejected: missing, expired, or already-used ticket");
-      socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-  }
-
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url }, "WebSocket upgraded");
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                                      break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                                       break;
       case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo);              break;
-      case "webcall":  void handleWebCallWebSocket(ws, agentId, callerId, callbackId, promptVariables);                              break;
     }
   });
 })(); });

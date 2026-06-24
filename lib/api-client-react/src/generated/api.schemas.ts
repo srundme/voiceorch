@@ -4864,15 +4864,6 @@ export type CheckPasswordResetOtp200 = {
   ok: boolean;
 };
 
-export type CreateWebcallTicketBody = {
-  agentId: number;
-};
-
-export type CreateWebcallTicket200 = {
-  /** 64-hex-char single-use token, valid for 60 s */
-  ticket: string;
-};
-
 export type ListCallbacksParams = {
 status?: ListCallbacksStatus;
 reason?: ListCallbacksReason;

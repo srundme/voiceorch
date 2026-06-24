@@ -72,8 +72,6 @@ import {
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
-import { WebCallPanel } from "@/components/webcall-panel";
-
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
@@ -740,15 +738,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
         </div>
       </div>
 
-      {/* ── Right: Live Test panel ───────────────────────────────────────────── */}
-      <div className="w-[272px] shrink-0 flex flex-col min-h-0 bg-background/20">
-        <div className="px-4 py-3 border-b border-border/50 shrink-0 flex items-center gap-2">
-          <Mic className="h-3 w-3 text-primary" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-foreground/70">Live Test</span>
-          <span className="text-[10px] text-muted-foreground ml-auto">No phone needed</span>
-        </div>
-        <WebCallPanel agentId={agent.id} agentName={agent.name} compact agent={agent} />
-      </div>
 
     </div>
   );
@@ -2683,12 +2672,8 @@ const fmtDur = (s?: number | null) => {
 const csvEscape = (v: string) =>
   /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
-const isWebCall = (call: { toNumber?: string | null; fromNumber?: string | null }) =>
-  (call.toNumber ?? "").trim().startsWith("webcall") || call.fromNumber === "browser";
-
 function LogsTab({ agentId }: { agentId: number }) {
   const [statusFilter, setStatusFilter] = useState("all");
-  const [typeFilter,   setTypeFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
   const [startDate,    setStartDate]    = useState("");
   const [endDate,      setEndDate]      = useState("");
@@ -2704,11 +2689,6 @@ function LogsTab({ agentId }: { agentId: number }) {
   const filtered = useMemo(() => {
     let r = [...calls];
     if (statusFilter !== "all") r = r.filter(c => c.status === statusFilter);
-    if (typeFilter !== "all") {
-      r = r.filter(c =>
-        typeFilter === "webcall" ? isWebCall(c) : !isWebCall(c)
-      );
-    }
     if (search.trim()) {
       const q = search.toLowerCase();
       r = r.filter(c =>
@@ -2726,7 +2706,7 @@ function LogsTab({ agentId }: { agentId: number }) {
       r = r.filter(c => parseISO(c.createdAt).getTime() <= endMs);
     }
     return r;
-  }, [calls, statusFilter, typeFilter, search, startDate, endDate]);
+  }, [calls, statusFilter, search, startDate, endDate]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -2740,12 +2720,11 @@ function LogsTab({ agentId }: { agentId: number }) {
   const handleExport = () => {
     const header = ["Call Type", "Call ID", "Phone Number", "Status", "Start Time", "Duration", "Cost"];
     const rows = filtered.map(c => {
-      const isWeb = isWebCall(c);
       const costCents = c.costCents;
       return [
-        isWeb ? "Web Call" : "Live Call",
+        "Live Call",
         `#${c.id}`,
-        isWeb ? "" : (c.toNumber || c.fromNumber || ""),
+        c.toNumber || c.fromNumber || "",
         STATUS_LABELS[c.status] ?? c.status,
         format(parseISO(c.createdAt), "MMM d, yyyy h:mm a"),
         fmtDur(c.durationSeconds),
@@ -2777,17 +2756,6 @@ function LogsTab({ agentId }: { agentId: number }) {
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-
-        <Select value={typeFilter} onValueChange={v => { setTypeFilter(v); setPage(1); }}>
-          <SelectTrigger className="h-9 text-xs w-40 bg-background/50">
-            <SelectValue placeholder="All Call Types" />
-          </SelectTrigger>
-          <SelectContent position="popper">
-            <SelectItem value="all" className="text-xs">All Call Types</SelectItem>
-            <SelectItem value="webcall" className="text-xs">Web Call</SelectItem>
-            <SelectItem value="telephony" className="text-xs">Live Call</SelectItem>
-          </SelectContent>
-        </Select>
 
         <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
           <SelectTrigger className="h-9 text-xs w-40 bg-background/50">

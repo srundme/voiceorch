@@ -6,7 +6,7 @@ import {
   Filter, Calendar, Headphones, BarChart3, Download, X,
   ChevronDown, ChevronUp, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
-  UserCheck, Users, Globe, TrendingUp, Activity
+  UserCheck, Users, TrendingUp, Activity
 } from "lucide-react";
 import {
   useListCalls,
@@ -55,23 +55,6 @@ function getDispositionValues(
   return Object.entries(result)
     .filter(([k, v]) => !DISPOSITION_META_KEYS.has(k) && v != null && v !== "")
     .map(([, v]) => String(v));
-}
-
-function isWebCall(call: {
-  toNumber?: string | null;
-  fromNumber?: string | null;
-  metadata?: string | null;
-}): boolean {
-  if (call.toNumber === "webcall" || call.fromNumber === "browser") return true;
-  if (call.metadata) {
-    try {
-      const md = JSON.parse(call.metadata) as Record<string, unknown>;
-      if (md?.channel === "webcall") return true;
-    } catch {
-      /* ignore non-JSON metadata */
-    }
-  }
-  return false;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -531,17 +514,10 @@ export default function CallsList() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {isWebCall(call) ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-                            <Globe className="h-3 w-3" />
-                            Web Call
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
                             <Phone className="h-3 w-3" />
                             Live Call
                           </span>
-                        )}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={call.status} />

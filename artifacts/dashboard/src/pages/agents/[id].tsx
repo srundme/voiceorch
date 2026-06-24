@@ -32,8 +32,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
-import { WebCallPanel } from "@/components/webcall-panel";
-
 /* ── Caller Memory Tab ────────────────────────────────────────────────────── */
 
 interface CallerRow {
@@ -466,12 +464,7 @@ function CallerMemoryTab({ agentId }: { agentId: number }) {
 export default function AgentDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
-  // Support ?tab=test&autostart=1&callbackId=X URL params so the incoming-call notification
-  // can deep-link straight to the Test Call tab and instantly start a callback call.
-  const searchParams = new URLSearchParams(window.location.search);
-  const initialTab    = searchParams.get("tab") === "test" ? "test" : "overview";
-  const isAutostart   = searchParams.get("autostart") === "1";
-  const urlCallbackId = searchParams.get("callbackId") ? parseInt(searchParams.get("callbackId")!, 10) : undefined;
+  const initialTab    = "overview";
   const [activeTab, setActiveTab] = useState(initialTab);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
@@ -641,9 +634,6 @@ export default function AgentDetail() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0">
           <TabsTrigger value="overview"      className={tabClass}>Overview</TabsTrigger>
-          <TabsTrigger value="test"          className={tabClass}>
-            <Mic className="h-3.5 w-3.5 mr-1.5" />Test Call
-          </TabsTrigger>
           <TabsTrigger value="configuration" className={tabClass}>Configuration</TabsTrigger>
           <TabsTrigger value="calls"         className={tabClass}>Call History</TabsTrigger>
           <TabsTrigger value="memory"        className={tabClass}>
@@ -715,11 +705,6 @@ export default function AgentDetail() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* ── Test Call ── */}
-          <TabsContent value="test" className="m-0">
-            <WebCallPanel agentId={agent.id} agentName={agent.name} autostart={isAutostart} callbackId={urlCallbackId} agent={agent} />
           </TabsContent>
 
           {/* ── Configuration ── */}

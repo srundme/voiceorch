@@ -54,8 +54,6 @@ tags:
     description: Global search across leads, campaigns, batches, bookings, callbacks
   - name: pendrive
     description: Pendrive — caller memory API keys, archive, and context retrieval
-  - name: webcall
-    description: Browser-based test call management
   - name: auth
     description: Email+password authentication and password reset
 
@@ -5615,42 +5613,6 @@ paths:
           description: Invalid or expired OTP, missing fields, or password too short
         "500":
           description: Internal error
-
-  /webcall/ticket:
-    post:
-      operationId: createWebcallTicket
-      tags: [webcall]
-      summary: Issue a short-lived single-use ticket for a webcall WebSocket upgrade
-      description: >
-        Returns a 64-hex-char token valid for 60 seconds and usable exactly once.
-        The frontend passes it as ?ticket= on the WS URL so the session JWT never
-        appears in server access logs.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [agentId]
-              properties:
-                agentId:
-                  type: integer
-      responses:
-        "200":
-          description: Short-lived ticket
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [ticket]
-                properties:
-                  ticket:
-                    type: string
-                    description: 64-hex-char single-use token, valid for 60 s
-        "401":
-          description: No valid session
-        "403":
-          description: Agent not found or not owned by the authenticated user
 
   /callbacks:
     get:

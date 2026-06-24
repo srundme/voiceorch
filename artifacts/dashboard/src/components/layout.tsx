@@ -1,6 +1,5 @@
 import React, { useState, useEffect, Component } from "react";
 import { Link, useLocation } from "wouter";
-import { IncomingCallNotification } from "@/components/incoming-call-notification";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
   Monitor, Users, Zap, CalendarDays, Brain, Phone,
@@ -506,7 +505,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      <IncomingCallNotification />
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
