@@ -1,0 +1,68 @@
+---
+title: How to control response randomness with `temperature`
+description: Controls how random or deterministic the model's responses will be.
+---
+The `temperature` parameter controls **how random or deterministic** the model's responses will be.
+
+**Range:** `0` to `2`  
+**Default:** `0.2`
+
+- **Lower temperature** → more focused, predictable answers (e.g. `0.2`)
+- **Higher temperature** → more creative, varied responses (e.g. `0.8` or `1.0`)
+
+👉 **Tip**: For most use cases, values between `0.2` and `0.8` give good results.  
+
+### How it works:
+
+|  **Mode**              | **Recommended `temperature`** | **Behavior**                        |
+|-----------------------|-------------------------------|-------------------------------------|
+| Non-thinking mode     | `0.2` _(default)_              | Straightforward, factual responses   |
+| Thinking mode         | `0.5` or higher                | Deeper reasoning, more exploration   |
+| Highly creative       | `0.8` - `1.0`                  | Storytelling, brainstorming, poetry  |
+| Very random / playful | `> 1.0`                        | Unexpected, experimental output      |
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 1: Using default temperature (0.2) — straightforward, factual response
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain the concept of gravity."}
+    ],
+    # temperature is not specified → uses default 0.2
+)
+
+print(response.choices[0].message.content)
+```
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 2: Using temperature = 0.9 — more creative, varied response
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a creative storyteller."},
+        {"role": "user", "content": "Tell me a story about a magical tiger."}
+    ],
+    temperature=0.9  # More creative storytelling
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

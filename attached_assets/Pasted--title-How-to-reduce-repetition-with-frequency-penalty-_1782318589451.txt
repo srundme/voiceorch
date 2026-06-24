@@ -1,0 +1,61 @@
+---
+title: How to reduce repetition with `frequency_penalty`
+description: Helps you control how often the model repeats words or phrases
+---
+
+The `frequency_penalty` parameter helps you **control how often the model repeats words or phrases**.
+
+- **Positive values** → penalize tokens that have already appeared → model is **less likely to repeat itself**.
+- **Negative values** → encourage more repetition (rarely used).
+
+### How it works:
+
+- After each token is generated, the model adjusts the probability of generating the **same tokens again**, based on how often they have already been used.
+- This helps you create **more varied and natural-sounding text**.
+
+---
+
+### Parameter details:
+
+| Parameter            | Type    | Range              | Default |
+|----------------------|---------|--------------------|---------|
+| `frequency_penalty`  | Double  | -2.0 to 2.0        | 0.0     |
+
+---
+
+### When to use `frequency_penalty`:
+
+| Scenario                                  | Suggested Value |
+|-------------------------------------------|-----------------|
+| Model is repeating itself too much        | 0.5 to 1.0      |
+| Long-form content, essays, articles       | 0.5 to 1.0      |
+| Dialogue-heavy apps (avoid echoing user)  | 0.5 to 1.0      |
+| Want creative, varied phrasing            | 0.5 to 1.5      |
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example: Apply frequency_penalty to avoid repetition
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a travel blogger assistant."},
+        {"role": "user", "content": "Write a paragraph about the beaches of Goa."}
+    ],
+    frequency_penalty=1.0  # Reduce repetitive phrases
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

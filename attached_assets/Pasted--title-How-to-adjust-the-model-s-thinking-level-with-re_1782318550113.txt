@@ -1,0 +1,96 @@
+---
+title: How to adjust the model's thinking level with `reasoning_effort`
+description: controls **how much effort the model puts into reasoning.
+---
+
+The `reasoning_effort` parameter controls **how much effort the model puts into reasoning and planning its response**.
+
+- Higher effort → more thoughtful, step-by-step, or structured answers  
+- Lower effort → faster, simpler replies  
+
+---
+
+### Allowed values:
+
+| **Value**   | **Behavior**                                    |
+|-------------|-------------------------------------------------|
+| `"low"`     | Quick, simple replies                           |
+| `"medium"`  | Balanced depth and speed (**default value**)    |
+| `"high"`    | More detailed reasoning and structured answers   |
+| `None`      | Disables reasoning completely                    |
+
+---
+### 💡 Tips:
+
+- Use `"low"` when you want **short, direct responses**.
+- Use `"medium"` for **balanced performance** (this is the default).
+- Use `"high"` for tasks like **explanations, problem solving, reasoning**.
+- Use `None` to **completely disable reasoning** when you want the fastest possible responses.
+
+**Note:**  
+- Setting higher reasoning effort may **increase response time** slightly, since the model is thinking more.
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 1: Using default reasoning_effort (not specified) — defaults to "medium"
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Summarize the story of the Ramayana."}
+    ],
+    # reasoning_effort not specified → defaults to "medium"
+)
+
+print(response.choices[0].message.content)
+```
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 2: Using reasoning_effort = "high" — more detailed, thoughtful response
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Summarize the story of the Ramayana."}
+    ],
+    reasoning_effort="high"
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 3: Disabling reasoning completely with reasoning_effort = None
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What is the capital of India?"}
+    ],
+    reasoning_effort=None  # Disables reasoning for fastest response
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

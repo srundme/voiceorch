@@ -1,0 +1,70 @@
+---
+title: How to control response diversity with `top_p`
+description: Method used to generate text by limiting the possibilities of the next word
+---
+
+The `top_p` parameter controls **how much of the probability space** the model uses when selecting the next word — this is called **nucleus sampling**.
+
+**Range:** `0` to `1`  
+**Default:** `1.0`
+
+- Lower `top_p` → model chooses from a **smaller set of highly likely words** → more focused
+- Higher `top_p` → model chooses from a **broader set of words** → more diverse
+
+---
+
+### When to use:
+
+| **`top_p` value** | **Behavior**                           |
+|-------------------|----------------------------------------|
+| `0.1`             | Very focused, only top 10% words used   |
+| `0.3`             | Controlled diversity                   |
+| `0.5`             | Balanced creativity and accuracy       |
+| `0.8 - 1.0`       | Very creative, open-ended responses     |
+| `1.0` (default)   | Full probability space used             |
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 1: Using default top_p (1.0) — full probability space (diverse response)
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What is the capital of France?"}
+    ],
+    # top_p is not specified → uses default 1.0
+)
+
+print(response.choices[0].message.content)
+```
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 2: Using top_p = 0.3 — more focused, controlled response
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a creative storyteller."},
+        {"role": "user", "content": "Tell me a story about a magical tiger."}
+    ],
+    top_p=0.3
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

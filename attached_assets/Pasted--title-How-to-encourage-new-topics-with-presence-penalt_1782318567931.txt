@@ -1,0 +1,61 @@
+---
+title: How to encourage new topics with `presence_penalty`
+description: Helps you steer the model toward introducing new concepts or topics.
+---
+
+The `presence_penalty` parameter helps you **steer the model toward introducing new concepts or topics**, instead of sticking to the same words.
+
+- **Positive values** → penalize tokens that have already appeared → model becomes **more likely to explore new ideas**.
+- **Negative values** → encourage staying on the same topic (rarely used).
+
+### How it works:
+
+- As the model generates text, it tracks which tokens have already been used.
+- Higher `presence_penalty` nudges the model to **shift away from familiar tokens**, helping it bring in **new topics or angles**.
+
+---
+
+### Parameter details:
+
+| Parameter            | Type    | Range              | Default |
+|----------------------|---------|--------------------|---------|
+| `presence_penalty`   | Double  | -2.0 to 2.0        | 0.0     |
+
+---
+
+### When to use `presence_penalty`:
+
+| Scenario                                  | Suggested Value |
+|-------------------------------------------|-----------------|
+| You want the model to introduce **new topics** | 0.5 to 1.0      |
+| Avoid getting stuck on the same subject    | 0.5 to 1.0      |
+| Brainstorming ideas                       | 1.0 to 1.5      |
+| Writing **diverse, exploratory content**   | 0.5 to 1.5      |
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example: Encourage model to introduce new ideas
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a creative brainstorming assistant."},
+        {"role": "user", "content": "Suggest some ideas for eco-friendly products."}
+    ],
+    presence_penalty=1.0  # Encourage exploration of new ideas
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

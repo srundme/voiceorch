@@ -1,0 +1,58 @@
+---
+title: How to improve factual accuracy with `wiki_grounding`
+description: Model uses a RAG based approach to retrieve relevant chunks from Wikipedia.
+---
+
+If `wiki_grounding` is enabled, the model uses a **RAG (Retrieval-Augmented Generation)** approach:
+
+- It retrieves **relevant chunks from Wikipedia** based on the user's question.
+- It then **uses those chunks** to ground its answer — making the response more accurate and fact-based.
+
+---
+
+### What is RAG?
+
+**RAG** = Retrieval-Augmented Generation.
+
+Instead of only relying on the model's internal knowledge (which can be outdated or incomplete), RAG allows the model to:
+1. **Look up** external data sources (in this case, Wikipedia)
+2. **Condition its response** on those sources
+
+### Why enable `wiki_grounding`?
+
+| **When to use**                           | **Benefit**                        |
+|--------------------------------------------|------------------------------------|
+| Factual Q&A                                | Improves accuracy                  |
+| Educational content                        | Provides verified explanations     |
+| "What is X?" or "Explain Y" type questions | Uses up-to-date info from Wikipedia |
+| Historical or scientific queries           | Reduces hallucination              |
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example: Using wiki_grounding to improve factual accuracy
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a knowledgeable history professor."},
+        {"role": "user", "content": "Who was the first woman to win a Nobel Prize?"}
+    ],
+    wiki_grounding=True,
+    reasoning_effort="high",
+    temperature=0.3
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

@@ -1,0 +1,80 @@
+---
+title: How to list your chat messages
+description: Defines your entire conversation.
+---
+
+The `messages` parameter defines your entire conversation so far — this is how you "teach" the model what has happened in the chat.
+
+Each message is an object with two fields:
+
+| **Key**    | **Value**                                    |
+|------------|----------------------------------------------|
+| `role`     | `"system"`, `"user"`, or `"assistant"`       |
+| `content`  | The message text (string)                    |
+
+###  Why is this important?
+
+- The model uses the conversation history to generate **context-aware replies**.
+- The order of the messages matters — the model reads them **top to bottom**.
+- Including previous assistant responses helps the model maintain **coherence** and **memory**.
+
+### Roles explained:
+
+- **`system`**  (Optional, but Recommended)  
+  Sets initial behavior, tone, or instructions for the assistant.  
+  _Example:_ `"You are a helpful assistant."`
+
+- **`user`**  (Required)  
+  Represents questions, requests, or inputs from the user.  
+  _Example:_ `"Tell me about Indian classical music."`
+
+- **`assistant`**  (Optional, only for context in multi-turn)  
+  Contains previous replies from the model, which help it stay consistent in tone and content.  
+  _Example:_ `"Indian classical music is one of the oldest musical traditions..."`
+
+### Example: Listing messages in a conversation
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 1: Default example - single "user" message which is required (no prior context)
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "user", "content": "Hey, what is the capital of India?"}
+    ],
+)
+
+print(response.choices[0].message.content)
+```
+
+```python
+# Example 2: Multi-turn example — maintaining conversation context
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell me about Indian classical music."},
+        {"role": "assistant", "content": "Indian classical music is one of the oldest musical traditions in the world, with roots in ancient texts like the Natya Shastra."},
+        {"role": "user", "content": "What are the two main styles?"}
+    ],
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```
