@@ -1858,17 +1858,31 @@ function VoicemailTab({ form }: { form: any }) {
             </FormItem>
           )} />
           {action === "leave_message" && (
-            <FormField control={form.control} name="voicemailMessage" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Voicemail Message</FormLabel>
-                <FormControl>
-                  <Textarea className="min-h-[100px] text-sm resize-none"
-                    placeholder="Hello, we tried to reach you. Please call us back at your earliest convenience." {...field} />
-                </FormControl>
-                <FormDescription className="text-[10px]">Spoken via TTS into the voicemail recording.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <>
+              <FormField control={form.control} name="voicemailMessage" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Voicemail Message</FormLabel>
+                  <FormControl>
+                    <Textarea className="min-h-[100px] text-sm resize-none"
+                      placeholder="Hello, we tried to reach you. Please call us back at your earliest convenience." {...field} />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">Spoken via TTS into the voicemail recording.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="voicemailLeadInSeconds" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Lead-in Pause (seconds)</FormLabel>
+                  <FormControl>
+                    <Input type="number" min={0} max={15} step={1} className="h-9 text-sm"
+                      value={field.value ?? 2}
+                      onChange={e => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">Wait this long before speaking so the machine's greeting and beep finish first — the whole message gets recorded. Default 2s.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </>
           )}
         </>
       )}
@@ -4520,6 +4534,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+      voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, recordingEnabled: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
@@ -4579,6 +4594,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode ?? "disabled") as AgentFormValues["machineDetectionMode"],
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction ?? "hangup") as AgentFormValues["voicemailAction"],
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+      voicemailLeadInSeconds:   (agent as any).agentConfig?.voicemailLeadInSeconds ?? 2,
       tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
@@ -4645,6 +4661,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         machineDetectionMode:     "voicemail",
         voicemailAction:          "voicemail",
         voicemailMessage:         "voicemail",
+        voicemailLeadInSeconds:   "voicemail",
         systemPrompt:             "prompt",
         temperature:              "prompt",
         greetingMessage:          "overview",

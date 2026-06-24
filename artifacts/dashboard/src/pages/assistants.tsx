@@ -422,6 +422,7 @@ type AgentCfg = {
   voicemailDetection?: boolean;
   voicemailAction?: "hangup" | "leave_message" | "continue";
   voicemailMessage?: string;
+  voicemailLeadInSeconds?: number;
   machineDetectionMode?: "Enable" | "DetectMessageEnd";
   // P2-C: Call Recording
   recordingEnabled?: boolean;
@@ -2634,7 +2635,10 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       </Select>
                     </div>
                   </div>
-                  {cfg.voicemailAction === "leave_message" && <div><p className="text-xs text-muted-foreground mb-1">Voicemail message</p><Textarea value={cfg.voicemailMessage ?? ""} onChange={e => setCfg({ voicemailMessage: e.target.value })} placeholder="Hi, this is a message from…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>}
+                  {cfg.voicemailAction === "leave_message" && <>
+                    <div><p className="text-xs text-muted-foreground mb-1">Voicemail message</p><Textarea value={cfg.voicemailMessage ?? ""} onChange={e => setCfg({ voicemailMessage: e.target.value })} placeholder="Hi, this is a message from…" rows={2} className="bg-card border-border text-foreground text-xs resize-none placeholder:text-muted-foreground" /></div>
+                    <div><p className="text-xs text-muted-foreground mb-1">Lead-in pause (seconds)</p><Input type="number" min={0} max={15} step={1} value={cfg.voicemailLeadInSeconds ?? 2} onChange={e => setCfg({ voicemailLeadInSeconds: e.target.value === "" ? undefined : Number(e.target.value) })} className="h-7 text-xs bg-card border-border text-foreground placeholder:text-muted-foreground" /><p className="text-[10px] text-muted-foreground mt-1">Wait before speaking so the machine's greeting and beep finish first — the whole message gets recorded. Default 2s.</p></div>
+                  </>}
                 </>}
               </div>
               <div className="bg-muted border border-border/40 rounded-xl p-4 space-y-4">

@@ -247,6 +247,11 @@ function escapeXml(s: string): string {
 const DEFAULT_VOICEMAIL_MESSAGE =
   "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.";
 
+// Lead-in pause (seconds) before speaking the voicemail message so the answering
+// machine's outgoing greeting + record beep finish first and the whole message
+// is captured. Configurable per agent via `voicemailLeadInSeconds`.
+const DEFAULT_VOICEMAIL_LEAD_IN_SECONDS = 2;
+
 type AmdResult = "human" | "machine" | "unknown";
 
 /**
@@ -286,11 +291,22 @@ async function persistAmdResult(providerCallId: string, result: AmdResult): Prom
  * `speakTag` is "Say" (Twilio TwiML) or "Speak" (Plivo/Vobiz XML).
  * Returns null for the "continue" action (caller should open the stream anyway).
  */
-function buildVoicemailXml(action: string, message: string, speakTag: "Say" | "Speak"): string | null {
+function buildVoicemailXml(
+  action: string,
+  message: string,
+  speakTag: "Say" | "Speak",
+  leadInSeconds = DEFAULT_VOICEMAIL_LEAD_IN_SECONDS,
+): string | null {
   if (action === "continue") return null;
   if (action === "leave_message") {
     const text = message && message.trim() ? message : DEFAULT_VOICEMAIL_MESSAGE;
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <${speakTag}>${escapeXml(text)}</${speakTag}>\n  <Hangup/>\n</Response>`;
+    // Pause before speaking so the machine's greeting + beep complete first and
+    // the entire message lands in the recording. Twilio TwiML uses <Pause>,
+    // Plivo/Vobiz XML uses <Wait>.
+    const seconds = Math.max(0, Math.round(leadInSeconds));
+    const waitTag = speakTag === "Say" ? "Pause" : "Wait";
+    const lead = seconds > 0 ? `\n  <${waitTag} length="${seconds}"/>` : "";
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>${lead}\n  <${speakTag}>${escapeXml(text)}</${speakTag}>\n  <Hangup/>\n</Response>`;
   }
   // "hangup" (default)
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Hangup/>\n</Response>`;
@@ -330,7 +346,11 @@ async function applyAmdGate(opts: {
   }
   const action  = (cfg["voicemailAction"]  as string | undefined) ?? "hangup";
   const message = (cfg["voicemailMessage"] as string | undefined) ?? DEFAULT_VOICEMAIL_MESSAGE;
-  const xml = buildVoicemailXml(action, message, speakTag);
+  const leadInRaw = cfg["voicemailLeadInSeconds"];
+  const leadIn = typeof leadInRaw === "number" && Number.isFinite(leadInRaw)
+    ? leadInRaw
+    : DEFAULT_VOICEMAIL_LEAD_IN_SECONDS;
+  const xml = buildVoicemailXml(action, message, speakTag, leadIn);
   if (xml === null) return false; // "continue" → fall through and open the stream
   res.set("Content-Type", "text/xml").send(xml);
   return true;

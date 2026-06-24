@@ -45,6 +45,7 @@ export const agentFormSchema = z.object({
   machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
   voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
   voicemailMessage:       z.string().optional(),
+  voicemailLeadInSeconds: z.number().min(0).max(15).optional(),
   tools: z.array(z.object({
     type: z.enum(["call_transfer", "webhook", "send_sms", "end_call", "cal_com", "native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel", "transfer_cold", "transfer_warm", "transfer_agent"]),
     name: z.string().optional(),

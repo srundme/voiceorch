@@ -61,7 +61,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames,
-    timezone, autoSwitchToEnglish, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
@@ -85,6 +85,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (machineDetectionMode && machineDetectionMode !== "disabled") agentConfig["machineDetectionMode"] = machineDetectionMode;
   if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
+  if (voicemailLeadInSeconds != null && voicemailLeadInSeconds !== 2) agentConfig["voicemailLeadInSeconds"] = voicemailLeadInSeconds;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
@@ -315,6 +316,7 @@ export default function AgentEdit() {
       autoSwitchToEnglish: false,
       machineDetectionMode: "disabled", voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+      voicemailLeadInSeconds: 2,
       tools: [],
       genderDetectionEnabled: false,
       recordingEnabled: false,
@@ -1229,16 +1231,30 @@ export default function AgentEdit() {
                     </FormItem>
                   )} />
                   {form.watch("voicemailAction") === "leave_message" && (
-                    <FormField control={form.control} name="voicemailMessage" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Voicemail Message</FormLabel>
-                        <FormControl>
-                          <Textarea className="min-h-[80px] text-sm" placeholder="Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you." {...field} />
-                        </FormControl>
-                        <FormDescription className="text-[11px]">This text is spoken via TTS into the voicemail recording.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <>
+                      <FormField control={form.control} name="voicemailMessage" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Voicemail Message</FormLabel>
+                          <FormControl>
+                            <Textarea className="min-h-[80px] text-sm" placeholder="Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you." {...field} />
+                          </FormControl>
+                          <FormDescription className="text-[11px]">This text is spoken via TTS into the voicemail recording.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="voicemailLeadInSeconds" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Lead-in Pause (seconds)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} max={15} step={1}
+                              value={field.value ?? 2}
+                              onChange={e => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
+                          </FormControl>
+                          <FormDescription className="text-[11px]">Wait this long before speaking so the machine's greeting and beep finish first — the whole message gets recorded. Default 2s.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </>
                   )}
                 </>
               )}
