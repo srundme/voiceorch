@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { diffWords, diffWordsWithSpace } from "diff";
 import { useLocation, useParams } from "wouter";
 import {
-  Bot, Plus, Search, Phone, Mic, Brain, Zap, Webhook, PhoneForwarded,
+  Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
   Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
@@ -707,9 +707,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">System Prompt</span>
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 px-3">
-                <Zap className="h-3 w-3" /> Generate
-              </Button>
             </div>
             <FormField control={form.control} name="systemPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
