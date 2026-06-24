@@ -3063,12 +3063,14 @@ export async function handleWebCallWebSocket(
 
       let greetingText = "";
 
-      // For returning callers, prefer a memory-informed (recognition-style)
-      // opening generated from the memory-injected system prompt over the static
-      // scripted greeting — otherwise the agent would re-introduce itself cold.
+      // When a greeting message is configured, always use it (with prompt-variable
+      // injection) for BOTH first-time and returning callers, so injected vars like
+      // {{name}} are reliable on the opening line. Only fall back to the
+      // memory-informed LLM-generated opening when no greeting message is set.
+      // Callbacks are exempted: they keep their dedicated LLM callback opening.
       const isReturningCaller = (webcallProfile?.callCount ?? 0) >= 1;
 
-      if (agent.greetingMessage && !isReturningCaller) {
+      if (agent.greetingMessage && !callbackId) {
         // Fast path — use configured greeting directly.
         // First resolve prompt variables (e.g. {{customer_name}}) using the SAME
         // map and precedence as the system prompt, so the greeting addresses the
