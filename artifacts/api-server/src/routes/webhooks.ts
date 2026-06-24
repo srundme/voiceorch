@@ -329,8 +329,13 @@ async function applyAmdGate(opts: {
   result: AmdResult | null;
   speakTag: "Say" | "Speak";
   preloadedCfg?: Record<string, unknown>;
+  /** When provided AND the configured action is "leave_message", this builder's XML
+   *  is returned instead of the static blind-timer voicemail XML. Used by Vobiz to
+   *  open a media stream and deliver the full message after the greeting ends
+   *  (acoustic cue) rather than overlapping the greeting on a fixed timer. */
+  buildVoicemailStreamXml?: () => string;
 }): Promise<boolean> {
-  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg } = opts;
+  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg, buildVoicemailStreamXml } = opts;
   if (result === null) return false; // AMD not requested — no behaviour change
   await persistAmdResult(providerCallId, result);
   log.info({ agentId, providerCallId, amdResult: result }, "AMD result on answer webhook");
@@ -346,6 +351,16 @@ async function applyAmdGate(opts: {
   }
   const action  = (cfg["voicemailAction"]  as string | undefined) ?? "hangup";
   const message = (cfg["voicemailMessage"] as string | undefined) ?? DEFAULT_VOICEMAIL_MESSAGE;
+
+  // Acoustic voicemail delivery (Vobiz): open the media stream and speak the full
+  // message once the machine's greeting ends, instead of a blind <Wait> timer that
+  // overlaps the greeting and only records the message tail.
+  if (action === "leave_message" && buildVoicemailStreamXml) {
+    log.info({ agentId, providerCallId, action, mode: "stream-voicemail" }, "AMD machine — opening voicemail-delivery stream");
+    res.set("Content-Type", "text/xml").send(buildVoicemailStreamXml());
+    return true;
+  }
+
   const leadInRaw = cfg["voicemailLeadInSeconds"];
   const leadIn = typeof leadInRaw === "number" && Number.isFinite(leadInRaw)
     ? leadInRaw
@@ -421,15 +436,24 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     .where(eq(agentsTable.id, agentId));
   const cfg = (agent?.agentConfig ?? {}) as Record<string, unknown>;
 
+  const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
+  const inboundFrom = String(req.body?.From ?? req.body?.from ?? "").trim() || undefined;
+  const inboundTo   = String(req.body?.To   ?? req.body?.to   ?? "").trim() || undefined;
+
   // ── AMD gating ───────────────────────────────────────────────────────────
   // Synchronous AMD (Vobiz Plivo-compatible API): the machine flag is delivered
   // on this answer request. Branch before queue/IVR or opening the AI stream.
+  // For action="leave_message" we open a voicemail-delivery media stream (vm=1)
+  // so the full message is recorded after the greeting ends, not on a blind timer.
   const amdHandled = await applyAmdGate({
     res, log: req.log, agentId,
     providerCallId: String(req.body?.CallUUID ?? req.body?.call_uuid ?? ""),
     result: parseMachineFlag(req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine),
     speakTag: "Speak",
     preloadedCfg: cfg,
+    buildVoicemailStreamXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
+      campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true,
+    }),
   });
   if (amdHandled) return;
 
@@ -468,9 +492,6 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     return;
   }
 
-  const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
-  const inboundFrom = String(req.body?.From ?? req.body?.from ?? "").trim() || undefined;
-  const inboundTo   = String(req.body?.To   ?? req.body?.to   ?? "").trim() || undefined;
   // Cancel pending auto-redials when the caller rings us first (they're reachable)
   if (inboundFrom) void cancelPendingRedials(agentId, inboundFrom);
   res.set("Content-Type", "text/xml").send(

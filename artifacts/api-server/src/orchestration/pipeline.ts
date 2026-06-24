@@ -110,6 +110,16 @@ const TELEPHONY_TAIL_DRAIN_MS = 800;    // After the final utterance fully strea
                                          // Sending real silence (not just sleeping) is critical for
                                          // Vobiz — a passive sleep lets Vobiz detect "no audio" and
                                          // close its playout window early, clipping the last words.
+// ── Voicemail-delivery (Vobiz AMD leave_message) tunables ──────────────────────
+// When the answer webhook detects a machine, we open the media stream and listen
+// to the machine's outgoing greeting. The message is spoken once the greeting ends
+// (sustained silence ≈ the record beep) so the recipient's machine records it in
+// full. Env-overridable to tune against real recordings.
+const VOICEMAIL_GREETING_END_SILENCE_MS =
+  Number(process.env["VOICEMAIL_GREETING_END_SILENCE_MS"]) || 800;  // silence after speech = end-of-greeting
+const VOICEMAIL_MAX_WAIT_MS =
+  Number(process.env["VOICEMAIL_MAX_WAIT_MS"]) || 12000;            // fallback: speak anyway after this long
+const VOICEMAIL_GREETING_ENERGY_THRESHOLD = 300;                    // RMS bar for "machine is speaking its greeting"
 const KB_CONTEXT_RACE_MS      = 200;    // Max time the turn waits for KB-context retrieval before
                                          // starting the LLM. If the prefetch is slower than this, the
                                          // turn proceeds with whatever context resolved (possibly none)
@@ -190,6 +200,13 @@ export class OrchestrationPipeline {
   // back to us as "caller audio" (sidetone / echo).  Without this hold, the
   // echo triggers barge-in within 200 ms and the caller never hears anything.
   private bargeInHoldUntil = 0;
+
+  // Voicemail-delivery mode (Vobiz AMD leave_message). When set, the conversation
+  // pipeline is bypassed: inbound audio only drives greeting-end detection and
+  // deliverVoicemail() speaks the configured message once the machine's greeting ends.
+  private readonly voicemailDelivery: { message: string; postSilenceMarginMs?: number; maxWaitMs?: number } | null;
+  private vmHeardSpeech = false;   // true once the machine's greeting has been heard
+  private vmLastSpeechAt = 0;      // ms timestamp of the last energetic (greeting) frame
 
   // P1-D: Per-agent VAD / barge-in settings (set from agent config in constructor)
   private readonly vadSilenceMs: number;
@@ -290,6 +307,7 @@ export class OrchestrationPipeline {
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
+    this.voicemailDelivery = config.voicemailDelivery ?? null;
     this.bargeInCallback = config.onBargeIn ?? null;
     // P1-D: Per-agent VAD / barge-in tuning
     this.vadSilenceMs           = config.agentConfig.vadSilenceMs;
@@ -679,6 +697,16 @@ export class OrchestrationPipeline {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
+    // Voicemail-delivery mode: inbound audio is the answering machine's outgoing
+    // greeting, NOT a conversation. Drive greeting-end detection only and skip the
+    // STT / conversation path entirely (no streamSTT is ever opened).
+    if (this.voicemailDelivery) {
+      if (hasSpeechEnergy(pcm8k, VOICEMAIL_GREETING_ENERGY_THRESHOLD)) {
+        this.vmHeardSpeech = true;
+        this.vmLastSpeechAt = Date.now();
+      }
+      return;
+    }
     processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
@@ -919,6 +947,90 @@ export class OrchestrationPipeline {
     } finally {
       this.isProcessing = false;
     }
+  }
+
+  // ── Voicemail delivery (Vobiz AMD leave_message) ──────────────────────────────
+
+  /**
+   * Voicemail-delivery mode entry point — used INSTEAD of greet() when the answer
+   * webhook detected an answering machine and the agent's voicemailAction is
+   * "leave_message". The conversation pipeline is NOT run.
+   *
+   * Flow:
+   *   1. Stream comfort-noise silence to Vobiz while we listen (Vobiz drops the call
+   *      after ~2 s of no outbound audio, so we MUST keep emitting frames).
+   *   2. Detect end-of-greeting acoustically: once the machine's greeting has been
+   *      heard (inbound VAD energy), wait for a sustained silence gap (≈ the record
+   *      beep) before speaking. A maxWait fallback fires if no greeting/end is heard
+   *      (e.g. a silent or beep-only machine) so the message is never dropped.
+   *   3. Speak the configured message ONCE in full, drain the carrier's playout
+   *      buffer so the final words aren't clipped, then hang up.
+   *
+   * This replaces the old blind-timer XML (`<Wait>`+`<Speak>`) that overlapped the
+   * greeting and only recorded the message tail.
+   */
+  async deliverVoicemail(): Promise<void> {
+    const vd = this.voicemailDelivery;
+    if (!vd || this.closed) return;
+    const margin  = vd.postSilenceMarginMs ?? VOICEMAIL_GREETING_END_SILENCE_MS;
+    const maxWait = vd.maxWaitMs ?? VOICEMAIL_MAX_WAIT_MS;
+
+    // 20 ms comfort-noise frame, sized to the negotiated output format.
+    const FRAME_MS    = 20;
+    const FRAME_BYTES = this.config.rawPcmOutput ? FRAME_MS * 8 * 2 : FRAME_MS * 8;
+    const silenceFrame = Buffer.alloc(FRAME_BYTES, 0);
+
+    const startedAt = Date.now();
+    logger.info(
+      { callId: this.config.callId, marginMs: margin, maxWaitMs: maxWait },
+      "Voicemail delivery: listening for the machine greeting to end before speaking",
+    );
+
+    let trigger: "greeting-end" | "max-wait" = "max-wait";
+    let nextTick = Date.now() + FRAME_MS;
+    while (!this.closed) {
+      // Keep the Vobiz audio bridge alive while we wait silently.
+      this.config.onAudioOut(silenceFrame);
+      const now = Date.now();
+      if (this.vmHeardSpeech && (now - this.vmLastSpeechAt) >= margin) { trigger = "greeting-end"; break; }
+      if (now - startedAt >= maxWait) { trigger = "max-wait"; break; }
+      const delay = Math.max(0, nextTick - now);
+      nextTick += FRAME_MS;
+      await new Promise<void>((r) => setTimeout(r, delay));
+    }
+
+    if (this.closed) return;
+    logger.info(
+      {
+        callId: this.config.callId,
+        trigger,
+        waitedMs: Date.now() - startedAt,
+        heardGreeting: this.vmHeardSpeech,
+        messagePreview: vd.message.slice(0, 80),
+      },
+      trigger === "greeting-end"
+        ? "Voicemail delivery: greeting ended — speaking the full message"
+        : "Voicemail delivery: max-wait fallback fired (no greeting end heard) — speaking the full message",
+    );
+
+    this.firstAudioSentAt = null;
+    this.isPlaying = true;
+    try {
+      await this.playSentence(vd.message);
+    } catch (err) {
+      logger.error(
+        { callId: this.config.callId, agentId: this.agent.id, ttsProvider: this.agent.ttsProvider, err },
+        toReadableError(err, "Voicemail delivery TTS/playback error"),
+      );
+    } finally {
+      this.isPlaying = false;
+      this.armTailEchoGrace();
+    }
+    // Drain the carrier's jitter buffer so the message's final word lands in the
+    // recording (sends real silence frames — critical for Vobiz).
+    await this.drainPlaybackTail();
+    logger.info({ callId: this.config.callId }, "Voicemail delivery: message playback complete — ending call");
+    this.config.onCallEnd();
   }
 
   // ── VAD timers ──────────────────────────────────────────────────────────────

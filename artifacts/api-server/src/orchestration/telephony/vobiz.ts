@@ -56,6 +56,7 @@ export async function handleVobizWebSocket(
   campaignLeadId?: number,
   urlFrom?: string,
   urlTo?: string,
+  voicemailDelivery = false,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -142,6 +143,7 @@ export async function handleVobizWebSocket(
             platformTelephony,
             customParameters: params,
             campaignLeadId,
+            voicemailDelivery,
             onAudioOut: (audio: Buffer) => {
               stopSilence();            // first real audio → drop silence immediately
               sendAudioToVobiz(audio);
@@ -226,11 +228,14 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
   if (opts.campaignLeadId) qsParts.push(`campaignLeadId=${opts.campaignLeadId}`);
+  // vm=1 routes the WS handler into voicemail-delivery mode: it listens for the
+  // answering machine's greeting to end, then speaks the full message once.
+  if (opts.voicemailDelivery) qsParts.push("vm=1");
   // Embed From/To in the WebSocket URL query string — the most reliable way to
   // pass caller/callee numbers.  VoBiz POSTs them to the answer URL, we encode
   // them here, and our WS handler reads them from the URL before the start event

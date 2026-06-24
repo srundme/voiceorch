@@ -454,4 +454,16 @@ export interface SessionConfig {
    *  When set, the opening greeting is generated from the memory-injected system prompt
    *  (recognition-style) instead of speaking the static scripted greeting verbatim. */
   isReturningCaller?: boolean;
+  /** When set, the session does NOT run the conversation pipeline. Instead it waits for
+   *  the answering machine's outgoing greeting to end — detected acoustically via inbound
+   *  VAD (sustained silence after speech ≈ the record beep) — then speaks `message` once
+   *  in full and hangs up. Used by the Vobiz AMD `leave_message` path so the recipient's
+   *  machine records the ENTIRE message instead of just the tail. */
+  voicemailDelivery?: {
+    message: string;
+    /** ms of continuous silence after greeting speech that signals end-of-greeting/beep. */
+    postSilenceMarginMs?: number;
+    /** Hard cap: if no greeting-end is detected, speak anyway after this many ms. */
+    maxWaitMs?: number;
+  };
 }

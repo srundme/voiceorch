@@ -90,6 +90,11 @@ export async function createSession(params: {
   /** Overrides the default audio-format derivation. When omitted, PCM output is
    *  used for Vobiz only. The browser webcall transport sets this true. */
   rawPcmOutput?: boolean;
+  /** When true, the session runs in voicemail-delivery mode instead of the normal
+   *  conversation pipeline: it waits for the answering machine's greeting to end
+   *  (acoustic VAD cue) then speaks the agent's configured `voicemailMessage` once
+   *  in full and hangs up. Used by the Vobiz AMD `leave_message` path. */
+  voicemailDelivery?: boolean;
 }): Promise<{ sessionId: string; callDbId: number }> {
 
   // Browser "Live Test" transport — labels the call record + lifecycle log so the
@@ -687,6 +692,13 @@ export async function createSession(params: {
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
+    voicemailDelivery: params.voicemailDelivery
+      ? {
+          message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
+            ? (agentCfg["voicemailMessage"] as string)
+            : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+        }
+      : undefined,
     // Returning caller (>=1 prior completed call) → memory-informed recognition opening
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     onTranscript: (speaker, text) => {
@@ -887,9 +899,17 @@ export async function createSession(params: {
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
-  pipeline.greet().catch((err) => {
-    logger.error({ sessionId, err }, "Greeting failed");
-  });
+  if (params.voicemailDelivery) {
+    // Voicemail-delivery mode: do NOT greet/run the conversation. Listen for the
+    // machine greeting to end, then speak the full message once and hang up.
+    pipeline.deliverVoicemail().catch((err) => {
+      logger.error({ sessionId, err }, "Voicemail delivery failed");
+    });
+  } else {
+    pipeline.greet().catch((err) => {
+      logger.error({ sessionId, err }, "Greeting failed");
+    });
+  }
 
   return { sessionId, callDbId: callRecord.id };
 }

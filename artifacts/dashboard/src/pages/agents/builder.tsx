@@ -1879,7 +1879,7 @@ function VoicemailTab({ form }: { form: any }) {
                       value={field.value ?? 2}
                       onChange={e => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
                   </FormControl>
-                  <FormDescription className="text-[10px]">Wait this long before speaking so the machine's greeting and beep finish first — the whole message gets recorded. Default 2s.</FormDescription>
+                  <FormDescription className="text-[10px]">Blind lead-in for Twilio/Plivo: wait this long before speaking so the machine's greeting and beep finish first. Vobiz ignores this — it listens for the greeting to end and speaks the full message automatically. Default 2s.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )} />
