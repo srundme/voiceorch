@@ -131,6 +131,16 @@ function bandpassFilter(samples: Int16Array, states: BiquadState[]): Int16Array 
   return out;
 }
 
+/**
+ * Filter an 8 kHz LINEAR16 loop through the telephony passband (300–3400 Hz)
+ * with fresh filter state. Used to measure the in-band energy that actually
+ * survives a phone carrier, so ambient levels can be normalised against what
+ * the caller really hears rather than the broadband signal.
+ */
+export function telephonyBandpass(samples: Int16Array): Int16Array {
+  return bandpassFilter(samples, makeBiquadStates());
+}
+
 // --- Adaptive noise gate ---
 const GATE_RATIO          = 4.0;   // suppress frames below 4× estimated noise floor
 const NOISE_ALPHA         = 0.98;  // slow-tracking IIR for noise-frame noise floor updates

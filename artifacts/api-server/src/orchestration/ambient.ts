@@ -21,7 +21,7 @@
  *   onAudioOut(stream.mixIntoMulaw(ttsMulawChunk));
  */
 
-import { linearToMulaw, mulawToLinear, upsample8to16 } from "./audio.js";
+import { linearToMulaw, mulawToLinear, upsample8to16, telephonyBandpass } from "./audio.js";
 import { db, ambientSoundsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { spawn } from "child_process";
@@ -44,14 +44,21 @@ interface TrackParams {
   speechVol: number;
 }
 
+// α values are deliberately kept low/mid here: the one-pole IIRs are pure
+// low-passes, so high α concentrates energy in the sub-300 Hz range that a
+// telephony carrier strips out (~300–3400 Hz passband). Lower α pushes the
+// noise up into the band that actually survives a phone call while preserving
+// each track's relative character (blend/gain still distinguish them). The
+// absolute level no longer depends on these — generateLoop normalises every
+// track to a target *in-band* RMS afterwards.
 export const TRACK_PARAMS: Record<string, TrackParams> = {
-  "office-ambience":   { alpha: 0.86, alpha2: 0.50, blend: 0.3, gain: 3800, silenceVol: 0.22, speechVol: 0.10 },
-  "cafe":              { alpha: 0.68, alpha2: 0.40, blend: 0.4, gain: 4800, silenceVol: 0.28, speechVol: 0.12 },
-  "coffee-shop":       { alpha: 0.70, alpha2: 0.42, blend: 0.4, gain: 4500, silenceVol: 0.26, speechVol: 0.11 },
-  "convention-hall":   { alpha: 0.93, alpha2: 0.60, blend: 0.2, gain: 3200, silenceVol: 0.18, speechVol: 0.08 },
-  "home":              { alpha: 0.90, alpha2: 0.55, blend: 0.2, gain: 2800, silenceVol: 0.15, speechVol: 0.07 },
-  "outdoor":           { alpha: 0.55, alpha2: 0.30, blend: 0.5, gain: 5000, silenceVol: 0.30, speechVol: 0.13 },
-  "restaurant":        { alpha: 0.72, alpha2: 0.44, blend: 0.4, gain: 5500, silenceVol: 0.32, speechVol: 0.14 },
+  "office-ambience":   { alpha: 0.62, alpha2: 0.34, blend: 0.3, gain: 3800, silenceVol: 0.22, speechVol: 0.10 },
+  "cafe":              { alpha: 0.50, alpha2: 0.28, blend: 0.4, gain: 4800, silenceVol: 0.28, speechVol: 0.12 },
+  "coffee-shop":       { alpha: 0.52, alpha2: 0.30, blend: 0.4, gain: 4500, silenceVol: 0.26, speechVol: 0.11 },
+  "convention-hall":   { alpha: 0.68, alpha2: 0.42, blend: 0.2, gain: 3200, silenceVol: 0.18, speechVol: 0.08 },
+  "home":              { alpha: 0.66, alpha2: 0.40, blend: 0.2, gain: 2800, silenceVol: 0.15, speechVol: 0.07 },
+  "outdoor":           { alpha: 0.40, alpha2: 0.22, blend: 0.5, gain: 5000, silenceVol: 0.30, speechVol: 0.13 },
+  "restaurant":        { alpha: 0.54, alpha2: 0.30, blend: 0.4, gain: 5500, silenceVol: 0.32, speechVol: 0.14 },
 };
 
 const DEFAULT_PARAMS: TrackParams = TRACK_PARAMS["office-ambience"]!;
@@ -73,37 +80,55 @@ const FS           = 8000;                       // samples per second
 const LOOP_SAMPLES = LOOP_SECONDS * FS;          // 64 000 samples
 const CHUNK_SAMPLES = 160;                       // 20 ms @ 8 kHz (1 mulaw chunk)
 
-// Every ambient loop (built-in *and* uploaded) is normalised to this RMS at
-// construction time so that the silence/speech volume multipliers below produce
-// a consistent, audible background regardless of a track's filter shaping or an
-// uploaded file's native level. ~5000 RMS ≈ -16 dBFS; with SILENCE_VOL the
-// silence-period ambient lands around -27 dBFS and the speech-mixed ambient
-// around -33 dBFS — clearly perceptible but well under the agent's voice.
-const TARGET_LOOP_RMS = 5000;
+// Every ambient loop (built-in *and* uploaded) is normalised so that its energy
+// *inside the telephony passband* (300–3400 Hz) — i.e. what actually survives a
+// phone carrier — hits this RMS. Normalising on the band-limited signal (rather
+// than the broadband loop) is the key fix: previously a bass-heavy loop measured
+// loud broadband but arrived near-inaudible on a real handset. ~6500 in-band RMS
+// ≈ -14 dBFS; combined with the volumes below the caller hears ambient around
+// -22 dBFS during silence and -29 dBFS under speech — clearly present yet well
+// under the agent's voice.
+const TARGET_LOOP_RMS = 6500;
 
 // Volume applied to the (normalised) loop. Shared by built-in + uploaded tracks.
-const SILENCE_VOL = 0.28; // ambient while the agent is silent  (~-27 dBFS)
-const SPEECH_VOL  = 0.14; // ambient mixed under TTS speech      (~-33 dBFS)
+const SILENCE_VOL = 0.42; // ambient while the agent is silent  (~-22 dBFS in-band)
+const SPEECH_VOL  = 0.17; // ambient mixed under TTS speech      (~-29 dBFS in-band)
 
 /**
- * Scale an Int16 loop in place so its RMS matches `targetRms`, without clipping.
- * If the loudest sample would exceed range after scaling, the scale is capped so
- * peaks stay within ~95% of full scale (the loop may then sit slightly below the
- * target RMS, which is fine — it just avoids introducing distortion).
+ * Scale an Int16 loop in place so that its *in-band* (telephony passband,
+ * 300–3400 Hz) RMS matches `targetInBandRms`, without clipping the broadband
+ * signal.
+ *
+ * Why in-band rather than broadband: a bass-heavy loop can measure loud on the
+ * full-band signal yet have almost no energy in the band a phone carrier passes,
+ * so it arrives near-inaudible on a real handset. Measuring the level the caller
+ * actually hears (post band-pass) and targeting that makes ambient consistently
+ * audible across tracks regardless of their low-frequency content.
+ *
+ * The scale is capped by the *broadband* peak so peaks stay within ~95% of full
+ * scale (the in-band level may then sit slightly below target, which is fine —
+ * it just avoids introducing distortion).
  */
-function normalizeLoopRms(loop: Int16Array, targetRms: number): void {
+function normalizeLoopRms(loop: Int16Array, targetInBandRms: number): void {
   if (loop.length === 0) return;
-  let sumSq = 0;
+
+  // Measure the energy that survives the telephony passband.
+  const filtered = telephonyBandpass(loop);
+  let inBandSumSq = 0;
+  for (let i = 0; i < filtered.length; i++) {
+    const v = filtered[i]!;
+    inBandSumSq += v * v;
+  }
+  const inBandRms = Math.sqrt(inBandSumSq / filtered.length);
+  if (inBandRms < 1) return; // no usable in-band energy — nothing to normalise
+
+  // Broadband peak bounds the scale so we never clip after scaling.
   let peak = 1;
   for (let i = 0; i < loop.length; i++) {
-    const v = loop[i]!;
-    sumSq += v * v;
-    const a = Math.abs(v);
+    const a = Math.abs(loop[i]!);
     if (a > peak) peak = a;
   }
-  const rms = Math.sqrt(sumSq / loop.length);
-  if (rms < 1) return; // effectively silent — nothing to normalise
-  let scale = targetRms / rms;
+  let scale = targetInBandRms / inBandRms;
   const maxScale = (0.95 * 32767) / peak;
   if (scale > maxScale) scale = maxScale;
   for (let i = 0; i < loop.length; i++) {
@@ -174,6 +199,15 @@ export class AmbientNoiseStream {
   nextMulawChunk(): Buffer {
     const pcm = this.readPcm(CHUNK_SAMPLES, this.silenceVol);
     return pcmToMulaw(pcm);
+  }
+
+  /**
+   * Returns the next 160-sample (20 ms) chunk as raw 8 kHz LINEAR16 LE PCM,
+   * for the silence-fill on raw-PCM (web-call) output. Mirrors nextMulawChunk
+   * but skips the mulaw encode so it can be sent straight to a web client.
+   */
+  nextPcmChunk(): Buffer {
+    return this.readPcm(CHUNK_SAMPLES, this.silenceVol);
   }
 
   /**
@@ -257,6 +291,11 @@ export class FileAmbientNoiseStream {
   nextMulawChunk(): Buffer {
     const pcm = this.readPcm(CHUNK_SAMPLES, SILENCE_VOL);
     return pcmToMulaw(pcm);
+  }
+
+  /** See AmbientNoiseStream.nextPcmChunk — raw 8 kHz PCM silence-fill for web calls. */
+  nextPcmChunk(): Buffer {
+    return this.readPcm(CHUNK_SAMPLES, SILENCE_VOL);
   }
 
   mixIntoMulaw(ttsMulaw: Buffer): Buffer {

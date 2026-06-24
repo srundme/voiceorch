@@ -414,7 +414,14 @@ export class OrchestrationPipeline {
       // avoid interleaving two concurrent senders on the same WebSocket.
       this.ambientInterval = setInterval(() => {
         if (!this.closed && !this.isPlaying && this.ambientStream) {
-          this.config.onAudioOut(this.ambientStream.nextMulawChunk());
+          // Emit the encoding the call actually consumes: raw 8 kHz PCM for
+          // web calls (rawPcmOutput), mulaw for telephony. Sending mulaw bytes
+          // into a raw-PCM stream makes the browser reinterpret them as PCM16
+          // and play garbled static during silence gaps.
+          const chunk = this.config.rawPcmOutput
+            ? this.ambientStream.nextPcmChunk()
+            : this.ambientStream.nextMulawChunk();
+          this.config.onAudioOut(chunk);
         }
       }, 20);
     }
@@ -1282,13 +1289,19 @@ export class OrchestrationPipeline {
         const pcm16k = combined.slice(0, alignedLen);
         _ttsAccumBytes += pcm16k.length;
         const pcm8k = downsample16to8(pcm16k);
-        // Record agent audio (downsampled to match recording sample rate)
+        // Record agent audio (downsampled to match recording sample rate).
+        // Recording stays clean — ambient is mixed only into the outbound copy.
         this.recording.addAgentChunk(pcm8k);
         if (this.config.rawPcmOutput) {
-          // Vobiz accepts LINEAR16 PCM natively — skip mulaw encode to avoid lossy round-trip
+          // Vobiz/web accept LINEAR16 PCM natively — skip mulaw encode to avoid
+          // lossy round-trip. Mix ambient under speech (at 16 kHz, where the
+          // ambient stream's mixIntoPcm16k operates) before downsampling to 8 kHz.
+          const out8k = this.ambientStream
+            ? downsample16to8(this.ambientStream.mixIntoPcm16k(pcm16k))
+            : pcm8k;
           const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
-          for (let i = 0; i < pcm8k.length; i += PCM_CHUNK) {
-            queue.push(pcm8k.slice(i, i + PCM_CHUNK));
+          for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
+            queue.push(out8k.slice(i, i + PCM_CHUNK));
           }
         } else {
           const mulaw = encodeMulaw(pcm8k);
@@ -1380,11 +1393,17 @@ export class OrchestrationPipeline {
       this.recording.addAgentChunk(ttsPcm8k);
       const _audioDurationMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
       if (this.config.rawPcmOutput) {
+        // Mix ambient under speech at 16 kHz (mixIntoPcm16k's native rate) then
+        // downsample to the 8 kHz raw-PCM web output. When ambient is disabled
+        // this reuses ttsPcm8k unchanged, so the non-ambient path is untouched.
+        const out8k = this.ambientStream
+          ? downsample16to8(this.ambientStream.mixIntoPcm16k(ttsPcm16k))
+          : ttsPcm8k;
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
-        for (let i = 0; i < ttsPcm8k.length; i += PCM_CHUNK) {
+        for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;
           if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
-          this.config.onAudioOut(ttsPcm8k.slice(i, i + PCM_CHUNK));
+          this.config.onAudioOut(out8k.slice(i, i + PCM_CHUNK));
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
           // the start grace + tail grace bound the self-echo window. A per-chunk
           // re-arm would span the whole sentence and block mid-sentence barge-in.
