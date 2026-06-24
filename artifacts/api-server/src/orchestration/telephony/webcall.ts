@@ -3544,12 +3544,21 @@ export async function handleWebCallWebSocket(
     bargeInLowEnergyFrames = 0;
     bargeInFirstFrameAt = 0;
 
-    // End grace: suppress new-turn detection for BARGE_IN_END_GRACE_MS after the last
-    // TTS chunk was sent. This prevents the trailing echo of the agent's final word
-    // (still playing in the browser speaker) from being picked up by the mic and
-    // immediately firing a new user turn before the caller has a chance to speak.
+    // End grace: suppress new-turn STATE changes for BARGE_IN_END_GRACE_MS after the
+    // last TTS chunk was sent. This prevents the trailing echo of the agent's final
+    // word (still playing in the browser speaker) from immediately firing a new user
+    // turn before the caller has a chance to speak.
+    //
+    // IMPORTANT: we still forward audio to streamSTT during end grace so the user's
+    // very first words aren't starved. Echo transcripts in the 0–echoGraceUntil window
+    // are already suppressed by the onFinal/onPartial handlers. Without this forwarding
+    // the caller has to speak twice: first utterance lands in the 600ms dead zone and
+    // is silently dropped, second utterance is the first one Sarvam actually receives.
     const inEndGrace = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
-    if (inEndGrace) return;
+    if (inEndGrace) {
+      if (streamSTT) streamSTT.sendAudio(Buffer.from(data));
+      return;
+    }
 
     // Streaming STT path: send all audio directly to the provider WebSocket.
     // We ALSO mirror speech frames into audioChunks as a backup so batch STT
