@@ -2192,7 +2192,9 @@ export class OrchestrationPipeline {
         `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
         `This applies to EVERY reply without exception — including when you are confused, ` +
         `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
-        `Never switch to English or any other language under any circumstances.`;
+        `Never switch to English or any other language under any circumstances. ` +
+        `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
+        `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
     }
     systemPromptForTurn = langGuard
       ? `${langGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${langGuard}`
