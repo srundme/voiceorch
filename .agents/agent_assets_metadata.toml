@@ -138,3 +138,9 @@ id = "YQffqw0pP5pqmnffbpTQE"
 uri = "file://.local/design-tokens.md"
 type = "text"
 title = "Dashboard Design Tokens — Current State"
+
+[[outputs]]
+id = "R6f_5jZw6BApElUrKI9EL"
+uri = "file://beta-report.md"
+type = "text"
+title = "VoiceOrch Beta Report — June 2026"
