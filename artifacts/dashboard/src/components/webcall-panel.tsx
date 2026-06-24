@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Loader2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -38,7 +38,7 @@ registerProcessor('pcm-capture', PcmCaptureProcessor);
 // Target wire rate for mic audio. The server downsamples this 2:1 to 8 kHz.
 const TARGET_RATE = 16000;
 
-export function WebcallPanel({ agentId, agentName }: { agentId: number; agentName: string }) {
+export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId: number; agentName: string; compact?: boolean; onClose?: () => void }) {
   const [state, setState]   = useState<CallState>("idle");
   const [error, setError]   = useState<string | null>(null);
   const [muted, setMuted]   = useState(false);
@@ -297,8 +297,8 @@ export function WebcallPanel({ agentId, agentName }: { agentId: number; agentNam
   const active = state === "live" || state === "connecting" || state === "ending";
 
   return (
-    <div className="p-5 max-w-3xl">
-      <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col" style={{ height: "calc(100vh - 9rem)" }}>
+    <div className={compact ? "h-full flex flex-col" : "p-5 max-w-3xl"}>
+      <div className={`bg-card border border-border rounded-2xl overflow-hidden flex flex-col${compact ? " flex-1" : ""}`} style={compact ? undefined : { height: "calc(100vh - 9rem)" }}>
         {/* Header */}
         <div className="flex items-center gap-3 px-4 h-12 shrink-0 border-b border-border">
           <span className={
@@ -308,7 +308,7 @@ export function WebcallPanel({ agentId, agentName }: { agentId: number; agentNam
               : state === "error" ? "bg-red-500"
               : "bg-muted-foreground/40")
           } />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-foreground truncate">Live Test — {agentName}</p>
             <p className="text-[10.5px] text-muted-foreground/60">
               {state === "idle"       && "Talk to your agent right in the browser"}
@@ -318,6 +318,11 @@ export function WebcallPanel({ agentId, agentName }: { agentId: number; agentNam
               {state === "error"      && "Call ended with an error"}
             </p>
           </div>
+          {onClose && (
+            <button onClick={onClose} className="ml-auto shrink-0 p-1 rounded hover:bg-muted/60 text-muted-foreground/60 hover:text-foreground transition-colors" title="Close">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Transcript */}

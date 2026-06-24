@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { WebcallPanel } from "@/components/webcall-panel";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -4723,6 +4724,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     );
   };
 
+  const [showWebcall, setShowWebcall] = useState(false);
   const isDirty   = form.formState.isDirty;
   const nameValue = form.watch("name");
 
@@ -4768,6 +4770,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setCallDialog(true)}>
             <Phone className="h-3.5 w-3.5" /> Call
           </Button>
+          <Button size="sm" variant={showWebcall ? "default" : "outline"} className="h-7 text-xs gap-1.5" onClick={() => setShowWebcall(v => !v)}>
+            <Mic className="h-3.5 w-3.5" /> Web Call
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon" variant="ghost" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
@@ -4785,6 +4790,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           </DropdownMenu>
         </div>
       </div>
+
+      {showWebcall && (
+        <div className="fixed bottom-4 right-4 z-50 w-[420px] h-[560px] flex flex-col shadow-2xl rounded-2xl overflow-hidden">
+          <WebcallPanel agentId={agent.id} agentName={agent.name ?? "Agent"} compact onClose={() => setShowWebcall(false)} />
+        </div>
+      )}
 
       {/* Tab strip */}
       <div className="flex items-center gap-1 px-6 border-b border-border/60 shrink-0 overflow-x-auto">
