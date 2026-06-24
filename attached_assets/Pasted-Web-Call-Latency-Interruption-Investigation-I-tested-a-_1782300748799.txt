@@ -1,0 +1,85 @@
+Web Call – Latency & Interruption Investigation
+
+I tested a Web Call and observed two issues:
+
+1. Noticeable latency between the caller finishing speech and the agent starting its response.
+
+2. Interruption / barge-in is not working correctly. The agent continues speaking even when the caller starts talking.
+
+I have attached the call logs/JSON for reference.
+
+IMPORTANT:
+Before making any code changes, please investigate only.
+
+Do NOT modify:
+
+* STT logic
+* TTS logic
+* VAD configuration
+* Interruption/barge-in flow
+* Playback handling
+* Buffering logic
+* LLM orchestration
+* Filler logic
+* Web Call architecture
+* Live Call architecture
+
+I do not want any existing working functionality to be affected. Please first identify the exact root cause and provide a detailed analysis.
+
+Investigation Required:
+
+1. End-to-End Latency Breakdown
+   For this specific call, provide:
+
+* STT latency
+* Time from final transcript to LLM request
+* LLM TTFT (time to first token)
+* LLM completion time
+* TTS generation time
+* Time from TTS generation to playback start
+* Total caller-to-agent response latency
+
+2. Interruption / Barge-In Analysis
+   Please investigate:
+
+* Is interruption actually being triggered?
+* Is caller speech being detected while the agent is talking?
+* Is VAD detecting the interruption correctly?
+* Is TTS playback receiving a cancel/stop event?
+* If cancellation is sent, why does playback continue?
+* Is there any buffering or queued audio preventing interruption?
+
+3. Web Call vs Live Call
+   Please compare:
+
+* Does Web Call use the same interruption logic as Live Calls?
+* Does Web Call use different audio streaming, buffering, or playback architecture?
+* Is this issue isolated to Web Calls?
+
+4. Fillers Analysis
+   Please investigate:
+
+* Why fillers are being played frequently.
+* Are fillers being triggered because of LLM latency?
+* Are fillers masking another latency issue elsewhere in the pipeline?
+
+5. Architecture Impact Assessment
+   Before recommending any fix, tell me:
+
+* Which files/components are involved.
+* Which components are high-risk to modify.
+* What is the safest fix with the lowest risk to existing functionality.
+
+Expected Deliverable:
+
+Provide a detailed investigation report including:
+
+* Root cause of latency.
+* Root cause of interruption failure.
+* Whether the issue is Web Call specific.
+* Recommended fix.
+* Risk assessment.
+
+Do NOT implement any fixes yet.
+
+Investigation only.
