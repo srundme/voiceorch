@@ -1,13 +1,34 @@
 import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
- * Sarvam AI — Chat completions (OpenAI-compatible endpoint)
- * Models: sarvam-30b (default), sarvam-105b
- * Docs: https://docs.sarvam.ai/api-reference/text/chat-completions
+ * Sarvam AI — Chat Completions (OpenAI-compatible endpoint)
+ * Docs: https://docs.sarvam.ai/api-reference-docs/chat-completion/overview
  *
- * Tool calling: supported on sarvam-30b and above.
- * The wire format is identical to OpenAI (OpenAI-compatible endpoint).
- * Note: sarvam-m was deprecated by Sarvam; sarvam-30b is now the smallest tool-capable model.
+ * Models:
+ *   - sarvam-30b  (default) — 64K context, lower latency / faster TTFT, best for voice agents
+ *   - sarvam-105b           — 128K context, highest quality (higher latency)
+ *   (sarvam-m / 24B is deprecated — aliased to sarvam-30b below.)
+ *
+ * Endpoint: POST https://api.sarvam.ai/v1/chat/completions
+ * Auth: `api-subscription-key` header (also accepts `Authorization: Bearer <key>`).
+ *
+ * Hybrid Thinking Mode:
+ *   Thinking is ON BY DEFAULT (reasoning_effort="low"). When enabled the model
+ *   streams `reasoning_content` BEFORE the reply `content`, which:
+ *     - adds latency before the first spoken word,
+ *     - is billed as completion tokens, and
+ *     - can consume the whole max_tokens budget on short replies, leaving an
+ *       empty `content` with finish_reason "length".
+ *   For a voice agent we want low latency, so we DISABLE thinking by sending
+ *   `reasoning_effort: null` (the documented way to turn it off). We also never
+ *   forward `reasoning_content` to TTS even if some leaks through.
+ *
+ * Tool calling: supported on sarvam-30b and sarvam-105b. Wire format is identical
+ * to OpenAI (function name + stringified JSON arguments).
+ *
+ * Streaming: each `data:` line is a chat.completion.chunk. `delta.content` carries
+ * the reply text; the final chunk has an empty `choices` array and carries `usage`;
+ * the stream ends with `data: [DONE]`.
  */
 
 /** Models that support Sarvam's function-calling interface */
@@ -65,6 +86,7 @@ export class SarvamLLM implements LLMAdapter {
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     // Only sarvam-30b and sarvam-105b support tool use
@@ -93,6 +115,9 @@ export class SarvamLLM implements LLMAdapter {
       body: JSON.stringify({
         model: this.model,
         stream: true,
+        // Disable Hybrid Thinking mode (on by default) for low-latency voice:
+        // avoids reasoning_content latency/cost and the empty-content-on-short-reply trap.
+        reasoning_effort: null,
         messages: [
           { role: "system", content: systemPrompt },
           ...sanitized.map((m) => ({ role: m.role, content: m.content })),
@@ -112,49 +137,84 @@ export class SarvamLLM implements LLMAdapter {
     let toolCallName = "";
     let toolCallArgs = "";
     let isToolCall = false;
+    let usage: LLMUsage | undefined;
 
+    // Process a single complete `data: ...` SSE payload. Mutates the closure
+    // accumulators above. Kept as a closure so the buffered reader and the
+    // end-of-stream flush share one parse path.
+    const handleData = (data: string): void => {
+      if (data === "[DONE]") return;
+      try {
+        const parsed = JSON.parse(data) as {
+          choices: Array<{
+            delta?: {
+              content?: string;
+              // Thinking tokens — deliberately NOT spoken. Typed only for honesty;
+              // we never forward it to onToken/TTS.
+              reasoning_content?: string;
+              tool_calls?: Array<{
+                function?: { name?: string; arguments?: string };
+              }>;
+            };
+          }>;
+          usage?: { prompt_tokens?: number; completion_tokens?: number };
+        };
+
+        // The final chunk has an empty `choices` array and carries usage.
+        if (parsed.usage) {
+          usage = {
+            inputTokens: parsed.usage.prompt_tokens ?? 0,
+            outputTokens: parsed.usage.completion_tokens ?? 0,
+          };
+        }
+
+        const delta = parsed.choices[0]?.delta;
+        if (!delta) return;
+
+        // Only the reply text is spoken — reasoning_content is intentionally ignored.
+        const token = delta.content ?? "";
+        if (token) {
+          full += token;
+          onToken(token);
+        }
+
+        if (delta.tool_calls) {
+          isToolCall = true;
+          for (const tc of delta.tool_calls) {
+            if (tc.function?.name) toolCallName += tc.function.name;
+            if (tc.function?.arguments) toolCallArgs += tc.function.arguments;
+          }
+        }
+      } catch {
+        // skip malformed chunk
+      }
+    };
+
+    // Buffered SSE parse: events can split across TCP reads, so accumulate text
+    // and only dispatch complete lines, keeping any partial remainder for the
+    // next read. This protects token capture, tool-call args, and the final
+    // usage chunk from being lost on chunk boundaries.
+    let buffer = "";
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const text = decoder.decode(value, { stream: true });
-      const lines = text.split("\n").filter((l) => l.startsWith("data: "));
+      buffer += decoder.decode(value, { stream: true });
 
-      for (const line of lines) {
-        const data = line.slice(6);
-        if (data === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(data) as {
-            choices: Array<{
-              delta?: {
-                content?: string;
-                tool_calls?: Array<{
-                  function?: { name?: string; arguments?: string };
-                }>;
-              };
-            }>;
-          };
-          const delta = parsed.choices[0]?.delta;
-          if (!delta) continue;
-
-          const token = delta.content ?? "";
-          if (token) {
-            full += token;
-            onToken(token);
-          }
-
-          if (delta.tool_calls) {
-            isToolCall = true;
-            for (const tc of delta.tool_calls) {
-              if (tc.function?.name) toolCallName += tc.function.name;
-              if (tc.function?.arguments) toolCallArgs += tc.function.arguments;
-            }
-          }
-        } catch {
-          // skip malformed chunk
-        }
+      let nl: number;
+      while ((nl = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line.startsWith("data: ")) handleData(line.slice(6));
       }
     }
+
+    // Flush any trailing buffered line left without a final newline.
+    buffer += decoder.decode();
+    const tail = buffer.trim();
+    if (tail.startsWith("data: ")) handleData(tail.slice(6));
+
+    if (usage) options?.onUsage?.(usage);
 
     if (isToolCall && toolCallName && options?.onToolCall) {
       let args: Record<string, unknown> = {};
@@ -165,7 +225,7 @@ export class SarvamLLM implements LLMAdapter {
       }
       options.onToolCall(toolCallName, args);
     } else {
-      onDone(full);
+      onDone(full, usage);
     }
   }
 }
