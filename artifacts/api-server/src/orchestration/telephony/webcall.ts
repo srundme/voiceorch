@@ -1138,7 +1138,12 @@ export async function handleWebCallWebSocket(
 
   // ── Recording ─────────────────────────────────────────────────────────────
   // Stereo WAV: L=caller (16 kHz from browser), R=agent (TTS pre-amplification)
-  const recording = new RecordingBuffer(16000);
+  // Caller frames arrive every ~128 ms (browser ScriptProcessor(2048) @ 16 kHz),
+  // which is above the recorder's 120 ms default gap-resync threshold — so we
+  // raise it to 300 ms here to keep the continuous caller stream appending
+  // contiguously (no per-frame wall-clock padding → no buzz on the left channel)
+  // while still re-syncing on real multi-second connection stalls.
+  const recording = new RecordingBuffer(16000, 300);
 
   // ── Pipeline ─────────────────────────────────────────────────────────────
   async function process() {

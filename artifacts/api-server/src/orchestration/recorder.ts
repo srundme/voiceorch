@@ -53,15 +53,26 @@ import { logger } from "../lib/logger.js";
 const BYTES_PER_SAMPLE = 2; // LINEAR16
 
 /**
- * A write gap on a track longer than this (ms) is treated as a GENUINE
- * conversational pause and re-synced to the shared wall-clock timeline. Shorter
- * gaps are the sub-frame jitter of a continuous 40 ms-frame stream and are
- * appended contiguously (no padding) — this is what removes the per-frame
- * silence chop that buzzed on the agent track. The value is comfortably above
- * the ~40 ms frame cadence (and ordinary event-loop jitter) yet below a real
- * inter-sentence / inter-turn pause.
+ * Default write-gap threshold (ms). A write gap on a track longer than this is
+ * treated as a GENUINE conversational pause and re-synced to the shared
+ * wall-clock timeline. Shorter gaps are the sub-frame jitter of a continuous
+ * frame stream and are appended contiguously (no padding) — this is what
+ * removes the per-frame silence chop that buzzed on the agent track. The
+ * default is comfortably above the telephony ~40 ms frame cadence (and ordinary
+ * event-loop jitter) yet below a real inter-sentence / inter-turn pause.
+ *
+ * This is overridable per-instance via the constructor because frame cadence is
+ * transport-specific. Web calls feed the caller track from the browser's
+ * `createScriptProcessor(2048, 1, 1)` at 16 kHz = ~128 ms per frame, which is
+ * GREATER than this 120 ms default — so every caller frame would trip the
+ * resync branch and get wall-clock-aligned, injecting jitter-sized silence gaps
+ * before nearly every frame (~8 Hz amplitude modulation, heard as a buzz on the
+ * caller channel). The web-call path therefore passes a higher threshold
+ * (~300 ms) that sits above the 128 ms cadence plus normal jitter, while still
+ * re-syncing on real multi-second connection stalls. Telephony keeps this
+ * default unchanged.
  */
-const GAP_RESYNC_MS = 120;
+const DEFAULT_GAP_RESYNC_MS = 120;
 
 /** Per-track capture state. */
 interface Track {
@@ -74,13 +85,22 @@ interface Track {
 
 export class RecordingBuffer {
   private readonly sampleRate: number;
+  private readonly gapResyncMs: number;
   private caller: Track = { chunks: [], bytes: 0, lastWriteMs: null };
   private agent: Track = { chunks: [], bytes: 0, lastWriteMs: null };
   /** Wall-clock anchor for the shared timeline; set by the first chunk seen. */
   private startMs: number | null = null;
 
-  constructor(sampleRate: number) {
+  /**
+   * @param sampleRate audio sample rate in Hz.
+   * @param gapResyncMs write-gap threshold in ms above which a track re-syncs to
+   *   wall-clock (see {@link DEFAULT_GAP_RESYNC_MS}). Defaults to 120 ms for
+   *   telephony; web calls pass ~300 ms because their caller frames arrive every
+   *   ~128 ms (> the default) and would otherwise buzz.
+   */
+  constructor(sampleRate: number, gapResyncMs: number = DEFAULT_GAP_RESYNC_MS) {
     this.sampleRate = sampleRate;
+    this.gapResyncMs = gapResyncMs;
   }
 
   /** Byte offset on the shared timeline corresponding to `now`. */
@@ -103,7 +123,7 @@ export class RecordingBuffer {
     const isFirstWrite = track.lastWriteMs === null;
     const idleMs = isFirstWrite ? Infinity : now - track.lastWriteMs!;
 
-    if ((isFirstWrite || idleMs >= GAP_RESYNC_MS) && target > track.bytes) {
+    if ((isFirstWrite || idleMs >= this.gapResyncMs) && target > track.bytes) {
       const pad = target - track.bytes;
       track.chunks.push(Buffer.alloc(pad));
       track.bytes += pad;
