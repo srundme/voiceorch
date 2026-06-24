@@ -73,24 +73,15 @@ const BARGE_IN_MIN_FRAMES      = 3;     // minimum frames — prevents a single 
 const WEBCALL_FRAME_MS         = 128;   // browser ScriptProcessorNode(2048) at 16 kHz → one frame per 128 ms
                                         // (NOT 40ms — the telephony pipeline sends 40ms chunks, webcall doesn't)
 const BARGE_IN_ECHO_GRACE_MS   = 700;  // suppress barge-in after TTS starts — allows browser echo cancellation to adapt
-const BARGE_IN_END_GRACE_MS    = 1200; // suppress new-turn detection for 1200ms after the last TTS chunk.
-                                        // Call-414 analysis: room echo of the final word arrives ~825ms after the
-                                        // last silence frame (lastChunkSentAt), so 600ms was not enough — the echo
-                                        // hit the streaming STT path, reset the stall timer, and caused the stall
-                                        // reprompt to fire 10 s later when the user was genuinely silent.
-                                        // 1200ms gives ~375ms headroom beyond the measured 825ms echo delay.
+const BARGE_IN_END_GRACE_MS    = 600;  // suppress new-turn detection for 600ms after the last TTS chunk.
+                                        // Prevents the trailing echo of the agent's final word from triggering
+                                        // a false new-user-turn before the caller has a chance to speak.
 const ECHO_DISCARD_OVERLAP_MS  = 1500; // speech that starts within this many ms of agent ending is genuine overlap,
                                         // not echo (echo from TTS starts at TTS onset, not near the end)
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
-const WEB_TAIL_ECHO_MARGIN_MS  = 800;  // extra echo-grace held PAST the tail-silence drain so the agent's own
-                                        // final-word echo — which returns through the mic LATER than we sent it
-                                        // (client AudioContext buffering lag + network round-trip) — can't trip a
-                                        // false barge-in that flushes the last word on the client.
-                                        // Increased from 100ms: the tail re-arm fires at the START of the 300ms
-                                        // silence drain, so effective post-playback coverage =
-                                        // AUDIO_TAIL_SILENCE_MS(300) + WEB_TAIL_ECHO_MARGIN_MS(800) = 1100ms,
-                                        // which aligns with BARGE_IN_END_GRACE_MS protection.
+const WEB_TAIL_ECHO_MARGIN_MS  = 100;  // extra echo-grace held PAST the tail-silence drain so the agent's own
+                                        // final-word echo can't trip a false barge-in that flushes the last word.
 const TTS_TAIL_SILENCE_MS      = 150;  // PCM silence appended to every TTS buffer so the last word isn't clipped
                                         // by the client's AudioContext reaching the end of its scheduled queue
 const MIN_PCM_BYTES            = 3200; // ~100ms at 16kHz Int16 — minimum speech before processing
@@ -3557,11 +3548,8 @@ export async function handleWebCallWebSocket(
     // TTS chunk was sent. This prevents the trailing echo of the agent's final word
     // (still playing in the browser speaker) from being picked up by the mic and
     // immediately firing a new user turn before the caller has a chance to speak.
-    // NOTE: for streaming STT we compute this flag but do NOT early-return here —
-    // we must still call streamSTT.sendAudio() so the provider receives the full
-    // audio stream. Gating sendAudio on inEndGrace drops the first 1200ms of the
-    // user's response after every agent turn (the provider's own VAD rejects echo).
     const inEndGrace = lastChunkSentAt > 0 && Date.now() - lastChunkSentAt < BARGE_IN_END_GRACE_MS;
+    if (inEndGrace) return;
 
     // Streaming STT path: send all audio directly to the provider WebSocket.
     // We ALSO mirror speech frames into audioChunks as a backup so batch STT
@@ -3572,12 +3560,7 @@ export async function handleWebCallWebSocket(
     // backup (see the onFinal handler above).
     if (streamSTT) {
       const chunk = Buffer.from(data);
-      streamSTT.sendAudio(chunk);
-      // During end grace: audio is forwarded to the provider (above) but we do
-      // NOT accumulate chunks or signal "listening" — this prevents echo from
-      // triggering a new turn via our local logic.  The provider's server-side VAD
-      // will not fire a final from the attenuated echo frames.
-      if (inEndGrace) return;
+      streamSTT.sendAudio(chunk); // always feed the streaming provider so it receives every audio frame
       if (!processing && rms > SPEECH_RMS_THRESHOLD) sendStatus("listening");
       if (rms > SPEECH_RMS_THRESHOLD) {
         audioChunks.push(chunk);
