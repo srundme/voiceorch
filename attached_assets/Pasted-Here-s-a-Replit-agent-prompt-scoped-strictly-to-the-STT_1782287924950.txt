@@ -1,0 +1,26 @@
+Here's a Replit-agent prompt scoped strictly to the STT / user-speech-capture problem — nothing about the 503 crash, end-call, or latency, since those are separate layers and mixing them will make the agent thrash.
+
+Context: This is artifacts/api-server/src/orchestration/telephony/webcall.ts — the WebSocket handler for browser voice calls. The pipeline is: browser mic → WebSocket → STT (Sarvam streaming, saaras:v3) → LLM → TTS. Do not touch the LLM, TTS, tool-calling, end-call, hangup, or billing code. Only investigate and fix STT / user-speech capture.
+Problem: The caller's speech is frequently not being captured. In testing, the caller says short Tamil/English phrases ("Hello", "சொல்லுங்க மேடம்", "புரியுது மேடம்") and the agent does not register them — the caller has to repeat 2–3 times before anything is transcribed, and sometimes the utterance is dropped entirely with no transcript appearing in the UI.
+What I need you to do — investigate first, do not blindly edit:
+
+Add diagnostic logging, then trace one failing utterance end-to-end. For every incoming audio frame in the ws.on("message") handler, I want to be able to confirm in the logs:
+
+That the frame is reaching streamSTT.sendAudio(chunk) (is streamSTT non-null, or did it die and fall back to batch?)
+The RMS value of the frame vs SPEECH_RMS_THRESHOLD (400) — are genuine caller frames actually exceeding the threshold, or is the mic level so low post-AEC that real speech reads as silence?
+Whether streamSTT.onSpeechStart ever fires for the utterance
+Whether Sarvam's onFinal callback fires at all, and if it does, whether the transcript is being discarded — log which gate dropped it: isAgentEcho (content echo), the echoGraceUntil window, the short-utterance gate (wc < wordsForInterruption), or the empty-text check.
+
+
+Specifically check whether isAgentEcho is over-dropping genuine caller speech. The content-echo gate compares the caller's transcript against recent agent text (recentAgentText) within ECHO_CONTENT_WINDOW_MS of the last TTS chunk. The suspect case: the caller repeats a word the agent just said (e.g. agent said "சொல்லுங்க" / "சரி", caller says it back as a genuine reply) and it's wrongly classified as echo and discarded. Log every isAgentEcho decision with the transcript, the matched agent text, the containment ratio, and the lastLoudFrameAt tiebreaker result, so I can see if real speech is being eaten.
+Check whether streamSTT is silently dead. If the Sarvam WebSocket closed (the onClose / onConnectionDead path ran), streamSTT becomes null and frames should fall to batch STT. Confirm in logs whether streaming actually stayed alive for the whole call or died early, and whether the batch fallback (streamingFallbackTimer / process()) actually ran when it should have.
+Verify the frame is valid PCM. Confirm the browser frames arriving are the expected format (PCM16, 16kHz) and non-empty before sendAudio. Log frame byte length once per N frames.
+
+Constraints:
+
+Make logging changes first and tell me what to look for in the logs. Do not change capture thresholds, echo logic, or timing constants until the logs show which stage is dropping the audio.
+If you do propose a fix after the logs are clear, change one thing at a time and explain exactly which log line proves it's the cause.
+Do not remove or weaken the echo-detection entirely as a "fix" — if isAgentEcho is over-dropping, the correct fix is to narrow it (e.g. the energy tiebreaker or window), not delete it.
+Keep the streaming STT WebSocket continuous — do not add code that closes/reopens it between turns.
+
+Output: First, the logging additions and where they go. Then, once I paste back the log output from a failing call, your diagnosis of which stage dropped the audio and the single targeted fix.

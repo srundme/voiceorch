@@ -541,6 +541,9 @@ export async function handleWebCallWebSocket(
       streamSTT = stt.transcribeStream(
         (text, isFinal, _lang, sttMeta) => {
           if (closed) return;
+          // Diagnostic: log every STT callback entry so we can confirm onFinal fires
+          // and see which gate drops the transcript.
+          if (isFinal) logger.info({ callId, text, speaking, wc: text.trim().split(/\s+/).length, msSinceLastChunk: lastChunkSentAt > 0 ? Date.now() - lastChunkSentAt : -1, echoGraceMsRemaining: Math.max(0, echoGraceUntil - Date.now()) }, "Webcall: STT onFinal received");
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent speech, where partials are
           // barge-in candidates). Don't process yet.
@@ -714,7 +717,7 @@ export async function handleWebCallWebSocket(
         // (leftover — should be discarded). Without this, the post-speech 600ms
         // grace window discards every first user utterance whose Sarvam transcript
         // lands within 600ms of speakingEndedAt — i.e. "always 2nd time" bug.
-        streamSTT.onSpeechStart = () => { lastUserSpeechStartAt = Date.now(); };
+        streamSTT.onSpeechStart = () => { lastUserSpeechStartAt = Date.now(); logger.info({ callId }, "Webcall: STT speech_start (VAD fired)"); };
       }
     } catch (streamInitErr) {
       logger.warn({ callId, err: streamInitErr }, "Webcall: streaming STT init failed — falling back to batch");
@@ -1084,7 +1087,8 @@ export async function handleWebCallWebSocket(
   // would be overwritten to false by the trailing silence frames that appear between
   // the caller's speech and Sarvam's onFinal — the timestamp survives that gap.
   function isAgentEcho(transcript: string): boolean {
-    if (lastChunkSentAt <= 0 || Date.now() - lastChunkSentAt > ECHO_CONTENT_WINDOW_MS) return false;
+    const msSinceChunk = lastChunkSentAt > 0 ? Date.now() - lastChunkSentAt : -1;
+    if (lastChunkSentAt <= 0 || msSinceChunk > ECHO_CONTENT_WINDOW_MS) return false;
     const t = normalizeIndic(transcript);
     const tTokens = t.split(/\s+/).filter(Boolean);
     if (tTokens.length === 0) return false;
@@ -1104,7 +1108,11 @@ export async function handleWebCallWebSocket(
         // within the echo window → almost certainly genuine (AEC attenuates echo
         // 6–12 dB, so real echo is low-energy). Accept as caller speech.
         const callerWasLoud = lastLoudFrameAt > 0 && (Date.now() - lastLoudFrameAt) < ECHO_CONTENT_WINDOW_MS;
-        if (tSet.size <= 2 && callerWasLoud) return false;
+        if (tSet.size <= 2 && callerWasLoud) {
+          logger.info({ callId, transcript, containment, tSetSize: tSet.size, msSinceLastLoud: lastLoudFrameAt > 0 ? Date.now() - lastLoudFrameAt : -1, msSinceChunk }, "Webcall: isAgentEcho — tiebreaker SAVED short phrase as genuine");
+          return false;
+        }
+        logger.info({ callId, transcript, containment, tSetSize: tSet.size, callerWasLoud, msSinceLastLoud: lastLoudFrameAt > 0 ? Date.now() - lastLoudFrameAt : -1, msSinceChunk, agentEntry: text.slice(0, 60) }, "Webcall: isAgentEcho — DROPPING transcript as echo");
         return true; // drop as echo
       }
     }
@@ -1137,6 +1145,7 @@ export async function handleWebCallWebSocket(
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   let _webcallTurnIdx   = 0;
+  let _diagFrameN       = 0; // throttle counter for per-frame diagnostic logs
   let _tVadFlush        = 0;   // when VAD flush was scheduled → audio dispatched to STT
   let _tSttFinal        = 0;   // when STT returned transcript
   let _tLlmFirstToken:  number | null = null;
@@ -3599,6 +3608,11 @@ export async function handleWebCallWebSocket(
     // agent talks for long stretches, flipping "Sir" → "Ma'am".
     if (genderDetector && !speaking) genderDetector.addSpeechChunk(pcm8kForGender);
     const rms = rmsEnergy(data);
+    // Diagnostic: every ~25 frames (~3 s) log RMS, streamSTT liveness, and echo-grace state
+    // so we can confirm audio is flowing and identify if the mic level is too low post-AEC.
+    if (++_diagFrameN % 25 === 0) {
+      logger.info({ callId, rms, speaking, streamSTT_alive: !!streamSTT, echoGraceMsRemaining: Math.max(0, echoGraceUntil - Date.now()), msSinceLastChunk: lastChunkSentAt > 0 ? Date.now() - lastChunkSentAt : -1, frameBytes: (data as Buffer).byteLength }, "Webcall: audio-diag frame sample");
+    }
 
     if (speaking) {
       // Agent is speaking — use elevated threshold to ignore echo / ambient noise.
