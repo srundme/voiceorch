@@ -1,0 +1,55 @@
+Read the whole file. Your three fixes are correctly applied — I verified the two that depend on ordering:
+
+STT barge-in gate ordering (my point 1): isAgentEcho sits above interrupted = true / send({type:"interrupted"}) in both the primary and fallback speaking branches. No side effects fire before the echo check. Correct.
+stripSsml/normalizeIndic order (my point 2): you run stripSsml(normalizeIndic(x)) — normalizeIndic inner. I'd flagged order as a risk, but it's safe here: normalizeIndic only does NFC + ZWJ/ZWNJ strip + lowercase + whitespace, none of which touch </>, so tags survive into stripSsml intact. Fine at all four sites, and consistent across them.
+
+But now that I can see the surrounding code, the rework has exposed two real latent bugs in adjacent paths. These are the ones to fix before you ship.
+1. HIGH — recentAgentText is pruned before the echo it's meant to catch arrives
+AGENT_TEXT_BUFFER_MS = 3000, and you push each sentence with at: Date.now() at sentence start (in the playback loop, before the await). But isAgentEcho only runs within ECHO_CONTENT_WINDOW_MS (900ms) of lastChunkSentAt, which is the end of playback plus tail drains.
+Work the timing for the last sentence (the one most likely to echo):
+entry.at        = sentence_start
+lastChunkSentAt ≈ sentence_start + D + 150ms(per-sentence tail) + 300ms(turn tail)
+match fires at  ≤ lastChunkSentAt + 900ms
+entry age at match = D + 450 + (≤900) = D + up to 1350ms
+pruned when age > 3000  →  D > ~1650ms
+So any agent sentence longer than ~1.65s has its buffer entry pruned before its own echo transcript can match it — and the echo silently leaks through as a user turn. At ~64ms/char Tamil that's ~26 characters. Most real sentences clear that. Your content-echo detection effectively doesn't fire for normal-length final sentences, which is the exact case inEndGrace originally existed to handle.
+Fix: either bump AGENT_TEXT_BUFFER_MS to ~8000ms, or timestamp the push at lastChunkSentAt / sentence end instead of start. The buffer needs to span max_sentence_duration + ECHO_CONTENT_WINDOW_MS + STT_finalize_latency. 3s doesn't.
+2. HIGH — pendingShortUtterance bypasses echo filtering, reintroducing the self-echo bug
+In the speaking branch the short-utterance save happens before the echo checks:
+typescriptif (!semanticOverride && wc < wordsForInterruption) {
+  pendingShortUtterance = text;   // saved with NO echo check
+  return;
+}
+if (!semanticOverride && Date.now() < echoGraceUntil) return;
+if (!semanticOverride && isAgentEcho(text)) return;   // ← never reached for short text
+And the replay path runs it straight into process() with no filter:
+typescriptif (pendingShortUtterance) {
+  streamingTranscriptPending = pendingShortUtterance;
+  void process();
+}
+So when the agent says a 1-word confirmation ("சரி") mid-sentence and the mic echoes it, Sarvam transcribes "சரி", wc=1 < 2, it's saved unfiltered, and then replayed post-speech as if the caller said it. That's precisely the Concern A self-echo loop the whole rework was meant to kill — it just travels through the short-utterance replay channel instead of the main one.
+Don't filter at save time (during speech, lastLoudFrameAt is stale because you only update it in the !speaking branch, so the tiebreaker can't protect a genuine short confirmation). Filter at replay time, where speaking is false, lastLoudFrameAt reflects real post-speech caller frames, and lastChunkSentAt is still within the window:
+typescriptif (pendingShortUtterance) {
+  const queued = pendingShortUtterance;
+  pendingShortUtterance = null;
+  if (isAgentEcho(queued)) {
+    // agent's own short word echoed back — drop, don't replay
+  } else {
+    streamingTranscriptPending = queued;
+    void process();
+  }
+}
+Note this fix depends on #1 — if the buffer is pruned, isAgentEcho returns false here too and the echo replays anyway. Fix #1 first.
+3. MEDIUM — the energy barge-in path still has no content gate
+You added isAgentEcho to both STT transcript branches, but the energy-based barge-in in the message handler fires purely on RMS, guarded only by echoGraceUntil:
+typescriptif (!inStartGrace && rms > bargeInRmsThreshold) { ... interrupted = true; ... }
+In practice echoGraceUntil covers the sentence (exact duration for buffered, 70ms/char + 700ms slack for streaming), so this is mostly protected. But it's the asymmetry that bit you before: if the 70ms/char estimate undershoots a fast-spoken sentence, grace expires mid-playback and the agent's own echo at >800 RMS can false-fire a barge-in with no content backstop. Lower-priority than 1 and 2, but it's the same class of bug you just fixed on the other path — worth a content check or a more conservative duration estimate.
+4. MEDIUM — lastLoudFrameAt threshold may drop moderate-volume genuine confirmations
+You set lastLoudFrameAt with if (rms > bargeInRmsThreshold) (800). Post-AEC, a genuine reply can land in the 600–800 band. A short genuine "சரி" at 650 RMS right after the agent said "சரி" → not "loud" → tiebreaker fails → dropped as echo → caller repeats. That's the original bug in a narrow band. Since your whole design biases toward accepting the caller (dropped-genuine happens every turn; echo-acceptance is rare and recoverable), use SPEECH_RMS_THRESHOLD (400) for this marker specifically, not the barge-in threshold.
+5. LOW — stripSsml's <[^>]+> eats literal angle-bracket text
+"policy < 5 lakh > tier" would have < 5 lakh > deleted from the echo buffer. Consequence is an echo miss (not a false drop of caller speech), and it's rare in insurance/edutech scripts, but </?[a-zA-Z][^>]*> is the safer pattern.
+
+Two things I can't check statically and you should confirm on a live call, since #2 is exactly the kind of bug that passes static review and fails in production:
+
+Agent emits a 1-word Tamil confirmation, caller stays silent → verify no replay loop (this is the #2 path).
+Agent says "சரி", caller immediately says "சரி" back at normal volume → verify it's accepted as a turn (this is the #1 + #4 interaction).

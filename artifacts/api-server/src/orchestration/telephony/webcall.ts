@@ -78,7 +78,12 @@ const ECHO_CONTENT_WINDOW_MS   = 900;  // only run content-based echo check for 
                                         // be echo from the agent's own voice
 const ECHO_SIM_THRESHOLD       = 0.6;  // token containment ratio (|intersection| / |transcript tokens|) above which
                                         // a post-speech transcript is classified as acoustic echo and discarded
-const AGENT_TEXT_BUFFER_MS     = 3000; // retain agent utterances in the echo-detection buffer for this long
+const AGENT_TEXT_BUFFER_MS     = 8000; // retain agent utterances in the echo-detection buffer for this long.
+                                        // Must cover: max sentence TTS duration + ECHO_CONTENT_WINDOW_MS + STT
+                                        // finalize latency. With push-at-sentence-start timing, a 4s sentence has
+                                        // entry.at ≈ 0 and the matching echo arrives at ~4s(TTS)+0.15s(tail)+
+                                        // 0.9s(window)+0.5s(Sarvam finalize) ≈ 5.6s. 8 s gives headroom for
+                                        // slower TTS providers and network jitter without unbounded buffer growth.
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
 const WEB_TAIL_ECHO_MARGIN_MS  = 100;  // extra echo-grace held PAST the tail-silence drain so the agent's own
@@ -1053,7 +1058,11 @@ export async function handleWebCallWebSocket(
   // storing raw markup prevents token matching because "சரி" with a surrounding
   // <break> tag won't tokenise to the same word as the STT output "சரி".
   function stripSsml(s: string): string {
-    return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // Use a tag-specific pattern (</?[a-zA-Z][^>]*>) rather than the greedy <[^>]+>
+    // so literal angle-bracket text in agent scripts ("policy < 5 lakh > tier") is
+    // preserved in the echo buffer. The greedy form would delete "< 5 lakh >" from
+    // the token set, causing an echo miss. SSML tags always start with a letter.
+    return s.replace(/<\/?[a-zA-Z][^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
 
   // isAgentEcho: returns true when `transcript` looks like acoustic echo of the agent.
@@ -2679,12 +2688,19 @@ export async function handleWebCallWebSocket(
         clearStreamingFallback();
         // Replay any short utterance that was said during the agent's speech but was
         // too short to trigger a barge-in. Process it now as the user's actual turn.
+        // Echo check at replay time (NOT at save time): lastLoudFrameAt is only updated
+        // in the !speaking audio branch, so it reflects real post-speech caller frames
+        // here. At save time (during agent speech) it would have been stale.
         if (pendingShortUtterance) {
           const queued = pendingShortUtterance;
           pendingShortUtterance = null;
-          logger.info({ callId, text: queued }, "Webcall: replaying queued short utterance as user turn");
-          streamingTranscriptPending = queued;
-          void process();
+          if (isAgentEcho(queued)) {
+            logger.info({ callId, text: queued, msSinceLastChunk: Date.now() - lastChunkSentAt }, "Webcall: dropping queued short utterance — content echo at replay time");
+          } else {
+            logger.info({ callId, text: queued }, "Webcall: replaying queued short utterance as user turn");
+            streamingTranscriptPending = queued;
+            void process();
+          }
         }
         // STEP 0b diag: natural turn-end ordering of (a) final-sentence TTS done,
         // (b) last audio frame handed to ws.send, (c) flip to "listening" — plus the
@@ -3628,7 +3644,14 @@ export async function handleWebCallWebSocket(
     // silence, so a boolean would be overwritten to false by trailing silent frames before
     // the transcript fires. lastLoudFrameAt preserves the most recent loud-frame time across
     // the silence gap so the tiebreaker can check within the full ECHO_CONTENT_WINDOW_MS.
-    if (rms > bargeInRmsThreshold) lastLoudFrameAt = Date.now();
+    //
+    // Use SPEECH_RMS_THRESHOLD (400), NOT bargeInRmsThreshold (800). Post-AEC, a genuine
+    // short confirmation ("சரி") can land at 600–800 RMS — below the barge-in threshold
+    // but clearly above background noise. Using 800 here would blind the tiebreaker to
+    // that mid-band signal, causing a genuine caller "சரி" to be dropped as echo every
+    // time the agent said "சரி". The design biases toward accepting the caller (missed
+    // echo → one extra turn; missed genuine → caller must repeat every turn).
+    if (rms > SPEECH_RMS_THRESHOLD) lastLoudFrameAt = Date.now();
 
     // Streaming STT path: send all audio directly to the provider WebSocket.
     // Audio flows unconditionally — no end-grace early-return. Echo transcripts

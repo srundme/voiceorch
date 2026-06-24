@@ -1,0 +1,117 @@
+Task: Investigate why the "Noise Cancellation" toggle has no effect during calls.
+
+Current Behavior
+
+The Agent → Voice page contains a "Noise Cancellation" toggle.
+
+However:
+
+- Whether the toggle is ON or OFF, the call recording still contains the same background noise.
+- The toggle appears to have no observable effect.
+- The issue is noticeable in the call recording.
+
+This task is to investigate and identify the root cause before implementing any fix.
+
+------------------------------------------------------------
+
+Please analyze the complete flow.
+
+1. Verify whether the Noise Cancellation toggle is actually persisted in the database.
+
+- Is the setting saved correctly?
+- Which table and column store it?
+- Is the value changing when the toggle is switched?
+
+------------------------------------------------------------
+
+2. Verify whether the orchestration layer reads this setting.
+
+Specifically identify:
+
+- Which file reads the Noise Cancellation configuration.
+- Whether both telephony (pipeline.ts) and webcall.ts use it.
+- Whether only one path supports it.
+
+------------------------------------------------------------
+
+3. Trace the complete caller audio pipeline.
+
+Show exactly where caller audio flows through:
+
+Browser / Telephony
+↓
+
+Audio Capture
+
+↓
+
+Noise Cancellation
+
+↓
+
+VAD
+
+↓
+
+STT
+
+↓
+
+Recording
+
+Tell me whether noise cancellation is applied:
+
+- before STT
+- before recording
+- both
+- or neither.
+
+------------------------------------------------------------
+
+4. Verify the recording pipeline.
+
+Determine whether the recording stores:
+
+- Raw caller audio
+
+or
+
+- Noise-cancelled caller audio.
+
+If recordings always save the raw audio, explain why.
+
+------------------------------------------------------------
+
+5. Verify implementation status.
+
+Tell me whether the Noise Cancellation toggle currently:
+
+- is fully implemented,
+- is only partially implemented,
+- only updates the UI,
+- or is completely unused.
+
+------------------------------------------------------------
+
+6. Compare both call paths.
+
+Check whether Noise Cancellation works differently in:
+
+- webcall.ts
+- pipeline.ts
+
+If one supports it and the other does not, explain the difference.
+
+------------------------------------------------------------
+
+Expected Output
+
+Do NOT make code changes yet.
+
+Provide:
+
+- Root cause.
+- Which files are involved.
+- Whether this is a UI issue, backend issue, or recording pipeline issue.
+- Whether recordings are expected to contain background noise by design.
+- What changes would be required to make the toggle actually affect both live STT and call recordings.
