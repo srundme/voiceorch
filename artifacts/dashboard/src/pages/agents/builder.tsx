@@ -815,7 +815,6 @@ function PromptTab({ form }: { form: any }) {
 /* ── Tab: Voice ─────────────────────────────────────────────────────────────── */
 
 function VoiceTab({ form }: { form: any }) {
-  const backchannelingEnabled = form.watch("backchannelingEnabled");
   const ttsProvider   = form.watch("ttsProvider");
   const ttsVoice      = form.watch("ttsVoice");
   const ttsModel      = form.watch("ttsModel");
@@ -1160,21 +1159,6 @@ function VoiceTab({ form }: { form: any }) {
               <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
-          {backchannelingEnabled && (
-            <>
-              <FormField control={form.control} name="backchannelingFrequency" render={({ field }) => (
-                <FormItem>
-                  <div className="flex justify-between"><FormLabel className="text-xs">Frequency</FormLabel>
-                    <span className="text-xs font-mono">{((field.value ?? 0.5) * 100).toFixed(0)}%</span></div>
-                  <FormControl>
-                    <input type="range" min={0} max={1} step={0.05} value={field.value ?? 0.5}
-                      onChange={e => field.onChange(parseFloat(e.target.value))}
-                      className="w-full h-1.5 accent-primary cursor-pointer" />
-                  </FormControl>
-                </FormItem>
-              )} />
-            </>
-          )}
 
           <FormField control={form.control} name="ambientNoiseEnabled" render={({ field }) => (
             <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
