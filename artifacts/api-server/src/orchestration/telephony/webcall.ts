@@ -572,6 +572,13 @@ export async function handleWebCallWebSocket(
               logger.info({ callId, text, msToGraceEnd: echoGraceUntil - Date.now() }, "Webcall: ignoring STT transcript within echo grace");
               return;
             }
+            // Content echo gate: catches the agent's own words echoing back AFTER the
+            // echoGraceUntil window expires (e.g. a long TTS sentence whose AEC-adapted echo
+            // still matches agent text). Semantic interrupts bypass this too.
+            if (!semanticOverride && isAgentEcho(text)) {
+              logger.info({ callId, text, msSinceLastChunk: Date.now() - lastChunkSentAt }, "Webcall: ignoring barge-in transcript (content-based echo, during-speech)");
+              return;
+            }
             interrupted = true;
             send({ type: "interrupted" });
             sendStatus("thinking");
@@ -583,7 +590,7 @@ export async function handleWebCallWebSocket(
               metadata: { event: "Barge-in Detected", reason: semanticOverride ? "semantic" : "word_count", wordCount: wc },
             });
             logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via streaming STT");
-          } else if (isAgentEcho(text, lastFrameWasLoud)) {
+          } else if (isAgentEcho(text)) {
             // Content-based echo detection: the transcript's tokens overlap ≥ECHO_SIM_THRESHOLD
             // with recently spoken agent text AND arrived within ECHO_CONTENT_WINDOW_MS of the
             // last TTS chunk. This catches acoustic echo regardless of when in the turn the
@@ -637,6 +644,11 @@ export async function handleWebCallWebSocket(
                         logger.info({ callId, text, msToGraceEnd: echoGraceUntil - Date.now() }, "Webcall: ignoring transcript within echo grace (fallback STT)");
                         return;
                       }
+                      // Content echo gate — same as primary STT speaking branch.
+                      if (!semanticOverride && isAgentEcho(text)) {
+                        logger.info({ callId, text, msSinceLastChunk: Date.now() - lastChunkSentAt }, "Webcall: ignoring barge-in transcript (content-based echo, during-speech, fallback STT)");
+                        return;
+                      }
                       interrupted = true;
                       send({ type: "interrupted" });
                       sendStatus("thinking");
@@ -648,7 +660,7 @@ export async function handleWebCallWebSocket(
                         metadata: { event: "Barge-in Detected", reason: semanticOverride ? "semantic" : "word_count", wordCount: wc, path: "fallback_stt" },
                       });
                       logger.info({ callId, wc, semanticOverride }, "Webcall: barge-in via fallback streaming STT");
-                    } else if (isAgentEcho(text, lastFrameWasLoud)) {
+                    } else if (isAgentEcho(text)) {
                       // Content-based echo detection — same gate as primary STT path.
                       logger.info({ callId, text, msSinceLastChunk: Date.now() - lastChunkSentAt }, "Webcall: discarding post-speech transcript (content-based echo, fallback STT)");
                       safetyNet.beginListening();
@@ -1014,10 +1026,14 @@ export async function handleWebCallWebSocket(
   let echoGraceUntil = 0;
   // Rolling buffer of agent TTS sentences for content-based echo detection (see isAgentEcho below).
   const recentAgentText: { text: string; at: number }[] = [];
-  // Was the most recent audio frame from the caller above the barge-in energy threshold?
-  // Used as a tiebreaker in isAgentEcho for short single/two-token utterances (e.g. "சரி")
-  // that overlap with agent vocabulary: a genuine caller confirmation is full-energy, echo is AEC-attenuated.
-  let lastFrameWasLoud = false;
+  // Timestamp of the most recent caller audio frame that exceeded the barge-in RMS threshold.
+  // Used by isAgentEcho() as a tiebreaker for short (≤2-token) transcripts that overlap with
+  // agent vocabulary. A timestamp is required (not a boolean): by the time Sarvam finalizes a
+  // segment, several trailing silence frames have already overwritten a boolean to false — the
+  // boolean would reflect end-of-utterance silence, not the speech itself. With a timestamp,
+  // isAgentEcho checks whether ANY frame was loud within ECHO_CONTENT_WINDOW_MS, which correctly
+  // spans the entire utterance plus the silence gap before the transcript fires.
+  let lastLoudFrameAt = 0;
   let pendingShortUtterance: string | null = null; // short transcript discarded during speaking — replayed after agent finishes
 
   // ── Content-based echo detection ──────────────────────────────────────────
@@ -1032,14 +1048,23 @@ export async function handleWebCallWebSocket(
     return s.normalize("NFC").replace(/[\u200C\u200D]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
   }
 
+  // stripSsml: remove SSML/HTML markup tags from agent TTS text before storing in
+  // recentAgentText. Cartesia and other TTS providers receive SSML-tagged strings;
+  // storing raw markup prevents token matching because "சரி" with a surrounding
+  // <break> tag won't tokenise to the same word as the STT output "சரி".
+  function stripSsml(s: string): string {
+    return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
   // isAgentEcho: returns true when `transcript` looks like acoustic echo of the agent.
   // Only fires within ECHO_CONTENT_WINDOW_MS of the last TTS chunk — outside that window
   // the microphone can't contain echo. Uses token containment (|intersection|/|transcript|)
   // so single-word echoes that Jaccard would miss are still caught. Tiebreaker for
-  // short confirmations (≤2 tokens): full-energy frames are almost certainly the caller
-  // since AEC attenuates echo 6–12 dB; accept them as genuine rather than risking a
-  // dropped "சரி" every turn.
-  function isAgentEcho(transcript: string, energyWasFull: boolean): boolean {
+  // short confirmations (≤2 tokens): uses lastLoudFrameAt (timestamp, NOT a boolean)
+  // to check whether any loud frame arrived within ECHO_CONTENT_WINDOW_MS. A boolean
+  // would be overwritten to false by the trailing silence frames that appear between
+  // the caller's speech and Sarvam's onFinal — the timestamp survives that gap.
+  function isAgentEcho(transcript: string): boolean {
     if (lastChunkSentAt <= 0 || Date.now() - lastChunkSentAt > ECHO_CONTENT_WINDOW_MS) return false;
     const t = normalizeIndic(transcript);
     const tTokens = t.split(/\s+/).filter(Boolean);
@@ -1056,9 +1081,11 @@ export async function handleWebCallWebSocket(
       for (const w of tSet) if (aSet.has(w)) hit++;
       const containment = hit / tSet.size;
       if (containment >= ECHO_SIM_THRESHOLD) {
-        // Tiebreaker: short (≤2 tokens) full-energy responses are overwhelmingly
-        // genuine caller speech — AEC-attenuated echo arrives at reduced RMS. Accept.
-        if (tSet.size <= 2 && energyWasFull) return false;
+        // Tiebreaker: short (≤2 tokens) utterance where a loud caller frame arrived
+        // within the echo window → almost certainly genuine (AEC attenuates echo
+        // 6–12 dB, so real echo is low-energy). Accept as caller speech.
+        const callerWasLoud = lastLoudFrameAt > 0 && (Date.now() - lastLoudFrameAt) < ECHO_CONTENT_WINDOW_MS;
+        if (tSet.size <= 2 && callerWasLoud) return false;
         return true; // drop as echo
       }
     }
@@ -1238,7 +1265,7 @@ export async function handleWebCallWebSocket(
           logger.warn({ callId, transcript: userText, garbledReason }, "Webcall: garbled transcript — responding with clarification");
           history.push({ role: "assistant", content: clarification });
           send({ type: "transcript", speaker: "agent", text: clarification });
-          recentAgentText.push({ text: clarification, at: Date.now() });
+          recentAgentText.push({ text: stripSsml(normalizeIndic(clarification)), at: Date.now() });
           try {
             const { audio: rawAudio } = await tts.synthesize(clarification);
             if (!closed) {
@@ -2463,7 +2490,9 @@ export async function handleWebCallWebSocket(
         }
         send({ type: "sentence_start", index: i, text: sentenceTexts[i] ?? "" });
         // Record each sentence in the echo-detection buffer the moment we begin playing it.
-        if (sentenceTexts[i]) recentAgentText.push({ text: sentenceTexts[i]!, at: Date.now() });
+        // stripSsml+normalizeIndic ensures SSML markup (e.g. <break>, <prosody>) and Unicode
+        // variations don't prevent token matching against STT output later.
+        if (sentenceTexts[i]) recentAgentText.push({ text: stripSsml(normalizeIndic(sentenceTexts[i]!)), at: Date.now() });
 
         const jobEntry = sentenceJobs[i]!;
 
@@ -2922,7 +2951,7 @@ export async function handleWebCallWebSocket(
 
   async function speakFinalUtterance(text: string): Promise<void> {
     if (!text.trim() || closed) return;
-    recentAgentText.push({ text, at: Date.now() });
+    recentAgentText.push({ text: stripSsml(normalizeIndic(text)), at: Date.now() });
     let audio: Buffer;
     try {
       const res = await tts.synthesize(text);
@@ -3110,7 +3139,7 @@ export async function handleWebCallWebSocket(
           // Send transcript before audio starts so the UI shows the text
           // while the agent is speaking, not after it finishes.
           send({ type: "transcript", speaker: "agent", text: greetingText });
-          recentAgentText.push({ text: greetingText, at: Date.now() });
+          recentAgentText.push({ text: stripSsml(normalizeIndic(greetingText)), at: Date.now() });
 
           for (let j = 0; j < greetAudio.length; j += AUDIO_CHUNK_BYTES) {
             if (closed || interrupted) break;
@@ -3594,11 +3623,12 @@ export async function handleWebCallWebSocket(
     bargeInFrames       = 0;           // agent not speaking — reset
     bargeInLowEnergyFrames = 0;
     bargeInFirstFrameAt = 0;
-    // Track whether the most recent caller audio frame was loud; used by isAgentEcho()
-    // as a tiebreaker for short (≤2-token) transcripts that overlap with agent vocabulary.
-    // AEC attenuates echo 6–12 dB, so full-energy post-speech frames are almost certainly
-    // the caller, not a mic reflection of the agent's last word.
-    lastFrameWasLoud = rms > bargeInRmsThreshold;
+    // Track the last loud caller frame for isAgentEcho()'s energy tiebreaker.
+    // A timestamp (not a boolean) is required: Sarvam fires onFinal after end-of-speech
+    // silence, so a boolean would be overwritten to false by trailing silent frames before
+    // the transcript fires. lastLoudFrameAt preserves the most recent loud-frame time across
+    // the silence gap so the tiebreaker can check within the full ECHO_CONTENT_WINDOW_MS.
+    if (rms > bargeInRmsThreshold) lastLoudFrameAt = Date.now();
 
     // Streaming STT path: send all audio directly to the provider WebSocket.
     // Audio flows unconditionally — no end-grace early-return. Echo transcripts
