@@ -342,6 +342,29 @@ export async function createSession(params: {
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
     if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult);
+      // Append a language-override note AFTER the memory block so the LLM
+      // treats it as the final authority and doesn't drift into a prior language
+      // the agent used to be configured for (e.g. Tamil → now Hindi).
+      {
+        const _agentLang = agent.asrLanguage ?? agent.language;
+        if (_agentLang) {
+          const _LNAMES: Record<string, string> = {
+            "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+            "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+            "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+            "en-IN": "English", "en-US": "English", "en-GB": "English",
+            "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+            "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+            "ar-EG": "Arabic", "ru-RU": "Russian",
+          };
+          const _lname = _LNAMES[_agentLang] ?? _agentLang;
+          agentConfig.systemPrompt +=
+            `\n\n[CURRENT AGENT LANGUAGE — THIS SESSION] The agent is now configured for ${_lname}. ` +
+            `Even if previous calls (shown in the memory above) were conducted in a different language, ` +
+            `you MUST communicate exclusively in ${_lname} throughout this entire call. ` +
+            `Do not switch to any other language for any reason.`;
+        }
+      }
       logger.info(
         { agentId: params.agentId, callerPhone, callCount: callerProfileSnapshot?.callCount ?? 0, factCount: callerCtxResult.facts.length, archiveCount: callerCtxResult.recentCalls.length },
         "Caller memory injected into system prompt"

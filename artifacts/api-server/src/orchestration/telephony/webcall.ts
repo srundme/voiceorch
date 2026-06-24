@@ -752,6 +752,26 @@ export async function handleWebCallWebSocket(
       for (const f of webcallCtx.facts) webcallLatchedFacts.set(f.key, f.value);
       if (webcallProfile || webcallCtx.facts.length > 0 || webcallCtx.recentCalls.length > 0) {
         systemPrompt = injectEnhancedMemory(systemPrompt, webcallCtx);
+        // Append a language-override note AFTER the memory block so the LLM
+        // sees it as the final authority, not overridden by Tamil/Hindi/etc.
+        // call summaries from a prior language configuration of this agent.
+        if (agentLanguage) {
+          const _LNAMES: Record<string, string> = {
+            "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+            "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+            "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+            "en-IN": "English", "en-US": "English", "en-GB": "English",
+            "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+            "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+            "ar-EG": "Arabic", "ru-RU": "Russian",
+          };
+          const _lname = _LNAMES[agentLanguage] ?? agentLanguage;
+          systemPrompt +=
+            `\n\n[CURRENT AGENT LANGUAGE — THIS SESSION] The agent is now configured for ${_lname}. ` +
+            `Even if previous calls (shown in the memory above) were conducted in a different language, ` +
+            `you MUST communicate exclusively in ${_lname} throughout this entire call. ` +
+            `Do not switch to any other language for any reason.`;
+        }
         logger.info({ callId, agentId, callCount: webcallProfile?.callCount ?? 0, factCount: webcallCtx.facts.length, archiveCount: webcallCtx.recentCalls.length }, "Webcall caller memory injected");
         logExecution("Memory", "response", {
           responsePayload: {
