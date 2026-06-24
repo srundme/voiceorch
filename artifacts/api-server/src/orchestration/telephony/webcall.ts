@@ -31,6 +31,7 @@ import { buildDatetimeInjection } from "../datetimeInject.js";
 import { getBackchannelFillers } from "../backchannel.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "../conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks } from "../reasoningFilter.js";
+import { resolvePromptVariables } from "../prompt-vars.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "../kb-retrieval.js";
 import {
   buildToolDefs,
@@ -804,25 +805,21 @@ export async function handleWebCallWebSocket(
   // Substitutes {var} / {{var}} placeholders in the system prompt.
   // Built-in vars (agent_name, date) are always available; caller-supplied
   // vars (from the webcall URL ?variables=...) take the highest priority.
-  {
+  // Vars are hoisted to function scope so the SAME map (and precedence) resolves
+  // BOTH the system prompt here and the static greeting later.
+  const greetingVars: Record<string, string> = (() => {
     const now = new Date();
-    const builtinVars: Record<string, string> = {
+    return {
       agent_name:    agent.name,
       date: now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
       caller_number: "browser",
       ...promptVariables,
     };
-    const resolveVar = (key: string, fullMatch: string): string => {
-      if (key === "caller_salutation") return fullMatch;
-      return key in builtinVars ? builtinVars[key]! : fullMatch;
-    };
-    systemPrompt = systemPrompt
-      .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
-      .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
-    const resolvedVars: Record<string, string> = {};
-    for (const [k, v] of Object.entries(builtinVars)) resolvedVars[k] = v;
+  })();
+  {
+    systemPrompt = resolvePromptVariables(systemPrompt, greetingVars);
     logExecution("VariableResolver", "system", {
-      requestPayload: { variables: resolvedVars },
+      requestPayload: { variables: greetingVars },
       responsePayload: { resolvedPromptPreview: systemPrompt.substring(0, 600) },
       status: "info",
     });
@@ -3048,18 +3045,22 @@ export async function handleWebCallWebSocket(
 
       if (agent.greetingMessage && !isReturningCaller) {
         // Fast path — use configured greeting directly.
-        // Substitute {caller_salutation} with neutral salutation — gender is
-        // not yet known at greeting time; per-turn substitution will use the
+        // First resolve prompt variables (e.g. {{customer_name}}) using the SAME
+        // map and precedence as the system prompt, so the greeting addresses the
+        // caller by name. caller_salutation is left untouched by the helper.
+        const greetingBase = resolvePromptVariables(agent.greetingMessage, greetingVars);
+        // Then substitute {caller_salutation} with the neutral salutation — gender
+        // is not yet known at greeting time; per-turn substitution will use the
         // real detected value for all subsequent LLM calls.
         {
           const rawSal = neutralSal;
           const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
           if (resolvedSal) {
-            greetingText = agent.greetingMessage
+            greetingText = greetingBase
               .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
               .replace(/\{caller_salutation\}/g, resolvedSal);
           } else {
-            greetingText = agent.greetingMessage
+            greetingText = greetingBase
               .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
               .replace(/\s*\{caller_salutation\}\s*/g, " ");
           }

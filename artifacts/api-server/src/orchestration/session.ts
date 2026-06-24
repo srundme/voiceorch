@@ -9,6 +9,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
+import { resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -372,14 +373,16 @@ export async function createSession(params: {
     ...Object.fromEntries(Object.entries(params.customParameters ?? {}).map(([k, v]) => [k, v])),
   };
 
-  const resolveVar = (key: string, fullMatch: string): string => {
-    if (key === "caller_salutation") return fullMatch;
-    return key in dynVars ? dynVars[key]! : fullMatch;
-  };
+  agentConfig.systemPrompt = resolvePromptVariables(agentConfig.systemPrompt, dynVars);
 
-  agentConfig.systemPrompt = agentConfig.systemPrompt
-    .replace(/\{\{(\w+)\}\}/g, (m, k: string) => resolveVar(k, m))
-    .replace(/\{(\w+)\}/g,     (m, k: string) => resolveVar(k, m));
+  // Apply the SAME resolution to the static greeting so it addresses the caller
+  // by their prompt variables (e.g. {{customer_name}} → "krithika"). Static
+  // greetings skip the LLM, so without this the name is never inserted.
+  // caller_salutation is deliberately preserved here and resolved later by
+  // gender detection in pipeline.greet().
+  if (agentConfig.greetingMessage) {
+    agentConfig.greetingMessage = resolvePromptVariables(agentConfig.greetingMessage, dynVars);
+  }
 
   // Apply knowledge base (prepended so it sits at the top of the final prompt)
   if (kbEntriesResult) {
