@@ -3788,14 +3788,18 @@ export function extractSentences(text: string): { sentences: string[]; remainder
         const shouldSplit = afterSpace === undefined || /[A-Z"'(\u2018\u201C\u0900-\u0D7F]/.test(afterSpace);
 
         if (shouldSplit) {
-          // Only split when word before the period is > 4 letters (not an abbreviation).
-          // A ≤4-letter all-alpha word (Mr, Mrs, Dr, Prof, vs, etc.) is almost
-          // certainly an abbreviation.  Digits/punctuation before "." mean we're
-          // NOT in an abbreviation (e.g. "cost $1,200.50. Next…").
+          // Only split when the full word before the period is NOT a short abbreviation.
+          // We match the complete trailing Latin word (all consecutive letters) and
+          // flag as abbreviation only if it is ≤2 chars (Mr, Dr, vs, St, No, etc.).
+          // The old heuristic matched a 1–4-char SUFFIX which incorrectly treated
+          // Romanised Hindi words like "kare" (4 chars) or the suffix "rega" of
+          // "karega" as abbreviations, blocking the sentence split.
+          // Digits/punctuation before "." mean we're NOT in an abbreviation
+          // (e.g. "cost $1,200.50. Next…").
           // Non-Latin scripts (Tamil, Hindi etc.) won't match the Latin regex so
           // isAbbrev will be false — they always split correctly.
-          const wordBefore = text.slice(segStart, i).match(/([A-Za-z]{1,4})$/)?.[1];
-          const isAbbrev = wordBefore !== undefined; // matched = 1–4 letter suffix = abbreviation
+          const wordBefore = text.slice(segStart, i).match(/([A-Za-z]+)$/)?.[1];
+          const isAbbrev = wordBefore !== undefined && wordBefore.length <= 2;
           if (!isAbbrev) {
             const s = text.slice(segStart, i + 1).trim();
             if (s.length >= 4) sentences.push(s);
