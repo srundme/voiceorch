@@ -171,6 +171,68 @@ async function loadEpisodeTail(
     .map(r => ({ speaker: r.speaker as "agent" | "caller", text: r.text }));
 }
 
+/**
+ * Decide whether an abrupt-end conversation tail is worth resuming.
+ *
+ * The "resume, do not restart" behaviour suppresses the agent's scripted opening
+ * (brand/persona intro) and tells the model to pick the prior conversation back
+ * up. That is only safe when the prior tail is a real, coherent exchange. If the
+ * previous call was itself broken — the agent looping the same line, or the
+ * caller side being STT garbage — resuming it drops the model straight back into
+ * the broken state and the scripted intro never happens, and the new call tends
+ * to drop too, feeding the next call (a self-perpetuating loop). In that case it is
+ * treated as an unresumable drop: caller memory cold-starts (name only) so the
+ * scripted opening is restored, rather than resuming the broken thread.
+ */
+function isResumableTail(
+  tail: Array<{ speaker: "agent" | "caller"; text: string }> | null,
+): boolean {
+  if (!tail || tail.length === 0) return false;
+
+  const normalize = (s: string) =>
+    s.toLowerCase().replace(/[\s।॥,.!?…\-–—]+/g, " ").trim();
+
+  // Looping prior call: the agent repeated the same — or a near-identical — line.
+  // Resuming such a call drops the model straight back into the loop, so start
+  // fresh instead. We fail safe toward "not resumable": a false positive just
+  // means the agent gives its normal scripted opening, which is the desired
+  // behaviour anyway.
+  const agentLines = tail
+    .filter(t => t.speaker === "agent")
+    .map(t => normalize(t.text))
+    .filter(t => t.length > 0);
+  if (agentLines.length >= 2) {
+    if (new Set(agentLines).size < agentLines.length) return false; // exact repeat
+    for (let i = 0; i < agentLines.length; i++) {
+      for (let j = i + 1; j < agentLines.length; j++) {
+        const a = agentLines[i]!;
+        const b = agentLines[j]!;
+        const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+        // near-duplicate: one line contains the other, or they share a long prefix
+        if (shorter.length >= 16 && longer.includes(shorter)) return false;
+        let k = 0;
+        while (k < shorter.length && a[k] === b[k]) k++;
+        if (k >= 20) return false;
+      }
+    }
+  }
+
+  // A resume only makes sense if the caller actually contributed something
+  // substantive to continue from. Reject all-agent tails and tails whose caller
+  // turns are all empty or a single repeated token (typical STT garbage, e.g.
+  // "मैं मैं मैं") — there is no real thread to pick back up.
+  const callerLines = tail
+    .filter(t => t.speaker === "caller")
+    .map(t => normalize(t.text))
+    .filter(t => t.length > 0);
+  const hasSubstantiveCaller = callerLines.some(
+    line => new Set(line.split(" ").filter(Boolean)).size >= 2,
+  );
+  if (!hasSubstantiveCaller) return false;
+
+  return true;
+}
+
 // ── Layer 1 compat: load just the profile row ─────────────────────────────────
 
 export async function loadCallerProfile(
@@ -333,32 +395,46 @@ export function injectEnhancedMemory(
   const lastLabel  = daysSinceLabel(profile?.lastCalledAt ?? null);
 
   const headerParts: string[] = [`Name: ${namePart}`];
-  if (!personaChanged) {
+
+  const isRecentDrop = !personaChanged && isAbruptEnd(profile);
+  // Only treat the drop as resumable when the prior tail is a coherent exchange.
+  // A looping/garbage prior call must NOT suppress the scripted opening, or the
+  // agent re-enters the broken thread and never re-introduces itself (doom loop).
+  const abruptEndTail = ctx.abruptEndTail ?? null;
+  const resumeDrop = isRecentDrop && isResumableTail(abruptEndTail);
+
+  // A dropped call we've decided NOT to resume is treated as a cold start, just
+  // like a persona change: the profile/summary/episodes were written by the
+  // broken call and are contaminated, so we suppress all domain-bearing memory
+  // and let the agent give its normal scripted opening instead of the
+  // "don't re-introduce yourself" returning-caller behaviour. Only the caller's
+  // name (and the name-priority safety rule) survive.
+  const unresumableDrop = isRecentDrop && !resumeDrop;
+  const suppressDomain = personaChanged || unresumableDrop;
+
+  if (!suppressDomain) {
     headerParts.push(`Calls: ${callCount}`);
     if (lastLabel) headerParts.push(`Last: ${lastLabel}`);
   }
-
-  const isRecentDrop = !personaChanged && isAbruptEnd(profile);
-
-  if (isRecentDrop) headerParts.push("⚠️ LAST CALL DROPPED");
+  if (resumeDrop) headerParts.push("⚠️ LAST CALL DROPPED");
   lines.push(headerParts.join("  |  "));
 
   // ── Predicted intent (if available) ───────────────────────────────────────
-  if (!personaChanged && profile?.predictedIntent) {
+  if (!suppressDomain && profile?.predictedIntent) {
     lines.push("");
     lines.push(`🎯 PREDICTED REASON FOR THIS CALL: ${profile.predictedIntent}`);
   }
 
   // ── Risk signal ───────────────────────────────────────────────────────────
   const risk = profile?.riskScore ?? 0;
-  if (!personaChanged && risk >= 0.7) {
+  if (!suppressDomain && risk >= 0.7) {
     lines.push(`🚨 HIGH RISK CALLER (score: ${(risk * 100).toFixed(0)}%) — approach with extra patience, proactively address pain points`);
-  } else if (!personaChanged && risk >= 0.4) {
+  } else if (!suppressDomain && risk >= 0.4) {
     lines.push(`⚠️ ELEVATED RISK (score: ${(risk * 100).toFixed(0)}%) — caller may be frustrated, handle with care`);
   }
 
   // ── Sentiment arc ─────────────────────────────────────────────────────────
-  const sentimentsWithData = personaChanged ? [] : recentCalls.filter(c => c.sentiment);
+  const sentimentsWithData = suppressDomain ? [] : recentCalls.filter(c => c.sentiment);
   if (sentimentsWithData.length >= 2) {
     const trend = profile?.sentimentTrend;
     const arc = sentimentsWithData
@@ -372,7 +448,7 @@ export function injectEnhancedMemory(
 
   // ── L0: current (non-superseded) structured facts ─────────────────────────
   const now = Date.now();
-  const displayFacts = personaChanged ? [] : facts.filter(f => {
+  const displayFacts = suppressDomain ? [] : facts.filter(f => {
     if (f.key === "name") return false;
     if (f.confidence < 0.5) return false;
     // Always suppress language_pref — agents have a fixed configured language;
@@ -389,13 +465,13 @@ export function injectEnhancedMemory(
       const ageLabel = daysSinceLabel(f.createdAt);
       lines.push(`• ${f.key}: ${f.value}${ageLabel ? `  [${ageLabel}]` : ""}${staleTag}`);
     }
-  } else if (!personaChanged && profile?.summary) {
+  } else if (!suppressDomain && profile?.summary) {
     lines.push("");
     lines.push(`Prior context: ${profile.summary}`);
   }
 
   // ── L1: recent episode summaries with sentiment ───────────────────────────
-  const callsWithSummary = personaChanged ? [] : recentCalls.filter(c => c.summary);
+  const callsWithSummary = suppressDomain ? [] : recentCalls.filter(c => c.summary);
   if (callsWithSummary.length > 0) {
     lines.push("");
     lines.push("RECENT EPISODES:");
@@ -407,8 +483,7 @@ export function injectEnhancedMemory(
   }
 
   // ── Resume thread: tail of the abruptly-ended prior conversation (L2) ──────
-  const abruptEndTail = ctx.abruptEndTail ?? null;
-  const hasResumeTail = isRecentDrop && !!abruptEndTail && abruptEndTail.length > 0;
+  const hasResumeTail = resumeDrop && !!abruptEndTail && abruptEndTail.length > 0;
   if (hasResumeTail) {
     lines.push("");
     lines.push("LAST EXCHANGES BEFORE THE CALL DROPPED (resume from here):");
@@ -433,7 +508,7 @@ export function injectEnhancedMemory(
     "and use it exclusively for the rest of the call. The caller's self-stated name takes absolute " +
     "priority over the stored name shown above, which may belong to a previous caller on the same number.",
   );
-  if (isRecentDrop) {
+  if (resumeDrop) {
     lines.push(
       "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
       "Do NOT re-introduce yourself or your company and do NOT start the conversation over. " +
@@ -442,7 +517,7 @@ export function injectEnhancedMemory(
         ? "pick the conversation back up exactly where the exchanges above left off."
         : "continue naturally from the prior context above."),
     );
-  } else if (!personaChanged && callCount >= 1) {
+  } else if (!suppressDomain && callCount >= 1) {
     const riskInstruction = risk >= 0.7
       ? " Caller has shown frustration recently — proactively address concerns before they escalate."
       : risk >= 0.4

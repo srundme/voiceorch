@@ -38,6 +38,7 @@
 - [Pre-greeting drop resilience](pre-greeting-drop-resilience.md) — setup DB reads need withDbRetry; greeting-LLM failure must fall back not fatal; every pre-greeting teardown must log provider+readable reason
 - [Recording track alignment](recording-track-alignment.md) — align agent track to its own audio cursor, not per-frame wall-clock; per-frame padding buzzes the TTS channel
 - [Caller-memory persona-swap invalidation](caller-memory-persona-swap.md) — persona swap must clear priorFacts + DB rows + priorContext together, or the first post-swap extraction re-pollutes
+- [Caller-memory resume doom-loop](caller-memory-resume-doomloop.md) — dropped-call "resume from here" must be quality-gated; unresumable (looping/garbage) tail = cold start (suppressDomain), not returning-caller, or the greeting copies the broken thread and re-drops
 - [Strict-language rule translates brand names](language-rule-proper-nouns.md) — the single-language injection must exempt proper nouns or weak LLMs translate the brand (policyfy/पॉलिसीफाई → नीतिफाई)
 - [Webcall 2.0 thin adapter](webcall-pipeline-split.md) — browser webcall is a thin WS transport over the shared createSession/pipeline core; never re-fork conversation logic into webcall.ts
 - [Web-call mic capture anti-aliasing](webcall-capture-aliasing.md) — browser ignores requested 16k AudioContext rate; band-limit (biquad) before decimating to 16k or the caller channel buzzes
