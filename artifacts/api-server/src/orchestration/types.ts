@@ -201,11 +201,43 @@ export interface STTConfig {
   endpointingSilenceMs?: number;
 }
 
+/**
+ * Provider-agnostic LLM generation parameters resolved from agent config.
+ * Currently consumed only by the Sarvam adapter (per Sarvam's Chat Completions
+ * docs). Every field is optional — an adapter sends a value only when it is
+ * explicitly set, so any unset param falls back to the provider's own default.
+ */
+export interface LLMGenerationParams {
+  /** Sampling temperature, 0–2. */
+  temperature?: number;
+  /** Nucleus sampling, 0–1. */
+  topP?: number;
+  /** Maximum tokens in the completion. */
+  maxTokens?: number;
+  /** Penalize already-present tokens to encourage new topics, -2..2. */
+  presencePenalty?: number;
+  /** Penalize frequent tokens to reduce repetition, -2..2. */
+  frequencyPenalty?: number;
+  /** Deterministic sampling seed (best-effort). */
+  seed?: number;
+  /** Hard stop sequence(s); a single string or up to 4 strings. */
+  stop?: string | string[];
+  /** Sarvam-specific: Wikipedia RAG grounding for factual accuracy. */
+  wikiGrounding?: boolean;
+  /**
+   * Sarvam Hybrid Thinking level. The Sarvam adapter defaults this to `null`
+   * (thinking disabled) for voice latency; only set this to override.
+   */
+  reasoningEffort?: "low" | "medium" | "high" | null;
+}
+
 export interface AgentConfig {
   id: number;
   name: string;
   systemPrompt: string;
   temperature: number;
+  /** Resolved LLM generation params (temperature/top_p/penalties/etc.). */
+  llmGenerationParams?: LLMGenerationParams;
   maxDuration: number;
   asrProvider: string;
   asrModel: string | null;

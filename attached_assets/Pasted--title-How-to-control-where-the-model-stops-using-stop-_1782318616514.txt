@@ -1,0 +1,86 @@
+---
+title: How to control where the model stops using `stop`
+description: Tell the model to **stop generating further tokens.
+---
+
+The `stop` parameter lets you define **one or more strings** that tell the model to **stop generating further tokens** when it encounters them.
+
+- The stop sequence(s) will **not appear** in the returned text.
+- `stop` is a **hard stop** — the model will not generate anything past the stop string.
+- You can use `stop` to:
+  - **Format structured outputs**
+  - Avoid responses that **run too long**
+  - Segment **multi-part answers**
+
+### How it works:
+
+- You can pass:
+  - A single **string**
+  - Or a **list of up to 4 strings**
+- The model will stop generating as soon as **any stop string is matched**.
+
+---
+
+### Parameter details:
+
+| Parameter | Type                     | Limits      |
+|-----------|--------------------------|-------------|
+| `stop`    | String or List of Strings | Max 4 items |
+
+---
+
+### When to use `stop`:
+
+| Scenario                             | Example `stop` |
+|--------------------------------------|----------------|
+| Building chat with system markers     | `"###"`        |
+| Multi-turn Q&A                        | `"\nQ:"`       |
+| Ending output before next prompt      | `"User:"`      |
+| Preventing overly long answers        | `["###", "\nUser:", "End"]` |
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 1: Using single stop string
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant. End your answers with ###."},
+        {"role": "user", "content": "What is the capital of France?"}
+    ],
+    stop="###"  # Stop when "###" is reached
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```
+
+```python
+from sarvamai import SarvamAI
+
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example 2: Using list of stop strings
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are an expert answering user questions."},
+        {"role": "user", "content": "Explain what a black hole is."}
+    ],
+    stop=["###", "\nUser:", "\nQ:"]  # Multiple stop sequences
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

@@ -1,0 +1,64 @@
+---
+title: How to get repeatable results using `seed`
+description: Get the same output every time for the same prompt
+---
+
+The `seed` parameter lets you **make model outputs deterministic** — meaning you'll get the **same output** every time for the same prompt and settings.
+
+Great for **testing**, **debugging**, or **consistent experiences** in production.
+
+### What it does:
+
+- When you pass a `seed`, the model uses that value to **initialize its random number generator**.
+- This allows it to **sample deterministically** — so the same prompt and settings will always produce the same result.
+- If you don't pass a seed, the output will naturally vary on each request.
+- _**Note:** This feature is currently in **Beta** — the system will make a **best effort** to sample deterministically when `seed` is used._
+
+---
+
+### Format and Range:
+
+| Property       | Value Type | Range                                       |
+|----------------|------------|---------------------------------------------|
+| `seed`         | Integer    | `>= -9223372036854776000` to `<= 9223372036854776000` |
+
+👉 Typically, values like `42`, `1234`, or any stable number will work fine.
+
+### When to use `seed`:
+
+| Use Case                        | Why use it?                                |
+|---------------------------------|--------------------------------------------|
+| Regression testing               | Ensure same outputs over time              |
+| Demo apps or tutorials           | Show consistent results to all users       |
+| A/B testing with fixed inputs    | Keep output stable for comparison          |
+| QA pipelines                     | Validate expected model behavior           |
+
+---
+
+First, install the SDK:
+
+```bash
+pip install -Uqq sarvamai
+```
+
+Then use the following Python code:
+
+```python
+from sarvamai import SarvamAI
+
+# Initialize the SarvamAI client with your API key
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+
+# Example: Using `seed` to repeat responses
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {"role": "system", "content": "You are a poetry assistant."},
+        {"role": "user", "content": "Write a short poem about the moon."}
+    ],
+    seed=12345  # Ensures the same poem is returned every time (best effort)
+)
+
+# Receive assistant's reply as output
+print(response.choices[0].message.content)
+```

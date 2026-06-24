@@ -1,4 +1,4 @@
-import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Sarvam AI — Chat Completions (OpenAI-compatible endpoint)
@@ -64,9 +64,11 @@ function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[
 export class SarvamLLM implements LLMAdapter {
   private key: string;
   private model: string;
+  private genParams: LLMGenerationParams;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.key = apiKey;
+    this.genParams = genParams ?? {};
     // Map legacy/deprecated model names to current equivalents
     const ALIASES: Record<string, string> = {
       "sarvam-m":        "sarvam-30b",
@@ -76,6 +78,48 @@ export class SarvamLLM implements LLMAdapter {
     };
     const raw = model ?? "sarvam-30b";
     this.model = ALIASES[raw] ?? raw;
+  }
+
+  /**
+   * Map the resolved generation params onto Sarvam's documented request fields,
+   * clamping each to its valid range and including it ONLY when explicitly set,
+   * so an unset param falls back to Sarvam's own default.
+   *
+   * `reasoning_effort` is the one exception: it always defaults to `null`
+   * (Hybrid Thinking disabled) for low-latency voice, unless the agent has
+   * explicitly overridden it to "low" | "medium" | "high" | null.
+   */
+  private buildGenerationBody(): Record<string, unknown> {
+    const p = this.genParams;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const body: Record<string, unknown> = {
+      reasoning_effort: p.reasoningEffort === undefined ? null : p.reasoningEffort,
+    };
+
+    if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
+      body["temperature"] = clamp(p.temperature, 0, 2);
+    if (typeof p.topP === "number" && Number.isFinite(p.topP))
+      body["top_p"] = clamp(p.topP, 0, 1);
+    if (typeof p.maxTokens === "number" && Number.isFinite(p.maxTokens) && p.maxTokens > 0)
+      body["max_tokens"] = Math.floor(p.maxTokens);
+    if (typeof p.presencePenalty === "number" && Number.isFinite(p.presencePenalty))
+      body["presence_penalty"] = clamp(p.presencePenalty, -2, 2);
+    if (typeof p.frequencyPenalty === "number" && Number.isFinite(p.frequencyPenalty))
+      body["frequency_penalty"] = clamp(p.frequencyPenalty, -2, 2);
+    if (typeof p.seed === "number" && Number.isFinite(p.seed))
+      body["seed"] = Math.trunc(p.seed);
+    if (typeof p.wikiGrounding === "boolean")
+      body["wiki_grounding"] = p.wikiGrounding;
+
+    // stop: a single non-empty string, or up to 4 non-empty strings.
+    if (typeof p.stop === "string" && p.stop.length > 0) {
+      body["stop"] = p.stop;
+    } else if (Array.isArray(p.stop)) {
+      const stops = p.stop.filter((s) => typeof s === "string" && s.length > 0).slice(0, 4);
+      if (stops.length > 0) body["stop"] = stops;
+    }
+
+    return body;
   }
 
   async chat(
@@ -115,9 +159,12 @@ export class SarvamLLM implements LLMAdapter {
       body: JSON.stringify({
         model: this.model,
         stream: true,
-        // Disable Hybrid Thinking mode (on by default) for low-latency voice:
-        // avoids reasoning_content latency/cost and the empty-content-on-short-reply trap.
-        reasoning_effort: null,
+        // Generation params (temperature/top_p/penalties/seed/stop/max_tokens/
+        // wiki_grounding) resolved from agent config. Also supplies
+        // reasoning_effort, which defaults to null (Hybrid Thinking disabled) for
+        // low-latency voice — avoiding reasoning_content latency/cost and the
+        // empty-content-on-short-reply trap — unless explicitly overridden.
+        ...this.buildGenerationBody(),
         messages: [
           { role: "system", content: systemPrompt },
           ...sanitized.map((m) => ({ role: m.role, content: m.content })),

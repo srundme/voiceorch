@@ -1,4 +1,4 @@
-import type { LLMAdapter } from "../../types.js";
+import type { LLMAdapter, LLMGenerationParams } from "../../types.js";
 import { OpenAILLM } from "./openai.js";
 import { GroqLLM } from "./groq.js";
 import { GoogleLLM } from "./google.js";
@@ -16,7 +16,9 @@ export function createLLMAdapter(
   apiKey: string,
   model: string | null,
   /** Optional override for the provider's base URL (e.g. self-hosted vLLM endpoint). */
-  baseUrl?: string
+  baseUrl?: string,
+  /** Optional resolved generation params. Currently only the Sarvam adapter consumes these. */
+  genParams?: LLMGenerationParams
 ): LLMAdapter {
   if (STUB_PROVIDERS_ENABLED) return createStubLLM();
   switch (provider.toLowerCase()) {
@@ -29,7 +31,7 @@ export function createLLMAdapter(
     case "gemini":
       return new QwenLLM(apiKey, model);
     case "sarvam":
-      return new SarvamLLM(apiKey, model);
+      return new SarvamLLM(apiKey, model, genParams);
     case "deepseek":
       return new DeepSeekLLM(apiKey, model);
     case "anthropic":

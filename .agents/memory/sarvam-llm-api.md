@@ -41,6 +41,23 @@ deprecated/removed.
   the OpenAI SDK async iterator; the Sarvam adapter uses raw fetch so it must
   buffer itself.)
 
+## Generation params — send only-when-defined
+- Documented body fields: `temperature` (0–2), `top_p` (0–1), `max_tokens`
+  (default 2048), `presence_penalty`/`frequency_penalty` (−2..2, default 0),
+  `seed` (int), `stop` (string or ≤4 strings), `wiki_grounding` (bool RAG),
+  `reasoning_effort` (low|medium|high|null), `messages`.
+- **Rule:** omit any param the agent hasn't explicitly set so Sarvam applies its
+  own default. In particular, build `temperature` from the RAW DB value, NOT a
+  coerced `?? 0.5` fallback, or you silently override Sarvam's 0.2 default.
+- **Why:** the orchestration `AgentConfig.temperature` is `?? 0.5`-coerced for
+  legacy callers; reusing it for the request body changes model behavior for
+  every agent that never picked a temperature.
+- `reasoning_effort` is the one field always sent (defaults to `null` for voice);
+  see the Hybrid Thinking section above.
+- The adapter carries these via a nested `llmGenerationParams` on AgentConfig and
+  is the ONLY adapter that consumes them; other providers ignore the 5th
+  `createLLMAdapter` arg.
+
 ## Other
 - Strict user/assistant alternation starting with a user turn — merge consecutive
   same-role turns and drop leading assistant turns before sending.

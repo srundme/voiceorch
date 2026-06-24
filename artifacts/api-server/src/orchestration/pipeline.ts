@@ -360,12 +360,12 @@ export class OrchestrationPipeline {
       keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null,
       sttCfg
     );
-    this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel);
+    this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel, undefined, this.agent.llmGenerationParams);
     // P0-B: Initialise fallback LLM adapter if the agent has one configured and the key is available
     if (this.agent.fallbackLlmProvider) {
       const fallbackKey = keys.get(this.agent.fallbackLlmProvider);
       if (fallbackKey) {
-        this.fallbackLlm = createLLMAdapter(this.agent.fallbackLlmProvider, fallbackKey, this.agent.fallbackLlmModel ?? null);
+        this.fallbackLlm = createLLMAdapter(this.agent.fallbackLlmProvider, fallbackKey, this.agent.fallbackLlmModel ?? null, undefined, this.agent.llmGenerationParams);
         logger.info({ callId: config.callId, fallbackProvider: this.agent.fallbackLlmProvider }, "Fallback LLM adapter initialised");
       }
     }

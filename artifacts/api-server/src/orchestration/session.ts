@@ -212,6 +212,23 @@ export async function createSession(params: {
     name: agent.name,
     systemPrompt: effectiveSystemPrompt,
     temperature: agent.temperature ?? 0.5,
+    // Resolved generation params for the LLM adapter (currently Sarvam-only).
+    // Use the RAW DB temperature (not the ?? 0.5 fallback) so the provider keeps
+    // its own default when the agent has not explicitly set one. The remaining
+    // fields live in the agent_config JSON blob; only defined values are carried.
+    llmGenerationParams: {
+      ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
+      ...(typeof agentCfg["maxTokens"] === "number" ? { maxTokens: agentCfg["maxTokens"] as number } : {}),
+      ...(typeof agentCfg["topP"] === "number" ? { topP: agentCfg["topP"] as number } : {}),
+      ...(typeof agentCfg["presencePenalty"] === "number" ? { presencePenalty: agentCfg["presencePenalty"] as number } : {}),
+      ...(typeof agentCfg["frequencyPenalty"] === "number" ? { frequencyPenalty: agentCfg["frequencyPenalty"] as number } : {}),
+      ...(typeof agentCfg["seed"] === "number" ? { seed: agentCfg["seed"] as number } : {}),
+      ...(typeof agentCfg["stop"] === "string" || Array.isArray(agentCfg["stop"]) ? { stop: agentCfg["stop"] as string | string[] } : {}),
+      ...(typeof agentCfg["wikiGrounding"] === "boolean" ? { wikiGrounding: agentCfg["wikiGrounding"] as boolean } : {}),
+      ...(agentCfg["reasoningEffort"] === null || ["low", "medium", "high"].includes(agentCfg["reasoningEffort"] as string)
+        ? { reasoningEffort: agentCfg["reasoningEffort"] as "low" | "medium" | "high" | null }
+        : {}),
+    },
     maxDuration: agent.maxDuration ?? 600,
     asrProvider: agent.asrProvider,
     asrModel: agent.asrModel,
