@@ -194,6 +194,10 @@ export class OrchestrationPipeline {
   // Running word count accumulated across streaming STT callbacks for the
   // current user turn. Reset at the start of each new agent turn so it does
   // not bleed across turns.
+  // Timestamp (ms) when the current sentence started playing. Used by the
+  // streaming STT path to apply a per-sentence 600 ms echo grace instead of
+  // the extended `bargeInHoldUntil` that protects the batch STT path.
+  private bargeInSentenceStartAt: number = 0;
   private streamingBargeInWordCount = 0;
   // Echo grace period: timestamp (ms) until which barge-in is suppressed after
   // playback starts.  Vobiz / Twilio route a small amount of our own TTS audio
@@ -563,12 +567,12 @@ export class OrchestrationPipeline {
           metadata: { event: "Barge-in Detected", trigger: "semantic", transcriptPreview: transcript.slice(0, 80) },
         });
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
-      } else if (Date.now() < this.bargeInHoldUntil) {
-        // Echo grace — suppress non-semantic barge-in while our own freshly
-        // (re)started audio may still be echoing back, mirroring the energy-based
-        // batch STT path (which also gates on bargeInHoldUntil). Protects the
-        // start of each sentence; combined with the end-of-playback re-arm it
-        // also protects the tail of the final sentence from self-echo.
+      } else if (Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs) {
+        // Per-sentence 600 ms echo grace — suppress non-semantic barge-in while our own
+        // freshly started audio may still be echoing back. This uses the *sentence start*
+        // timestamp (not the extended bargeInHoldUntil which protects the batch STT
+        // path) so that the streaming STT path (webcall) can interrupt mid-sentence after
+        // the initial 600 ms window expires.
         logger.info({ callId: this.config.callId }, "Streaming STT: barge-in suppressed during echo grace");
       } else {
         // Accumulate word count across streaming callbacks for this user turn and
@@ -1167,6 +1171,11 @@ export class OrchestrationPipeline {
         Date.now() + estimatedMs + this.bargeInEchoGraceMs,
       );
     }
+
+    // Record when this sentence starts so the streaming STT path can apply a
+    // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
+    // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
+    this.bargeInSentenceStartAt = Date.now();
 
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
