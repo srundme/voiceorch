@@ -54,6 +54,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import { getIrdaiBlock, getIrdaiBlockedError, type IrdaiMissingItem } from "@/lib/irdai-block";
 import { IrdaiBlockBanner } from "@/components/irdai-block-banner";
+import { startMicCapture, type MicCaptureHandle } from "@/lib/webcall-capture";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { format } from "date-fns";
 import { computePipelineCost } from "@/lib/provider-pricing";
@@ -397,6 +398,7 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt, agent }: 
   const wsRef          = useRef<WebSocket | null>(null);
   const audioCtxRef    = useRef<AudioContext | null>(null);
   const processorRef   = useRef<ScriptProcessorNode | null>(null);
+  const captureRef     = useRef<MicCaptureHandle | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
   const nextPlayRef    = useRef(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
@@ -411,12 +413,6 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt, agent }: 
   useEffect(() => {
     if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [msgs]);
-
-  function float32ToInt16(f32: Float32Array): Int16Array {
-    const out = new Int16Array(f32.length);
-    for (let i = 0; i < f32.length; i++) out[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
-    return out;
-  }
 
   function stopAllAudio() {
     for (const src of activeSourcesRef.current) { try { src.stop(); } catch { /* ended */ } }
@@ -444,6 +440,7 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt, agent }: 
   }
 
   function cleanup() {
+    captureRef.current?.disconnect(); captureRef.current = null;
     processorRef.current?.disconnect(); processorRef.current = null;
     audioCtxRef.current?.close().catch(() => {}); audioCtxRef.current = null;
     streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null;
@@ -469,13 +466,11 @@ function WebCallPanel({ agentId, agentName, systemPrompt: savedPrompt, agent }: 
         if (!AudioCtx) return;
         const ctx = new AudioCtx({ sampleRate: 16000 });
         audioCtxRef.current = ctx; nextPlayRef.current = 0;
-        const src = ctx.createMediaStreamSource(stream);
-        const proc = ctx.createScriptProcessor(2048, 1, 1);
-        processorRef.current = proc; src.connect(proc); proc.connect(ctx.destination);
-        proc.onaudioprocess = (e) => {
+        const capture = startMicCapture(ctx, stream, (pcm) => {
           if (ws.readyState !== WebSocket.OPEN) return;
-          ws.send(float32ToInt16(e.inputBuffer.getChannelData(0)).buffer);
-        };
+          ws.send(pcm);
+        });
+        captureRef.current = capture; processorRef.current = capture.processor;
       };
       ws.onmessage = (e) => {
         if (e.data instanceof ArrayBuffer) {

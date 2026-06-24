@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { getIrdaiBlock, getIrdaiBlockedError, type IrdaiMissingItem } from "@/lib/irdai-block";
 import { IrdaiBlockBanner } from "@/components/irdai-block-banner";
+import { startMicCapture, type MicCaptureHandle } from "@/lib/webcall-capture";
 
 type CallStatus = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "ended";
 interface Msg { speaker: "user" | "agent"; text: string }
@@ -80,6 +81,7 @@ export function WebCallPanel({
   const wsRef            = useRef<WebSocket | null>(null);
   const audioCtxRef      = useRef<AudioContext | null>(null);
   const processorRef     = useRef<ScriptProcessorNode | null>(null);
+  const captureRef       = useRef<MicCaptureHandle | null>(null);
   const streamRef        = useRef<MediaStream | null>(null);
   const nextPlayRef      = useRef(0);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
@@ -98,30 +100,6 @@ export function WebCallPanel({
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
   }, [msgs, streamingText]);
-
-  function float32ToInt16(f32: Float32Array): Int16Array {
-    const int16 = new Int16Array(f32.length);
-    for (let i = 0; i < f32.length; i++) {
-      int16[i] = Math.max(-32768, Math.min(32767, f32[i]! * 32768));
-    }
-    return int16;
-  }
-
-  function downsampleFloat32(input: Float32Array, fromRate: number, toRate: number): Float32Array {
-    if (fromRate === toRate) return input;
-    const ratio = fromRate / toRate;
-    const outputLength = Math.floor(input.length / ratio);
-    const output = new Float32Array(outputLength);
-    for (let i = 0; i < outputLength; i++) {
-      const pos = i * ratio;
-      const idx = Math.floor(pos);
-      const frac = pos - idx;
-      const a = input[idx] ?? 0;
-      const b = input[idx + 1] ?? a;
-      output[i] = a + frac * (b - a);
-    }
-    return output;
-  }
 
   function stopAllAudio() {
     for (const src of activeSourcesRef.current) { try { src.stop(); } catch { /**/ } }
@@ -180,6 +158,8 @@ export function WebCallPanel({
       clearTimeout(playbackEndedTimerRef.current);
       playbackEndedTimerRef.current = null;
     }
+    captureRef.current?.disconnect();
+    captureRef.current = null;
     processorRef.current?.disconnect();
     processorRef.current = null;
     audioCtxRef.current?.close().catch(() => {});
@@ -273,37 +253,12 @@ export function WebCallPanel({
         const ctx       = new AudioCtx({ sampleRate: 16000 }) as AudioContext;
         audioCtxRef.current  = ctx;
         nextPlayRef.current  = 0;
-        const src       = ctx.createMediaStreamSource(stream);
-        const processor = ctx.createScriptProcessor(2048, 1, 1);
-        processorRef.current = processor;
-        src.connect(processor);
-        processor.connect(ctx.destination);
-        console.info("[WEBCALL_AUDIO_DEBUG]", JSON.stringify({
-          stage: "capture-setup",
-          audioContextSampleRate: ctx.sampleRate,
-          requestedSampleRate: 16000,
-          micTrackSampleRate: stream.getAudioTracks()[0]?.getSettings().sampleRate,
-          outputSampleRate: 16000,
-          downsampleWillRun: ctx.sampleRate !== 16000,
-          browser: navigator.userAgent,
-        }));
-        let firstFrameLogged = false;
-        processor.onaudioprocess = (e) => {
+        const capture = startMicCapture(ctx, stream, (pcm) => {
           if (ws.readyState !== WebSocket.OPEN) return;
-          const raw = e.inputBuffer.getChannelData(0);
-          const downsampleDidRun = ctx.sampleRate !== 16000;
-          const samples = downsampleDidRun ? downsampleFloat32(raw, ctx.sampleRate, 16000) : raw;
-          if (!firstFrameLogged) {
-            firstFrameLogged = true;
-            console.info("[WEBCALL_AUDIO_DEBUG]", JSON.stringify({
-              stage: "first-frame",
-              downsampleDidRun,
-              inputSampleRate: ctx.sampleRate,
-              outputSampleRate: 16000,
-            }));
-          }
-          ws.send(float32ToInt16(samples).buffer);
-        };
+          ws.send(pcm);
+        });
+        captureRef.current   = capture;
+        processorRef.current = capture.processor;
       };
 
       ws.onmessage = (e) => {

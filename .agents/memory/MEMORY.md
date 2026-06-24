@@ -45,3 +45,4 @@
 - [Orval codegen pitfalls](orval-codegen-pitfalls.md) — duplicate YAML schema key silently breaks codegen; TS config fails jiti; use orval.config.mjs; existing campaign schemas named CallbackItem/CallbacksPage etc.
 - [Pre-greeting drop resilience](pre-greeting-drop-resilience.md) — setup DB reads need withDbRetry; greeting-LLM failure must fall back not fatal; every pre-greeting teardown must log provider+readable reason
 - [Recording track alignment](recording-track-alignment.md) — align agent track to its own audio cursor, not per-frame wall-clock; per-frame padding buzzes the TTS channel
+- [Web-call mic capture anti-aliasing](webcall-capture-aliasing.md) — browser ignores requested 16k AudioContext rate; must band-limit before decimation or caller channel buzzes; 2 capture sites share one helper
