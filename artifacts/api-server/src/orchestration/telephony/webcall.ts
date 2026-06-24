@@ -87,6 +87,12 @@ const AGENT_TEXT_BUFFER_MS     = 8000; // retain agent utterances in the echo-de
                                         // slower TTS providers and network jitter without unbounded buffer growth.
 const AUDIO_TAIL_SILENCE_MS    = 300;  // extra wait after the last chunk so the client's audio buffer drains
                                         // before the server signals "listening" (prevents last-word cutoff)
+const BARGE_IN_MAX_SENTENCE_GRACE_MS = 2500; // cap on per-sentence echo-grace duration (ms). Without this, a 13-second
+                                             // sentence's grace window (188 chars × 70 ms/char = 13160 ms) blocks barge-in
+                                             // for the full sentence. Capping at 2500 ms lets the caller interrupt after
+                                             // the first ~3 s of any sentence. AEC adapts within ~700 ms; the cap is set
+                                             // conservatively at 2500 ms to absorb slow-adapting browser AEC while still
+                                             // allowing interruption of long replies.
 const WEB_TAIL_ECHO_MARGIN_MS  = 100;  // extra echo-grace held PAST the tail-silence drain so the agent's own
                                         // final-word echo can't trip a false barge-in that flushes the last word.
 const TTS_TAIL_SILENCE_MS      = 150;  // PCM silence appended to every TTS buffer so the last word isn't clipped
@@ -1298,7 +1304,7 @@ export async function handleWebCallWebSocket(
               const _clarPbStart = Date.now();
               logPlaybackEvent(logExecution, "Playback Started", { provider: agent.ttsProvider, turnNumber: _curTurnIdx });
               {
-                const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+                const sentenceDurationMs = Math.min(Math.round((audio.length / 2 / 16000) * 1000), BARGE_IN_MAX_SENTENCE_GRACE_MS);
                 echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
               }
               for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
@@ -2520,20 +2526,19 @@ export async function handleWebCallWebSocket(
           // provider. First audio byte reaches the browser in ~150ms after the
           // TTS request fires — no full-buffer wait.
           //
-          // echoGrace: estimate sentence playback duration from char count so the
-          // grace covers the FULL sentence. ~70 ms/char covers Tamil/Indic and
-          // Latin at typical TTS speech rate (observed: 56-char Tamil sentence ≈
-          // 3600 ms = 64 ms/char). Without this, a 700 ms start-grace expires
-          // while multi-second TTS audio is still playing; the agent's own voice
-          // echoing back through an imperfect browser AEC then exceeds the energy
-          // threshold and fires a false barge-in (root cause of the "9-second gap"
-          // / "say it twice" issue seen in call-411 turn 3→4).
-          //
+          // echoGrace: cover enough of the sentence so the agent's own voice
+          // echoing back through an imperfect browser AEC (which needs ~700 ms to
+          // adapt) cannot trigger a false barge-in. We cap at
+          // BARGE_IN_MAX_SENTENCE_GRACE_MS (2500 ms) so that callers CAN interrupt
+          // a long reply after ~3 s — the old uncapped estimate (188 chars × 70 ms
+          // = 13160 ms) locked out the caller for the full 13-second sentence.
           // Semantic interrupts ("stop", "wait", Tamil equivalents) still bypass
-          // this gate. Callers can also barge-in between sentences once the grace
-          // from the previous sentence has expired.
+          // this gate regardless of the grace window.
           {
-            const estimatedSentenceMs = Math.round((sentenceTexts[i]?.length ?? 30) * 70);
+            const estimatedSentenceMs = Math.min(
+              Math.round((sentenceTexts[i]?.length ?? 30) * 70),
+              BARGE_IN_MAX_SENTENCE_GRACE_MS,
+            );
             echoGraceUntil = Date.now() + estimatedSentenceMs + echoGraceMs;
           }
           let frameBuf = Buffer.alloc(0);
@@ -2616,11 +2621,10 @@ export async function handleWebCallWebSocket(
           }
           if (interrupted || closed) break;
 
-          // Arm echo grace for the full sentence duration (exact, from PCM byte count)
-          // so the agent's own voice echoing back through an imperfect browser AEC
-          // cannot fire a false energy barge-in while audio is still playing.
+          // Arm echo grace for the start of the sentence so AEC can adapt. Capped
+          // at BARGE_IN_MAX_SENTENCE_GRACE_MS so callers can interrupt long replies.
           {
-            const sentenceDurationMs = Math.round((pcmOut.length / 2 / 16000) * 1000);
+            const sentenceDurationMs = Math.min(Math.round((pcmOut.length / 2 / 16000) * 1000), BARGE_IN_MAX_SENTENCE_GRACE_MS);
             echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
           }
 
@@ -2992,7 +2996,7 @@ export async function handleWebCallWebSocket(
     const _pbStart = Date.now();
     logPlaybackEvent(logExecution, "Playback Started", { provider: agent.ttsProvider });
     {
-      const sentenceDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+      const sentenceDurationMs = Math.min(Math.round((audio.length / 2 / 16000) * 1000), BARGE_IN_MAX_SENTENCE_GRACE_MS);
       echoGraceUntil = Date.now() + sentenceDurationMs + echoGraceMs;
     }
     for (let j = 0; j < audio.length; j += AUDIO_CHUNK_BYTES) {
@@ -3158,10 +3162,10 @@ export async function handleWebCallWebSocket(
             greetAudio = withTailSilence(audio);
           }
 
-          // Set echo-grace to cover the full greeting duration so the mic echo
-          // of the agent's own voice doesn't trigger a false barge-in mid-greeting.
+          // Set echo-grace for the greeting. Capped at BARGE_IN_MAX_SENTENCE_GRACE_MS
+          // so callers can interrupt a long greeting after ~3 s.
           {
-            const greetDurationMs = Math.round((greetAudio.length / 2 / 16000) * 1000);
+            const greetDurationMs = Math.min(Math.round((greetAudio.length / 2 / 16000) * 1000), BARGE_IN_MAX_SENTENCE_GRACE_MS);
             echoGraceUntil = Date.now() + greetDurationMs + echoGraceMs;
           }
 
@@ -3567,6 +3571,13 @@ export async function handleWebCallWebSocket(
           if (playbackSilenceTimer) { clearTimeout(playbackSilenceTimer); playbackSilenceTimer = null; }
           logger.info({ callId }, "Webcall: playback_ended received — starting silence timer");
           resetHangupSilenceTimer();
+          // Collapse any residual per-sentence echo-grace to a brief tail so the
+          // caller can speak immediately after playback ends. The per-sentence grace
+          // (capped at BARGE_IN_MAX_SENTENCE_GRACE_MS) can still extend 1–2 s past
+          // the client's confirmed playback end, causing the caller's first word to
+          // be silently dropped (the "say it twice after TTS ends" symptom).
+          // Using Math.min here preserves an already-expired (or very short) grace.
+          echoGraceUntil = Math.min(echoGraceUntil, Date.now() + BARGE_IN_ECHO_GRACE_MS);
         }
       }
       catch { /* ignore */ }
