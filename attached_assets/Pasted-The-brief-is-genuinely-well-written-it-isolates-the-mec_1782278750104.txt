@@ -1,0 +1,63 @@
+The brief is genuinely well-written — it isolates the mechanics clearly enough that the root cause is visible. Let me give you the diagnosis and a fix that satisfies all four constraints, then flag the one thing in your current code that I'd bet money is the real reason the June 24 change still fails.
+Root cause: you're discriminating echo by time, but time can't tell echo from a fast caller
+Every fix has oscillated because both echo and a genuine immediate response arrive in the same window, through the same mic. Any time-based gate that's wide enough to catch the echo is also wide enough to eat the caller's first words. That's not a tuning problem — it's the wrong axis of discrimination.
+You have ground truth that you're not using: you know exactly what the agent just said. Echo can only ever contain the agent's own words. The caller can say anything. So the discriminator should be content, not timing.
+There are actually two stacked failures right now:
+
+inEndGrace blocks audio. The hard return drops the caller's first 300–600ms outright. Sarvam never sees it, so the segment is mangled or missing.
+The transcript-level guards over-discard by time. Both echoGraceUntil (tail extension) and the BARGE_IN_END_GRACE_MS && speech_start > 1.5s ago guard in onFinal throw away transcripts by window, catching genuine fast responses too.
+
+Why your June 24 "forward but still return" change didn't fix it
+This is the part I'd check first in actual HEAD. Look at where RMS-based speech-start inference happens relative to your early return. If lastUserSpeechStartAt is updated after the inEndGrace branch, then during the grace window it never updates — it stays stale from the previous turn. So when the caller's transcript finally fires in onFinal, this guard:
+if (within BARGE_IN_END_GRACE_MS AND speech_start was > 1.5s ago) → discard
+sees a timestamp from a turn ago (way more than 1.5s), concludes "leftover echo," and discards the genuine response. You forwarded the audio correctly, Sarvam transcribed it correctly, and then your own callback threw it away. That matches your symptom exactly: audio flows, transcript still vanishes.
+The fix
+1. Never block audio. Delete the inEndGrace early-return entirely. Audio flows to streamSTT on every frame, unconditionally. This satisfies constraint 4 for free — Sarvam's session never breaks because you never stop feeding it. Sarvam's internal VAD segments the caller's utterance naturally.
+2. Move speech-start inference above all grace checks. lastUserSpeechStartAt must update for speech beginning inside the window. This alone probably unbreaks your current state.
+3. Replace the time-window transcript discard with content matching. Keep a rolling buffer of recent agent TTS text and test transcripts against it:
+typescriptconst recentAgentText: { text: string; at: number }[] = [];
+// push normalized agent utterance text as each sentence is synthesized
+
+function isAgentEcho(transcript: string, energyWasFull: boolean): boolean {
+  const now = Date.now();
+  if (now - lastChunkSentAt > ECHO_CONTENT_WINDOW_MS) return false; // ~900ms
+
+  const t = normalizeIndic(transcript);            // NFC, strip ZWJ/ZWNJ, lowercase, collapse ws
+  const tTokens = new Set(t.split(/\s+/).filter(Boolean));
+  if (tTokens.size === 0) return false;
+
+  for (const { text, at } of recentAgentText) {
+    if (now - at > AGENT_TEXT_BUFFER_MS) continue;  // ~3s window
+    const aTokens = new Set(normalizeIndic(text).split(/\s+/));
+    let hit = 0;
+    for (const w of tTokens) if (aTokens.has(w)) hit++;
+    const containment = hit / tTokens.size;          // echo ⊆ agent words
+
+    if (containment >= ECHO_SIM_THRESHOLD) {         // ~0.6
+      // Tiebreaker for short confirmations ("சரி", "ஆமாங்க"):
+      // a genuine caller confirmation is full-energy; echo is AEC-attenuated.
+      if (tTokens.size <= 2 && energyWasFull) return false; // accept as caller
+      return true;                                   // drop as echo
+    }
+  }
+  return false;
+}
+Use containment (|intersection| / |transcript tokens|), not symmetric Jaccard. Echo is a subset of what the agent said, so containment is the correct metric and it handles single-word echoes that Jaccard would miss.
+Then onFinal collapses to:
+typescriptif (speaking) { /* barge-in path, also gated by isAgentEcho */ }
+else if (isAgentEcho(text, lastFrameRmsAboveBargeIn)) return;  // content, not time
+else { /* genuine caller turn */ }
+Delete the tail extension of echoGraceUntil and the speech_start > 1.5s guard. Both are now subsumed.
+Keep one thing: the echoGraceUntil set at sentence start (during active TTS). That's legitimately protecting barge-in while browser AEC adapts — a different problem from the post-speech tail. Don't remove it.
+The cost asymmetry, made explicit
+The short-confirmation case ("caller says சரி right after agent said சரி") is the only genuinely ambiguous one. Bias your tiebreaker toward accepting it, because dropped-genuine happens every single turn and is your headline complaint, while echo-acceptance is rare when AEC works and is recoverable. The full-energy check above encodes that bias — a caller speaking at full RMS in the post-TTS window is almost certainly the caller, since AEC attenuates echo 6–12 dB (which is exactly why your BARGE_IN_RMS=800 exists; reuse that boundary as the "full energy" signal).
+For the pendingShortUtterance bug (Section 7)
+Make it a queue rather than a single overwritable string, store the capture-time RMS alongside it, and flush on the speaking → false transition through the same isAgentEcho filter. Since these already passed the energy gate during speech, they're full-energy and will survive the filter unless they textually match what the agent was saying at that instant — which is the correct behavior.
+New constants
+typescriptconst ECHO_CONTENT_WINDOW_MS = 900;   // only content-check transcripts this close to last TTS chunk
+const ECHO_SIM_THRESHOLD     = 0.6;   // containment ratio to call it echo
+const AGENT_TEXT_BUFFER_MS   = 3000;  // retention for agent-utterance matching
+BARGE_IN_END_GRACE_MS (as an audio blocker), WEB_TAIL_ECHO_MARGIN_MS, and the tail echoGraceUntil extension all retire.
+
+Two caveats worth stating plainly. The normalizeIndic step matters more than it looks — given your earlier Tamil head-duplication regex bug, make sure NFC normalization and ZWJ/ZWNJ stripping happen before tokenizing, or "சரி" won't reliably match "சரி" across STT vs TTS encodings. And the doc warns it may lag HEAD, so verify the speech-start ordering (point 2) against the actual file first — that's the highest-probability quick win regardless of whether you adopt the full content-matching rework.
+If you paste the actual message handler, the onFinal callback, and the TTS loop from current webcall.ts, I'll turn this into a concrete diff against your real code rather than the brief's pseudocode.
