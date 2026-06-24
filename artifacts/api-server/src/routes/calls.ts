@@ -91,7 +91,7 @@ function resolveWebhookBase(req: Parameters<Parameters<IRouter["post"]>[1]>[0], 
   return `${proto}://${host}`;
 }
 
-import { dialTwilio, dialPlivo, dialVobiz } from "../orchestration/telephony/dial.js";
+import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { triggerTransfer } from "../orchestration/session.js";
 import { sendBrevoSms } from "../services/brevo.js";
 import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp.js";
@@ -220,6 +220,9 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   let providerCallId: string;
   let effectiveFromNumber = "outbound";
 
+  // AMD (synchronous voicemail detection) — normalised across both config shapes.
+  const amd = resolveAmdConfig((agent.agentConfig ?? {}) as Record<string, unknown>);
+
   try {
     if (provider === "twilio") {
       const cfg = providerRow!.extraConfig ? JSON.parse(providerRow!.extraConfig) as Record<string, string> : {};
@@ -232,6 +235,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
         maxDurationSeconds,
+        ...(amd.enabled && { machineDetection: amd.twilioMode }),
       });
     } else if (provider === "plivo") {
       const cfg = providerRow!.extraConfig ? JSON.parse(providerRow!.extraConfig) as Record<string, string> : {};
@@ -243,11 +247,10 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
         fromNumber: cfg["fromNumber"]!, toNumber,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}`,
         maxDurationSeconds,
+        ...(amd.enabled && { machineDetectionEnabled: true }),
       });
     } else if (provider === "vobiz") {
       const agentCfg2    = (agent.agentConfig ?? {}) as Record<string, unknown>;
-      const amdEnabled   = agentCfg2["voicemailDetection"] === true;
-      const amdMode      = (agentCfg2["machineDetectionMode"] as "Enable" | "DetectMessageEnd" | undefined) ?? "DetectMessageEnd";
       const cfg          = providerRow?.extraConfig ? JSON.parse(providerRow.extraConfig) as Record<string, string> : {};
       const hasOwnCreds  = !!(providerRow && cfg["authId"] && cfg["fromNumber"]);
 
@@ -273,7 +276,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
           answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
           hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
           maxDurationSeconds,
-          ...(amdEnabled && { machineDetection: amdMode, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}` }),
+          ...(amd.enabled && { machineDetectionEnabled: true }),
         });
       } else {
         // ── Managed platform number — no personal number/KYC required ──
@@ -345,7 +348,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
           answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1`,
           hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
           maxDurationSeconds,
-          ...(amdEnabled && { machineDetection: amdMode, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}` }),
+          ...(amd.enabled && { machineDetectionEnabled: true }),
         });
         req.log.info({ agentId, toNumber, fromNumber, managedAuthId }, "Outbound call via managed number");
       }

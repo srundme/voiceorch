@@ -46,3 +46,4 @@
 - [Pre-greeting drop resilience](pre-greeting-drop-resilience.md) — setup DB reads need withDbRetry; greeting-LLM failure must fall back not fatal; every pre-greeting teardown must log provider+readable reason
 - [Recording track alignment](recording-track-alignment.md) — align agent track to its own audio cursor, not per-frame wall-clock; per-frame padding buzzes the TTS channel
 - [Web-call mic capture anti-aliasing](webcall-capture-aliasing.md) — browser ignores requested 16k AudioContext rate; must band-limit before decimation or caller channel buzzes; 2 capture sites share one helper
+- [AMD / voicemail-detection config shapes](amd-voicemail-config-shapes.md) — outbound AMD gates synchronously on the answer webhook; two agentConfig shapes normalized by resolveAmdConfig

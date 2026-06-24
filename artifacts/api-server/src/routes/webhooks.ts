@@ -145,6 +145,17 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
     return;
   }
 
+  // ── AMD gating ───────────────────────────────────────────────────────────
+  // Synchronous AMD: Twilio includes AnsweredBy in this request when machine
+  // detection was requested. Branch before opening the AI media stream.
+  const amdHandled = await applyAmdGate({
+    res, log: req.log, agentId,
+    providerCallId: String(req.body?.CallSid ?? ""),
+    result: parseTwilioAnsweredBy(String(req.body?.AnsweredBy ?? "")),
+    speakTag: "Say",
+  });
+  if (amdHandled) return;
+
   const wsBaseUrl = getWsBaseUrl(req);
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   const twiml = getTwilioVoiceTwiML(wsBaseUrl, agentId, campaignLeadId);
@@ -194,6 +205,17 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
     return;
   }
 
+  // ── AMD gating ───────────────────────────────────────────────────────────
+  // Synchronous AMD: Plivo passes the `Machine` flag on this answer request when
+  // machine_detection was requested. Branch before opening the AI media stream.
+  const amdHandled = await applyAmdGate({
+    res, log: req.log, agentId,
+    providerCallId: String(req.body?.CallUUID ?? req.body?.call_uuid ?? ""),
+    result: parseMachineFlag(req.body?.Machine ?? req.body?.machine),
+    speakTag: "Speak",
+  });
+  if (amdHandled) return;
+
   const wsBaseUrl = getWsBaseUrl(req);
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId);
@@ -214,6 +236,104 @@ function getHttpBaseUrl(req: Parameters<Parameters<IRouter["post"]>[1]>[0]): str
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ── AMD / voicemail gating (synchronous) ─────────────────────────────────────
+// AMD now completes BEFORE the AI conversation begins: each provider performs
+// synchronous detection and delivers the result on the answer/voice webhook.
+// We read it here and branch the call flow — human → open the AI media stream;
+// machine → enact the configured voicemailAction and never start the agent.
+
+const DEFAULT_VOICEMAIL_MESSAGE =
+  "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.";
+
+type AmdResult = "human" | "machine" | "unknown";
+
+/**
+ * Parse Twilio's `AnsweredBy` field into a normalised AMD result.
+ * Returns null when the field is absent (AMD not requested) so callers skip
+ * gating entirely and incur zero added work for non-AMD calls.
+ */
+function parseTwilioAnsweredBy(answeredBy: string | undefined): AmdResult | null {
+  if (!answeredBy) return null;
+  const v = answeredBy.toLowerCase();
+  if (v === "human") return "human";
+  if (v.startsWith("machine") || v === "fax") return "machine";
+  return "unknown"; // "unknown" / anything else → treated as human downstream
+}
+
+/**
+ * Parse a Plivo/Vobiz boolean-style machine flag ("true"/"false") into a result.
+ * Returns null when no flag is present (AMD not requested).
+ */
+function parseMachineFlag(raw: unknown): AmdResult | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  return String(raw).toLowerCase() === "true" ? "machine" : "human";
+}
+
+/** Best-effort persistence of the AMD result on the matching call record. */
+async function persistAmdResult(providerCallId: string, result: AmdResult): Promise<void> {
+  if (!providerCallId) return;
+  try {
+    await db.update(callsTable)
+      .set({ amdResult: result })
+      .where(sql`metadata::text like ${"%" + providerCallId + "%"}`);
+  } catch { /* non-critical */ }
+}
+
+/**
+ * Build the XML enacting the configured voicemailAction for a detected machine.
+ * `speakTag` is "Say" (Twilio TwiML) or "Speak" (Plivo/Vobiz XML).
+ * Returns null for the "continue" action (caller should open the stream anyway).
+ */
+function buildVoicemailXml(action: string, message: string, speakTag: "Say" | "Speak"): string | null {
+  if (action === "continue") return null;
+  if (action === "leave_message") {
+    const text = message && message.trim() ? message : DEFAULT_VOICEMAIL_MESSAGE;
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <${speakTag}>${escapeXml(text)}</${speakTag}>\n  <Hangup/>\n</Response>`;
+  }
+  // "hangup" (default)
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Hangup/>\n</Response>`;
+}
+
+/**
+ * Apply AMD gating in an answer/voice handler.
+ *   • result === null → AMD not requested; returns false (proceed normally).
+ *   • human/unknown   → persists result, returns false (open the AI stream).
+ *   • machine         → persists result, sends the voicemailAction XML and
+ *                       returns true (response already sent), UNLESS the action
+ *                       is "continue", in which case it returns false.
+ * `preloadedCfg` lets the Vobiz handler reuse the agentConfig it already loaded.
+ */
+async function applyAmdGate(opts: {
+  res: Parameters<Parameters<IRouter["post"]>[1]>[1];
+  log: { info: (o: unknown, m?: string) => void };
+  agentId: number;
+  providerCallId: string;
+  result: AmdResult | null;
+  speakTag: "Say" | "Speak";
+  preloadedCfg?: Record<string, unknown>;
+}): Promise<boolean> {
+  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg } = opts;
+  if (result === null) return false; // AMD not requested — no behaviour change
+  await persistAmdResult(providerCallId, result);
+  log.info({ agentId, providerCallId, amdResult: result }, "AMD result on answer webhook");
+  if (result !== "machine") return false; // human / unknown → open AI stream
+
+  let cfg = preloadedCfg;
+  if (!cfg) {
+    const [agent] = await db
+      .select({ agentConfig: agentsTable.agentConfig })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, agentId));
+    cfg = (agent?.agentConfig ?? {}) as Record<string, unknown>;
+  }
+  const action  = (cfg["voicemailAction"]  as string | undefined) ?? "hangup";
+  const message = (cfg["voicemailMessage"] as string | undefined) ?? DEFAULT_VOICEMAIL_MESSAGE;
+  const xml = buildVoicemailXml(action, message, speakTag);
+  if (xml === null) return false; // "continue" → fall through and open the stream
+  res.set("Content-Type", "text/xml").send(xml);
+  return true;
 }
 
 /**
@@ -280,6 +400,18 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     .from(agentsTable)
     .where(eq(agentsTable.id, agentId));
   const cfg = (agent?.agentConfig ?? {}) as Record<string, unknown>;
+
+  // ── AMD gating ───────────────────────────────────────────────────────────
+  // Synchronous AMD (Vobiz Plivo-compatible API): the machine flag is delivered
+  // on this answer request. Branch before queue/IVR or opening the AI stream.
+  const amdHandled = await applyAmdGate({
+    res, log: req.log, agentId,
+    providerCallId: String(req.body?.CallUUID ?? req.body?.call_uuid ?? ""),
+    result: parseMachineFlag(req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine),
+    speakTag: "Speak",
+    preloadedCfg: cfg,
+  });
+  if (amdHandled) return;
 
   // P2-E: Queue — check if agent is at capacity, hold caller if so
   if (cfg["queueEnabled"] === true) {
@@ -401,60 +533,15 @@ router.post("/webhooks/twilio/status", (req, res): void => {
 // Query param: agentId (set when initiating the outbound call).
 
 router.post("/webhooks/vobiz/amd", async (req, res): Promise<void> => {
-  const agentId = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10);
-  const machineDetected = String(req.body?.MachineDetected ?? "").toLowerCase() === "true";
-  const callUuid        = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "");
-
-  req.log.info({ agentId, machineDetected, callUuid }, "VoBiz AMD callback");
-
-  // Mark the call record with AMD result
-  if (callUuid) {
-    try {
-      await db.update(callsTable)
-        .set({ amdResult: machineDetected ? "machine" : "human" })
-        .where(sql`metadata::text like ${"%" + callUuid + "%"}`);
-    } catch { /* non-critical */ }
-  }
-
-  if (!machineDetected) {
-    // Human answered — continue with normal VoBiz stream
-    const wsBase = getWsBaseUrl(req);
-    res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBase, agentId));
-    return;
-  }
-
-  // Machine detected — look up agent config for voicemailAction
-  let voicemailAction: string = "hangup";
-  let voicemailMessage: string = "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.";
-  let continueWithStream = false;
-
-  if (agentId) {
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-    if (agent?.agentConfig) {
-      const cfg = agent.agentConfig as Record<string, unknown>;
-      voicemailAction  = (cfg["voicemailAction"]  as string | undefined) ?? "hangup";
-      voicemailMessage = (cfg["voicemailMessage"]  as string | undefined) ?? voicemailMessage;
-    }
-  }
-
-  if (voicemailAction === "leave_message") {
-    const safeMsg = voicemailMessage
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Speak>${safeMsg}</Speak>\n  <Hangup/>\n</Response>`
-    );
-  } else if (voicemailAction === "continue") {
-    continueWithStream = true;
-    const wsBase = getWsBaseUrl(req);
-    res.set("Content-Type", "text/xml").send(getVobizAnswerXML(wsBase, agentId));
-  } else {
-    // "hangup" (default)
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Hangup/>\n</Response>`
-    );
-  }
-
-  void continueWithStream; // suppress unused warning
+  // AMD is now resolved synchronously on the /vobiz/voice answer webhook, which
+  // gates the call flow there. This async callback is retained only as a
+  // best-effort persistence sink for any late/duplicate AMD notification — it no
+  // longer controls the call flow.
+  const machineFlag = parseMachineFlag(req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine);
+  const callUuid    = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "");
+  req.log.info({ callUuid, machineFlag }, "VoBiz AMD callback (persistence-only)");
+  if (machineFlag) await persistAmdResult(callUuid, machineFlag);
+  res.sendStatus(204);
 });
 
 // ── P2-A: Transfer XML callbacks ──────────────────────────────────────────────
@@ -631,108 +718,25 @@ router.post("/webhooks/plivo/recording", async (req, res): Promise<void> => {
 // ── AMD callbacks — Twilio / Plivo ────────────────────────────────────────────
 
 // Twilio posts here when MachineDetection fires (AnsweredBy field).
+// AMD is now resolved synchronously on /twilio/voice, which gates the call flow
+// there. This async callback is retained only as a best-effort persistence sink.
 router.post("/webhooks/twilio/amd", async (req, res): Promise<void> => {
-  const answeredBy = String(req.body?.AnsweredBy ?? "");
-  const callSid    = String(req.body?.CallSid ?? "");
-  const agentId    = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10);
-  const machineDetected = answeredBy === "machine_start" || answeredBy === "machine_end_beep" || answeredBy === "machine_end_silence" || answeredBy === "machine_end_other";
-  req.log.info({ agentId, answeredBy, machineDetected, callSid }, "Twilio AMD callback");
-
-  if (callSid) {
-    try {
-      await db.update(callsTable)
-        .set({ amdResult: machineDetected ? "machine" : "human" })
-        .where(sql`metadata::text like ${"%" + callSid + "%"}`);
-    } catch { /* non-critical */ }
-  }
-
-  if (!machineDetected) {
-    res.sendStatus(204);
-    return;
-  }
-
-  // Machine detected — look up agent voicemail action
-  let voicemailAction   = "hangup";
-  let voicemailMessage  = "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.";
-  if (agentId) {
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-    if (agent?.agentConfig) {
-      const cfg = agent.agentConfig as Record<string, unknown>;
-      voicemailAction  = (cfg["voicemailAction"]  as string | undefined) ?? voicemailAction;
-      voicemailMessage = (cfg["voicemailMessage"] as string | undefined) ?? voicemailMessage;
-    }
-  }
-
-  // Redirect the call to TwiML that enacts the configured action
-  const wsBase = getWsBaseUrl(req);
-  const httpBase = getHttpBaseUrl(req);
-  const safeMsg = voicemailMessage.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  if (voicemailAction === "leave_message") {
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>${safeMsg}</Say>\n  <Hangup/>\n</Response>`
-    );
-  } else if (voicemailAction === "continue") {
-    // Continue — redirect to normal voice handler so it opens a WS stream
-    const wsUrl = `${httpBase}/api/webhooks/twilio/voice?agentId=${agentId}`;
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Redirect method="POST">${wsUrl}</Redirect>\n</Response>`
-    );
-  } else {
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Hangup/>\n</Response>`
-    );
-  }
-
-  void wsBase; // suppress unused warning
+  const result  = parseTwilioAnsweredBy(String(req.body?.AnsweredBy ?? ""));
+  const callSid = String(req.body?.CallSid ?? "");
+  req.log.info({ callSid, result }, "Twilio AMD callback (persistence-only)");
+  if (result) await persistAmdResult(callSid, result);
+  res.sendStatus(204);
 });
 
 // Plivo posts here when machine_detection fires.
+// AMD is now resolved synchronously on /plivo/voice, which gates the call flow
+// there. This async callback is retained only as a best-effort persistence sink.
 router.post("/webhooks/plivo/amd", async (req, res): Promise<void> => {
-  const machineDetected = String(req.body?.Machine ?? req.body?.machine ?? "").toLowerCase() === "true";
+  const result   = parseMachineFlag(req.body?.Machine ?? req.body?.machine);
   const callUuid = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "");
-  const agentId  = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10);
-  req.log.info({ agentId, machineDetected, callUuid }, "Plivo AMD callback");
-
-  if (callUuid) {
-    try {
-      await db.update(callsTable)
-        .set({ amdResult: machineDetected ? "machine" : "human" })
-        .where(sql`metadata::text like ${"%" + callUuid + "%"}`);
-    } catch { /* non-critical */ }
-  }
-
-  if (!machineDetected) {
-    const wsBase = getWsBaseUrl(req);
-    res.set("Content-Type", "text/xml").send(getPlivoAnswerXML(wsBase, agentId));
-    return;
-  }
-
-  let voicemailAction  = "hangup";
-  let voicemailMessage = "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.";
-  if (agentId) {
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-    if (agent?.agentConfig) {
-      const cfg = agent.agentConfig as Record<string, unknown>;
-      voicemailAction  = (cfg["voicemailAction"]  as string | undefined) ?? voicemailAction;
-      voicemailMessage = (cfg["voicemailMessage"] as string | undefined) ?? voicemailMessage;
-    }
-  }
-
-  const safeMsg = voicemailMessage.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  if (voicemailAction === "leave_message") {
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Speak>${safeMsg}</Speak>\n  <Hangup/>\n</Response>`
-    );
-  } else if (voicemailAction === "continue") {
-    const wsBase = getWsBaseUrl(req);
-    res.set("Content-Type", "text/xml").send(getPlivoAnswerXML(wsBase, agentId));
-  } else {
-    res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Hangup/>\n</Response>`
-    );
-  }
+  req.log.info({ callUuid, result }, "Plivo AMD callback (persistence-only)");
+  if (result) await persistAmdResult(callUuid, result);
+  res.sendStatus(204);
 });
 
 export default router;
