@@ -29,6 +29,7 @@ import {
   loadCallerContext,
   injectCallerMemory,
   injectEnhancedMemory,
+  computePersonaHash,
   updateCallerProfile,
   latchCallerName,
   latchCallerFact,
@@ -66,6 +67,9 @@ interface ActiveSession {
   /** Name latched mid-call via latchCallerName (caller said "my name is X").
    *  Used to guard against LLM-extraction contamination at call-end. */
   callerNameLatchedThisCall: string | null;
+  /** Agent persona fingerprint at call start — written to caller memory at
+   *  call-end so future calls can detect a persona swap (whiplash guard). */
+  personaHash: string;
 }
 
 const sessions = new Map<string, ActiveSession>();
@@ -220,8 +224,12 @@ export async function createSession(params: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
       ...(typeof agentCfg["maxTokens"] === "number" ? { maxTokens: agentCfg["maxTokens"] as number } : {}),
       ...(typeof agentCfg["topP"] === "number" ? { topP: agentCfg["topP"] as number } : {}),
-      ...(typeof agentCfg["presencePenalty"] === "number" ? { presencePenalty: agentCfg["presencePenalty"] as number } : {}),
-      ...(typeof agentCfg["frequencyPenalty"] === "number" ? { frequencyPenalty: agentCfg["frequencyPenalty"] as number } : {}),
+      // Repetition guard: OpenAI-compatible LLMs (incl. Sarvam) default these to 0,
+      // which at low temperature lets the model emit byte-identical replies turn
+      // after turn (call 548 looped on repeated "yes"). Apply a mild 0.3 default
+      // when the agent hasn't set one; an explicit value (including 0) is honored.
+      presencePenalty: typeof agentCfg["presencePenalty"] === "number" ? agentCfg["presencePenalty"] as number : 0.3,
+      frequencyPenalty: typeof agentCfg["frequencyPenalty"] === "number" ? agentCfg["frequencyPenalty"] as number : 0.3,
       ...(typeof agentCfg["seed"] === "number" ? { seed: agentCfg["seed"] as number } : {}),
       ...(typeof agentCfg["stop"] === "string" || Array.isArray(agentCfg["stop"]) ? { stop: agentCfg["stop"] as string | string[] } : {}),
       ...(typeof agentCfg["wikiGrounding"] === "boolean" ? { wikiGrounding: agentCfg["wikiGrounding"] as boolean } : {}),
@@ -244,7 +252,10 @@ export async function createSession(params: {
     firstSpeaker: agent.firstSpeaker === "user" ? "user" : "assistant",
     endCallPhrases,
     silenceTimeoutSeconds: agent.silenceTimeoutSeconds ?? null,
-    language: agent.language ?? null,
+    // Mirror the STT language resolution (asrLanguage first) so AgentConfig.language —
+    // which drives the pipeline's [LANGUAGE — ABSOLUTE RULE] block — agrees with STT,
+    // the [STRICT LANGUAGE RULE], and TTS instead of contradicting them (call 548).
+    language: agent.asrLanguage || agent.language || null,
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
@@ -324,6 +335,11 @@ export async function createSession(params: {
   // All three are independent DB reads — fire simultaneously to avoid sequential
   // round-trips that add 20-60 ms to call setup latency.
   const callerPhone = humanPhone(params.fromNumber, params.toNumber);
+  // Persona fingerprint for caller-memory whiplash detection: when the agent is
+  // repurposed (e.g. real-estate → insurance), stale domain memory keyed on
+  // (agentId, phone) must not bleed into the new persona. Derived from the RAW
+  // system prompt, not effectiveSystemPrompt (which varies per call).
+  const personaHash = computePersonaHash(agent.systemPrompt);
   let callerProfileSnapshot: CallerProfile | null = null;
   let latchedFactsMap = new Map<string, string>();
   // Tracks the name latched THIS call via latchCallerName (caller said "my name is X").
@@ -333,7 +349,7 @@ export async function createSession(params: {
   const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
-      ? loadCallerContext(params.agentId, callerPhone).catch((memErr) => {
+      ? loadCallerContext(params.agentId, callerPhone, personaHash).catch((memErr) => {
           logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller context — continuing without memory");
           return null;
         })
@@ -885,6 +901,7 @@ export async function createSession(params: {
     get naturalEndTriggered() { return naturalEndTriggered; },
     get callerProfileSnapshot() { return callerProfileSnapshot; },
     get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
+    personaHash,
     callerPhone,
     agentUserId:      agent.userId ?? null,
     agentLlmProvider: agent.llmProvider,
@@ -1487,6 +1504,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   callId:            session.callId,
                   wasDropped,
                   callerNameInCall:  session.callerNameLatchedThisCall,
+                  personaHash:       session.personaHash ?? undefined,
                 });
                 createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
                   status: "success",

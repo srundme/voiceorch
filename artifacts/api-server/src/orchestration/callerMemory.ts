@@ -32,7 +32,8 @@ import {
   callerFactSentenceLinksTable,
   callerEpisodeFactLinksTable,
 } from "@workspace/db";
-import { and, eq, desc, isNull, inArray, sql } from "drizzle-orm";
+import { and, eq, ne, desc, isNull, inArray, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import type { ConversationTurn } from "./types.js";
 import type { createLLMAdapter } from "./adapters/llm/index.js";
 import { logger } from "../lib/logger.js";
@@ -85,6 +86,29 @@ export interface CallerContext {
   /** Tail (last few utterances) of the prior conversation when it ended abruptly
    *  (dropped within the dropped-call window). null when there is nothing to resume. */
   abruptEndTail?: Array<{ speaker: "agent" | "caller"; text: string }> | null;
+  /** True when this caller's stored memory was written under a DIFFERENT agent
+   *  persona than the one currently configured (the agent was repurposed). When
+   *  set, injectEnhancedMemory suppresses ALL domain-bearing memory so a stale
+   *  persona's intent/facts/episodes can't bleed into the new one. */
+  personaChanged?: boolean;
+}
+
+// Reserved caller_fact key holding a fingerprint of the agent persona that last
+// wrote this caller's memory. Lets us detect persona/domain whiplash when an
+// agent is repurposed (e.g. real-estate → insurance) so stale intent/facts are
+// not reused. Never shown to the LLM — filtered out of the facts list on load.
+export const PERSONA_HASH_FACT_KEY = "__agent_persona_hash";
+
+/**
+ * Stable fingerprint of an agent's persona. Derived from the system prompt only
+ * (the persona definition that changes when an agent is repurposed) — NOT from
+ * compliance toggles, dates, or call-specific data, which would cause false
+ * invalidation. Returns "" for an empty prompt (treated as "no fingerprint").
+ */
+export function computePersonaHash(systemPrompt: string | null | undefined): string {
+  const src = (systemPrompt ?? "").trim();
+  if (!src) return "";
+  return createHash("sha1").update(src).digest("hex").slice(0, 16);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -165,6 +189,7 @@ export async function loadCallerProfile(
 export async function loadCallerContext(
   agentId: number,
   phoneNumber: string,
+  currentPersonaHash?: string,
 ): Promise<CallerContext> {
   const [profile, currentFacts, recentCalls] = await Promise.all([
     // L1 profile
@@ -220,18 +245,36 @@ export async function loadCallerContext(
     }
   }
 
+  // ── Persona-change detection ───────────────────────────────────────────────
+  // The reserved marker fact records the persona that last wrote this caller's
+  // memory. If it exists and differs from the current agent persona, the agent
+  // was repurposed — flag it so domain memory is suppressed for this call.
+  // Absence = first persona ever seen = no mismatch (nothing stale to suppress).
+  const storedPersonaHash = currentFacts.find(r => r.key === PERSONA_HASH_FACT_KEY)?.value ?? null;
+  const personaChanged =
+    !!currentPersonaHash && !!storedPersonaHash && storedPersonaHash !== currentPersonaHash;
+  if (personaChanged) {
+    logger.warn(
+      { agentId, phoneNumber, storedPersonaHash, currentPersonaHash },
+      "Caller memory: agent persona changed since last contact — suppressing stale domain memory for this call",
+    );
+  }
+
   return {
     profile: normalizedProfile,
-    facts: currentFacts.map(r => ({
-      id:                r.id,
-      key:               r.key,
-      value:             r.value,
-      confidence:        r.confidence,
-      sourceCallId:      r.sourceCallId,
-      sourceSentenceIds: [],  // fetched via junction table in detail endpoints only
-      supersededById:    r.supersededById,
-      createdAt:         r.createdAt,
-    })),
+    facts: currentFacts
+      .filter(r => r.key !== PERSONA_HASH_FACT_KEY)
+      .map(r => ({
+        id:                r.id,
+        key:               r.key,
+        value:             r.value,
+        confidence:        r.confidence,
+        sourceCallId:      r.sourceCallId,
+        sourceSentenceIds: [],  // fetched via junction table in detail endpoints only
+        supersededById:    r.supersededById,
+        createdAt:         r.createdAt,
+      })),
+    personaChanged,
     recentCalls: recentCalls.map(r => ({
       id:              r.id,
       callId:          r.callId,
@@ -276,6 +319,12 @@ export function injectEnhancedMemory(
   ctx: CallerContext,
 ): string {
   const { profile, facts, recentCalls } = ctx;
+  // Persona whiplash guard: when the agent was repurposed since this caller's
+  // memory was written, suppress ALL domain-bearing memory (predicted intent,
+  // facts, summary, episodes, sentiment/risk, resume thread, and the
+  // returning-caller instruction) and treat the call as cold. Only the caller's
+  // name and the name-priority safety rule survive.
+  const personaChanged = ctx.personaChanged ?? false;
 
   const lines: string[] = ["=== CALLER MEMORY — NEVER FORGETS ==="];
 
@@ -283,30 +332,33 @@ export function injectEnhancedMemory(
   const callCount  = profile?.callCount ?? 0;
   const lastLabel  = daysSinceLabel(profile?.lastCalledAt ?? null);
 
-  const headerParts: string[] = [`Name: ${namePart}`, `Calls: ${callCount}`];
-  if (lastLabel) headerParts.push(`Last: ${lastLabel}`);
+  const headerParts: string[] = [`Name: ${namePart}`];
+  if (!personaChanged) {
+    headerParts.push(`Calls: ${callCount}`);
+    if (lastLabel) headerParts.push(`Last: ${lastLabel}`);
+  }
 
-  const isRecentDrop = isAbruptEnd(profile);
+  const isRecentDrop = !personaChanged && isAbruptEnd(profile);
 
   if (isRecentDrop) headerParts.push("⚠️ LAST CALL DROPPED");
   lines.push(headerParts.join("  |  "));
 
   // ── Predicted intent (if available) ───────────────────────────────────────
-  if (profile?.predictedIntent) {
+  if (!personaChanged && profile?.predictedIntent) {
     lines.push("");
     lines.push(`🎯 PREDICTED REASON FOR THIS CALL: ${profile.predictedIntent}`);
   }
 
   // ── Risk signal ───────────────────────────────────────────────────────────
   const risk = profile?.riskScore ?? 0;
-  if (risk >= 0.7) {
+  if (!personaChanged && risk >= 0.7) {
     lines.push(`🚨 HIGH RISK CALLER (score: ${(risk * 100).toFixed(0)}%) — approach with extra patience, proactively address pain points`);
-  } else if (risk >= 0.4) {
+  } else if (!personaChanged && risk >= 0.4) {
     lines.push(`⚠️ ELEVATED RISK (score: ${(risk * 100).toFixed(0)}%) — caller may be frustrated, handle with care`);
   }
 
   // ── Sentiment arc ─────────────────────────────────────────────────────────
-  const sentimentsWithData = recentCalls.filter(c => c.sentiment);
+  const sentimentsWithData = personaChanged ? [] : recentCalls.filter(c => c.sentiment);
   if (sentimentsWithData.length >= 2) {
     const trend = profile?.sentimentTrend;
     const arc = sentimentsWithData
@@ -320,7 +372,7 @@ export function injectEnhancedMemory(
 
   // ── L0: current (non-superseded) structured facts ─────────────────────────
   const now = Date.now();
-  const displayFacts = facts.filter(f => {
+  const displayFacts = personaChanged ? [] : facts.filter(f => {
     if (f.key === "name") return false;
     if (f.confidence < 0.5) return false;
     // Always suppress language_pref — agents have a fixed configured language;
@@ -337,13 +389,13 @@ export function injectEnhancedMemory(
       const ageLabel = daysSinceLabel(f.createdAt);
       lines.push(`• ${f.key}: ${f.value}${ageLabel ? `  [${ageLabel}]` : ""}${staleTag}`);
     }
-  } else if (profile?.summary) {
+  } else if (!personaChanged && profile?.summary) {
     lines.push("");
     lines.push(`Prior context: ${profile.summary}`);
   }
 
   // ── L1: recent episode summaries with sentiment ───────────────────────────
-  const callsWithSummary = recentCalls.filter(c => c.summary);
+  const callsWithSummary = personaChanged ? [] : recentCalls.filter(c => c.summary);
   if (callsWithSummary.length > 0) {
     lines.push("");
     lines.push("RECENT EPISODES:");
@@ -390,7 +442,7 @@ export function injectEnhancedMemory(
         ? "pick the conversation back up exactly where the exchanges above left off."
         : "continue naturally from the prior context above."),
     );
-  } else if (callCount >= 1) {
+  } else if (!personaChanged && callCount >= 1) {
     const riskInstruction = risk >= 0.7
       ? " Caller has shown frustration recently — proactively address concerns before they escalate."
       : risk >= 0.4
@@ -759,8 +811,12 @@ export async function updateCallerProfile(opts: {
    * from a transcript where the agent may have already used the wrong (stored) name.
    */
   callerNameInCall?: string | null;
+  /** Current agent persona fingerprint (computePersonaHash). Written to the
+   *  reserved marker fact at call end so future calls can detect a persona swap;
+   *  when a swap is detected here, the caller's pre-swap memory is retired. */
+  personaHash?: string;
 }): Promise<void> {
-  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall } = opts;
+  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash } = opts;
 
   if (history.length < 1) return;
 
@@ -812,12 +868,15 @@ export async function updateCallerProfile(opts: {
   });
 
   // ── Phase 3: LLM extraction (best-effort) ─────────────────────────────────
-  const priorContext = existing?.summary
+  // Mutable: the persona-swap block below clears it so the new persona's first
+  // extraction never sees the retired domain's summary (would re-pollute memory).
+  let priorContext = existing?.summary
     ? `Prior context from previous calls: ${existing.summary}\n\n`
     : "";
 
   // Load current (non-superseded) facts for LLM context
   let priorFacts: CallerFact[] = [];
+  let storedPersonaMarker: string | null = null;
   try {
     const rows = await db
       .select()
@@ -828,7 +887,8 @@ export async function updateCallerProfile(opts: {
         isNull(callerFactsTable.supersededById),
       ))
       .orderBy(desc(callerFactsTable.createdAt));
-    priorFacts = rows.map(r => ({
+    storedPersonaMarker = rows.find(r => r.key === PERSONA_HASH_FACT_KEY)?.value ?? null;
+    priorFacts = rows.filter(r => r.key !== PERSONA_HASH_FACT_KEY).map(r => ({
       id:                r.id,
       key:               r.key,
       value:             r.value,
@@ -839,6 +899,53 @@ export async function updateCallerProfile(opts: {
       createdAt:         r.createdAt,
     }));
   } catch { /* non-fatal */ }
+
+  // ── Persona whiplash: permanently retire stale memory after an agent swap ───
+  // loadCallerContext only HIDES stale domain memory for the live call. If the
+  // persona changed since this caller's memory was written, retire it for good
+  // here (before extraction) so it can neither contaminate this call's fact
+  // extraction nor resurface on later calls once the marker matches again.
+  const personaSwapped =
+    !!personaHash && !!storedPersonaMarker && storedPersonaMarker !== personaHash;
+  if (personaSwapped) {
+    try {
+      const markerId = await supersedeFact({
+        agentId, phoneNumber,
+        key: PERSONA_HASH_FACT_KEY, value: personaHash!, confidence: 1, sourceCallId: callId,
+      });
+      if (markerId) {
+        await db.update(callerFactsTable)
+          .set({ supersededById: markerId })
+          .where(and(
+            eq(callerFactsTable.agentId, agentId),
+            eq(callerFactsTable.phoneNumber, phoneNumber),
+            isNull(callerFactsTable.supersededById),
+            ne(callerFactsTable.key, PERSONA_HASH_FACT_KEY),
+          ));
+      }
+      await db.update(callerProfilesTable)
+        .set({ predictedIntent: null, summary: null, riskScore: null, sentimentTrend: null, updatedAt: now })
+        .where(and(
+          eq(callerProfilesTable.agentId, agentId),
+          eq(callerProfilesTable.phoneNumber, phoneNumber),
+        ));
+      // Retire pre-swap episodes (keep THIS call's archive) so old-domain
+      // summaries and sentiment can't resurface via RECENT EPISODES later.
+      await db.update(callerCallArchiveTable)
+        .set({ summary: null, sentiment: null })
+        .where(and(
+          eq(callerCallArchiveTable.agentId, agentId),
+          eq(callerCallArchiveTable.phoneNumber, phoneNumber),
+          // Keep THIS call's archive row intact when we know its id.
+          archiveId != null ? ne(callerCallArchiveTable.id, archiveId) : undefined,
+        ));
+      priorFacts = [];     // extraction must start cold for the new persona
+      priorContext = "";   // and must NOT inherit the retired domain's summary
+      logger.info({ agentId, phoneNumber, callId }, "Caller memory: retired stale persona memory after agent repurpose");
+    } catch (swapErr) {
+      logger.warn({ agentId, phoneNumber, callId, swapErr }, "Caller memory: persona invalidation failed — continuing");
+    }
+  }
 
   const MAX_ATTEMPTS = 3;
   const BACKOFF_BASE_MS = 1000;
@@ -932,7 +1039,7 @@ export async function updateCallerProfile(opts: {
     extracted.name = callerNameInCall;
   }
   const newName    = extracted.name    || existing?.name    || null;
-  const newSummary = extracted.summary || existing?.summary || null;
+  const newSummary = extracted.summary || (personaSwapped ? null : existing?.summary) || null;
 
   try {
     await db
@@ -948,9 +1055,26 @@ export async function updateCallerProfile(opts: {
   }
 
   // ── Phase 4: async intent prediction + risk scoring (fire-and-forget) ────
-  predictCallerIntent({ agentId, phoneNumber, llm, callCount: newCount }).catch(
-    (err) => logger.warn({ err, agentId, phoneNumber }, "predictCallerIntent fire-and-forget failed"),
-  );
+  // Skipped right after a persona swap: the just-retired episodes would otherwise
+  // re-derive a stale-domain intent and re-pollute the freshly-cleared profile.
+  if (!personaSwapped) {
+    predictCallerIntent({ agentId, phoneNumber, llm, callCount: newCount }).catch(
+      (err) => logger.warn({ err, agentId, phoneNumber }, "predictCallerIntent fire-and-forget failed"),
+    );
+  }
+
+  // Refresh the persona fingerprint marker for same-persona / first-ever calls
+  // (the swap path above already wrote the new marker).
+  if (personaHash && !personaSwapped) {
+    try {
+      await supersedeFact({
+        agentId, phoneNumber,
+        key: PERSONA_HASH_FACT_KEY, value: personaHash, confidence: 1, sourceCallId: callId,
+      });
+    } catch (markerErr) {
+      logger.warn({ agentId, phoneNumber, callId, markerErr }, "Caller memory: persona marker write failed");
+    }
+  }
 }
 
 // ── Real-time name latch (unchanged) ──────────────────────────────────────────

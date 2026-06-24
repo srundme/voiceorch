@@ -37,6 +37,7 @@
 - [Orval codegen pitfalls](orval-codegen-pitfalls.md) — duplicate YAML schema key silently breaks codegen; TS config fails jiti; use orval.config.mjs; existing campaign schemas named CallbackItem/CallbacksPage etc.
 - [Pre-greeting drop resilience](pre-greeting-drop-resilience.md) — setup DB reads need withDbRetry; greeting-LLM failure must fall back not fatal; every pre-greeting teardown must log provider+readable reason
 - [Recording track alignment](recording-track-alignment.md) — align agent track to its own audio cursor, not per-frame wall-clock; per-frame padding buzzes the TTS channel
+- [Caller-memory persona-swap invalidation](caller-memory-persona-swap.md) — persona swap must clear priorFacts + DB rows + priorContext together, or the first post-swap extraction re-pollutes
 - [Webcall 2.0 thin adapter](webcall-pipeline-split.md) — browser webcall is a thin WS transport over the shared createSession/pipeline core; never re-fork conversation logic into webcall.ts
 - [Web-call mic capture anti-aliasing](webcall-capture-aliasing.md) — browser ignores requested 16k AudioContext rate; band-limit (biquad) before decimating to 16k or the caller channel buzzes
 - [AMD / voicemail-detection config shapes](amd-voicemail-config-shapes.md) — outbound AMD gates synchronously on the answer webhook; two agentConfig shapes normalized by resolveAmdConfig

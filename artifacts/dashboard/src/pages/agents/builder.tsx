@@ -306,7 +306,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsVoice              = form.watch("ttsVoice");
   const ttsModel              = form.watch("ttsModel");
   const language              = form.watch("language");
-  const temperature           = form.watch("temperature") ?? 0.1;
+  const temperature           = form.watch("temperature") ?? 0.4;
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
   const asrModelOpts  = ASR_MODELS[asrProvider]  ?? [];
@@ -4509,7 +4509,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       name: "", description: "", asrProvider: "deepgram", asrModel: "",
       llmProvider: "openai", llmModel: "", ttsProvider: "cartesia",
       ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
-      systemPrompt: "", temperature: 0.10, maxDuration: 300,
+      systemPrompt: "", temperature: 0.40, maxDuration: 300,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
@@ -4555,7 +4555,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       ttsModel:                 agent.ttsModel ?? "",
       telephonyProvider:        agent.telephonyProvider,
       systemPrompt:             agent.systemPrompt,
-      temperature:              agent.temperature ?? 0.10,
+      temperature:              agent.temperature ?? 0.40,
       maxDuration:              agent.maxDuration ?? 300,
       greetingMessage:          agent.greetingMessage ?? "Hello",
       firstSpeaker:             ((agent as any).firstSpeaker === "user" ? "user" : "assistant") as AgentFormValues["firstSpeaker"],

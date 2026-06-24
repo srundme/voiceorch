@@ -50,6 +50,16 @@ const WS_BASE   = "wss://api.sarvam.ai/speech-to-text/ws";
 /** Only saaras:v3 supports the `mode` parameter. */
 const MODE_CAPABLE = new Set(["saaras:v3"]);
 
+/**
+ * Strip leaked diarization/speaker labels (e.g. "Speaker 1:", "speaker:") from a
+ * transcript line. Some Sarvam responses prefix utterances with a speaker tag that
+ * would otherwise leak verbatim into the LLM context (call 548). Removes the label
+ * at the start of the string or immediately after any newline, then trims.
+ */
+function stripDiarizationLabels(text: string): string {
+  return text.replace(/(^|\n)\s*speaker\s*\d*\s*:\s*/gi, "$1").trim();
+}
+
 /** BCP-47 codes accepted by Sarvam (note: Odia uses od-IN, not or-IN). */
 const VALID_LANG = new Set([
   "bn-IN", "en-IN", "gu-IN", "hi-IN", "kn-IN",
@@ -137,7 +147,7 @@ export class SarvamSTT implements STTAdapter {
     }
 
     const json = (await resp.json()) as { transcript?: string };
-    return (json.transcript ?? "").trim();
+    return stripDiarizationLabels(json.transcript ?? "");
   }
 
   // ── Streaming WebSocket ─────────────────────────────────────────────────────
@@ -390,7 +400,7 @@ export class SarvamSTT implements STTAdapter {
         // Final transcript — official type: "transcript"; legacy: "data"
         if (msg.type === "transcript" || msg.type === "data") {
           inSpeechSegment = false; // segment complete
-          const text = (msg.data?.transcript ?? "").trim();
+          const text = stripDiarizationLabels(msg.data?.transcript ?? "");
           if (!text) return;
           const meta: SttFinalMetadata = {
             endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,

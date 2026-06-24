@@ -308,6 +308,34 @@ export class OrchestrationPipeline {
   // Tracks the configured agent language for per-turn LLM language injection.
   private currentLang: string = "";
 
+  // Repetition guard (call 548): the last spoken assistant line + how many times
+  // in a row the model has repeated itself. Used by the per-turn anti-repeat nudge
+  // to quote the previous line and forbid a verbatim repeat, escalating if stuck.
+  private lastAssistantSpokenRaw = "";
+  private consecutiveRepeats = 0;
+  /** Normalize a reply for repeat comparison: lowercase, strip terminal
+   *  punctuation (incl. Devanagari danda), collapse whitespace. */
+  private normalizeForRepeat = (s: string): string =>
+    s.toLowerCase().replace(/[.,!?;:।…]/g, "").replace(/\s+/g, " ").trim();
+
+  /** Update the repetition guard after the agent speaks. A verbatim (normalized)
+   *  match against the previous reply increments consecutiveRepeats so the next
+   *  turn's nudge escalates; anything new resets it. Always records the raw line. */
+  private trackRepeat(spoken: string): void {
+    const norm     = this.normalizeForRepeat(spoken);
+    const prevNorm = this.normalizeForRepeat(this.lastAssistantSpokenRaw);
+    if (norm && norm === prevNorm) {
+      this.consecutiveRepeats++;
+      logger.warn(
+        { callId: this.config.callId, consecutiveRepeats: this.consecutiveRepeats, line: spoken.slice(0, 80) },
+        "Pipeline: agent repeated its previous reply verbatim — escalating anti-repeat nudge",
+      );
+    } else {
+      this.consecutiveRepeats = 0;
+    }
+    this.lastAssistantSpokenRaw = spoken;
+  }
+
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
@@ -892,8 +920,12 @@ export class OrchestrationPipeline {
           ? [{ role: "user", content: "[call connected — this is a returning caller you already know from the CALLER MEMORY block above; open by greeting them by name and referencing prior context, do NOT re-introduce yourself]" }]
           : [];
         try {
+          // Cap the opener length — the greeting LLM path otherwise produces a long
+          // multi-sentence monologue (call 548: ~20 s greeting). Constrain to one
+          // short sentence without hard-truncating mid-word.
+          const greetingSystemPrompt = `${this.agent.systemPrompt}\n\n[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.`;
           await this.llm.chat(
-            greetingTrigger, this.agent.systemPrompt,
+            greetingTrigger, greetingSystemPrompt,
             (token) => { greeting += token; },
             (full) => { greeting = full; },
             {
@@ -929,6 +961,7 @@ export class OrchestrationPipeline {
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
       this.conversationHistory.push({ role: "assistant", content: greeting });
+      this.lastAssistantSpokenRaw = greeting;  // seed repeat guard with the opener
       this.config.onTranscript("agent", greeting);
       this.config.onConversationUpdate?.(this.conversationHistory);
       this.firstAudioSentAt = null;
@@ -2401,6 +2434,24 @@ export class OrchestrationPipeline {
       }
     }
 
+    // Per-turn anti-repeat nudge (call 548): when the agent has already spoken a
+    // line, quote it onto the last user turn and forbid a verbatim repeat, telling
+    // the model to advance if the caller answered/agreed (e.g. repeated "yes").
+    // Escalates after a detected repeat so a stuck model is pushed harder to move on.
+    if (this.lastAssistantSpokenRaw && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        const prevLine = this.lastAssistantSpokenRaw.slice(0, 180);
+        const antiRepeat = this.consecutiveRepeats >= 1
+          ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. The caller has responded — move the conversation FORWARD to the next step or question. Say something different now.`
+          : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. If the caller answered or agreed (e.g. "yes"), acknowledge briefly and advance to the next point — do not re-ask or restate.`;
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${antiRepeat}` },
+        ];
+      }
+    }
+
     // Layer 4: Staged Prompt — override system prompt with active stage block
     if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
       const stage = this.agent.stagedPromptStages[this.currentStageIndex];
@@ -2785,6 +2836,7 @@ export class OrchestrationPipeline {
     // resumes from the dropped step next turn instead of believing it covered it.
     const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
     this.conversationHistory.push({ role: "assistant", content: spokenResponse });
+    this.trackRepeat(spokenResponse);
     this.config.onTranscript("agent", spokenResponse);
     this.config.onConversationUpdate?.(this.conversationHistory);
 
@@ -3241,6 +3293,7 @@ export class OrchestrationPipeline {
     if (cleanResponse) {
       const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
       this.conversationHistory.push({ role: "assistant", content: spokenResponse });
+      this.trackRepeat(spokenResponse);
       this.config.onTranscript("agent", spokenResponse);
       this.config.onConversationUpdate?.(this.conversationHistory);
     }
