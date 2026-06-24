@@ -771,23 +771,15 @@ function PromptTab({ form }: { form: any }) {
       )} />
       <div className="space-y-4">
         <SectionDivider label="Call Behaviour" />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Greeting Message</FormLabel>
-              <FormControl><Input placeholder="Hello! How can I help you today?" className="h-8 text-xs" {...field} /></FormControl>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="timezone" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-xs">Agent Timezone</FormLabel>
-              <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
-                placeholder="Not set" />
-              <FormDescription className="text-[10px]">Injected as current-time context</FormDescription>
-            </FormItem>
-          )} />
-        </div>
+        <FormField control={form.control} name="timezone" render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-xs">Agent Timezone</FormLabel>
+            <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+              options={[{ value: "", label: "Not set" }, ...AGENT_TIMEZONES]}
+              placeholder="Not set" />
+            <FormDescription className="text-[10px]">Injected as current-time context</FormDescription>
+          </FormItem>
+        )} />
         <FormField control={form.control} name="endCallPhrases" render={({ field }) => (
           <FormItem>
             <FormLabel className="text-xs">End-Call Phrases (comma-separated)</FormLabel>
