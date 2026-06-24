@@ -278,10 +278,30 @@ export function WebCallPanel({
         processorRef.current = processor;
         src.connect(processor);
         processor.connect(ctx.destination);
+        console.info("[WEBCALL_AUDIO_DEBUG]", JSON.stringify({
+          stage: "capture-setup",
+          audioContextSampleRate: ctx.sampleRate,
+          requestedSampleRate: 16000,
+          micTrackSampleRate: stream.getAudioTracks()[0]?.getSettings().sampleRate,
+          outputSampleRate: 16000,
+          downsampleWillRun: ctx.sampleRate !== 16000,
+          browser: navigator.userAgent,
+        }));
+        let firstFrameLogged = false;
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const raw = e.inputBuffer.getChannelData(0);
-          const samples = ctx.sampleRate === 16000 ? raw : downsampleFloat32(raw, ctx.sampleRate, 16000);
+          const downsampleDidRun = ctx.sampleRate !== 16000;
+          const samples = downsampleDidRun ? downsampleFloat32(raw, ctx.sampleRate, 16000) : raw;
+          if (!firstFrameLogged) {
+            firstFrameLogged = true;
+            console.info("[WEBCALL_AUDIO_DEBUG]", JSON.stringify({
+              stage: "first-frame",
+              downsampleDidRun,
+              inputSampleRate: ctx.sampleRate,
+              outputSampleRate: 16000,
+            }));
+          }
           ws.send(float32ToInt16(samples).buffer);
         };
       };
