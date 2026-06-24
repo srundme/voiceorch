@@ -1,0 +1,332 @@
+I have one final request before we continue building new features.
+
+**Do not make any code changes. Do not suggest improvements yet. I only want to understand the current architecture completely.**
+
+We've noticed that fixing one issue (such as STT, interruption, recording, or playback) sometimes breaks another feature that was previously working. This tells me there are hidden dependencies in the orchestration that we don't fully understand.
+
+I want you to act as the lead engineer of this project and explain the entire system as if you were handing it over to a new engineering team.
+
+Create a structured architecture document containing the following:
+
+# 1. Overall Architecture
+
+Explain the complete flow for:
+
+* Web Call (webcall.ts)
+* Live Call (pipeline.ts)
+
+Show the lifecycle from:
+
+Call Created
+→ Connection Established
+→ STT
+→ LLM
+→ Tool Calling
+→ TTS
+→ Playback
+→ Recording
+→ Summary
+→ Logs
+→ Database
+→ Call End
+
+Explain every stage in chronological order.
+
+---
+
+# 2. Feature Ownership
+
+For each feature below, tell me:
+
+* Which file owns it
+* Which functions control it
+* Which files call it
+* Whether it is Webcall only, Live Call only, or Shared
+
+Features:
+
+* STT
+* LLM
+* TTS
+* Playback
+* Interruption / Barge-in
+* Echo cancellation
+* Voice Activity Detection
+* Fillers
+* Call Recording
+* Caller Audio Capture
+* Playback Audio
+* Call Summary
+* Logs
+* Memory / CRM
+* Variable Resolution
+* Knowledge Base
+* Tool Calling
+* Call Status
+* Call Cost
+* Voice Selection
+* Language Selection
+* Campaigns
+* Call End Logic
+
+---
+
+# 3. Dependency Map (Most Important)
+
+For every major feature explain:
+
+* What it depends on
+* What depends on it
+
+For example:
+
+If I modify STT...
+
+What else could break?
+
+If I modify interruption...
+
+What else could break?
+
+If I modify playback timing...
+
+What else could break?
+
+If I modify recording...
+
+What else could break?
+
+If I modify webcall.ts...
+
+Which shared systems are affected?
+
+Create a dependency graph showing the relationships between all major systems.
+
+---
+
+# 4. State Machine
+
+Explain the internal call state machine.
+
+For example:
+
+Call Created
+
+↓
+
+WebRTC Connected
+
+↓
+
+Listening
+
+↓
+
+Caller Speaking
+
+↓
+
+STT Final
+
+↓
+
+LLM Processing
+
+↓
+
+Tool Calling
+
+↓
+
+TTS Streaming
+
+↓
+
+Playback
+
+↓
+
+Listening Again
+
+↓
+
+Call End
+
+For every state explain:
+
+* Which variables change
+* Which timers start
+* Which timers stop
+* Which callbacks fire
+* Which events are emitted
+
+---
+
+# 5. Data Flow
+
+Show how audio and data travel through the system.
+
+Example:
+
+Browser Mic
+
+↓
+
+WebRTC
+
+↓
+
+webcall.ts
+
+↓
+
+Azure STT
+
+↓
+
+Transcript
+
+↓
+
+LLM
+
+↓
+
+Tool
+
+↓
+
+Cartesia
+
+↓
+
+Playback
+
+↓
+
+Recorder
+
+↓
+
+Logs
+
+↓
+
+Database
+
+Do the same for Live Calls.
+
+---
+
+# 6. Configuration Map
+
+List every important timeout, threshold, retry limit, silence duration, debounce, grace window, playback timer, interruption timer, VAD threshold, RMS threshold, endpoint timeout, and configuration constant used in the orchestration.
+
+Explain where each one is used and what changing it affects.
+
+---
+
+# 7. Database & Persistence
+
+Explain:
+
+* Which tables are written during a call
+* Which tables are updated
+* When they are written
+* Which component writes them
+
+For example:
+
+Calls
+
+Call Logs
+
+Recordings
+
+Summaries
+
+CRM
+
+Memory
+
+Campaigns
+
+Usage
+
+Billing
+
+---
+
+# 8. Event Timeline
+
+List every event that can happen during a call in chronological order.
+
+For example:
+
+Call Started
+
+Recording Started
+
+STT Started
+
+Partial Transcript
+
+Final Transcript
+
+LLM Request
+
+First Token
+
+Tool Requested
+
+Tool Completed
+
+TTS Started
+
+Playback Started
+
+Playback Completed
+
+Recording Saved
+
+Summary Generated
+
+Call Ended
+
+---
+
+# 9. Risk Map
+
+Identify the highest-risk files in the project.
+
+For each file explain:
+
+* Why it is risky
+* What features depend on it
+* What can accidentally break if it is modified
+
+Mark files as:
+
+🟢 Safe to modify
+
+🟡 Medium Risk
+
+🔴 High Risk
+
+---
+
+# 10. Engineering Guide
+
+Finally, create a practical guide for future development.
+
+For every new bug or feature, explain:
+
+* Which file should be investigated first
+* Which related files should also be checked
+* Which areas should never be modified without understanding the dependencies
+
+The goal is to create a permanent engineering reference so future tasks can be implemented confidently without unintentionally breaking existing functionality.
+
+Do not change any code.
+
+Produce a structured document only.
