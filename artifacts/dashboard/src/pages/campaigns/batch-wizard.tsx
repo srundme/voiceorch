@@ -19,6 +19,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +33,7 @@ import {
   RefreshCw, Check, ArrowLeft,
   Phone, User, Mail, Clock,
   Shield, Layers, ListChecks, Play, Info,
-  Building2, ExternalLink, Copy, Zap, X,
+  Building2, ExternalLink, Copy, Zap, X, ChevronDown,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -1292,6 +1296,52 @@ function Step6({
 
 // ── Step 7: Execution Rules ────────────────────────────────────────────────────
 
+function TimezoneCombobox({
+  value, options, onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (tz: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 h-9 text-xs hover:border-border transition-colors"
+        >
+          <span className="truncate">{value || "Select timezone"}</span>
+          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search timezone…" className="text-xs" />
+          <CommandList>
+            <CommandEmpty>No timezone found.</CommandEmpty>
+            <CommandGroup>
+              {options.map(tz => (
+                <CommandItem
+                  key={tz}
+                  value={tz}
+                  onSelect={() => { onChange(tz); setOpen(false); }}
+                  className="text-xs"
+                >
+                  <Check className={cn("mr-2 h-3.5 w-3.5", value === tz ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{tz}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function Step7({
   state, setState,
 }: {
@@ -1360,14 +1410,11 @@ function Step7({
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Business Hours</p>
         <div className="space-y-1.5">
           <Label className="text-xs">Timezone</Label>
-          <Select value={state.timezone} onValueChange={v => setState({ timezone: v })}>
-            <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent className="max-h-56">
-              {allTimezones.slice(0, 200).map(tz => (
-                <SelectItem key={tz} value={tz} className="text-xs">{tz}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <TimezoneCombobox
+            value={state.timezone}
+            options={allTimezones}
+            onChange={tz => setState({ timezone: tz })}
+          />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
