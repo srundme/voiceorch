@@ -2672,6 +2672,18 @@ const fmtDur = (s?: number | null) => {
 const csvEscape = (v: string) =>
   /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
+/** A browser "Live Test" (Webcall) call — labelled via metadata.transport at
+ *  creation; falls back to the synthetic caller-id prefix for older rows. */
+const isWebCall = (call: { metadata?: string | null; fromNumber?: string | null }): boolean => {
+  if (call.metadata) {
+    try {
+      const md = JSON.parse(call.metadata) as { transport?: string };
+      if (md.transport === "webcall") return true;
+    } catch { /* not JSON — fall through */ }
+  }
+  return (call.fromNumber ?? "").startsWith("webcall-user-");
+};
+
 function LogsTab({ agentId }: { agentId: number }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search,       setSearch]       = useState("");

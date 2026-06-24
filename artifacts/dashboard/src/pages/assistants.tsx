@@ -55,6 +55,7 @@ import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/
 import { getIrdaiBlock, getIrdaiBlockedError, type IrdaiMissingItem } from "@/lib/irdai-block";
 import { IrdaiBlockBanner } from "@/components/irdai-block-banner";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
+import { WebcallPanel } from "@/components/webcall-panel";
 import { format } from "date-fns";
 import { computePipelineCost } from "@/lib/provider-pricing";
 
@@ -1409,6 +1410,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
     { value: "knowledge", label: "Knowledge", icon: BookOpen },
     { value: "tools",     label: "Tools",     icon: Wrench },
     { value: "pipeline",  label: "Pipeline",  icon: GitBranch },
+    { value: "test",      label: "Test",      icon: PlayCircle },
     { value: "logs",      label: "Logs",      icon: AlignLeft },
     { value: "memory",    label: "Memory",    icon: Brain },
   ];
@@ -2724,6 +2726,11 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                 )}
               </div>
             </div>
+          )}
+
+          {/* ═══ TEST (browser live voice test) ═════════════════════════ */}
+          {activeTab === "test" && (
+            <WebcallPanel agentId={agent.id} agentName={agent.name ?? "Agent"} />
           )}
 
           {/* ═══ LOGS ═══════════════════════════════════════════════════ */}

@@ -16,21 +16,19 @@ so high-frequency caller energy folded back into decorrelated broadband noise. T
 corrupted frames feed BOTH STT and the server recorder, so the buzz is baked into the WAV.
 At 48 kHz the decimator degenerates to pure 3:1 decimation → maximal aliasing.
 
-**The rule:** band-limit BEFORE any rate reduction. The shared helper
-`artifacts/dashboard/src/lib/webcall-capture.ts` (`startMicCapture`) inserts a low-pass
-biquad cascade (~7 kHz, 3 stages) between the MediaStreamSource and the ScriptProcessor
-whenever `ctx.sampleRate !== 16000`, then resamples. When the context is genuinely 16 kHz
-the filter is skipped (no decimation = nothing to alias).
+**The rule:** band-limit BEFORE any rate reduction. Insert a low-pass biquad cascade
+(~7 kHz, 3 stages ≈ 36 dB/oct) between the MediaStreamSource and the resampler whenever
+`ctx.sampleRate !== 16000`. When the context is genuinely 16 kHz the filter is skipped
+(no decimation = nothing to alias).
 
-**Why two capture sites must share one helper:** there are TWO independent web-call mic
-graphs — `components/webcall-panel.tsx` (embedded panel) and `pages/assistants.tsx` (agent
-test panel). They previously kept private copies of `float32ToInt16`/`downsampleFloat32`,
-and `assistants.tsx` sent `getChannelData(0)` with NO resample at all (broken on any
-non-16k context). Any capture-chain change must go through the shared helper or one path
-silently regresses.
+**Current location (Webcall 2.0):** there is now exactly ONE capture site —
+`components/webcall-panel.tsx`. It uses an inline AudioWorklet that posts raw Float32
+frames; the main thread band-limits (the biquad cascade) then linear-resamples to 16 kHz
+with a fractional cursor + leftover tail carried across frames (no click at boundaries).
+The old shared helper `lib/webcall-capture.ts` and the `pages/assistants.tsx` capture
+graph BOTH described in earlier revisions of this note were removed with the webcall 1.0
+purge — do not look for them. `assistants.tsx` now only renders `<WebcallPanel>`.
 
-**Validation can only run on a real ctx ≠ 16000 device.** The helper logs
-`[webcall-capture] AudioContext sampleRate=…Hz path=native-16k|resampled` at call start so
-a tester can confirm the resample path was actually exercised. The fix is a no-op on
-contexts already at 16 kHz, so a test on such a device proves nothing. Telephony/live-call
-audio is a completely separate path and is unaffected.
+**Validation can only run on a real ctx ≠ 16000 device.** The fix is a no-op on contexts
+already at 16 kHz, so a test on such a device proves nothing. Telephony/live-call audio is
+a completely separate path and is unaffected.

@@ -11,7 +11,7 @@ import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
-import type { AgentConfig, AgentTool, TelephonyProvider, PipelineMetrics } from "./types.js";
+import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
 import {
   saveSessionMeta,
@@ -72,7 +72,7 @@ const sessions = new Map<string, ActiveSession>();
 
 export async function createSession(params: {
   agentId: number;
-  telephonyProvider: TelephonyProvider;
+  telephonyProvider: SessionTransport;
   toNumber: string;
   fromNumber: string;
   externalCallId?: string;
@@ -84,7 +84,17 @@ export async function createSession(params: {
   onAudioOut: (audio: Buffer) => void;
   onCallEnd: () => void;
   onBargeIn?: () => void;
+  /** Forwards every finalized transcript line (user + agent) to the transport so a
+   *  browser webcall can render a live transcript. Telephony callers omit it. */
+  onTranscript?: (speaker: "user" | "agent", text: string) => void;
+  /** Overrides the default audio-format derivation. When omitted, PCM output is
+   *  used for Vobiz only. The browser webcall transport sets this true. */
+  rawPcmOutput?: boolean;
 }): Promise<{ sessionId: string; callDbId: number }> {
+
+  // Browser "Live Test" transport — labels the call record + lifecycle log so the
+  // calls log can distinguish test calls, and forces PCM audio I/O.
+  const isWebcall = params.telephonyProvider === "webcall";
 
   const [agent] = await withDbRetry("load-agent", () =>
     db.select().from(agentsTable).where(eq(agentsTable.id, params.agentId)),
@@ -565,6 +575,7 @@ export async function createSession(params: {
         metadata: JSON.stringify({
           ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
           ...(params.platformTelephony ? { platformTelephony: true } : {}),
+          ...(isWebcall ? { transport: "webcall", isTestCall: true } : {}),
         }) || null,
       }).returning(),
     );
@@ -574,8 +585,8 @@ export async function createSession(params: {
 
   // ── Call Started lifecycle row (enables Logs tab for telephony calls) ─────────
   writeCallStartedLog(callRecord.id, params.agentId, {
-    callType: "Live Call",
-    direction: params.externalCallId ? "Outbound" : "Inbound",
+    callType: isWebcall ? "Webcall" : "Live Call",
+    direction: isWebcall ? "Inbound" : (params.externalCallId ? "Outbound" : "Inbound"),
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
     sessionId: (() => {
       try {
@@ -675,11 +686,13 @@ export async function createSession(params: {
     callerPhone,
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
-    rawPcmOutput: params.telephonyProvider === "vobiz",
+    rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
     // Returning caller (>=1 prior completed call) → memory-informed recognition opening
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
+      // Forward to the transport (browser webcall renders a live transcript).
+      params.onTranscript?.(speaker, text);
       if (speaker === "user" && callerPhone) {
         // Real-time name latch — persist immediately so the name is saved even
         // if the call drops before the post-call LLM extraction runs.

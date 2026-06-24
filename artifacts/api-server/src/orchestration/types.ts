@@ -407,6 +407,12 @@ export interface TTSAdapter {
 
 export type TelephonyProvider = "twilio" | "plivo" | "vobiz";
 
+/** Audio transport for a session. Extends the real telephony providers with the
+ *  browser "webcall" test transport. The pipeline never branches on this value
+ *  (it is purely metadata + audio-format selection via rawPcmOutput), so widening
+ *  it here is safe. */
+export type SessionTransport = TelephonyProvider | "webcall";
+
 export interface PipelineMetrics {
   sttLatencyMs: number;
   llmLatencyMs: number;
@@ -417,7 +423,7 @@ export interface SessionConfig {
   callId: number;
   agentConfig: AgentConfig;
   providerKeys: Map<string, string>;
-  telephonyProvider: TelephonyProvider;
+  telephonyProvider: SessionTransport;
   callerPhone?: string | null;
   /** Campaign lead ID for outbound calls — enables transfer DB writes + lead timeline */
   campaignLeadId?: number | null;

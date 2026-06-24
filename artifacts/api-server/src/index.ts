@@ -17,6 +17,8 @@ import { startDpdpRetentionSweep } from "./services/dpdpRetention.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
+import { handleWebcallWebSocket } from "./orchestration/telephony/webcall.js";
+import { verifySessionToken } from "./lib/session.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -79,8 +81,13 @@ function isWsRateLimited(ip: string): boolean {
 server.on("upgrade", (request, socket, head) => { void (async () => {
   const url = request.url ?? "";
 
+  // Redact the session JWT (and any future secret query params) before ANY logging
+  // — the webcall transport carries ?token=<JWT> which must never reach the logs,
+  // including the rate-limit warning below.
+  const safeUrl = url.replace(/([?&](?:token|auth)=)[^&]*/gi, "$1[redacted]");
+
   // Match /api/ws/<provider>/<agentId>[?pt=1]
-  const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz)\/(\d+)/);
+  const match = url.match(/^\/api\/ws\/(twilio|plivo|vobiz|webcall)\/(\d+)/);
   if (!match) {
     socket.destroy();
     return;
@@ -94,25 +101,63 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     (request.socket?.remoteAddress ?? "unknown");
   const isLocalhost = remoteIp === "127.0.0.1" || remoteIp === "::1" || remoteIp === "::ffff:127.0.0.1";
   if (!isLocalhost && isWsRateLimited(remoteIp)) {
-    logger.warn({ remoteIp, url }, "WebSocket upgrade rate-limited");
+    logger.warn({ remoteIp, url: safeUrl }, "WebSocket upgrade rate-limited");
     socket.write("HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\n\r\n");
     socket.destroy();
     return;
   }
 
-  const provider          = match[1] as "twilio" | "plivo" | "vobiz";
+  const provider          = match[1] as "twilio" | "plivo" | "vobiz" | "webcall";
   const agentId           = parseInt(match[2]!, 10);
   const platformTelephony = url.includes("pt=1");
   const qs                = new URLSearchParams(url.split("?")[1] ?? "");
   const campaignLeadId    = qs.has("campaignLeadId") ? parseInt(qs.get("campaignLeadId")!, 10) : undefined;
   const vobizFrom         = qs.get("from") ?? undefined;
   const vobizTo           = qs.get("to")   ?? undefined;
+
+  // ── Webcall auth (browser "Live Test") ──────────────────────────────────────
+  // Unlike telephony providers (which are inbound from the provider and cannot
+  // present a bearer token), the browser CAN authenticate. Require a valid session
+  // JWT in ?token= AND that the authenticated user owns the agent — enforced BEFORE
+  // handleUpgrade so an unauthorized request never allocates a session/socket.
+  let webcallUserId: string | null = null;
+  if (provider === "webcall") {
+    const token   = qs.get("token");
+    const payload = token ? verifySessionToken(token) : null;
+    if (!payload) {
+      socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    let agentRow: { userId: string | null } | undefined;
+    try {
+      const rows = await db
+        .select({ userId: agentsTable.userId })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, agentId));
+      agentRow = rows[0];
+    } catch (err) {
+      logger.error({ err, agentId }, "Webcall upgrade — agent ownership lookup failed");
+      socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    if (!agentRow || agentRow.userId !== payload.sub) {
+      logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — agent ownership mismatch");
+      socket.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    webcallUserId = payload.sub;
+  }
+
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
-    logger.info({ provider, agentId, platformTelephony, campaignLeadId, url }, "WebSocket upgraded");
+    logger.info({ provider, agentId, platformTelephony, campaignLeadId, url: safeUrl }, "WebSocket upgraded");
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                                      break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                                       break;
       case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo);              break;
+      case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });
 })(); });
