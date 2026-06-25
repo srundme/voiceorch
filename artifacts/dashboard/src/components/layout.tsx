@@ -10,6 +10,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
 import { useGetWallet } from "@workspace/api-client-react";
+import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { SnapServeIcon } from "@/components/logo";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
@@ -111,6 +112,14 @@ function getPageTitle(location: string): string {
 function WalletChip() {
   const { data: wallet } = useGetWallet();
   const cents = wallet?.balanceCents ?? null;
+  const rateMap = useMinuteRatesMap();
+  const userProviders = useUserProviderNames();
+
+  const rateCentsPerMin = userProviders.size > 0
+    ? (rateMap.get("byop") ?? 3.5)
+    : (rateMap.get("managed") ?? 5);
+
+  const availMins = cents !== null ? Math.floor(cents / rateCentsPerMin) : null;
 
   const { ring, text, bar } =
     cents === null
@@ -127,11 +136,18 @@ function WalletChip() {
     <Link href="/app/wallet">
       <div className={`flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border ${ring} bg-elevated/40 cursor-pointer hover:bg-elevated transition-colors`}>
         <Wallet className={`w-3 h-3 shrink-0 ${text}`} />
-        <div className="flex flex-col gap-[3px] min-w-[44px]">
+        <div className="flex flex-col gap-[3px]">
           {cents !== null ? (
-            <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
-              ${(cents / 100).toFixed(2)}
-            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className={`text-[11px] font-semibold tabular-nums leading-none ${text}`}>
+                ${(cents / 100).toFixed(2)}
+              </span>
+              {availMins !== null && (
+                <span className={`text-[9px] leading-none tabular-nums ${text} opacity-60`}>
+                  ~{availMins}m
+                </span>
+              )}
+            </div>
           ) : (
             <div className="h-2.5 w-10 rounded animate-pulse bg-elevated" />
           )}
