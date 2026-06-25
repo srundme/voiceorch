@@ -150,3 +150,9 @@ id = "E0zvrLeWQTVec7iOkUQRy"
 uri = "file://webcall-architecture-brief.md"
 type = "text"
 title = "Webcall Architecture & Speech Capture Problem Brief"
+
+[[outputs]]
+id = "CcxCO-3_7X2vvvCxdnFXh"
+uri = "file://platform-cost-analysis.md"
+type = "text"
+title = "VoiceOrch Platform Cost Analysis"
