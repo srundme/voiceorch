@@ -128,10 +128,14 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
 
     const provider = agent.telephonyProvider.toLowerCase();
     const [provRow] = await db.select().from(providersTable)
-      .where(and(eq(providersTable.providerName, provider), eq(providersTable.isActive, true)))
+      .where(and(
+        eq(providersTable.userId, campaign.userId),
+        eq(providersTable.providerName, provider),
+        eq(providersTable.isActive, true),
+      ))
       .limit(1);
 
-    if (!provRow) throw new Error(`No active "${provider}" provider configured`);
+    if (!provRow) throw new Error(`No active "${provider}" provider key configured for this account`);
 
     const cfg = provRow.extraConfig
       ? (JSON.parse(provRow.extraConfig) as Record<string, string>)

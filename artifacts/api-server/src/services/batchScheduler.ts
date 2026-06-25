@@ -1,5 +1,6 @@
 import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable } from "@workspace/db";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { eq, and, lte, isNull, or, sql } from "drizzle-orm";
+import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { logger } from "../lib/logger.js";
 import { processRetries } from "./retryEngine.js";
@@ -39,16 +40,19 @@ export function startBatchScheduler(): void {
     void processRetries();
   }, 60_000);
 
-  logger.info("Batch scheduler started");
+  logger.info({ campaignWebhookBaseUrl: getSelfBaseUrl() }, "Batch scheduler started");
 }
 
 async function pollScheduledBatches(): Promise<void> {
   try {
-    // Process draft batches whose scheduled start time has arrived
+    // Process draft batches whose scheduled start time has arrived (or is null = start immediately)
     const dueDraft = await db.select().from(campaignBatchesTable)
       .where(and(
         eq(campaignBatchesTable.status, "draft"),
-        lte(campaignBatchesTable.scheduledStartAt, new Date()),
+        or(
+          isNull(campaignBatchesTable.scheduledStartAt),
+          lte(campaignBatchesTable.scheduledStartAt, new Date()),
+        ),
       ));
 
     for (const batch of dueDraft) {

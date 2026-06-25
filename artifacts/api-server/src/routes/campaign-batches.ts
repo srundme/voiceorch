@@ -86,12 +86,23 @@ async function requireBatch(batchId: number, campaignId: number): Promise<BatchR
 }
 
 async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<void> {
+  const limit = campaign.concurrentCallLimit ?? 20;
+  const [{ active }] = await db.select({ active: count() })
+    .from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.campaignId, campaign.id),
+      eq(campaignLeadsTable.callStatus, "calling"),
+    ));
+  const slots = Math.max(0, limit - Number(active));
+  if (slots <= 0) return;
+
   const pending = await db.select().from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaign.id),
       sql`${campaignLeadsTable.batchId} = ${batch.id}`,
       eq(campaignLeadsTable.callStatus, "pending"),
-    ));
+    ))
+    .limit(slots);
   for (const lead of pending) {
     scheduleCampaignCall(lead, campaign);
   }
