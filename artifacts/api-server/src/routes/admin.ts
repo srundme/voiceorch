@@ -10,6 +10,7 @@ import { logger } from "../lib/logger.js";
 import { sendTestAlertNotification, getAlertCooldownStats, resetAlertSuppressedCount, getAlertCooldownStatus } from "../services/alert-notifications.js";
 import { getAllCampaignConcurrency } from "../services/batchScheduler.js";
 import { processErasureRequest } from "../services/dpdp/index.js";
+import { getVobizWalletStatus } from "../services/vobiz-wallet-monitor.js";
 import { getRedis } from "../lib/redis.js";
 import { pool } from "@workspace/db";
 
@@ -1145,6 +1146,17 @@ router.get("/admin/vobiz-balance", async (req, res): Promise<void> => {
     });
   } catch (err) {
     req.log.error({ err }, "admin/vobiz-balance failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── VoBiz wallet monitor status (for admin dashboard) ────────────────────────
+router.get("/admin/vobiz-wallet-status", requireAdmin, async (req, res): Promise<void> => {
+  try {
+    const status = await getVobizWalletStatus();
+    res.json(status);
+  } catch (err) {
+    req.log.error({ err }, "admin/vobiz-wallet-status failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
