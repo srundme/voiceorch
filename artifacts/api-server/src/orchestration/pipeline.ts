@@ -145,7 +145,10 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
  * Priority: Tamil > Devanagari (Hindi) > Malayalam > Telugu > Kannada > Bengali >
  *           Gujarati > Gurmukhi (Punjabi) > Odia > Latin-only (English) > null.
  *
- * Mixed scripts: the script with the most characters wins.
+ * Mixed scripts: the Indic script with the most characters wins among Indic scripts.
+ * Latin (English) only wins when the transcript contains zero Indic characters — any
+ * presence of Tamil/Devanagari/etc. script outweighs any amount of Latin text, because
+ * callers frequently mix romanized words ("Anna", "insurance") into Indic-script speech.
  */
 function detectScriptLanguage(text: string): string | null {
   let tamil = 0, devanagari = 0, malayalam = 0, telugu = 0, kannada = 0;
@@ -163,17 +166,25 @@ function detectScriptLanguage(text: string): string | null {
     else if (cp >= 0x0B00 && cp <= 0x0B7F) odia++;
     else if ((cp >= 0x0041 && cp <= 0x005A) || (cp >= 0x0061 && cp <= 0x007A)) latin++;
   }
+  // If ANY Indic script characters are present, Latin cannot win.
+  // Rationale: callers often mix romanized words ("Anna", "insurance") into an
+  // otherwise Indic-script utterance. A single Tamil/Devanagari/etc. character is
+  // stronger evidence of language than any number of shared-Latin words.
+  // English (Latin-only) is returned only when the transcript contains zero Indic chars.
+  const indicTotal = tamil + devanagari + malayalam + telugu + kannada +
+                     bengali + gujarati + gurmukhi + odia;
+  const effectiveLatin = indicTotal > 0 ? 0 : latin;
   const scores: Array<[number, string]> = [
-    [tamil,      "ta-IN"],
-    [devanagari, "hi-IN"],
-    [malayalam,  "ml-IN"],
-    [telugu,     "te-IN"],
-    [kannada,    "kn-IN"],
-    [bengali,    "bn-IN"],
-    [gujarati,   "gu-IN"],
-    [gurmukhi,   "pa-IN"],
-    [odia,       "or-IN"],
-    [latin,      "en-IN"],
+    [tamil,         "ta-IN"],
+    [devanagari,    "hi-IN"],
+    [malayalam,     "ml-IN"],
+    [telugu,        "te-IN"],
+    [kannada,       "kn-IN"],
+    [bengali,       "bn-IN"],
+    [gujarati,      "gu-IN"],
+    [gurmukhi,      "pa-IN"],
+    [odia,          "or-IN"],
+    [effectiveLatin,"en-IN"],
   ];
   const best = scores.reduce((a, b) => (b[0] > a[0] ? b : a));
   // Only return a result if at least 1 non-whitespace non-punctuation character matches.
