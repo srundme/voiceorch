@@ -156,3 +156,9 @@ id = "CcxCO-3_7X2vvvCxdnFXh"
 uri = "file://platform-cost-analysis.md"
 type = "text"
 title = "VoiceOrch Platform Cost Analysis"
+
+[[outputs]]
+id = "Nb7Axj-3YPk6dzcuevlQq"
+uri = "file://master-costing.md"
+type = "text"
+title = "SnapServe Master Costing Reference"
