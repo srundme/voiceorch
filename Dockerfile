@@ -29,6 +29,11 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:24-slim
 WORKDIR /workspace
 
+# ffmpeg is a PATH fallback for the ambient-sound transcode (uploaded tracks).
+# The primary path is the ffmpeg-static npm binary, but installing it here too
+# guarantees a working ffmpeg in the runtime regardless of the active builder.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 RUN npm install -g pnpm@10.26.1
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./

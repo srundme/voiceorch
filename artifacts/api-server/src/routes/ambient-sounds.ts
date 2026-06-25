@@ -8,6 +8,7 @@ import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { invalidatePcmCache } from "../orchestration/ambient.js";
+import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -27,7 +28,7 @@ function pcmDurationSeconds(pcm: Buffer): number {
 
 async function transcode(inputBuffer: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", [
+    const proc = spawn(resolveFfmpegPath(), [
       "-i", "pipe:0",
       "-f", "s16le",
       "-ar", "8000",

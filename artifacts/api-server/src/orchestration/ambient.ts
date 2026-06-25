@@ -26,6 +26,7 @@ import { db, ambientSoundsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { spawn } from "child_process";
 import { logger } from "../lib/logger.js";
+import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 
 // ── Track configuration ────────────────────────────────────────────────────────
 
@@ -93,6 +94,13 @@ const TARGET_LOOP_RMS = 6500;
 // Volume applied to the (normalised) loop. Shared by built-in + uploaded tracks.
 const SILENCE_VOL = 0.42; // ambient while the agent is silent  (~-22 dBFS in-band)
 const SPEECH_VOL  = 0.17; // ambient mixed under TTS speech      (~-29 dBFS in-band)
+
+/** The mix levels actually applied, exported so callers can log them per call. */
+export const AMBIENT_LEVELS = {
+  targetLoopRms: TARGET_LOOP_RMS,
+  silenceVol: SILENCE_VOL,
+  speechVol: SPEECH_VOL,
+} as const;
 
 /**
  * Scale an Int16 loop in place so that its *in-band* (telephony passband,
@@ -404,7 +412,7 @@ async function regeneratePcmLoop(id: string): Promise<Buffer> {
 /** Transcode an arbitrary audio file buffer to raw s16le 8 kHz mono PCM via ffmpeg. */
 function transcodeToPcm8k(inputBuffer: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", [
+    const proc = spawn(resolveFfmpegPath(), [
       "-i", "pipe:0",
       "-f", "s16le",
       "-ar", "8000",

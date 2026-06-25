@@ -10,7 +10,7 @@ import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
-import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop } from "./ambient.js";
+import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
@@ -297,6 +297,7 @@ export class OrchestrationPipeline {
   // Ambient noise
   private ambientStream: AmbientNoiseStream | FileAmbientNoiseStream | null = null;
   private ambientInterval: ReturnType<typeof setInterval> | null = null;
+  private ambientFirstChunkLogged = false;
 
   // IVR / DTMF
   private dtmfDetector: DtmfDetector | null = null;
@@ -419,19 +420,33 @@ export class OrchestrationPipeline {
     // Ambient noise — start looping silence-fill interval
     if (this.agent.ambientNoiseEnabled && this.agent.ambientNoiseTrack) {
       const track = this.agent.ambientNoiseTrack;
-      if (Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track)) {
+      // One structured per-call line so ambient health is observable in prod
+      // logs: which track, built-in vs uploaded, transport encoding, provider,
+      // and the mix levels actually applied. A future regression (wrong levels,
+      // ambient silently off) is visible from this single line.
+      const ambientType = Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track) ? "builtin" : "uploaded";
+      logger.info(
+        {
+          callId: config.callId,
+          track,
+          ambientType,
+          encoding: config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k",
+          telephonyProvider: config.telephonyProvider,
+          levels: AMBIENT_LEVELS,
+        },
+        "Ambient noise enabled",
+      );
+      if (ambientType === "builtin") {
         // Built-in procedural track — synchronous
         this.ambientStream = new AmbientNoiseStream(track);
-        logger.info({ callId: config.callId, track }, "Ambient noise enabled (built-in track)");
       } else {
-        // Uploaded sound ID — load PCM from GCS asynchronously
-        // ambientStream starts as null; the interval skips while loading
-        logger.info({ callId: config.callId, soundId: track }, "Ambient noise enabled (uploaded sound, loading PCM…)");
+        // Uploaded sound ID — load PCM from Postgres asynchronously.
+        // ambientStream starts as null; the interval skips while loading.
         loadPcmLoop(track)
           .then((pcmBuffer) => {
             if (!this.closed) {
               this.ambientStream = new FileAmbientNoiseStream(pcmBuffer);
-              logger.info({ callId: config.callId, soundId: track }, "Ambient noise: PCM loop ready");
+              logger.info({ callId: config.callId, soundId: track, bytes: pcmBuffer.length }, "Ambient noise: uploaded PCM loop ready");
             }
           })
           .catch((err) => {
@@ -451,6 +466,16 @@ export class OrchestrationPipeline {
             ? this.ambientStream.nextPcmChunk()
             : this.ambientStream.nextMulawChunk();
           this.config.onAudioOut(chunk);
+          // Prove (once per call) that ambient audio actually went out on the
+          // wire — distinguishes "enabled but never emitted" from a genuine
+          // carrier-level audibility issue when debugging from prod logs.
+          if (!this.ambientFirstChunkLogged) {
+            this.ambientFirstChunkLogged = true;
+            logger.info(
+              { callId: this.config.callId, bytes: chunk.length, encoding: this.config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k" },
+              "Ambient noise: first silence chunk emitted to caller",
+            );
+          }
         }
       }, 20);
     }
