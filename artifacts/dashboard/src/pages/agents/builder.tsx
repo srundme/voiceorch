@@ -306,6 +306,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsVoice              = form.watch("ttsVoice");
   const ttsModel              = form.watch("ttsModel");
   const language              = form.watch("language");
+  const langAutoDetect        = form.watch("languageAutoDetect") ?? false;
   const temperature           = form.watch("temperature") ?? 0.4;
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
@@ -579,18 +580,17 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   )} />
                 )}
               </div>
-              <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
-                <div className="flex items-center justify-between pt-1">
-                  <div>
-                    <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
-                    <p className="text-[9px] text-muted-foreground/60">Follow caller's language mid-call — off enforces a single language</p>
-                  </div>
-                  <button type="button" onClick={() => field.onChange(!field.value)}
-                    className={`relative w-8 h-4 rounded-full transition-colors ${field.value ? "bg-blue-500" : "bg-muted-foreground/30"}`}>
-                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${field.value ? "translate-x-4" : "translate-x-0.5"}`} />
-                  </button>
+              <div className="flex items-center justify-between border-t border-blue-400/10 pt-2 mt-1">
+                <div>
+                  <p className="text-[10px] font-medium text-blue-100/80">Auto-detect Language</p>
+                  <p className="text-[9px] text-blue-300/50">Follow caller's language mid-call — off enforces a single language</p>
                 </div>
-              )} />
+                <button type="button"
+                  onClick={() => form.setValue("languageAutoDetect", !langAutoDetect, { shouldDirty: true })}
+                  className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${langAutoDetect ? "bg-blue-500" : "bg-white/10"}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${langAutoDetect ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+              </div>
             </div>
           )}
 
