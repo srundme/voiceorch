@@ -2158,6 +2158,9 @@ export class OrchestrationPipeline {
         delayMs = Math.round((plan.onNoPunctuationSeconds ?? 0) * 1000);
       }
       delayMs += Math.round((plan.waitSeconds ?? 0) * 1000);
+      // Safety cap: never stall the LLM for more than 300 ms regardless of agent config.
+      // Values above this add dead air with no perceptible naturalness benefit.
+      delayMs = Math.min(delayMs, 300);
       if (delayMs > 0 && !this.bargeInRequested) {
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }

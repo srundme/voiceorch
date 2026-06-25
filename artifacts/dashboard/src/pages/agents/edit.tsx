@@ -99,9 +99,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
-    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
-    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 1.5,
-    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.5,
+    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0,
+    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0,
+    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0,
   };
   agentConfig["stopSpeakingPlan"] = {
     numWords:       stopSpeakingNumWords    ?? 0,
