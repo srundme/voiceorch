@@ -24,8 +24,18 @@ import { toOpenAIMessages } from "./openai-messages.js";
  *   `reasoning_effort: null` (the documented way to turn it off). We also never
  *   forward `reasoning_content` to TTS even if some leaks through.
  *
- * Tool calling: supported on sarvam-30b and sarvam-105b. Wire format is identical
- * to OpenAI (function name + stringified JSON arguments).
+ * Tool calling — inline tag approach:
+ *   Sarvam-30b's native tool_calls API is unreliable:
+ *   - With reasoning_effort:null the model skips tool dispatch entirely (300ms TTFT, canned text).
+ *   - With reasoning_effort:"low" the model generates correct JSON args but outputs them in
+ *     delta.content as bare JSON (no tool name, no tool_calls delta) — which TTS then reads aloud.
+ *
+ *   Instead we use the pipeline's existing inline function-tag system:
+ *   1. Tool definitions are injected into the system prompt in <function=NAME> format.
+ *   2. The model is told to respond with <function=NAME>{args}</function> when calling a tool.
+ *   3. reasoning_effort is kept at "low" so the model actually reads the instructions.
+ *   4. The pipeline's makeFunctionTagFilter strips the tag from TTS (caller hears nothing).
+ *   5. The pipeline's extractInlineFunctionTag parses and executes the tool after playback.
  *
  * Streaming: each `data:` line is a chat.completion.chunk. `delta.content` carries
  * the reply text; the final chunk has an empty `choices` array and carries `usage`;
@@ -34,6 +44,56 @@ import { toOpenAIMessages } from "./openai-messages.js";
 
 /** Models that support Sarvam's function-calling interface */
 const TOOL_CAPABLE_MODELS = new Set(["sarvam-30b", "sarvam-105b"]);
+
+/**
+ * Build a system-prompt block that teaches the model the <function=NAME>{args}</function>
+ * inline-tag format. The pipeline's existing makeFunctionTagFilter and extractInlineFunctionTag
+ * infrastructure handles filtering from TTS and executing the call respectively.
+ */
+function buildSarvamToolGuide(tools: ToolDefinition[]): string {
+  const lines: string[] = [
+    "",
+    "",
+    "[FUNCTION CALLING — MANDATORY FORMAT]",
+    "When you need to call a tool, output ONLY this tag — nothing before it, nothing after it:",
+    "",
+    '  <function=TOOL_NAME>{"param1": "value1", "param2": "value2"}</function>',
+    "",
+    "Replace TOOL_NAME with one of the tool names below. Use valid JSON for parameters.",
+    "NEVER output bare JSON without the <function=…> wrapper — it will not be executed.",
+    "NEVER say 'I'll check' or any preamble — call the tool directly.",
+    "The system speaks a wait-tone to the caller while the tool runs; you do not need to announce it.",
+    "",
+    "Available tools:",
+  ];
+
+  for (const tool of tools) {
+    lines.push(`  ${tool.name}: ${tool.description}`);
+    // List required parameters from the JSON Schema so the model knows what to include
+    const schema = tool.parameters as {
+      properties?: Record<string, { type?: string; description?: string }>;
+      required?: string[];
+    };
+    if (schema?.properties) {
+      const required = new Set(schema.required ?? []);
+      const paramParts: string[] = [];
+      for (const [k, v] of Object.entries(schema.properties)) {
+        const req = required.has(k) ? " (required)" : " (optional)";
+        const desc = v.description ? ` — ${v.description}` : "";
+        paramParts.push(`    • ${k}${req}${desc}`);
+      }
+      if (paramParts.length) lines.push(...paramParts);
+    }
+  }
+
+  lines.push(
+    "",
+    "CRITICAL: when calling a tool, your entire response must be ONLY the <function=…> tag.",
+    "Do not include any text before or after the tag.",
+  );
+
+  return lines.join("\n");
+}
 
 /**
  * Sarvam requires strictly-alternating user/assistant turns starting with a user message.
@@ -96,12 +156,23 @@ export class SarvamLLM implements LLMAdapter {
    * (Hybrid Thinking disabled) for low-latency voice, unless the agent has
    * explicitly overridden it to "low" | "medium" | "high" | null.
    */
-  private buildGenerationBody(): Record<string, unknown> {
+  private buildGenerationBody(hasTools: boolean): Record<string, unknown> {
     const p = this.genParams;
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-    const body: Record<string, unknown> = {
-      reasoning_effort: p.reasoningEffort === undefined ? null : p.reasoningEffort,
-    };
+
+    // When tools are attached the model must reason about which function to call.
+    // With reasoning_effort:null (thinking OFF) Sarvam-30b bypasses its function-
+    // dispatch path entirely. We force "low" thinking for tool turns so the model
+    // reads the inline tool guide and emits the correct <function=NAME> tag.
+    // Agent-level reasoningEffort config still wins if explicitly set.
+    const reasoningEffort: unknown =
+      p.reasoningEffort !== undefined
+        ? p.reasoningEffort
+        : hasTools
+          ? "low"
+          : null;
+
+    const body: Record<string, unknown> = { reasoning_effort: reasoningEffort };
 
     if (typeof p.temperature === "number" && Number.isFinite(p.temperature))
       body["temperature"] = clamp(p.temperature, 0, 2);
@@ -142,33 +213,26 @@ export class SarvamLLM implements LLMAdapter {
   ): Promise<void> {
     // Only sarvam-30b and sarvam-105b support tool use
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
-    const sarvamTools = supportsTools && options?.tools?.length
-      ? options.tools.map((t) => ({
-          type: "function",
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters,
-          },
-        }))
-      : undefined;
+    const hasTools = supportsTools && (options?.tools?.length ?? 0) > 0;
+
+    // ── Inline tool guide injection ──────────────────────────────────────────
+    // Sarvam-30b does not reliably emit tool_calls in the SSE delta:
+    //   • reasoning_effort:null → ignores tools, emits canned text (~300ms TTFT)
+    //   • reasoning_effort:"low" → generates correct args but as bare JSON in
+    //     delta.content (no tool name, not in tool_calls), which TTS reads aloud.
+    //
+    // We bypass the native tool_calls API entirely and instead inject tool
+    // definitions into the system prompt as text using the pipeline's existing
+    // <function=NAME>{args}</function> inline-tag format. The pipeline's
+    // makeFunctionTagFilter silently strips the tag from TTS, and
+    // extractInlineFunctionTag parses and executes it after playback.
+    const effectiveSystemPrompt = hasTools && options!.tools!.length > 0
+      ? systemPrompt + buildSarvamToolGuide(options!.tools!)
+      : systemPrompt;
 
     // Sarvam enforces strict user/assistant alternation starting with a user message.
     // Merge any consecutive same-role turns before sending.
     const sanitized = sanitizeForAlternation(messages);
-
-    // Build the generation body; override reasoning_effort when tools are attached.
-    // Sarvam-30b bypasses its function-calling path entirely when thinking is OFF
-    // (reasoning_effort:null): TTFT drops to ~300ms and the model emits a short
-    // canned text reply instead of generating tool_calls in the delta. Enabling
-    // "low" thinking for tool turns gives the model enough reasoning budget to
-    // evaluate the tool schemas and emit a proper function call.  We only apply
-    // this override when the caller hasn't explicitly set reasoningEffort, so
-    // agent-level config still wins.
-    const genBody = this.buildGenerationBody();
-    if (sarvamTools && this.genParams.reasoningEffort === undefined) {
-      genBody["reasoning_effort"] = "low";
-    }
 
     const resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
       method: "POST",
@@ -179,12 +243,15 @@ export class SarvamLLM implements LLMAdapter {
       body: JSON.stringify({
         model: this.model,
         stream: true,
-        ...genBody,
+        // Generation params. reasoning_effort is "low" for tool turns so the model
+        // reads the inline guide; null for conversational turns for lowest latency.
+        ...this.buildGenerationBody(hasTools),
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: effectiveSystemPrompt },
           ...toOpenAIMessages(sanitized),
         ],
-        ...(sarvamTools ? { tools: sarvamTools, tool_choice: "auto" } : {}),
+        // Do NOT send tools/tool_choice — using inline text format instead.
+        // The native tool_calls delta is unreliable on sarvam-30b; see class doc.
       }),
     });
 
@@ -196,9 +263,6 @@ export class SarvamLLM implements LLMAdapter {
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let full = "";
-    let toolCallName = "";
-    let toolCallArgs = "";
-    let isToolCall = false;
     let usage: LLMUsage | undefined;
 
     // Process a single complete `data: ...` SSE payload. Mutates the closure
@@ -214,9 +278,6 @@ export class SarvamLLM implements LLMAdapter {
               // Thinking tokens — deliberately NOT spoken. Typed only for honesty;
               // we never forward it to onToken/TTS.
               reasoning_content?: string;
-              tool_calls?: Array<{
-                function?: { name?: string; arguments?: string };
-              }>;
             };
           }>;
           usage?: { prompt_tokens?: number; completion_tokens?: number };
@@ -239,14 +300,6 @@ export class SarvamLLM implements LLMAdapter {
           full += token;
           onToken(token);
         }
-
-        if (delta.tool_calls) {
-          isToolCall = true;
-          for (const tc of delta.tool_calls) {
-            if (tc.function?.name) toolCallName += tc.function.name;
-            if (tc.function?.arguments) toolCallArgs += tc.function.arguments;
-          }
-        }
       } catch {
         // skip malformed chunk
       }
@@ -254,8 +307,8 @@ export class SarvamLLM implements LLMAdapter {
 
     // Buffered SSE parse: events can split across TCP reads, so accumulate text
     // and only dispatch complete lines, keeping any partial remainder for the
-    // next read. This protects token capture, tool-call args, and the final
-    // usage chunk from being lost on chunk boundaries.
+    // next read. This protects token capture and the final usage chunk from being
+    // lost on chunk boundaries.
     let buffer = "";
     while (true) {
       const { done, value } = await reader.read();
@@ -278,16 +331,8 @@ export class SarvamLLM implements LLMAdapter {
 
     if (usage) options?.onUsage?.(usage);
 
-    if (isToolCall && toolCallName && options?.onToolCall) {
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(toolCallArgs || "{}") as Record<string, unknown>;
-      } catch {
-        // malformed args — pass empty
-      }
-      options.onToolCall(toolCallName, args);
-    } else {
-      onDone(full, usage);
-    }
+    // Always call onDone — the pipeline's extractInlineFunctionTag will parse
+    // any <function=NAME>{args}</function> tag from `full` and execute the tool.
+    onDone(full, usage);
   }
 }
