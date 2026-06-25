@@ -13,7 +13,6 @@ import { Layout } from "@/components/layout";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AgentBuilder from "@/pages/agents/builder";
-import AssistantsPage from "@/pages/assistants";
 import Dashboard from "@/pages/dashboard";
 import AgentDetail from "@/pages/agents/[id]";
 
