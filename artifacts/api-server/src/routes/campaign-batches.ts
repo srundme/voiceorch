@@ -96,14 +96,33 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
   const slots = Math.max(0, limit - Number(active));
   if (slots <= 0) return;
 
-  const pending = await db.select().from(campaignLeadsTable)
-    .where(and(
-      eq(campaignLeadsTable.campaignId, campaign.id),
-      sql`${campaignLeadsTable.batchId} = ${batch.id}`,
-      eq(campaignLeadsTable.callStatus, "pending"),
-    ))
-    .limit(slots);
-  for (const lead of pending) {
+  // Atomically pre-claim pending leads to 'calling' before scheduling them.
+  // The AND call_status = 'pending' guard on the outer WHERE means that under
+  // READ COMMITTED isolation, a second concurrent UPDATE on the same rows sees
+  // the already-committed 'calling' status and skips them — preventing
+  // double-scheduling when the batch scheduler and a manual /start race.
+  const claimed = await db.execute<{ id: number }>(sql`
+    UPDATE campaign_leads
+    SET call_status = 'calling', last_attempt_at = now()
+    WHERE id IN (
+      SELECT id FROM campaign_leads
+      WHERE campaign_id = ${campaign.id}
+        AND batch_id = ${batch.id}
+        AND call_status = 'pending'
+      ORDER BY id
+      LIMIT ${slots}
+    )
+    AND call_status = 'pending'
+    RETURNING id
+  `);
+
+  const claimedIds = claimed.rows.map(r => r.id);
+  if (claimedIds.length === 0) return;
+
+  const claimedLeads = await db.select().from(campaignLeadsTable)
+    .where(inArray(campaignLeadsTable.id, claimedIds));
+
+  for (const lead of claimedLeads) {
     scheduleCampaignCall(lead, campaign);
   }
 }
@@ -504,6 +523,12 @@ router.post("/campaigns/:id/batches/:batchId/start", async (req, res): Promise<v
 
   const batch = await requireBatch(batchId, campaignId);
   if (!batch) { res.status(404).json({ error: "Not found" }); return; }
+
+  // Idempotent: already running — return current state without re-queueing
+  if (batch.status === "running") {
+    res.json(toBatch(batch));
+    return;
+  }
 
   if (batch.status === "completed" || batch.status === "cancelled") {
     res.status(409).json({ error: `Cannot start a batch in "${batch.status}" status` });

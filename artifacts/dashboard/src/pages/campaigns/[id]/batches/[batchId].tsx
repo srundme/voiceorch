@@ -707,6 +707,7 @@ export default function BatchWorkspacePage() {
 
   const update = useUpdateCampaignBatch();
   const redial = useRedialBatchNoPickup();
+  const [isStarting, setIsStarting] = useState(false);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -725,6 +726,7 @@ export default function BatchWorkspacePage() {
   const batchStatus = header?.batch.status ?? "draft";
 
   async function handleStart() {
+    setIsStarting(true);
     try {
       const token = localStorage.getItem("voiceorch:session");
       const r = await fetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/start`, {
@@ -752,6 +754,8 @@ export default function BatchWorkspacePage() {
       } else {
         toast({ title: "Action failed", variant: "destructive" });
       }
+    } finally {
+      setIsStarting(false);
     }
   }
 
@@ -843,7 +847,7 @@ export default function BatchWorkspacePage() {
           {/* Controls */}
           <div className="flex items-center gap-2 ml-auto">
             <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={batchStatus === "running" || update.isPending}
+              disabled={batchStatus === "running" || update.isPending || isStarting}
               onClick={() => void handleStart()}>
               <Play className="h-3.5 w-3.5" /> Start
             </Button>

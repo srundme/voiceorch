@@ -93,28 +93,36 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     }
   }
 
-  // Check concurrency limit before firing
-  const limit = campaign.concurrentCallLimit ?? 20;
-  const currentlyActive = (await db.select({ count: sql<number>`count(*)` })
-    .from(campaignLeadsTable)
-    .where(and(
-      eq(campaignLeadsTable.campaignId, campaign.id),
-      eq(campaignLeadsTable.callStatus, "calling"),
-    )))[0]?.count ?? 0;
+  // Leads pre-claimed by fireStartBatch already have callStatus = "calling".
+  // They skip the concurrency gate (enforced at claim time) and the redundant
+  // callStatus update — we only increment the attempt counter.
+  const isPreClaimed = lead.callStatus === "calling";
 
-  if (currentlyActive >= limit) {
-    logger.warn({ leadId: lead.id, campaignId: campaign.id, limit, currentlyActive }, "Campaign concurrency limit reached — skipping call");
-    await db.update(campaignLeadsTable)
-      .set({ callStatus: "pending", notes: `Queued — concurrency limit (${limit}) reached` })
-      .where(eq(campaignLeadsTable.id, lead.id));
-    return;
+  if (!isPreClaimed) {
+    // Check concurrency limit before firing
+    const limit = campaign.concurrentCallLimit ?? 20;
+    const currentlyActive = (await db.select({ count: sql<number>`count(*)` })
+      .from(campaignLeadsTable)
+      .where(and(
+        eq(campaignLeadsTable.campaignId, campaign.id),
+        eq(campaignLeadsTable.callStatus, "calling"),
+      )))[0]?.count ?? 0;
+
+    if (currentlyActive >= limit) {
+      logger.warn({ leadId: lead.id, campaignId: campaign.id, limit, currentlyActive }, "Campaign concurrency limit reached — skipping call");
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "pending", notes: `Queued — concurrency limit (${limit}) reached` })
+        .where(eq(campaignLeadsTable.id, lead.id));
+      return;
+    }
   }
 
-  // Mark as calling
+  // Mark as calling + record attempt. Pre-claimed leads skip the callStatus
+  // write (already 'calling') but still increment callAttempts.
   const newAttempts = (lead.callAttempts ?? 0) + 1;
   await db.update(campaignLeadsTable)
     .set({
-      callStatus: "calling",
+      ...(isPreClaimed ? {} : { callStatus: "calling" as const }),
       callAttempts: sql`${campaignLeadsTable.callAttempts} + 1`,
       lastAttemptAt: new Date(),
     })
