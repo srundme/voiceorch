@@ -1,0 +1,5093 @@
+[
+  {
+    "id": 29233,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 21,
+      "agentName": "Nora",
+      "asrProvider": "sarvam",
+      "llmProvider": "openai",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 743,
+      "sessionId": "live-743",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-25T17:05:32.326Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 29234,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 29235,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-21",
+        "from_number": "webcall-user-115005227503912676259",
+        "agent_name": "Nora",
+        "caller_number": "webcall-user-115005227503912676259",
+        "date": "Thursday, June 25, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \nonce you have their name, email, and desired time slot. Do not ask for confirmation.\n\nWhen the caller asks about available slots, call `check_availability` first before \ndiscussing options.\n\nWhen the caller wants to see their bookings, call `list_bookings`.\n\nWhen the caller wants to cancel, call `cancel_booking` with the booking ID.\n\nWhen the caller wants to reschedule, call `reschedule_booking` with the booking ID \nand new time.\n\nYour only res"
+    },
+    "metadata": null
+  },
+  {
+    "id": 29236,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "openai",
+      "model": "gpt-4.1-mini"
+    }
+  },
+  {
+    "id": 29237,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 29239,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "67ca2dd1333e",
+      "promptLength": 7803,
+      "preview": "# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \nonce you have their name, email, and desired tim"
+    }
+  },
+  {
+    "id": 29238,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    }
+  },
+  {
+    "id": 29241,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 29240,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:32.333Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 29242,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:33.664Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1332,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 28160,
+      "textLength": 5,
+      "firstByteMs": 472
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1332
+    }
+  },
+  {
+    "id": 29243,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:33.664Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 880,
+      "turnNumber": 0,
+      "durationMs": 1332
+    }
+  },
+  {
+    "id": 29244,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:36.104Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 92,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29245,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:36.411Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:35 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 2,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29246,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:37.210Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29247,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:37.210Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it, got it..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29248,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:37.368Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 961,
+      "turnNumber": 1,
+      "durationMs": 961
+    }
+  },
+  {
+    "id": 29249,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:37.561Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 961,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "How can I assist you with your calendar appointments today?"
+    },
+    "metadata": {
+      "inputTokens": 4341,
+      "outputTokens": 12,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29250,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:38.820Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1610,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 43520,
+      "textLength": 17,
+      "firstByteMs": 269
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1610
+    }
+  },
+  {
+    "id": 29251,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:38.820Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1360,
+      "turnNumber": 1,
+      "durationMs": 1610
+    }
+  },
+  {
+    "id": 29252,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:38.820Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29253,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:38.820Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "How can I assist you with your calendar appointments today?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 29255,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:41.498Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2677,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79358,
+      "textLength": 59,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2677
+    }
+  },
+  {
+    "id": 29254,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:41.498Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2480,
+      "turnNumber": 1,
+      "durationMs": 2678
+    }
+  },
+  {
+    "id": 29256,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:44.018Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "I want to book appointment",
+      "endDetectToFinalMs": 249,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29257,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:44.320Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:35 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 4,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29258,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:45.118Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29259,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:45.119Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it, got it..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29260,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:45.195Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 878,
+      "turnNumber": 2,
+      "durationMs": 878
+    }
+  },
+  {
+    "id": 29261,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:45.444Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 878,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "What date and time would you like to book your appointment for?"
+    },
+    "metadata": {
+      "inputTokens": 4374,
+      "outputTokens": 14,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29265,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:46.536Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1280,
+      "turnNumber": 2,
+      "durationMs": 1418
+    }
+  },
+  {
+    "id": 29262,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:46.536Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1417,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 17,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 1417
+    }
+  },
+  {
+    "id": 29264,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:46.536Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "What date and time would you like to book your appointment for?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29263,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:46.536Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 29266,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:49.393Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2858,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 63,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 2858
+    }
+  },
+  {
+    "id": 29267,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:49.393Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2720,
+      "turnNumber": 2,
+      "durationMs": 2858
+    }
+  },
+  {
+    "id": 29268,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:52.623Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Tomorrow then am",
+      "endDetectToFinalMs": 226,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29269,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:52.924Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:35 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 6,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29270,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:53.725Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29271,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:53.725Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Okay, so..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29272,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:54.176Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1253,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[calling tool: check_availability]"
+    },
+    "metadata": {
+      "inputTokens": 4400,
+      "outputTokens": 38,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29274,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:55.419Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29275,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:55.419Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1520,
+      "turnNumber": 3,
+      "durationMs": 1694
+    }
+  },
+  {
+    "id": 29273,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:55.419Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1692,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 11,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1692
+    }
+  },
+  {
+    "id": 29276,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:55.419Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment…"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29277,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:56.851Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1280,
+      "turnNumber": 3,
+      "durationMs": 1434
+    }
+  },
+  {
+    "id": 29278,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:56.851Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1433,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 11,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1433
+    }
+  },
+  {
+    "id": 29280,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:57.652Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-06-26T09:00:00+05:30",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29279,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:57.652Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "check_availability",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29281,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:57.668Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 15,
+    "requestPayload": {
+      "tool": "check_availability"
+    },
+    "responsePayload": {
+      "result": "requested_slot_available: slot=\"2026-06-26T09:00:00+05:30\", label=\"Fri Jun 26 at 9:00 AM\", event=\"one to one event on Stay PG's\", duration_mins=30, timezone=\"Asia/Kolkata\""
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 15
+    }
+  },
+  {
+    "id": 29282,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:57.668Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "requested_slot_available: slot=\"2026-06-26T09:00:00+05:30\", label=\"Fri Jun 26 at 9:00 AM\", event=\"one to one event on Stay PG's\", duration_mins=30, timezone=\"Asia/Kolkata\"",
+      "turnNumber": 3,
+      "durationMs": 15
+    }
+  },
+  {
+    "id": 29283,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:58.988Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29284,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:05:58.988Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "The 9 AM slot tomorrow is available for booking."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29286,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:01.719Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2730,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81918,
+      "textLength": 48,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 2730
+    }
+  },
+  {
+    "id": 29285,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:01.719Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2560,
+      "turnNumber": 3,
+      "durationMs": 2731
+    }
+  },
+  {
+    "id": 29287,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:01.719Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29288,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:01.719Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "May I have your full name, please?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 29289,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:03.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2036,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 61438,
+      "textLength": 34,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 2036
+    }
+  },
+  {
+    "id": 29290,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:03.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1920,
+      "turnNumber": 3,
+      "durationMs": 2037
+    }
+  },
+  {
+    "id": 29291,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:07.701Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Karthikeyan",
+      "endDetectToFinalMs": 139,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29292,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:08.004Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 10,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29293,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:08.753Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 752,
+      "turnNumber": 4,
+      "durationMs": 752
+    }
+  },
+  {
+    "id": 29295,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:08.813Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29294,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:08.813Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you, Karthikeyan."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29296,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:08.936Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 752,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Thank you, Karthikeyan. Please provide your email address for the booking."
+    },
+    "metadata": {
+      "inputTokens": 4546,
+      "outputTokens": 18,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29298,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:10.403Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1589,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 46080,
+      "textLength": 23,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 1589
+    }
+  },
+  {
+    "id": 29297,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:10.403Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1440,
+      "turnNumber": 4,
+      "durationMs": 1590
+    }
+  },
+  {
+    "id": 29299,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:10.408Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29300,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:10.408Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Please provide your email address for the booking."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 29301,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:12.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2353,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 69118,
+      "textLength": 50,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 2353
+    }
+  },
+  {
+    "id": 29302,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:12.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2160,
+      "turnNumber": 4,
+      "durationMs": 2353
+    }
+  },
+  {
+    "id": 29303,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:16.214Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "K A R",
+      "endDetectToFinalMs": 86,
+      "mergedSegments": 3,
+      "pauseCount": 2
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 29304,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:16.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 29305,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:16.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't quite catch that — could you please say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 29306,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:17.928Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 3,
+      "threshold": 2,
+      "turnNumber": 5,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 29307,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:17.932Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1416,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 110080,
+      "textLength": 67,
+      "firstByteMs": 274
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1416
+    }
+  },
+  {
+    "id": 29309,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:17.932Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Tea Edge I",
+      "endDetectToFinalMs": 79,
+      "mergedSegments": 3,
+      "pauseCount": 2
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29308,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:17.932Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 3440,
+      "turnNumber": 5,
+      "durationMs": 1416,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 29310,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:18.235Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 14,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29313,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:19.036Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29312,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:19.036Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it, got it..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29311,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:19.036Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 802,
+      "turnNumber": 6,
+      "durationMs": 802
+    }
+  },
+  {
+    "id": 29314,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:20.288Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 802,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "I am using the email ramr76562@gmail.com to complete your booking. Your appointment will be booked for June 26th at 9 AM."
+    },
+    "metadata": {
+      "inputTokens": 4597,
+      "outputTokens": 90,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29315,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:20.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1459,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 17,
+      "firstByteMs": 156
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1459
+    }
+  },
+  {
+    "id": 29316,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:20.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1280,
+      "turnNumber": 6,
+      "durationMs": 1460
+    }
+  },
+  {
+    "id": 29318,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:20.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I am using the email ramr76562@gmail.com to complete your booking."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29317,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:20.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29320,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:26.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 6326,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 186878,
+      "textLength": 66,
+      "firstByteMs": 284
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 6326
+    }
+  },
+  {
+    "id": 29319,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:26.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5840,
+      "turnNumber": 6,
+      "durationMs": 6327
+    }
+  },
+  {
+    "id": 29321,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:26.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29322,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:26.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment…"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29323,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:27.978Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 2,
+      "threshold": 2,
+      "turnNumber": 6,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 29324,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:27.986Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "book_appointment",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29326,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:27.986Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "book_appointment",
+      "args": {
+        "attendee_name": "Karthikeyan",
+        "attendee_email": "ramr76562@gmail.com",
+        "preferred_date": "2026-06-26T09:00:00+05:30",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 29325,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:27.986Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1165,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 11,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1165
+    }
+  },
+  {
+    "id": 29327,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:27.987Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 1280,
+      "turnNumber": 6,
+      "durationMs": 1166,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 29328,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:28.001Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Request"
+    },
+    "responsePayload": {
+      "attendeeName": "Karthikeyan",
+      "attendeeEmail": "ramr76562@gmail.com",
+      "preferredRaw": "2026-06-26T09:00:00+05:30",
+      "eventTypeName": "one to one event on Stay PG's",
+      "calendarTimezone": "Asia/Kolkata",
+      "availableSlotsFound": 106
+    },
+    "metadata": null
+  },
+  {
+    "id": 29329,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:28.015Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Availability Applied"
+    },
+    "responsePayload": {
+      "bookingId": 39,
+      "slotStart": "2026-06-26T03:30:00.000Z",
+      "slotEnd": "2026-06-26T04:00:00.000Z",
+      "slotFormatted": "Friday, June 26th at 9:00 AM GMT+5:30",
+      "status": "confirmed",
+      "attendeeEmail": "ramr76562@gmail.com",
+      "attendeeName": "Karthikeyan"
+    },
+    "metadata": null
+  },
+  {
+    "id": 29330,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:29.396Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Calendar Event Created"
+    },
+    "responsePayload": {
+      "googleEventId": "vdtvbk4ve05he3hfpqdqocsi3c",
+      "connectionId": "d496025a-ef84-485a-a600-1fca41ef33f3",
+      "bookingId": 39,
+      "hasMeetLink": true,
+      "calendarSyncStatus": "synced"
+    },
+    "metadata": null
+  },
+  {
+    "id": 29331,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:29.396Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Meet Link Generated"
+    },
+    "responsePayload": {
+      "meetLink": "https://meet.google.com/iwf-mvih-hcu",
+      "googleEventId": "vdtvbk4ve05he3hfpqdqocsi3c",
+      "bookingId": 39
+    },
+    "metadata": null
+  },
+  {
+    "id": 29332,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:29.396Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Confirmed"
+    },
+    "responsePayload": {
+      "bookingId": 39,
+      "eventTypeName": "one to one event on Stay PG's",
+      "slot": "Friday, June 26th at 9:00 AM GMT+5:30",
+      "attendeeName": "Karthikeyan",
+      "attendeeEmail": "ramr76562@gmail.com",
+      "status": "confirmed",
+      "meetLink": "https://meet.google.com/iwf-mvih-hcu",
+      "googleEventId": "vdtvbk4ve05he3hfpqdqocsi3c"
+    },
+    "metadata": null
+  },
+  {
+    "id": 29334,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:29.396Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "booking_confirmed: event=\"one to one event on Stay PG's\", slot=\"Friday, June 26th at 9:00 AM GMT+5:30\", booking_id=39, attendee=\"Karthikeyan\", email=\"ramr76562@gmail.com\", status=\"confirmed\", meet_link=\"https://meet.google.com/iwf-mvih-hcu\"",
+      "turnNumber": 6,
+      "durationMs": 1404
+    }
+  },
+  {
+    "id": 29333,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:29.396Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1404,
+    "requestPayload": {
+      "tool": "book_appointment"
+    },
+    "responsePayload": {
+      "result": "booking_confirmed: event=\"one to one event on Stay PG's\", slot=\"Friday, June 26th at 9:00 AM GMT+5:30\", booking_id=39, attendee=\"Karthikeyan\", email=\"ramr76562@gmail.com\", status=\"confirmed\", meet_link=\"https://meet.google.com/iwf-mvih-hcu\""
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1404
+    }
+  },
+  {
+    "id": 29335,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:30.362Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "No no",
+      "endDetectToFinalMs": 76,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29336,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:30.663Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 18,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29337,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:31.280Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 618,
+      "turnNumber": 7,
+      "durationMs": 618
+    }
+  },
+  {
+    "id": 29338,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:31.340Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29339,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:31.340Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you for using the service."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29340,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:31.384Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 618,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Thank you for using the service. Have a great day!"
+    },
+    "metadata": {
+      "inputTokens": 4820,
+      "outputTokens": 13,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29341,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:32.995Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1653,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 32,
+      "firstByteMs": 131
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 1653
+    }
+  },
+  {
+    "id": 29343,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:32.995Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1520,
+      "turnNumber": 7,
+      "durationMs": 1654
+    }
+  },
+  {
+    "id": 29342,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:32.995Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Have a great day!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29344,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:32.995Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 29345,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:33.848Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Invitation Sent"
+    },
+    "responsePayload": {
+      "attendeeEmail": "ramr76562@gmail.com",
+      "hostEmail": "staymatesolutions25@gmail.com",
+      "bookingId": 39,
+      "meetLink": "https://meet.google.com/iwf-mvih-hcu"
+    },
+    "metadata": null
+  },
+  {
+    "id": 29346,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:34.409Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1415,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 17,
+      "firstByteMs": 151
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 1415
+    }
+  },
+  {
+    "id": 29347,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:34.409Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1280,
+      "turnNumber": 7,
+      "durationMs": 1415
+    }
+  },
+  {
+    "id": 29348,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:35.796Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hey bro",
+      "endDetectToFinalMs": 88,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 29349,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:36.098Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 20,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 29350,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:36.799Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 703,
+      "turnNumber": 8,
+      "durationMs": 703
+    }
+  },
+  {
+    "id": 29351,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:36.880Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 29353,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:36.880Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 703,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "How can I assist you further today?"
+    },
+    "metadata": {
+      "inputTokens": 4828,
+      "outputTokens": 9,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 29352,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:36.880Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "How can I assist you further today?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 29354,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:38.877Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1997,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 58878,
+      "textLength": 35,
+      "firstByteMs": 154
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 1997
+    }
+  },
+  {
+    "id": 29355,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:38.877Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1840,
+      "turnNumber": 8,
+      "durationMs": 1999
+    }
+  },
+  {
+    "id": 29356,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:42.000Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "I'll give my correct email ID.",
+      "endDetectToFinalMs": 276,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29357,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:42.103Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 22,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29358,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:42.903Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29359,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:42.903Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Let me check..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29360,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:42.921Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 822,
+      "turnNumber": 9,
+      "durationMs": 822
+    }
+  },
+  {
+    "id": 29361,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:43.080Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 822,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Please tell me your correct full email address so I can update it."
+    },
+    "metadata": {
+      "inputTokens": 4846,
+      "outputTokens": 15,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29362,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:44.016Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1112,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 30720,
+      "textLength": 15,
+      "firstByteMs": 131
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 1112
+    }
+  },
+  {
+    "id": 29363,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:44.016Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 960,
+      "turnNumber": 9,
+      "durationMs": 1113
+    }
+  },
+  {
+    "id": 29364,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:44.016Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29365,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:44.016Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Please tell me your correct full email address so I can update it."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 29366,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:47.372Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3040,
+      "turnNumber": 9,
+      "durationMs": 3356
+    }
+  },
+  {
+    "id": 29367,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:47.372Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3356,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 97278,
+      "textLength": 66,
+      "firstByteMs": 256
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 3356
+    }
+  },
+  {
+    "id": 29368,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:52.864Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Karthi A S C 12 at the right gmail.com",
+      "endDetectToFinalMs": 125,
+      "mergedSegments": 4,
+      "pauseCount": 3
+    },
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 29369,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:53.166Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 24,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 29370,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:53.866Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 701,
+      "turnNumber": 10,
+      "durationMs": 701
+    }
+  },
+  {
+    "id": 29371,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:54.033Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 701,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Would you like me to update your appointment with this new email address?"
+    },
+    "metadata": {
+      "inputTokens": 4888,
+      "outputTokens": 15,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 29372,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:54.033Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 29373,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:54.033Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Would you like me to update your appointment with this new email address?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 29375,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:57.186Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3153,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94718,
+      "textLength": 73,
+      "firstByteMs": 131
+    },
+    "metadata": {
+      "turnNumber": 10,
+      "durationMs": 3153
+    }
+  },
+  {
+    "id": 29374,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:57.186Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2960,
+      "turnNumber": 10,
+      "durationMs": 3154
+    }
+  },
+  {
+    "id": 29376,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:59.171Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Yes yes yes.",
+      "endDetectToFinalMs": 326,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29377,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:06:59.273Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:36 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 26,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29378,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:00.072Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29379,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:00.073Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it, got it..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29380,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:00.232Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 961,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[calling tool: list_bookings]"
+    },
+    "metadata": {
+      "inputTokens": 4913,
+      "outputTokens": 27,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29384,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:01.466Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29382,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:01.466Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment…"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29381,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:01.466Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1394,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 38400,
+      "textLength": 17,
+      "firstByteMs": 152
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 1394
+    }
+  },
+  {
+    "id": 29383,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:01.466Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1200,
+      "turnNumber": 11,
+      "durationMs": 1394
+    }
+  },
+  {
+    "id": 29386,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:02.797Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1200,
+      "turnNumber": 11,
+      "durationMs": 1332
+    }
+  },
+  {
+    "id": 29385,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:02.797Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1331,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 38400,
+      "textLength": 11,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 1331
+    }
+  },
+  {
+    "id": 29387,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:03.598Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "list_bookings",
+      "args": {
+        "attendee_name": "Karthikeyan",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29388,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:03.598Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "list_bookings",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29389,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:03.606Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "bookings_found: count=1, booking_id=39, event=\"one to one event on Stay PG's\", iso_start=2026-06-26T03:30:00.000Z, iso_end=2026-06-26T04:00:00.000Z, date=\"Fri Jun 26 at 9:00 AM GMT+5:30 – 9:30 AM GMT+5:30\", status=\"confirmed\", google_event_id=\"vdtvbk4ve05he3hfpqdqocsi3c\"",
+      "turnNumber": 11,
+      "durationMs": 7
+    }
+  },
+  {
+    "id": 29390,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:03.606Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 7,
+    "requestPayload": {
+      "tool": "list_bookings"
+    },
+    "responsePayload": {
+      "result": "bookings_found: count=1, booking_id=39, event=\"one to one event on Stay PG's\", iso_start=2026-06-26T03:30:00.000Z, iso_end=2026-06-26T04:00:00.000Z, date=\"Fri Jun 26 at 9:00 AM GMT+5:30 – 9:30 AM GMT+5:30\", status=\"confirmed\", google_event_id=\"vdtvbk4ve05he3hfpqdqocsi3c\""
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 7
+    }
+  },
+  {
+    "id": 29391,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:04.967Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I found your booking for June 26th at 9 AM."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29392,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:04.967Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29395,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:07.955Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2987,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89598,
+      "textLength": 43,
+      "firstByteMs": 167
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 2987
+    }
+  },
+  {
+    "id": 29394,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:07.955Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2800,
+      "turnNumber": 11,
+      "durationMs": 2988
+    }
+  },
+  {
+    "id": 29393,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:07.955Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29396,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:07.955Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "What new date and time would you like for this appointment?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 29397,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:10.709Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2755,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81918,
+      "textLength": 59,
+      "firstByteMs": 151
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 2755
+    }
+  },
+  {
+    "id": 29398,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:10.709Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2560,
+      "turnNumber": 11,
+      "durationMs": 2755
+    }
+  },
+  {
+    "id": 29399,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:16.511Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Um Same Day.",
+      "endDetectToFinalMs": 87,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29400,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:16.617Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:37 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 30,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29402,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:17.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29401,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:17.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it, got it..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29403,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:18.083Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1472,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[calling tool: check_availability]"
+    },
+    "metadata": {
+      "inputTokens": 5248,
+      "outputTokens": 38,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29406,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:18.896Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1480,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 40960,
+      "textLength": 17,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 12,
+      "durationMs": 1480
+    }
+  },
+  {
+    "id": 29404,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:18.896Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1280,
+      "turnNumber": 12,
+      "durationMs": 1481
+    }
+  },
+  {
+    "id": 29407,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:18.896Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29405,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:18.896Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment…"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29408,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:20.075Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1040,
+      "turnNumber": 12,
+      "durationMs": 1180
+    }
+  },
+  {
+    "id": 29409,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:20.075Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1179,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 33280,
+      "textLength": 11,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 12,
+      "durationMs": 1179
+    }
+  },
+  {
+    "id": 29411,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:20.876Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-06-26T09:00:00+05:30",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29410,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:20.876Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "check_availability",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29413,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:20.914Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "requested_slot_unavailable: requested=\"Fri Jun 26 at 9:00 AM\", alternatives=\"2026-06-26T09:30:00+05:30 (Fri Jun 26 at 9:30 AM); 2026-06-26T11:00:00+05:30 (Fri Jun 26 at 11:00 AM); 2026-06-26T12:30:00+05:30 (Fri Jun 26 at 12:30 PM); 2026-06-26T13:30:00+05:30 (Fri Jun 26 at 1:30 PM); 2026-06-26T14:00:00+05:30 (Fri Jun 26 at 2:00 PM)\"",
+      "turnNumber": 12,
+      "durationMs": 37
+    }
+  },
+  {
+    "id": 29412,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:20.914Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 37,
+    "requestPayload": {
+      "tool": "check_availability"
+    },
+    "responsePayload": {
+      "result": "requested_slot_unavailable: requested=\"Fri Jun 26 at 9:00 AM\", alternatives=\"2026-06-26T09:30:00+05:30 (Fri Jun 26 at 9:30 AM); 2026-06-26T11:00:00+05:30 (Fri Jun 26 at 11:00 AM); 2026-06-26T12:30:00+05:30 (Fri Jun 26 at 12:30 PM); 2026-06-26T13:30:00+05:30 (Fri Jun 26 at 1:30 PM); 2026-06-26T14:00:00+05:30 (Fri Jun 26 at 2:00 PM)\""
+    },
+    "metadata": {
+      "turnNumber": 12,
+      "durationMs": 37
+    }
+  },
+  {
+    "id": 29415,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:21.731Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29414,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:21.731Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "The 9 AM slot is already booked."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29416,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:24.043Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2311,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 69118,
+      "textLength": 32,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 12,
+      "durationMs": 2311
+    }
+  },
+  {
+    "id": 29417,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:24.043Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2160,
+      "turnNumber": 12,
+      "durationMs": 2312
+    }
+  },
+  {
+    "id": 29419,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:24.043Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29418,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:24.043Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Available alternatives on June 26th are 9:30 AM, 11 AM"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29423,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:28.835Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4792,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 140798,
+      "textLength": 54,
+      "firstByteMs": 290
+    },
+    "metadata": {
+      "turnNumber": 12,
+      "durationMs": 4792
+    }
+  },
+  {
+    "id": 29421,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:28.835Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29420,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:28.835Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4400,
+      "turnNumber": 12,
+      "durationMs": 4792
+    }
+  },
+  {
+    "id": 29422,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:28.835Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "12:30 PM, 1:30 PM, and 2 PM. Which one would you like?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 12
+    }
+  },
+  {
+    "id": 29424,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:33.746Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4560,
+      "turnNumber": 12,
+      "durationMs": 4911
+    }
+  },
+  {
+    "id": 29425,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:33.746Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4911,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145918,
+      "textLength": 54,
+      "firstByteMs": 191
+    },
+    "metadata": {
+      "turnNumber": 12,
+      "durationMs": 4911
+    }
+  },
+  {
+    "id": 29426,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:36.801Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "11 Lavaniyam",
+      "endDetectToFinalMs": 94,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29427,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:37.104Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:37 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 34,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29428,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:37.887Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 785,
+      "turnNumber": 13,
+      "durationMs": 785
+    }
+  },
+  {
+    "id": 29429,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:38.149Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29430,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:38.150Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "To update your booking email to Karthi A S C 12 at theright@gmail.com"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29431,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:40.606Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 785,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "To update your booking email to Karthi A S C 12 at theright@gmail.com, I will reschedule your appointment to June 26th at 11 AM."
+    },
+    "metadata": {
+      "inputTokens": 5546,
+      "outputTokens": 73,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29432,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:42.598Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4448,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 133118,
+      "textLength": 69,
+      "firstByteMs": 185
+    },
+    "metadata": {
+      "turnNumber": 13,
+      "durationMs": 4448
+    }
+  },
+  {
+    "id": 29434,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:42.598Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4160,
+      "turnNumber": 13,
+      "durationMs": 4449
+    }
+  },
+  {
+    "id": 29433,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:42.598Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29435,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:42.598Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment…"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29436,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:43.834Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1120,
+      "turnNumber": 13,
+      "durationMs": 1236
+    }
+  },
+  {
+    "id": 29437,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:43.834Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1236,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 35840,
+      "textLength": 11,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 13,
+      "durationMs": 1236
+    }
+  },
+  {
+    "id": 29438,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:44.636Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "reschedule_booking",
+      "args": {
+        "booking_id": "39",
+        "preferred_date": "2026-06-26T11:00:00+05:30"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29439,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:44.636Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "reschedule_booking",
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29440,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:46.017Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "reschedule_confirmed: old_booking_id=39, new_booking_id=40, new_slot=\"Friday, June 26th at 11:00 AM GMT+5:30\", status=\"confirmed\"",
+      "turnNumber": 13,
+      "durationMs": 1381
+    }
+  },
+  {
+    "id": 29441,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:46.018Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1381,
+    "requestPayload": {
+      "tool": "reschedule_booking"
+    },
+    "responsePayload": {
+      "result": "reschedule_confirmed: old_booking_id=39, new_booking_id=40, new_slot=\"Friday, June 26th at 11:00 AM GMT+5:30\", status=\"confirmed\""
+    },
+    "metadata": {
+      "turnNumber": 13,
+      "durationMs": 1381
+    }
+  },
+  {
+    "id": 29442,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:48.424Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Your appointment has been successfully moved from June 26th at 9 AM to June 26th at 11 AM."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29443,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:48.424Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 13
+    }
+  },
+  {
+    "id": 29444,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:54.511Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 6088,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 181758,
+      "textLength": 90,
+      "firstByteMs": 167
+    },
+    "metadata": {
+      "turnNumber": 13,
+      "durationMs": 6088
+    }
+  },
+  {
+    "id": 29445,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:54.512Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5680,
+      "turnNumber": 13,
+      "durationMs": 6088
+    }
+  },
+  {
+    "id": 29446,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:57.886Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Yeah Yeah, okay, thank you.",
+      "endDetectToFinalMs": 92,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 14
+    }
+  },
+  {
+    "id": 29447,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:57.992Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:37 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 38,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 14
+    }
+  },
+  {
+    "id": 29448,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:58.778Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 793,
+      "turnNumber": 14,
+      "durationMs": 793
+    }
+  },
+  {
+    "id": 29449,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:58.942Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 793,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Is there anything else you would like to do with your appointments?"
+    },
+    "metadata": {
+      "inputTokens": 5556,
+      "outputTokens": 14,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 14
+    }
+  },
+  {
+    "id": 29451,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:58.942Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 14
+    }
+  },
+  {
+    "id": 29450,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:07:58.942Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Is there anything else you would like to do with your appointments?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 14
+    }
+  },
+  {
+    "id": 29452,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:01.494Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2400,
+      "turnNumber": 14,
+      "durationMs": 2552
+    }
+  },
+  {
+    "id": 29453,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:01.494Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2552,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 67,
+      "firstByteMs": 132
+    },
+    "metadata": {
+      "turnNumber": 14,
+      "durationMs": 2552
+    }
+  },
+  {
+    "id": 29454,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:03.783Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "No Not right now",
+      "endDetectToFinalMs": 100,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29455,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:04.085Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:38 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 40,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29456,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:04.884Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29457,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:04.884Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Okay, so..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29458,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:04.908Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 825,
+      "turnNumber": 15,
+      "durationMs": 825
+    }
+  },
+  {
+    "id": 29459,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:05.129Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 825,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Thank you for using the service. Have a great day!"
+    },
+    "metadata": {
+      "inputTokens": 5570,
+      "outputTokens": 13,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29460,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:06.429Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1545,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 43520,
+      "textLength": 11,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 15,
+      "durationMs": 1545
+    }
+  },
+  {
+    "id": 29462,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:06.429Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1360,
+      "turnNumber": 15,
+      "durationMs": 1545
+    }
+  },
+  {
+    "id": 29461,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:06.429Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29463,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:06.441Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you for using the service."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29464,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:08.188Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1758,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 51198,
+      "textLength": 32,
+      "firstByteMs": 175
+    },
+    "metadata": {
+      "turnNumber": 15,
+      "durationMs": 1758
+    }
+  },
+  {
+    "id": 29465,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:08.188Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1600,
+      "turnNumber": 15,
+      "durationMs": 1759
+    }
+  },
+  {
+    "id": 29466,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:08.188Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29467,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:08.188Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Have a great day!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 15
+    }
+  },
+  {
+    "id": 29468,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:09.559Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1371,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 38400,
+      "textLength": 17,
+      "firstByteMs": 149
+    },
+    "metadata": {
+      "turnNumber": 15,
+      "durationMs": 1371
+    }
+  },
+  {
+    "id": 29469,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:09.559Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1200,
+      "turnNumber": 15,
+      "durationMs": 1372
+    }
+  },
+  {
+    "id": 29470,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:11.043Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Yeah, thank you.",
+      "endDetectToFinalMs": 98,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29471,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:11.145Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1-mini",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 10:38 PM GMT+5:30 (Asia/Kolkata)\n\n# Role\n\nYou are a Calendar Tool Testing Agent.\n## Tool Instructions\n\nWhen the caller wants to book an appointment, call `book_appointment` immediately \no",
+      "historyLength": 42,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29472,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:11.893Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 750,
+      "turnNumber": 16,
+      "durationMs": 750
+    }
+  },
+  {
+    "id": 29473,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:12.030Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29474,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:12.030Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You're welcome!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29475,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:12.207Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 750,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "You're welcome! If you need anything else later, feel free to ask."
+    },
+    "metadata": {
+      "inputTokens": 5593,
+      "outputTokens": 16,
+      "model": "gpt-4.1-mini",
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29478,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:13.141Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1111,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 30720,
+      "textLength": 15,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 16,
+      "durationMs": 1111
+    }
+  },
+  {
+    "id": 29476,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:13.141Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 960,
+      "turnNumber": 16,
+      "durationMs": 1111
+    }
+  },
+  {
+    "id": 29477,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:13.141Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29479,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:13.141Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "If you need anything else later, feel free to ask."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 16
+    }
+  },
+  {
+    "id": 29481,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:16.307Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2800,
+      "turnNumber": 16,
+      "durationMs": 3166
+    }
+  },
+  {
+    "id": 29480,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:16.307Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3166,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89598,
+      "textLength": 50,
+      "firstByteMs": 343
+    },
+    "metadata": {
+      "turnNumber": 16,
+      "durationMs": 3166
+    }
+  },
+  {
+    "id": 29482,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:18.867Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 29483,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:19.153Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/743"
+    }
+  },
+  {
+    "id": 29484,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:19.153Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/743"
+    }
+  },
+  {
+    "id": 29485,
+    "callId": 743,
+    "agentId": 21,
+    "ts": "2026-06-25T17:08:19.175Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 166,
+        "turns": 10,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "Yeah, thank you.",
+        "lastAgentResponse": "You're welcome! If you need anything else later, feel free to ask.",
+        "recordingStatus": "saved",
+        "warningCount": 4,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 166,
+      "turns": 10,
+      "avgSttMs": 0,
+      "avgLlmMs": 780,
+      "avgTtsMs": 975
+    }
+  }
+]
