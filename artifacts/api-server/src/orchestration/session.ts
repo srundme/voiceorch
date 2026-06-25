@@ -233,7 +233,7 @@ export async function createSession(params: {
     // fields live in the agent_config JSON blob; only defined values are carried.
     llmGenerationParams: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
-      ...(typeof agentCfg["maxTokens"] === "number" ? { maxTokens: agentCfg["maxTokens"] as number } : {}),
+      ...(typeof (agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"]) === "number" ? { maxTokens: (agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"]) as number } : {}),
       ...(typeof agentCfg["topP"] === "number" ? { topP: agentCfg["topP"] as number } : {}),
       // Repetition guard: OpenAI-compatible LLMs (incl. Sarvam) default these to 0,
       // which at low temperature lets the model emit byte-identical replies turn

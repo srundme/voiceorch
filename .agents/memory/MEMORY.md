@@ -46,4 +46,5 @@
 - [AMD / voicemail-detection config shapes](amd-voicemail-config-shapes.md) — outbound AMD gates synchronously on the answer webhook; two agentConfig shapes normalized by resolveAmdConfig
 - [Identity relink targets](identity-relink-targets.md) — adding a user-scoped table? add it to IDENTITY_RELINK_TARGETS or account merges orphan that data; canonical id = bare Google sub
 - [async execFile has no input option](execfile-no-input-option.md) — passing {input:buffer} to async execFile is ignored; child hangs on stdin forever, no log/timeout; use spawn
+- [Advanced Settings end-to-end audit](advanced-settings-audit.md) — ttsMinSentenceChars wires to extractSentences minCommaClauseChars param; llmMaxTokens key must be read before legacy maxTokens in llmGenerationParams
 - [ffmpeg missing in prod build images](ffmpeg-missing-in-prod.md) — ffmpeg on PATH in Nix dev but absent from every Railway image; bundle ffmpeg-static (external in esbuild) + apt fallback, resolve at runtime

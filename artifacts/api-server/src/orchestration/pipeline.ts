@@ -2759,7 +2759,7 @@ export class OrchestrationPipeline {
           const afterBrackets = filterBrackets(filtered); // drop long [instruction…] leaks
           if (!afterBrackets) return;
           pendingText += afterBrackets;
-          const { sentences, remainder } = extractSentences(pendingText);
+          const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
         },
@@ -2840,7 +2840,7 @@ export class OrchestrationPipeline {
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
               pendingText += afterBrackets;
-              const { sentences, remainder } = extractSentences(pendingText);
+              const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
               for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
               pendingText = remainder;
             },
@@ -2986,7 +2986,7 @@ export class OrchestrationPipeline {
     // Case C — 60-char comma-split fired mid-sentence: pendingText is a mid-sentence
     //   FRAGMENT (e.g. "எது பார்க்குற" after split emitted "நீங்க...வில்லா"). Not a
     //   prefix of allSentences[-1], but IS a substring of it — emit the suffix.
-    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse);
+    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse, this.agent.ttsMinSentenceChars);
     const pendingTrim = pendingText.trim();
     let flushText: string;
     if (trueRemainder.trim().length > pendingTrim.length) {
@@ -3414,7 +3414,7 @@ export class OrchestrationPipeline {
           const afterBrackets = filterBrackets(filtered);
           if (!afterBrackets) return;
           pendingText += afterBrackets;
-          const { sentences, remainder } = extractSentences(pendingText);
+          const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
         },
@@ -3456,7 +3456,7 @@ export class OrchestrationPipeline {
     // truncated pendingText, and enqueue any non-empty trailing text — a length
     // gate would silently drop very short final fragments.
     // Universal final-flush (mirrors processTurn logic — see Case A/B/C comment there).
-    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse);
+    const { sentences: allSentences, remainder: trueRemainder } = extractSentences(cleanResponse, this.agent.ttsMinSentenceChars);
     const pendingTrim = pendingText.trim();
     let flushText: string;
     if (trueRemainder.trim().length > pendingTrim.length) {
@@ -4008,7 +4008,7 @@ function stripBracketedInstructions(text: string): string {
  *      - Domain names:    "google.com" (period not followed by space)
  *  • Falls back to comma-clause dispatch for long responses with no boundary yet.
  */
-export function extractSentences(text: string): { sentences: string[]; remainder: string } {
+export function extractSentences(text: string, minCommaClauseChars = 8): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
   let i = 0;
   let segStart = 0;
@@ -4105,7 +4105,7 @@ export function extractSentences(text: string): { sentences: string[]; remainder
     const commaIdx = remainder.lastIndexOf(", ");
     if (commaIdx >= 30) {
       const clause = remainder.slice(0, commaIdx).trim();
-      if (clause.length >= 8) {
+      if (clause.length >= minCommaClauseChars) {
         sentences.push(clause);
         remainder = remainder.slice(commaIdx + 2);
       }
