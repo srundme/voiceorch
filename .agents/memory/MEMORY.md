@@ -1,5 +1,5 @@
 - [Sarvam TTS API quirks](sarvam-tts-api.md) — bulbul:v1 gone; v2 has 7 voices, v3 has 38; streaming endpoint 404s; speaker sets are model-specific
-- [Sarvam LLM Chat Completions quirks](sarvam-llm-api.md) — thinking mode ON by default (disable with reasoning_effort:null for voice); usage in final empty-choices chunk; raw SSE needs buffered parse
+- [Sarvam LLM Chat Completions quirks](sarvam-llm-api.md) — thinking OFF by default (reasoning_effort:null); streaming SSE never emits delta.tool_calls; use stream:false for tool turns — non-streaming response has message.tool_calls correctly
 - [Sarvam STT WebSocket protocol](sarvam-stt-ws-protocol.md) — valid streaming models: saarika:v2.5 + saaras:v3 only; audio must be WAV-wrapped in AudioContent {data,encoding:"audio/wav",sample_rate}
 - [Gender service startup](gender-service-startup.md) — lazy-import librosa; top-level import blocks uvicorn port binding in production
 - [KB FTS Architecture](kb-fts-architecture.md) — AI Knowledge uses PostgreSQL FTS only; no embeddings/pgvector; knowledge_sources + knowledge_entries tables with GIN index

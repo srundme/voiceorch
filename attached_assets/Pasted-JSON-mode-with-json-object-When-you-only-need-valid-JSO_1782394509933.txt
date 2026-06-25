@@ -1,0 +1,143 @@
+JSON mode with json_object
+When you only need valid JSON without enforcing a specific structure, use {"type": "json_object"} and describe the desired shape in your prompt:
+
+curl -X POST https://api.sarvam.ai/v1/chat/completions \
+  -H "api-subscription-key: $SARVAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sarvam-105b",
+    "messages": [
+      {"role": "system", "content": "Reply with a JSON object: {\"sentiment\": \"positive\" | \"negative\" | \"neutral\", \"confidence\": number}"},
+      {"role": "user", "content": "यह फिल्म शानदार थी!"}
+    ],
+    "response_format": {"type": "json_object"}
+  }'
+
+
+Even with Structured Outputs, validate the parsed JSON against your expected schema (e.g. with pydantic or zod) before acting on it — the schema constrains the model’s output shape, but your application logic may have stricter requirements (value ranges, business rules, etc.).
+
+Alternative: Tool calling as a JSON schema
+If your workflow is already built around tool calling, you can also get structured output by defining a single tool whose parameters schema describes the structure you want, and forcing it with tool_choice. The model’s arguments are then constrained to the schema.
+
+
+Python
+
+JavaScript
+
+
+import json
+from sarvamai import SarvamAI
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {
+            "role": "user",
+            "content": "Order: 2 masala dosas and 1 filter coffee to Koramangala, Bengaluru.",
+        }
+    ],
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_order",
+                "description": "Extract a structured food order",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "quantity": {"type": "integer"},
+                                },
+                                "required": ["name", "quantity"],
+                            },
+                        },
+                        "delivery_area": {"type": "string"},
+                        "city": {"type": "string"},
+                    },
+                    "required": ["items", "city"],
+                },
+            },
+        }
+    ],
+    tool_choice={"type": "function", "function": {"name": "extract_order"}},
+)
+arguments = response.choices[0].message.tool_calls[0].function.arguments
+order = json.loads(arguments)
+print(order)
+# {'items': [{'name': 'masala dosa', 'quantity': 2}, {'name': 'filter coffee', 'quantity': 1}], 'delivery_area': 'Koramangala', 'city': 'Bengaluru'}
+Alternative: Prompt-based JSON
+For simple cases, you can also instruct the model to reply with JSON only, set a low temperature, and validate the output before using it (consider JSON mode instead, which guarantees valid JSON):
+
+import json
+from sarvamai import SarvamAI
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {
+            "role": "system",
+            "content": (
+                "Reply with a single JSON object only — no prose, no markdown fences. "
+                'Schema: {"sentiment": "positive" | "negative" | "neutral", "confidence": number}'
+            ),
+        },
+        {"role": "user", "content": "यह फिल्म शानदार थी!"},
+    ],
+    temperature=0.1,
+)
+raw = response.choices[0].message.content
+try:
+    result = json.loads(raw)
+except json.JSONDecodeError:
+    # Retry, or strip markdown fences / extra text before parsing
+    raise
+print(result)
+
+
+Always validate model-produced JSON against your expected schema (e.g. with pydantic or zod) and add a retry path — prompt-based JSON is good, but not guaranteed.
+
+API Response Format
+Success Response Structure
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "created": 1699000000,
+  "model": "sarvam-105b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The capital of India is New Delhi. It has been the capital since 1931."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 25,
+    "total_tokens": 40
+  }
+}
+
+
+Response Fields
+Field	Type	Description
+id	string	Unique identifier for the completion request
+object	string	Always "chat.completion"
+created	integer	Unix timestamp when the completion was created
+model	string	The model used for completion
+choices[].index	integer	Index of the choice in the list
+choices[].message.role	string	Always "assistant"
+choices[].message.content	string	The generated text response (null when the model calls a tool)
+choices[].message.reasoning_content	string	Thinking steps (only when reasoning_effort is set)
+choices[].message.tool_calls	array	Tool invocations requested by the model (only when using tool calling)
+choices[].finish_reason	string	Why generation stopped: "stop", "length", "tool_calls", "content_filter"
+usage.prompt_tokens	integer	Tokens in the input prompt
+usage.completion_tokens	integer	Tokens in the generated response
+usage.total_tokens	integer	Total tokens used (prompt + completion)
