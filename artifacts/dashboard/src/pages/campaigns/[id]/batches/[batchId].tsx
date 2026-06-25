@@ -724,12 +724,43 @@ export default function BatchWorkspacePage() {
 
   const batchStatus = header?.batch.status ?? "draft";
 
-  async function handleControl(status: "running" | "paused" | "stopped") {
+  async function handleStart() {
+    try {
+      const token = localStorage.getItem("voiceorch:session");
+      const r = await fetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as { error?: string; code?: string; missingItems?: unknown[] };
+        if (body.code === "IRDAI_BLOCKED") {
+          toast({ title: "Call blocked", description: body.error, variant: "destructive" });
+          return;
+        }
+        throw new Error(body.error ?? `HTTP ${r.status}`);
+      }
+      await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
+      await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
+      toast({ title: "Batch started" });
+    } catch (err) {
+      const irdai = getIrdaiBlockedError(err);
+      if (irdai) {
+        toast({ title: "Call blocked", description: irdai.message, variant: "destructive" });
+      } else {
+        toast({ title: "Action failed", variant: "destructive" });
+      }
+    }
+  }
+
+  async function handleControl(status: "paused" | "stopped") {
     try {
       await update.mutateAsync({ id: campaignId, batchId, data: { status } });
       await qc.invalidateQueries({ queryKey: getListCampaignBatchesQueryKey(campaignId) });
       await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
-      toast({ title: status === "running" ? "Batch started" : status === "paused" ? "Batch paused" : "Batch stopped" });
+      toast({ title: status === "paused" ? "Batch paused" : "Batch stopped" });
     } catch (err) {
       const irdai = getIrdaiBlockedError(err);
       if (irdai) {
@@ -813,7 +844,7 @@ export default function BatchWorkspacePage() {
           <div className="flex items-center gap-2 ml-auto">
             <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
               disabled={batchStatus === "running" || update.isPending}
-              onClick={() => void handleControl("running")}>
+              onClick={() => void handleStart()}>
               <Play className="h-3.5 w-3.5" /> Start
             </Button>
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"

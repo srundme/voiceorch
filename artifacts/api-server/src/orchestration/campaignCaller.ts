@@ -176,7 +176,14 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       const authId  = psAuthId?.value  || (provider === "vobiz" ? (process.env["VOBIZ_AUTH_ID"]    ?? "") : "");
       const authKey = psApiKey?.value  || (provider === "vobiz" ? (process.env["VOBIZ_AUTH_TOKEN"] ?? "") : "");
       if (authId && authKey) {
-        creds = { apiKey: authKey, authId, isManaged: true };
+        // Twilio's "authId" field is its accountSid — normalise here so the
+        // Twilio dial branch can read creds.accountSid without special-casing.
+        creds = {
+          apiKey:      authKey,
+          authId:      provider !== "twilio" ? authId : undefined,
+          accountSid:  provider === "twilio"  ? authId : undefined,
+          isManaged:   true,
+        };
         logger.info({ leadId: lead.id, campaignId: campaign.id, provider }, "Campaign call using platform-managed credentials");
       }
     }
