@@ -58,16 +58,22 @@ deprecated/removed.
   is the ONLY adapter that consumes them; other providers ignore the 5th
   `createLLMAdapter` arg.
 
-## Tool calling REQUIRES reasoning enabled — do NOT use reasoning_effort:null with tools
-- With `reasoning_effort:null` (thinking off), sarvam-30b **skips tool calls entirely**
-  and replies conversationally even when the user explicitly requests a bookable action.
-  Verified in production call logs: 8 turns, all text responses, zero tool_call deltas.
-- **Fix:** auto-bump `reasoning_effort` from `null` → `"low"` when `hasTools` is true.
-  Agent-level override of `reasoningEffort` is still respected (only `null` is bumped).
-  This adds minor latency but is required for tools to work at all.
-- Also inject `[TOOL USE — MANDATORY]` header at the very top of the system prompt for
-  tool turns to override the model's confirmation-seeking behavior.
-- Gemini/OpenAI are unaffected — they have no thinking mode, tools work with any settings.
+## Tool calling REQUIRES reasoning — confirmed behavior table
+| reasoning_effort | Tool calls fired? | Confirmation loop? | Notes |
+|---|---|---|---|
+| null | ❌ never | n/a | Defaults to conversational text, ignores tools entirely |
+| low | ✅ sometimes | ✅ still confirms | Engages with tools but summarises + asks "is that ok?" before calling |
+| medium | ✅ more reliable | ⚠️ partially | Better instruction-following; still not 100% — open problem |
+
+Current code: auto-bump `null`→`medium` when `hasTools`, inject [TOOL USE — MANDATORY] numbered rules.
+Gemini/OpenAI unaffected (no thinking mode, tool_choice:auto works fine).
+**TODO: explore `tool_choice:"required"` or a post-response forced-call pattern for cases where medium still confirms.**
+
+## `<|message|>` and other special tokens leak into delta.content when reasoning is on
+- When `reasoning_effort` is `"low"/"medium"/"high"`, Sarvam leaks internal thinking
+  delimiter tokens (`<|message|>`, `<|thinking|>`, `<|endofthinking|>`, etc.) into
+  `delta.content`. These must be stripped before forwarding to TTS.
+- **Fix in sarvam.ts:** `token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end)\|>/g, "")` applied to every content token.
 
 ## Tool call streaming format — accumulate delta.tool_calls
 - Sarvam-30b DOES emit standard OpenAI-style streaming tool calls when reasoning is on:
