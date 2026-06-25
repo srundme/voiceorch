@@ -85,15 +85,17 @@ const CHUNK_SAMPLES = 160;                       // 20 ms @ 8 kHz (1 mulaw chunk
 // *inside the telephony passband* (300–3400 Hz) — i.e. what actually survives a
 // phone carrier — hits this RMS. Normalising on the band-limited signal (rather
 // than the broadband loop) is the key fix: previously a bass-heavy loop measured
-// loud broadband but arrived near-inaudible on a real handset. ~6500 in-band RMS
-// ≈ -14 dBFS; combined with the volumes below the caller hears ambient around
-// -22 dBFS during silence and -29 dBFS under speech — clearly present yet well
-// under the agent's voice.
-const TARGET_LOOP_RMS = 6500;
+// loud broadband but arrived near-inaudible on a real handset. ~7500 in-band RMS
+// ≈ -13 dBFS; combined with the volumes below the caller hears ambient around
+// -18 dBFS during silence and -28 dBFS under speech — clearly present yet well
+// under the agent's voice. The level is deliberately on the higher side so the
+// bed sits above a mobile carrier's VAD/DTX threshold and is not classified as
+// suppressible line noise on a real PSTN/mobile leg.
+const TARGET_LOOP_RMS = 7500;
 
 // Volume applied to the (normalised) loop. Shared by built-in + uploaded tracks.
-const SILENCE_VOL = 0.42; // ambient while the agent is silent  (~-22 dBFS in-band)
-const SPEECH_VOL  = 0.17; // ambient mixed under TTS speech      (~-29 dBFS in-band)
+const SILENCE_VOL = 0.55; // ambient while the agent is silent  (~-18 dBFS in-band)
+const SPEECH_VOL  = 0.18; // ambient mixed under TTS speech      (~-28 dBFS in-band)
 
 /** The mix levels actually applied, exported so callers can log them per call. */
 export const AMBIENT_LEVELS = {
@@ -159,12 +161,28 @@ function generateLoop(track: string): Int16Array {
     y2 = p.alpha2 * y2 + (1 - p.alpha2) * x;
   }
 
+  // Slow amplitude envelope so the bed has natural movement instead of flat,
+  // steady-state hiss. A mobile carrier's VAD/DTX classifies *flat* low-level
+  // noise as line noise and suppresses it (comfort-noise / discontinuous
+  // transmission), which is why a mathematically-loud-enough but steady bed can
+  // still arrive inaudible on a real handset while the agent's voice always
+  // passes. A moving, speech-band-active bed reads as activity and survives the
+  // carrier. The two LFOs run at whole-cycle-per-loop rates so the 8 s loop
+  // stays seamless, and ENV_FLOOR keeps the bed continuously present — it never
+  // dips toward silence, which would itself give DTX a gap to latch onto.
+  const ENV_FLOOR = 0.6;
+  const w1 = (2 * Math.PI * 1) / LOOP_SECONDS; // 1 cycle / loop
+  const w2 = (2 * Math.PI * 3) / LOOP_SECONDS; // 3 cycles / loop
   for (let i = 0; i < LOOP_SAMPLES; i++) {
     const x = prng();
     y1 = p.alpha  * y1 + (1 - p.alpha)  * x;
     y2 = p.alpha2 * y2 + (1 - p.alpha2) * x;
     const shaped = y1 * (1 - p.blend) + y2 * p.blend;
-    const s = Math.round(shaped * p.gain);
+    const t   = i / FS;
+    const lfo = 0.6 * (0.5 + 0.5 * Math.sin(w1 * t))
+              + 0.4 * (0.5 + 0.5 * Math.sin(w2 * t + 1.3));
+    const env = ENV_FLOOR + (1 - ENV_FLOOR) * lfo;
+    const s = Math.round(shaped * p.gain * env);
     out[i] = Math.max(-32767, Math.min(32767, s));
   }
 

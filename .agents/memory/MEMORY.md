@@ -26,6 +26,7 @@
 - [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)
 - [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound
+- [Ambient inaudible on real calls = carrier DTX](ambient-telephony-dtx.md) — web works→config flows; fix is channel continuity (no zero-frame gaps) + moving bed, NOT louder volume
 - [Dashboard agent form schema shared](agent-form-schema-shared.md) — edit.schema.ts/AgentFormValues/buildUpdateAgentPayload shared by edit.tsx AND builder.tsx; removing a field breaks the create wizard
 - [Barge-in echo-grace scoping](barge-in-echo-grace-scoping.md) — grace re-armed only at sentence-start + playback-tail, NEVER per chunk/frame or full-sentence, or callers can't interrupt long replies
 - [DPDP non-blocking wrapper](dpdp-non-blocking.md) — DPDP compliance is pre/post-only (disclosure, post-call PII scan, retention, erasure); NEVER add to dial/pipeline path, never gates dialing

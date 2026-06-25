@@ -3461,7 +3461,26 @@ export class OrchestrationPipeline {
     const frames        = Math.ceil(TELEPHONY_TAIL_DRAIN_MS / FRAME_MS);
     let nextTick        = Date.now() + FRAME_MS;
     for (let i = 0; i < frames && !this.closed && !this.bargeInRequested; i++) {
-      this.config.onAudioOut(silenceFrame);
+      // When ambient is enabled, carry the ambient bed through the drain window
+      // instead of pure digital silence. The ambient silence-fill interval is
+      // paused while isPlaying is true (it is still true here, set false only
+      // after this returns), so without this the channel emits ~800 ms of pure
+      // zero frames after every utterance. A run of digital-silence frames is
+      // exactly what a mobile carrier's VAD/DTX reads as an inactive channel:
+      // it engages comfort-noise / silence-suppression, which then gates the
+      // low-level ambient bed when it resumes — making it inaudible on a real
+      // phone while the loud agent voice always passes. Keeping ambient flowing
+      // continuously (no pure-silence gaps) keeps the channel "active" so DTX
+      // never engages. The frame size and real-time cadence are unchanged, so
+      // the drain still keeps Vobiz/Twilio/Plivo playout buffers ticking. When
+      // ambient is disabled this is byte-for-byte the original zero frame.
+      let frame: Buffer = silenceFrame;
+      if (this.ambientStream) {
+        frame = this.config.rawPcmOutput
+          ? this.ambientStream.nextPcmChunk()
+          : this.ambientStream.nextMulawChunk();
+      }
+      this.config.onAudioOut(frame);
       const delay = Math.max(0, nextTick - Date.now());
       nextTick += FRAME_MS;
       await new Promise<void>((r) => setTimeout(r, delay));
