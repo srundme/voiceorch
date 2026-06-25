@@ -1561,6 +1561,8 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     </div>
                   )}
                   <SliderRow label="Temperature" desc="Creativity" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
+                  <SliderRow label="Frequency Penalty" desc="Reduces word/phrase repetition" value={cfg.frequencyPenalty ?? 0.3} onChange={v => setCfg({ frequencyPenalty: v })} min={0} max={2} step={0.01} />
+                  <SliderRow label="Presence Penalty" desc="Encourages new topics" value={cfg.presencePenalty ?? 0.3} onChange={v => setCfg({ presencePenalty: v })} min={0} max={2} step={0.01} />
                 </div>
                 {/* Card 3 — Voice */}
                 <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
@@ -2360,6 +2362,8 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                       </div>}
                     </div>
                     <SliderRow label="Temperature" desc="Randomness — higher = more creative" value={temperature} onChange={v => { setTemperature(v); setDirty(true); }} min={0} max={2} step={0.01} />
+                    <SliderRow label="Frequency Penalty" desc="Reduces repeated words/phrases — raise to 0.6+ if AI loops" value={cfg.frequencyPenalty ?? 0.3} onChange={v => setCfg({ frequencyPenalty: v })} min={0} max={2} step={0.01} />
+                    <SliderRow label="Presence Penalty" desc="Encourages new topics — raise to 0.6+ if AI stays stuck" value={cfg.presencePenalty ?? 0.3} onChange={v => setCfg({ presencePenalty: v })} min={0} max={2} step={0.01} />
                     <SliderRow label="Max Tokens" desc="Max tokens per LLM response" value={cfg.maxTokens ?? 200} onChange={v => setCfg({ maxTokens: v })} min={50} max={2000} step={10} />
                     <ToggleRow label="Request JSON Response" desc="Force model to output structured JSON" checked={cfg.requestJsonResponse ?? false} onChange={v => setCfg({ requestJsonResponse: v })} />
                   </>}
