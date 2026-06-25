@@ -111,8 +111,8 @@ export async function handleWebcallWebSocket(
     const { sessionId: sid } = await createSession({
       agentId,
       telephonyProvider: "webcall",
-      // Synthetic, non-phone identities → humanPhone() returns null → caller-memory
-      // is intentionally skipped so repeated tests don't pollute a real caller.
+      // Synthetic identifiers: session.ts maps "webcall-user-<id>" → "webcall:user_<id>"
+      // so caller memory IS captured per authenticated user (not skipped).
       toNumber: `webcall-agent-${agentId}`,
       fromNumber: `webcall-user-${userId}`,
       rawPcmOutput: true,

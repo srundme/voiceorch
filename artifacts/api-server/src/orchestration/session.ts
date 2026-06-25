@@ -334,7 +334,15 @@ export async function createSession(params: {
   // ── Parallel pre-fetch: caller memory + campaign lead + knowledge base ───────
   // All three are independent DB reads — fire simultaneously to avoid sequential
   // round-trips that add 20-60 ms to call setup latency.
-  const callerPhone = humanPhone(params.fromNumber, params.toNumber);
+  // For webcall sessions fromNumber is "webcall-user-<userId>" which humanPhone()
+  // rejects (not a real phone number). Use it as a stable synthetic identifier so
+  // caller memory is captured per-user-id, matching the historical "webcall:user_<id>"
+  // format already in the DB. Real-phone callers are unaffected.
+  const callerPhone =
+    humanPhone(params.fromNumber, params.toNumber) ??
+    (params.fromNumber.startsWith("webcall-user-")
+      ? `webcall:user_${params.fromNumber.replace("webcall-user-", "")}`
+      : null);
   // Persona fingerprint for caller-memory whiplash detection: when the agent is
   // repurposed (e.g. real-estate → insurance), stale domain memory keyed on
   // (agentId, phone) must not bleed into the new persona. Derived from the RAW
