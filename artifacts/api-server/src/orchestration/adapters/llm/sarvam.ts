@@ -142,12 +142,30 @@ export class SarvamLLM implements LLMAdapter {
 
     const sanitized = sanitizeForAlternation(messages);
 
+    const genBody = this.buildGenerationBody();
+
+    // When tools are present, Sarvam-30b needs its reasoning trace to decide
+    // whether to call a tool vs reply conversationally. With reasoning_effort:null
+    // (thinking off) the model defaults to text replies and skips tool calls.
+    // Bump to "low" for tool turns so the model can reason through tool selection
+    // while keeping latency acceptable. Agent-level override is still respected.
+    if (hasTools && genBody["reasoning_effort"] === null) {
+      genBody["reasoning_effort"] = "low";
+    }
+
+    // Sarvam-specific tool-use injection: placed at the very top of the system
+    // prompt so it overrides any conversational tendency. Without this explicit
+    // instruction, sarvam-30b asks for confirmation rather than calling the tool.
+    const effectiveSystemPrompt = hasTools
+      ? `[TOOL USE — MANDATORY] You have tools available. When you have enough information to perform a requested action, call the appropriate tool IMMEDIATELY. Do NOT say "I'll book…" or ask for confirmation — call the tool directly. Trust the information the caller has given you.\n\n${systemPrompt}`
+      : systemPrompt;
+
     const body: Record<string, unknown> = {
       model: this.model,
       stream: true,
-      ...this.buildGenerationBody(),
+      ...genBody,
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: effectiveSystemPrompt },
         ...toOpenAIMessages(sanitized),
       ],
     };

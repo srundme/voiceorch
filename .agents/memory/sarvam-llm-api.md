@@ -58,25 +58,25 @@ deprecated/removed.
   is the ONLY adapter that consumes them; other providers ignore the 5th
   `createLLMAdapter` arg.
 
-## Tool calling streams fine — accumulate delta.tool_calls (do NOT fall back to non-streaming)
-- Sarvam-30b DOES emit standard OpenAI-style streaming tool calls. Verified live:
-  with `stream:true`, `reasoning_effort:null`, `tool_choice:"auto"` the SSE carries
-  `delta.tool_calls[0]={index,id,function:{name,arguments:""}}` first, then chunks
-  with only `function.arguments` fragments to CONCATENATE by index, then a chunk
-  with `finish_reason:"tool_calls"`, then the usage chunk, then `[DONE]`.
-- **An earlier code comment claimed the stream skips dispatch / dumps tool JSON into
-  `delta.content`. That is FALSE** — the real bug was the adapter only ever read
-  `delta.content` and never parsed `delta.tool_calls`. A non-streaming fallback was
-  added as a workaround; it was removed. Use ONE streaming path for both plain
-  replies and tool turns (matches how Bolna does it).
-- **Why it matters:** the non-streaming fallback forced EVERY turn to be
-  non-streaming whenever the agent had tools — a real TTFT regression on text turns.
+## Tool calling REQUIRES reasoning enabled — do NOT use reasoning_effort:null with tools
+- With `reasoning_effort:null` (thinking off), sarvam-30b **skips tool calls entirely**
+  and replies conversationally even when the user explicitly requests a bookable action.
+  Verified in production call logs: 8 turns, all text responses, zero tool_call deltas.
+- **Fix:** auto-bump `reasoning_effort` from `null` → `"low"` when `hasTools` is true.
+  Agent-level override of `reasoningEffort` is still respected (only `null` is bumped).
+  This adds minor latency but is required for tools to work at all.
+- Also inject `[TOOL USE — MANDATORY]` header at the very top of the system prompt for
+  tool turns to override the model's confirmation-seeking behavior.
+- Gemini/OpenAI are unaffected — they have no thinking mode, tools work with any settings.
+
+## Tool call streaming format — accumulate delta.tool_calls
+- Sarvam-30b DOES emit standard OpenAI-style streaming tool calls when reasoning is on:
+  `delta.tool_calls[0]={index,id,function:{name,arguments:""}}` first, then argument
+  fragment chunks, then `finish_reason:"tool_calls"`, then usage chunk, then `[DONE]`.
 - **How to apply:** accumulate `delta.tool_calls` into `Map<index,{id,name,args}>`;
   at end-of-stream fire onToolCall (first tool) OR onDone (plain text) — exactly one.
   Drop leading whitespace-only `delta.content` ("\n" artifact) and ignore any content
   once a tool delta has been seen, so TTS never speaks tool-turn noise.
-- `reasoning_effort:"low"` still streams tool calls correctly but wastes ~45 reasoning
-  chunks of latency first — keep it `null` for voice.
 
 ## Other
 - Strict user/assistant alternation starting with a user turn — merge consecutive
