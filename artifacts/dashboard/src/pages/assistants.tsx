@@ -411,7 +411,7 @@ const LANGUAGES = [
 
 type AgentCfg = {
   maxTokens?: number; topP?: number; minP?: number; topK?: number;
-  presencePenalty?: number; frequencyPenalty?: number;
+  presencePenalty?: number; frequencyPenalty?: number; languageAutoDetect?: boolean;
   requestJsonResponse?: boolean;
   guardrailRoutes?: Array<{ name: string; scoreThreshold: number; utterances: string; response: string }>;
   secondaryLanguage?: string; secondaryLanguages?: string[]; ttsStream?: boolean; ttsSamplingRate?: number;
@@ -1535,6 +1535,19 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                         </div>
                       );
                     })()}
+                    <div className="flex items-center justify-between mt-2">
+                      <div>
+                        <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
+                        <p className="text-[9px] text-muted-foreground/60">Follow caller's language mid-call</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCfg({ languageAutoDetect: !(cfg.languageAutoDetect ?? false) })}
+                        className={`relative w-8 h-4 rounded-full transition-colors ${cfg.languageAutoDetect ? "bg-primary" : "bg-muted-foreground/30"}`}
+                      >
+                        <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${cfg.languageAutoDetect ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {/* Card 2 — Brain */}
@@ -2325,6 +2338,7 @@ function AgentConfigPanel({ agentId, onDeleted, initialTab }: { agentId: number;
                     <SliderRow label="Confidence Threshold" desc="Discard transcripts below this score" value={asrConfidenceThreshold} onChange={v => { setAsrConfidenceThreshold(v); setDirty(true); }} min={0} max={1} step={0.01} />
                     <SliderRow label="End-of-Turn Timeout" desc="Max wait after speech ends" value={asrEndOfTurnTimeout} onChange={v => { setAsrEndOfTurnTimeout(v); setDirty(true); }} min={500} max={10000} step={100} unit="ms" />
                     <ToggleRow label="Background Denoising" desc="noise_reduction param (Deepgram)" checked={asrBackgroundDenoising} onChange={v => { setAsrBackgroundDenoising(v); setDirty(true); }} />
+                    <ToggleRow label="Auto-detect Language" desc="Follow caller's language mid-call — off = strict single language" checked={cfg.languageAutoDetect ?? false} onChange={v => setCfg({ languageAutoDetect: v })} />
                     <div className="border border-border/50 rounded-lg p-3 space-y-3">
                       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transcriber Fallback</p>
                       <ToggleRow label="Auto Fallback" desc="Try fallback providers if primary fails" checked={asrAutoFallback} onChange={v => { setAsrAutoFallback(v); setDirty(true); }} />

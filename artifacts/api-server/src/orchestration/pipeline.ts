@@ -522,7 +522,7 @@ export class OrchestrationPipeline {
     if (!this.stt.transcribeStream) return;
     try {
       this.streamSTT = this.stt.transcribeStream(
-        (text, isFinal, _lang, metadata) => {
+        (text, isFinal, lang, metadata) => {
           if (this.closed) return;
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent playback, where partials are
@@ -566,6 +566,11 @@ export class OrchestrationPipeline {
           if (!text.trim()) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
+          // Auto-detect mode: update currentLang from STT so the per-turn LLM
+          // language instruction follows the caller when they switch languages.
+          if (lang && this.agent.languageAutoDetect) {
+            this.currentLang = lang;
+          }
           // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
           // transcript that is later discarded (tail-echo) does NOT clear the stall.
           this._pendingSttMeta = metadata ?? null;

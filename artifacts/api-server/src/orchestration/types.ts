@@ -256,6 +256,10 @@ export interface AgentConfig {
   endCallPhrases: string[];
   silenceTimeoutSeconds: number | null;
   language: string | null;
+  /** When true, pipeline updates currentLang from STT's detectedLanguage on each
+   *  final transcript so the per-turn LLM instruction follows the caller's language.
+   *  False → strict single-language enforcement (default). */
+  languageAutoDetect: boolean;
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
   webhookUrl: string | null;

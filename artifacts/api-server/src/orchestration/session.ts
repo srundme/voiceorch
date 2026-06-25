@@ -166,6 +166,11 @@ export async function createSession(params: {
   });
   let effectiveSystemPrompt = agent.generatedPrompt ?? agent.systemPrompt;
   effectiveSystemPrompt += `\n\n[DATE/TIME CONTEXT] Today is ${dateCtxParts}. Current time is ${timeCtxParts} (${agentTimezone}).`;
+  // True when the agent is configured to follow the caller's language mid-call
+  // (any secondary language set, or explicit languageAutoDetect flag).
+  const isMultilingual =
+    (Array.isArray(agentCfg["secondaryLanguages"]) && (agentCfg["secondaryLanguages"] as string[]).length > 0) ||
+    agentCfg["languageAutoDetect"] === true;
   {
     // Prefer asrLanguage (the language the caller actually speaks) over the
     // agent's generic language field for enforcement. This prevents the
@@ -174,7 +179,13 @@ export async function createSession(params: {
     const agentLang = agent.asrLanguage ?? agent.language;
     if (agentLang) {
       const langName = LANG_NAMES[agentLang] ?? agentLang;
-      effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+      if (isMultilingual) {
+        // Auto-detect mode: follow the caller's language; switch seamlessly when they do.
+        effectiveSystemPrompt += `\n\n[LANGUAGE RULE] Your primary language is ${langName}. Always follow the caller's language — if they speak Tamil, reply in Tamil; if they switch to English, reply in English; if they mix languages (e.g. Hinglish), match their mix naturally. EXCEPTION — keep all proper nouns (brand names, product names, company names, people's names) EXACTLY as written in your instructions; never translate or transliterate them.`;
+      } else {
+        // Strict mode: single language, no switching.
+        effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+      }
     }
   }
 
@@ -256,6 +267,7 @@ export async function createSession(params: {
     // which drives the pipeline's [LANGUAGE — ABSOLUTE RULE] block — agrees with STT,
     // the [STRICT LANGUAGE RULE], and TTS instead of contradicting them (call 548).
     language: agent.asrLanguage || agent.language || null,
+    languageAutoDetect: isMultilingual,
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
