@@ -807,6 +807,7 @@ function Router() {
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
           <Route path="/docs" component={DocsPage} />
+          <Route path="/docs/api-reference/:op" component={DocsPage} />
           <Route path="/docs/:section" component={DocsPage} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route path="/terms" component={TermsPage} />

@@ -80,6 +80,7 @@
     "vite": "catalog:",
     "vitest": "^4.1.7",
     "wouter": "^3.3.5",
+    "yaml": "^2.9.0",
     "zod": "catalog:"
   },
   "dependencies": {

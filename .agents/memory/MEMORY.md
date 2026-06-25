@@ -48,3 +48,4 @@
 - [async execFile has no input option](execfile-no-input-option.md) — passing {input:buffer} to async execFile is ignored; child hangs on stdin forever, no log/timeout; use spawn
 - [Advanced Settings end-to-end audit](advanced-settings-audit.md) — ttsMinSentenceChars wires to extractSentences minCommaClauseChars param; llmMaxTokens key must be read before legacy maxTokens in llmGenerationParams
 - [ffmpeg missing in prod build images](ffmpeg-missing-in-prod.md) — ffmpeg on PATH in Nix dev but absent from every Railway image; bundle ffmpeg-static (external in esbuild) + apt fallback, resolve at runtime
+- [Docs API Reference explorer](docs-api-explorer.md) — dashboard docs auto-generate from openapi.yaml (Vite virtual module, lazy chunk); "Try it" is copy-only by design; resolve $refs not filter; cycle-track on full refId not short name

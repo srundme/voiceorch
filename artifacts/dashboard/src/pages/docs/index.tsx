@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { useRoute } from "wouter";
 import { DocsLayout } from "./DocsLayout";
 import IntroductionPage from "./pages/introduction";
@@ -19,12 +20,31 @@ import ManagingLeadsPage from "./pages/managing-leads";
 import SchedulingPage from "./pages/scheduling";
 import GoogleCalendarPage from "./pages/google-calendar";
 import WebhooksPage from "./pages/webhooks";
-import ApiReferencePage from "./pages/api-reference";
 import PricingPage from "./pages/pricing";
 import ChangelogPage from "./pages/changelog";
 
+const ApiReference = lazy(() => import("./api/ApiReference"));
+
+function ApiReferenceFallback() {
+  return (
+    <div className="min-h-screen bg-[#0B0D12] flex items-center justify-center text-muted-foreground text-sm">
+      Loading API reference…
+    </div>
+  );
+}
+
 export default function DocsPage() {
+  const [isApiRef, apiParams] = useRoute("/docs/api-reference/:op?");
   const [, params] = useRoute("/docs/:section?");
+
+  if (isApiRef) {
+    return (
+      <Suspense fallback={<ApiReferenceFallback />}>
+        <ApiReference operationId={apiParams?.op} />
+      </Suspense>
+    );
+  }
+
   const section = params?.section || "introduction";
 
   let Content: React.ComponentType;
@@ -48,7 +68,6 @@ export default function DocsPage() {
     case "scheduling":         Content = SchedulingPage; break;
     case "google-calendar":    Content = GoogleCalendarPage; break;
     case "webhooks":           Content = WebhooksPage; break;
-    case "api-reference":      Content = ApiReferencePage; break;
     case "pricing":            Content = PricingPage; break;
     case "changelog":          Content = ChangelogPage; break;
     default:
