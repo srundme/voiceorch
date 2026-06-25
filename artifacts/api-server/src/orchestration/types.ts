@@ -256,6 +256,11 @@ export interface AgentConfig {
   endCallPhrases: string[];
   silenceTimeoutSeconds: number | null;
   language: string | null;
+  /** When set, overrides the initial currentLang in the pipeline for this specific call.
+   *  Used by session.ts to seed the caller's preferred language from memory so the
+   *  agent starts the call in the language the caller used last time. Only respected
+   *  when languageAutoDetect=true. */
+  initialLanguage?: string | null;
   /** When true, pipeline updates currentLang from STT's detectedLanguage on each
    *  final transcript so the per-turn LLM instruction follows the caller's language.
    *  False → strict single-language enforcement (default). */

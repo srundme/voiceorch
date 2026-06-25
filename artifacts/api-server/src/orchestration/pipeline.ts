@@ -448,9 +448,15 @@ export class OrchestrationPipeline {
     // AgentConfig.language already holds asrLanguage || agent.language
     // (merged in session.ts). Use it directly for TTS language.
     const agentLanguage = this.agent.language ?? null;
-    // Seed currentLang so per-turn LLM language injection fires from turn 1
-    // in both multilingual and non-multilingual mode.
-    if (agentLanguage) this.currentLang = agentLanguage;
+    // Seed currentLang so per-turn LLM language injection fires from turn 1.
+    // When languageAutoDetect is ON and a caller preferred language is set,
+    // start in THAT language (the one they ended their last call in) so they
+    // never have to switch again. Otherwise fall back to the agent's primary language.
+    const seedLang =
+      (this.agent.languageAutoDetect && this.agent.initialLanguage)
+        ? this.agent.initialLanguage
+        : agentLanguage;
+    if (seedLang) this.currentLang = seedLang;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
       ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
@@ -3127,6 +3133,12 @@ export class OrchestrationPipeline {
 
   getHistory(): ConversationTurn[] {
     return this.conversationHistory;
+  }
+
+  /** Returns the BCP-47 language code the pipeline ended on this call.
+   *  Used by session.ts to persist it as the caller's preferredLanguage. */
+  getCurrentLang(): string {
+    return this.currentLang;
   }
 
   /**

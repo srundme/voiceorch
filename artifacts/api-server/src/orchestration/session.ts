@@ -410,21 +410,37 @@ export async function createSession(params: {
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
     if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult);
-      // Append a language-override note AFTER the memory block so the LLM
-      // treats it as the final authority and doesn't drift into a prior language
-      // the agent used to be configured for (e.g. Tamil → now Hindi).
       {
+        const _LNAMES: Record<string, string> = {
+          "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
+          "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
+          "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
+          "en-IN": "English", "en-US": "English", "en-GB": "English",
+          "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
+          "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
+          "ar-EG": "Arabic", "ru-RU": "Russian",
+        };
         const _agentLang = agent.asrLanguage ?? agent.language;
-        if (_agentLang) {
-          const _LNAMES: Record<string, string> = {
-            "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
-            "ml-IN": "Malayalam", "mr-IN": "Marathi", "bn-IN": "Bengali", "gu-IN": "Gujarati",
-            "pa-IN": "Punjabi", "or-IN": "Odia", "ur-IN": "Urdu",
-            "en-IN": "English", "en-US": "English", "en-GB": "English",
-            "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
-            "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
-            "ar-EG": "Arabic", "ru-RU": "Russian",
-          };
+        const _prefLang  = callerProfileSnapshot?.preferredLanguage ?? null;
+
+        if (agentConfig.languageAutoDetect && _prefLang) {
+          // Auto-detect ON + caller has a remembered language preference:
+          // seed the pipeline's starting language from memory and tell the LLM to
+          // continue in that language (while still following switches mid-call).
+          agentConfig.initialLanguage = _prefLang;
+          const _prefName = _LNAMES[_prefLang] ?? _prefLang;
+          agentConfig.systemPrompt +=
+            `\n\n[LANGUAGE MEMORY] This caller previously communicated in ${_prefName}. ` +
+            `Start the call in ${_prefName}. Continue to follow their language if they switch mid-call.`;
+          logger.info(
+            { agentId: params.agentId, callerPhone, preferredLanguage: _prefLang },
+            "Caller preferred language loaded from memory — seeding pipeline start language",
+          );
+        } else if (_agentLang) {
+          // Strict mode (or no preference yet): enforce the agent's configured language.
+          // Append a language-override note AFTER the memory block so the LLM
+          // treats it as the final authority and doesn't drift into a prior language
+          // the agent used to be configured for (e.g. Tamil → now Hindi).
           const _lname = _LNAMES[_agentLang] ?? _agentLang;
           agentConfig.systemPrompt +=
             `\n\n[CURRENT AGENT LANGUAGE — THIS SESSION] The agent is now configured for ${_lname}. ` +
@@ -1525,6 +1541,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   wasDropped,
                   callerNameInCall:  session.callerNameLatchedThisCall,
                   personaHash:       session.personaHash ?? undefined,
+                  // Persist the language the caller was using when the call ended.
+                  // Only meaningful when languageAutoDetect is ON; ignored otherwise
+                  // because the pipeline always ends in the agent's fixed language.
+                  finalLanguage:     session.pipeline.getCurrentLang() || null,
                 });
                 createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
                   status: "success",

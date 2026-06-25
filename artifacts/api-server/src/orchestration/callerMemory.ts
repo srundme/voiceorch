@@ -55,6 +55,9 @@ export interface CallerProfile {
   predictedIntent: string | null;
   riskScore: number | null;
   sentimentTrend: string | null;
+  /** BCP-47 code of the language the caller was speaking when the last call ended.
+   *  When languageAutoDetect is ON, the next call starts in this language. */
+  preferredLanguage: string | null;
 }
 
 export interface CallerFact {
@@ -289,9 +292,10 @@ export async function loadCallerContext(
 
   const normalizedProfile: CallerProfile | null = profile ? {
     ...profile,
-    predictedIntent: (profile as any).predictedIntent ?? null,
-    riskScore:       (profile as any).riskScore ?? null,
-    sentimentTrend:  (profile as any).sentimentTrend ?? null,
+    predictedIntent:   (profile as any).predictedIntent   ?? null,
+    riskScore:         (profile as any).riskScore         ?? null,
+    sentimentTrend:    (profile as any).sentimentTrend    ?? null,
+    preferredLanguage: (profile as any).preferredLanguage ?? null,
   } : null;
 
   // ── Resume support: when the previous call ended abruptly (dropped within the
@@ -890,8 +894,15 @@ export async function updateCallerProfile(opts: {
    *  reserved marker fact at call end so future calls can detect a persona swap;
    *  when a swap is detected here, the caller's pre-swap memory is retired. */
   personaHash?: string;
+  /**
+   * BCP-47 language code of the language the caller was speaking when the call ended
+   * (pipeline.getCurrentLang()). Stored as preferred_language so the next call can
+   * start in this language when languageAutoDetect is ON.
+   * Ignored when null/empty (don't overwrite an existing preference with nothing).
+   */
+  finalLanguage?: string | null;
 }): Promise<void> {
-  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash } = opts;
+  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash, finalLanguage } = opts;
 
   if (history.length < 1) return;
 
@@ -900,6 +911,9 @@ export async function updateCallerProfile(opts: {
   const transcript = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
 
   // ── Phase 1: counter update (always runs, same as before) ─────────────────
+  // Persist the caller's preferred language (last language spoken this call)
+  // when provided and non-empty, so the next call can start in that language.
+  const preferredLangUpdate = finalLanguage ? { preferredLanguage: finalLanguage } : {};
   await db
     .insert(callerProfilesTable)
     .values({
@@ -910,6 +924,7 @@ export async function updateCallerProfile(opts: {
       lastCalledAt:      now,
       lastCallDropped:   wasDropped,
       lastCallDroppedAt: wasDropped ? now : null,
+      ...preferredLangUpdate,
     })
     .onConflictDoUpdate({
       target: [callerProfilesTable.agentId, callerProfilesTable.phoneNumber],
@@ -919,6 +934,7 @@ export async function updateCallerProfile(opts: {
         lastCallDropped:   wasDropped,
         lastCallDroppedAt: wasDropped ? now : null,
         updatedAt:         now,
+        ...preferredLangUpdate,
       },
     });
 

@@ -127,6 +127,13 @@
       "when": 1782900000000,
       "tag": "0017_ambient_sounds_blobs",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782371989332,
+      "tag": "0018_caller_preferred_language",
+      "breakpoints": true
     }
   ]
 }

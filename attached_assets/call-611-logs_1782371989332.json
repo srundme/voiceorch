@@ -1,0 +1,1795 @@
+[
+  {
+    "id": 18319,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 36,
+      "agentName": "New Agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "sarvam",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "94270980-61d8-4f54-bc99-a83d76357fdb"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 611,
+      "sessionId": "live-611",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": false,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-25T07:17:02.185Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 18316,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 2
+      },
+      "factCount": 0,
+      "facts": {},
+      "recentCallsCount": 1
+    },
+    "metadata": null
+  },
+  {
+    "id": 18317,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-36",
+        "from_number": "webcall-user-101122737730832668494",
+        "agent_name": "New Agent",
+        "caller_number": "webcall-user-101122737730832668494",
+        "date": "Thursday, June 25, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which may belong to a previous caller on the same number.\n⚠️ IMPORTANT — THIS IS A RETURNING CALLER YOU ALREADY KNOW (call #3). Do NOT introduce yourself or your company as if meeting for the first time, a"
+    },
+    "metadata": null
+  },
+  {
+    "id": 18318,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "hi-IN"
+    }
+  },
+  {
+    "id": 18320,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "model": "sarvam-30b"
+    }
+  },
+  {
+    "id": 18321,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 18322,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "94270980-61d8-4f54-bc99-a83d76357fdb"
+    }
+  },
+  {
+    "id": 18323,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.189Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "2e0a4c4e7743",
+      "promptLength": 4477,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm"
+    }
+  },
+  {
+    "id": 18325,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.499Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 18324,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:02.499Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Namaste, Priya। Main aapke liye available hoon. Kaise help kar sakta hoon aaj?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 18326,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:07.298Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4801,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145918,
+      "textLength": 78,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 4801
+    }
+  },
+  {
+    "id": 18327,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:07.298Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4560,
+      "turnNumber": 0,
+      "durationMs": 4802
+    }
+  },
+  {
+    "id": 18328,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:11.179Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "जी बोलो जी",
+      "endDetectToFinalMs": 101,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18329,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:12.684Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 12:47 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately s",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18330,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:12.856Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 177,
+      "turnNumber": 1,
+      "durationMs": 177
+    }
+  },
+  {
+    "id": 18331,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:12.983Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 177,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, मैं सुन रहा हूँ। आप कौन सी मदद चाहिए?"
+    },
+    "metadata": {
+      "inputTokens": 1765,
+      "outputTokens": 17,
+      "model": "sarvam-30b",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18332,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:13.025Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18333,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:13.025Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, मैं सुन रहा हूँ।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18334,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:15.001Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1680,
+      "turnNumber": 1,
+      "durationMs": 1977
+    }
+  },
+  {
+    "id": 18337,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:15.001Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1975,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 53758,
+      "textLength": 24,
+      "firstByteMs": 255
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1975
+    }
+  },
+  {
+    "id": 18335,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:15.001Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आप कौन सी मदद चाहिए?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18336,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:15.001Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 18338,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:16.884Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1680,
+      "turnNumber": 1,
+      "durationMs": 1883
+    }
+  },
+  {
+    "id": 18339,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:16.884Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1883,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 53758,
+      "textLength": 20,
+      "firstByteMs": 182
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1883
+    }
+  },
+  {
+    "id": 18350,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:20.261Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "எனக்கு insurance வேணும்",
+      "endDetectToFinalMs": 123,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18353,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:21.763Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 12:47 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately s",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18354,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:21.944Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 182,
+      "turnNumber": 2,
+      "durationMs": 182
+    }
+  },
+  {
+    "id": 18355,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:22.022Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 182,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, என்ன insurance product வேண்டும்? எங்க policy-ல உங்களுக்கு எது best-ஆ இருக்கும்னு சொல்லலாம்."
+    },
+    "metadata": {
+      "inputTokens": 1792,
+      "outputTokens": 24,
+      "model": "sarvam-30b",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18357,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:22.023Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18356,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:22.023Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, என்ன insurance product வேண்டும்?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18360,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:24.910Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2887,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 37,
+      "firstByteMs": 145
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 2887
+    }
+  },
+  {
+    "id": 18359,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:24.910Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2720,
+      "turnNumber": 2,
+      "durationMs": 2887
+    }
+  },
+  {
+    "id": 18358,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:24.910Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18361,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:24.911Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "எங்க policy-ல உங்களுக்கு எது best-ஆ இருக்கும்னு சொல்லலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 18372,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:28.009Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3099,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 92158,
+      "textLength": 58,
+      "firstByteMs": 156
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 3099
+    }
+  },
+  {
+    "id": 18373,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:28.009Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2880,
+      "turnNumber": 2,
+      "durationMs": 3100
+    }
+  },
+  {
+    "id": 18380,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:32.362Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "எனக்கு வந்து நல்ல best-ஆன insurance சொல்லுங்க",
+      "endDetectToFinalMs": 194,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18381,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:33.865Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 12:47 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately s",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18382,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:34.081Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 218,
+      "turnNumber": 3,
+      "durationMs": 218
+    }
+  },
+  {
+    "id": 18383,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:34.158Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18384,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:34.158Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, insurance வேணும்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18385,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:34.223Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 218,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, insurance வேணும். உங்க தேவைக்கு எந்த type best-ஆ இருக்கும்னு நீங்க சொல்றீங்களா? Policy number இல்லனா ஏதாச்சும் detail இருந்தா சொல்லுங்க."
+    },
+    "metadata": {
+      "inputTokens": 1845,
+      "outputTokens": 42,
+      "model": "sarvam-30b",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18389,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:36.398Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2239,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 66558,
+      "textLength": 22,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 2239
+    }
+  },
+  {
+    "id": 18390,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:36.398Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2080,
+      "turnNumber": 3,
+      "durationMs": 2239
+    }
+  },
+  {
+    "id": 18391,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:36.398Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்க தேவைக்கு எந்த type best-ஆ இருக்கும்னு நீங்க சொல்றீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18392,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:36.398Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18401,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:39.937Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3539,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 102398,
+      "textLength": 61,
+      "firstByteMs": 276
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 3539
+    }
+  },
+  {
+    "id": 18402,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:39.937Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18403,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:39.937Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3200,
+      "turnNumber": 3,
+      "durationMs": 3539
+    }
+  },
+  {
+    "id": 18400,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:39.937Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Policy number இல்லனா ஏதாச்சும் detail இருந்தா சொல்லுங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 18410,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:42.854Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2720,
+      "turnNumber": 3,
+      "durationMs": 2917
+    }
+  },
+  {
+    "id": 18411,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:42.854Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2917,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 56,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 2917
+    }
+  },
+  {
+    "id": 18415,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:48.561Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "I just want to know what is the best policy that you have",
+      "endDetectToFinalMs": 406,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18419,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:50.062Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 12:47 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediate",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18420,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:50.323Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 261,
+      "turnNumber": 4,
+      "durationMs": 261
+    }
+  },
+  {
+    "id": 18421,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:50.434Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18422,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:50.434Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க எது best-ஆ இருக்குன்னு கேட்டீங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18423,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:50.566Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 261,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "நீங்க எது best-ஆ இருக்குன்னு கேட்டீங்க. எங்ககிட்ட health, life, மற்றும் motor-ன்னு மூணு main products இருக்கு. Health insurance-ல நாம வச்சிருக்கற \"SecureGuard\" plan ரொம்ப popular-ஆ இருக்கு. நீங்க சொல்லுங்க, இதுல உங்களுக்கு எதாச்சும் சந்தேகம் இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 1928,
+      "outputTokens": 71,
+      "model": "sarvam-30b",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18433,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:53.020Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2586,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 39,
+      "firstByteMs": 143
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 2586
+    }
+  },
+  {
+    "id": 18435,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:53.020Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18432,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:53.020Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2400,
+      "turnNumber": 4,
+      "durationMs": 2586
+    }
+  },
+  {
+    "id": 18434,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:53.020Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "எங்ககிட்ட health, life, மற்றும் motor-ன்னு மூணு main products இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18438,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:57.857Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4837,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145918,
+      "textLength": 70,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 4837
+    }
+  },
+  {
+    "id": 18439,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:57.857Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Health insurance-ல நாம வச்சிருக்கற \"SecureGuard\" plan ரொம்ப popular-ஆ இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18440,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:57.857Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4560,
+      "turnNumber": 4,
+      "durationMs": 4837
+    }
+  },
+  {
+    "id": 18441,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:17:57.857Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18448,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:02.363Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4505,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 133118,
+      "textLength": 78,
+      "firstByteMs": 161
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 4505
+    }
+  },
+  {
+    "id": 18450,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:02.364Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க சொல்லுங்க, இதுல உங்களுக்கு எதாச்சும் சந்தேகம் இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18451,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:02.364Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 18449,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:02.364Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4160,
+      "turnNumber": 4,
+      "durationMs": 4505
+    }
+  },
+  {
+    "id": 18456,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:05.369Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3006,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89598,
+      "textLength": 60,
+      "firstByteMs": 145
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 3006
+    }
+  },
+  {
+    "id": 18457,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:05.369Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2800,
+      "turnNumber": 4,
+      "durationMs": 3007
+    }
+  },
+  {
+    "id": 18466,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:11.030Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "कोई भी नहीं।",
+      "endDetectToFinalMs": 148,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18467,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:11.132Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 12:48 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 2  |  Last: today\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately s",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18468,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:11.372Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 241,
+      "turnNumber": 5,
+      "durationMs": 241
+    }
+  },
+  {
+    "id": 18469,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:11.456Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18470,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:11.457Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நல்லது."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18471,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:11.503Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 241,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நல்லது. அப்போ SecureGuard health plan பத்தி பேசலாம். இதுல உங்களுக்கு எதாச்சும் specific detail வேணுமா?"
+    },
+    "metadata": {
+      "inputTokens": 2022,
+      "outputTokens": 31,
+      "model": "sarvam-30b",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18476,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:13.160Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1703,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 48638,
+      "textLength": 12,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1703
+    }
+  },
+  {
+    "id": 18477,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:13.160Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அப்போ SecureGuard health plan பத்தி பேசலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18479,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:13.160Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1520,
+      "turnNumber": 5,
+      "durationMs": 1705
+    }
+  },
+  {
+    "id": 18478,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:13.160Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18480,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:15.806Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2646,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 74238,
+      "textLength": 44,
+      "firstByteMs": 282
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 2646
+    }
+  },
+  {
+    "id": 18481,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:15.806Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18482,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:15.806Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2320,
+      "turnNumber": 5,
+      "durationMs": 2646
+    }
+  },
+  {
+    "id": 18483,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:15.807Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இதுல உங்களுக்கு எதாச்சும் specific detail வேணுமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 18487,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:18.516Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2560,
+      "turnNumber": 5,
+      "durationMs": 2709
+    }
+  },
+  {
+    "id": 18486,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:18.516Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2708,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81918,
+      "textLength": 49,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 2708
+    }
+  },
+  {
+    "id": 18491,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:20.946Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "TTS",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 78,
+        "turns": 5,
+        "lastComponent": "TTS",
+        "lastUserTranscript": "कोई भी नहीं।",
+        "lastAgentResponse": "சரி, நல்லது. அப்போ SecureGuard health plan பத்தி பேசலாம். இதுல உங்களுக்கு எதாச்சும் specific detail வேணுமா?",
+        "recordingStatus": "disabled",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 78,
+      "turns": 5,
+      "avgSttMs": 0,
+      "avgLlmMs": 216,
+      "avgTtsMs": 485
+    }
+  },
+  {
+    "id": 18499,
+    "callId": 611,
+    "agentId": 36,
+    "ts": "2026-06-25T07:18:24.454Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]

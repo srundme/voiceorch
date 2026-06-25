@@ -16,6 +16,10 @@ export const callerProfilesTable = pgTable("caller_profiles", {
   predictedIntent:   text("predicted_intent"),        // LLM-predicted reason for next call
   riskScore:         real("risk_score"),              // 0.0–1.0 churn/escalation risk
   sentimentTrend:    text("sentiment_trend"),         // "improving" | "declining" | "stable_positive" | "stable_negative" | "mixed"
+  // Language preference — BCP-47 code of the language the caller ended their last call in.
+  // When languageAutoDetect is ON, the next call starts in this language instead of the
+  // agent's configured default, so the caller never has to switch languages again.
+  preferredLanguage: text("preferred_language"),
   createdAt:         timestamp("created_at").defaultNow().notNull(),
   updatedAt:         timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
