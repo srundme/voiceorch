@@ -18,7 +18,7 @@ export const METHODS: HttpMethod[] = ["get", "post", "put", "patch", "delete"];
  * already excluded at the operation level; this set covers the remaining
  * internal-only tags whose paths don't carry a visible /admin prefix.
  */
-const HIDDEN_TAGS = new Set(["command-center", "platform-analytics"]);
+const HIDDEN_TAGS = new Set(["command-center", "platform-analytics", "auth"]);
 
 export interface IndexedOperation {
   id: string;
