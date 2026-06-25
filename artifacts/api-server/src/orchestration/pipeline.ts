@@ -225,7 +225,8 @@ export class OrchestrationPipeline {
 
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
-  private pendingTranscript: { text: string; emittedAt: number; closeReason: TurnCloseReason } | null = null;
+  /** Queue of streaming STT final transcripts that arrived while a turn is still processing. */
+  private pendingTranscriptQueue: Array<{ text: string; emittedAt: number; closeReason: TurnCloseReason }> = [];
   private streamSTTReconnectAttempts = 0;
   private streamSTTReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -678,7 +679,7 @@ export class OrchestrationPipeline {
     // callback so the discarded/echo transcripts above can't suppress the stall).
     this.safetyNet.onFinal();
     if (this.isProcessing) {
-      this.pendingTranscript = { text: transcript, emittedAt: sttEmittedAt, closeReason };
+      this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       return;
     }
 
@@ -689,10 +690,13 @@ export class OrchestrationPipeline {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
-      const pending = this.pendingTranscript;
-      if (pending) {
-        this.pendingTranscript = null;
-        void this.handleStreamingTranscript(pending.text, pending.emittedAt, pending.closeReason);
+      const queue = this.pendingTranscriptQueue;
+      if (queue.length > 0) {
+        this.pendingTranscriptQueue = [];
+        const mergedText = queue.map((q) => q.text).join(" ");
+        const lastEmittedAt = queue[queue.length - 1].emittedAt;
+        const lastCloseReason = queue[queue.length - 1].closeReason;
+        void this.handleStreamingTranscript(mergedText, lastEmittedAt, lastCloseReason);
       } else if (!this.closed) {
         // Turn fully done — re-enter Listening and re-arm the stall backstop.
         this.safetyNet.beginListening();
@@ -737,7 +741,7 @@ export class OrchestrationPipeline {
     await this.drainPlaybackTail();
     // Reset turn state and re-enter Listening.
     this.audioBuffer = [];
-    this.pendingTranscript = null;
+    this.pendingTranscriptQueue = [];
     if (!this.closed) this.safetyNet.beginListening();
   }
 
@@ -1120,7 +1124,7 @@ export class OrchestrationPipeline {
     // ── Adaptive endpoint window ───────────────────────────────────────────
     const lastAgentText = [...this.conversationHistory].reverse()
       .find(t => t.role === "assistant")?.content ?? "";
-    const partialTranscript = this.pendingTranscript?.text ?? "";
+    const partialTranscript = this.pendingTranscriptQueue.length > 0 ? this.pendingTranscriptQueue[this.pendingTranscriptQueue.length - 1].text : "";
     // audioBuffer holds 8kHz 8-bit PCM: 8000 bytes/s → 1 ms ≈ 8 bytes
     const audioBufferMs = Math.round(
       this.audioBuffer.reduce((s, b) => s + b.length, 0) / 8
