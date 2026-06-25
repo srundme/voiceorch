@@ -1,10 +1,12 @@
-import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates } from "@/hooks/use-admin-api";
+import { useOverview, useSpikeAlerts, useDismissSpikeAlert, usePromptTemplates, useVobizWalletStatus } from "@/hooks/use-admin-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Users, PhoneCall, Activity, DollarSign, Clock, AlertCircle, Bell, X, Mail, Wallet, RefreshCw, TrendingDown } from "lucide-react";
 import { formatCentsToDollars } from "@/lib/api";
 import { formatApiError } from "@/lib/format-api-error";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NoActiveTemplateBanner } from "@/components/no-active-template-banner";
 
@@ -100,6 +102,110 @@ function SpikeAlertsPanel() {
               </p>
             )}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function VobizWalletCard() {
+  const { data, isLoading, isError, refetch, isFetching } = useVobizWalletStatus();
+  const queryClient = useQueryClient();
+
+  const status = data?.status ?? "unknown";
+  const vobizInr   = data?.vobizBalanceInr ?? null;
+  const requiredInr = data?.requiredMinInr ?? 0;
+  const shortfallInr = data?.shortfallInr ?? 0;
+  const totalUserUsd = data?.totalUserWalletUsd ?? 0;
+  const thresholdPct = data?.thresholdPct ?? 20;
+
+  const pct = vobizInr !== null && requiredInr > 0
+    ? Math.min(100, Math.round((vobizInr / requiredInr) * 100))
+    : 0;
+
+  const statusConfig = {
+    ok:       { color: "text-emerald-400", bar: "bg-emerald-500", ring: "border-emerald-500/30", label: "Healthy", bg: "" },
+    warning:  { color: "text-amber-400",   bar: "bg-amber-500",   ring: "border-amber-500/40",   label: "Low",     bg: "bg-amber-500/5" },
+    critical: { color: "text-red-400",     bar: "bg-red-500",     ring: "border-red-500/40",     label: "Critical",bg: "bg-red-500/5" },
+    unknown:  { color: "text-muted-foreground", bar: "bg-muted", ring: "border-border",           label: "Unknown", bg: "" },
+  }[status];
+
+  return (
+    <Card className={`border shadow-sm ${statusConfig.ring} ${statusConfig.bg}`}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Wallet className={`h-4 w-4 ${statusConfig.color}`} />
+            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              VoBiz Master Wallet
+            </CardTitle>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${statusConfig.ring} ${statusConfig.color}`}>
+              {statusConfig.label}
+            </span>
+          </div>
+          <Button
+            size="sm" variant="ghost"
+            className="h-6 w-6 p-0 text-muted-foreground"
+            onClick={() => { void queryClient.invalidateQueries({ queryKey: ["admin", "vobiz-wallet-status"] }); void refetch(); }}
+            disabled={isFetching}
+          >
+            <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-2">
+            <div className="h-4 w-32 rounded animate-pulse bg-muted" />
+            <div className="h-2 w-full rounded animate-pulse bg-muted" />
+          </div>
+        ) : isError ? (
+          <p className="text-xs text-destructive">Failed to load VoBiz balance. Check VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN.</p>
+        ) : (
+          <>
+            {/* Balance row */}
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <div className={`text-2xl font-bold font-mono tabular-nums ${statusConfig.color}`}>
+                  {vobizInr !== null ? `₹${vobizInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Available · min required ₹{requiredInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="text-right text-xs text-muted-foreground shrink-0">
+                <div>User wallets</div>
+                <div className="font-mono font-semibold text-foreground">${totalUserUsd.toFixed(2)}</div>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>{pct}% of required</span>
+                <span>{thresholdPct}% threshold</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-border/50 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${statusConfig.bar}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Alert banner */}
+            {(status === "warning" || status === "critical") && (
+              <div className={`flex items-start gap-2 rounded-md border px-3 py-2 ${statusConfig.ring} ${status === "critical" ? "bg-red-500/10" : "bg-amber-500/10"}`}>
+                <TrendingDown className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${statusConfig.color}`} />
+                <p className={`text-xs ${statusConfig.color}`}>
+                  {status === "critical"
+                    ? `⚠️ Critically low — top up at least ₹${shortfallInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} immediately to prevent call failures.`
+                    : `Top up ₹${shortfallInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} to restore the ${thresholdPct}% safety buffer.`}
+                </p>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -207,6 +313,7 @@ export default function Overview() {
         ))}
       </div>
 
+      <VobizWalletCard />
       <SpikeAlertsPanel />
     </div>
   );

@@ -837,3 +837,21 @@ export function useSendTestEmail() {
       }),
   });
 }
+
+export interface VobizWalletStatus {
+  totalUserWalletUsd:  number;
+  vobizBalanceInr:     number | null;
+  requiredMinInr:      number;
+  shortfallInr:        number;
+  thresholdPct:        number;
+  usdToInr:            number;
+  status:              "ok" | "warning" | "critical" | "unknown";
+}
+
+export function useVobizWalletStatus() {
+  return useQuery<VobizWalletStatus>({
+    queryKey: ["admin", "vobiz-wallet-status"],
+    queryFn:  () => adminFetch<VobizWalletStatus>("/vobiz-wallet-status"),
+    refetchInterval: 5 * 60 * 1000, // refresh every 5 minutes
+  });
+}
