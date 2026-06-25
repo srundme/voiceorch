@@ -12,6 +12,14 @@ export const spec: OpenApiDocument = doc;
 
 export const METHODS: HttpMethod[] = ["get", "post", "put", "patch", "delete"];
 
+/**
+ * Tags that are internal / platform-ops-only and must not appear in the
+ * user-facing API Reference. Operations whose path starts with "/admin" are
+ * already excluded at the operation level; this set covers the remaining
+ * internal-only tags whose paths don't carry a visible /admin prefix.
+ */
+const HIDDEN_TAGS = new Set(["command-center", "platform-analytics"]);
+
 export interface IndexedOperation {
   id: string;
   method: HttpMethod;
@@ -70,6 +78,9 @@ export function getOperations(): IndexedOperation[] {
     if (!pathItem) continue;
     const item = pathItem as PathItemObject;
     const sharedParams = item.parameters ?? [];
+    // Exclude admin-only endpoints — these are SnapServe-internal ops
+    // not relevant to end-user developers.
+    if (path.startsWith("/admin")) continue;
     for (const method of METHODS) {
       const op = item[method];
       if (!op) continue;
@@ -113,11 +124,13 @@ export function getTagGroups(): TagGroup[] {
     ...[...byTag.keys()].filter((t) => !declaredOrder.includes(t)).sort(),
   ];
 
-  return orderedTags.map((tag) => ({
-    tag,
-    description: descByTag.get(tag),
-    operations: byTag.get(tag) ?? [],
-  }));
+  return orderedTags
+    .filter((tag) => !HIDDEN_TAGS.has(tag))
+    .map((tag) => ({
+      tag,
+      description: descByTag.get(tag),
+      operations: byTag.get(tag) ?? [],
+    }));
 }
 
 export function getServerUrl(): string {
