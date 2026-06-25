@@ -488,6 +488,44 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
   res.json(toBatch(updated!));
 });
 
+// ── POST /campaigns/:id/batches/:batchId/start ────────────────────────────────
+// Dedicated "start now" endpoint — sets the batch to running and fires the
+// first wave of calls up to the campaign's concurrentCallLimit immediately,
+// regardless of scheduledStartAt. The dashboard Start button and any API
+// clients should prefer this over PATCH {status:"running"}.
+router.post("/campaigns/:id/batches/:batchId/start", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const batchId    = parseInt(req.params["batchId"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const batch = await requireBatch(batchId, campaignId);
+  if (!batch) { res.status(404).json({ error: "Not found" }); return; }
+
+  if (batch.status === "completed" || batch.status === "cancelled") {
+    res.status(409).json({ error: `Cannot start a batch in "${batch.status}" status` });
+    return;
+  }
+
+  const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
+  if (irdaiGate.blocked) {
+    res.status(403).json({ error: IRDAI_BLOCKED_MESSAGE, code: IRDAI_BLOCKED_CODE, missingItems: irdaiGate.missingItems });
+    return;
+  }
+
+  const [updated] = await db.update(campaignBatchesTable)
+    .set({ status: "running" })
+    .where(eq(campaignBatchesTable.id, batchId))
+    .returning();
+
+  await fireStartBatch(updated!, campaign);
+
+  res.json(toBatch(updated!));
+});
+
 // ── DELETE /campaigns/:id/batches/:batchId ────────────────────────────────────
 router.delete("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);

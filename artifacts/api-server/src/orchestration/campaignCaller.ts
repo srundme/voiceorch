@@ -8,7 +8,7 @@
 
 import {
   db, campaignsTable, campaignLeadsTable, agentsTable, providersTable,
-  callExecutionsTable, leadTimelineTable,
+  platformSettingsTable, callExecutionsTable, leadTimelineTable,
 } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "./telephony/dial.js";
@@ -127,6 +127,8 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     if (!agent) throw new Error(`Agent ${campaign.agentId} not found`);
 
     const provider = agent.telephonyProvider.toLowerCase();
+
+    // ── 1. Try user BYOP provider key ──────────────────────────────────────────
     const [provRow] = await db.select().from(providersTable)
       .where(and(
         eq(providersTable.userId, campaign.userId),
@@ -135,23 +137,69 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       ))
       .limit(1);
 
-    if (!provRow) throw new Error(`No active "${provider}" provider key configured for this account`);
+    // ── 2. Fall back to platform-managed credentials ────────────────────────────
+    // Admin sets these in platform_settings as:
+    //   managed_{provider}_auth_id   → authId / accountSid
+    //   managed_{provider}_api_key   → auth token / secret
+    // VoBiz: VOBIZ_AUTH_ID / VOBIZ_AUTH_TOKEN env vars serve as the ultimate
+    // fallback so managed-plan campaigns work out of the box.
+    type ProviderCreds = {
+      apiKey:      string;
+      authId?:     string;
+      accountSid?: string;
+      fromNumber?: string;
+      isManaged:   boolean;
+    };
 
-    const cfg = provRow.extraConfig
-      ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
-      : {} as Record<string, string>;
+    let creds: ProviderCreds | null = null;
+
+    if (provRow) {
+      const byopCfg = provRow.extraConfig
+        ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
+        : {} as Record<string, string>;
+      creds = {
+        apiKey:      decryptKey(provRow.apiKey),
+        authId:      byopCfg["authId"],
+        accountSid:  byopCfg["accountSid"],
+        fromNumber:  byopCfg["fromNumber"],
+        isManaged:   false,
+      };
+    } else {
+      const [[psAuthId], [psApiKey]] = await Promise.all([
+        db.select({ value: platformSettingsTable.value })
+          .from(platformSettingsTable)
+          .where(eq(platformSettingsTable.key, `managed_${provider}_auth_id`)),
+        db.select({ value: platformSettingsTable.value })
+          .from(platformSettingsTable)
+          .where(eq(platformSettingsTable.key, `managed_${provider}_api_key`)),
+      ]);
+      const authId  = psAuthId?.value  || (provider === "vobiz" ? (process.env["VOBIZ_AUTH_ID"]    ?? "") : "");
+      const authKey = psApiKey?.value  || (provider === "vobiz" ? (process.env["VOBIZ_AUTH_TOKEN"] ?? "") : "");
+      if (authId && authKey) {
+        creds = { apiKey: authKey, authId, isManaged: true };
+        logger.info({ leadId: lead.id, campaignId: campaign.id, provider }, "Campaign call using platform-managed credentials");
+      }
+    }
+
+    if (!creds) {
+      throw new Error(
+        `No active "${provider}" provider key configured for this account. ` +
+        `Add a ${provider} key in the Providers page.`
+      );
+    }
 
     const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
     // AMD (synchronous voicemail detection) — normalised across both config shapes.
     const amd = resolveAmdConfig(agentCfg);
 
     if (provider === "twilio") {
-      if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
-      const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
+      const accountSid = creds.accountSid;
+      const fromNumber = campaign.fromNumber ?? creds.fromNumber;
+      if (!accountSid || !fromNumber) throw new Error("Twilio config missing accountSid or fromNumber");
       const recordingEnabled = agentCfg["recordingEnabled"] === true;
       await dialTwilio({
-        accountSid: cfg["accountSid"]!,
-        authToken: decryptKey(provRow.apiKey),
+        accountSid,
+        authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
@@ -163,22 +211,24 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         } : {}),
       });
     } else if (provider === "plivo") {
-      if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Plivo config missing authId or fromNumber");
-      const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
+      const authId = creds.authId;
+      const fromNumber = campaign.fromNumber ?? creds.fromNumber;
+      if (!authId || !fromNumber) throw new Error("Plivo config missing authId or fromNumber");
       await dialPlivo({
-        authId: cfg["authId"]!,
-        authToken: decryptKey(provRow.apiKey),
+        authId,
+        authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
         ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
       });
     } else if (provider === "vobiz") {
-      if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
-      const fromNumber = campaign.fromNumber ?? cfg["fromNumber"]!;
+      const authId = creds.authId;
+      const fromNumber = campaign.fromNumber ?? creds.fromNumber;
+      if (!authId || !fromNumber) throw new Error("Vobiz config missing authId or fromNumber");
       await dialVobiz({
-        authId: cfg["authId"]!,
-        authToken: decryptKey(provRow.apiKey),
+        authId,
+        authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
