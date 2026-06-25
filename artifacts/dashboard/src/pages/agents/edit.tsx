@@ -1134,6 +1134,36 @@ export default function AgentEdit() {
                   </FormItem>
                 )} />
               </div>
+
+              <div className="mt-6">
+                <p className="text-sm font-medium text-foreground mb-0.5">Response Timing — Start Speaking Delays</p>
+                <p className="text-[11px] text-muted-foreground mb-4">
+                  How long the agent waits after end-of-turn detection before it starts speaking. <strong>Keep all at 0</strong> for minimum latency (~100ms turns with Indic punctuation, ~300ms without). Raise only if callers complain about the agent cutting in too early.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {(
+                    [
+                      { name: "startSpeakingWaitSecs",            label: "Base Wait",            desc: "Flat extra pause before any response. 0 = off.", default: 0, step: 0.1, max: 5 },
+                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Keep at 0 — punctuated turns already fire in ~100ms.", default: 0, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation detected. Keep at 0 — the pipeline has a 300ms hard cap.", default: 0, step: 0.1,  max: 3 },
+                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit (e.g. caller is reading out a number). 0 = off.",     default: 0, step: 0.05, max: 3 },
+                    ] as const
+                  ).map(({ name, label, desc, default: def, step, max }) => (
+                    <FormField key={name} control={form.control} name={name} render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{label}</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0} max={max} step={step}
+                            value={field.value ?? def}
+                            onChange={e => field.onChange(parseFloat(e.target.value))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">{desc}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  ))}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
