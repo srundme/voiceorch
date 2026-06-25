@@ -705,7 +705,7 @@ export default function AgentEdit() {
                     <Select onValueChange={field.onChange} value={field.value ?? ""}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="No timezone (server UTC used)" />
+                          <SelectValue placeholder="Not set (defaults to Asia/Kolkata IST)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="max-h-64">
