@@ -64,7 +64,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
-    complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
+    complianceIrdai, complianceDpdp, complianceTrai,
     snapserveAgentId,
     contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
@@ -111,7 +111,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["compliance"] = {
     irdai: !!complianceIrdai,
     dpdp:  !!complianceDpdp,
-    hipaa: !!complianceHipaa,
     trai:  !!complianceTrai,
   };
 

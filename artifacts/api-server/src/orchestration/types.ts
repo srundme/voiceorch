@@ -344,7 +344,6 @@ export interface AgentConfig {
   compliance: {
     irdai: boolean;
     dpdp: boolean;
-    hipaa: boolean;
     trai: boolean;
   } | null;
 

@@ -82,7 +82,6 @@ export const agentFormSchema = z.object({
   stopSpeakingBackOffSecs: z.number().min(0).max(10).optional(),
   complianceIrdai: z.boolean().optional(),
   complianceDpdp:  z.boolean().optional(),
-  complianceHipaa: z.boolean().optional(),
   complianceTrai:  z.boolean().optional(),
   snapserveAgentId: z.string().optional(),
   knowledgeSourceIds: z.array(z.number()).optional(),

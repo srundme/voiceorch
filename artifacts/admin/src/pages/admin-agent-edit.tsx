@@ -115,7 +115,6 @@ const agentFormSchema = z.object({
   stopSpeakingBackOffSecs: z.number().min(0).max(10).optional(),
   complianceIrdai: z.boolean().optional(),
   complianceDpdp:  z.boolean().optional(),
-  complianceHipaa: z.boolean().optional(),
   complianceTrai:  z.boolean().optional(),
   snapserveAgentId: z.string().optional(),
   contextWindowTurns: z.number().min(1).max(1000).optional().nullable(),
@@ -144,7 +143,7 @@ function buildUpdateAgentPayload(data: AgentFormValues) {
     timezone, autoSwitchToEnglish, machineDetectionMode, voicemailAction, voicemailMessage, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
-    complianceIrdai, complianceDpdp, complianceHipaa, complianceTrai,
+    complianceIrdai, complianceDpdp, complianceTrai,
     snapserveAgentId,
     contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
@@ -188,7 +187,6 @@ function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["compliance"] = {
     irdai: !!complianceIrdai,
     dpdp:  !!complianceDpdp,
-    hipaa: !!complianceHipaa,
     trai:  !!complianceTrai,
   };
 
@@ -402,7 +400,6 @@ export default function AdminAgentEdit() {
       greetingMessage: agent.greetingMessage ?? "",
       complianceIrdai: (agent.agentConfig?.compliance?.irdai as boolean | undefined) ?? false,
       complianceDpdp:  (agent.agentConfig?.compliance?.dpdp  as boolean | undefined) ?? false,
-      complianceHipaa: (agent.agentConfig?.compliance?.hipaa as boolean | undefined) ?? false,
       complianceTrai:  (agent.agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       startSpeakingWaitSecs: (agent.agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined) ?? 0,
       startSpeakingOnPunctuationSecs: (agent.agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined) ?? 0.1,
@@ -1301,7 +1298,6 @@ export default function AdminAgentEdit() {
                   {([
                     { name: "complianceIrdai", label: "IRDAI", desc: "Insurance Regulatory and Development Authority of India" },
                     { name: "complianceDpdp",  label: "DPDP",  desc: "Digital Personal Data Protection Act (India)" },
-                    { name: "complianceHipaa", label: "HIPAA", desc: "Health Insurance Portability and Accountability Act (US)" },
                     { name: "complianceTrai",  label: "TRAI",  desc: "Telecom Regulatory Authority of India" },
                   ] as const).map(({ name, label, desc }) => (
                     <FormField key={name} control={form.control} name={name} render={({ field }) => (

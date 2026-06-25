@@ -3156,7 +3156,7 @@ const COMPARE_SECTIONS: Array<{ label: string; keys: string[] }> = [
   { label: "Tools",         keys: ["tools"] },
   { label: "Knowledge Base", keys: ["knowledgeSourceIds"] },
   { label: "Scheduling",    keys: ["schedulingCalendarId", "schedulingEventTypeId"] },
-  { label: "Compliance",    keys: ["agentConfig.complianceDpdp", "agentConfig.complianceIrdai", "agentConfig.complianceHipaa", "agentConfig.complianceTrai"] },
+  { label: "Compliance",    keys: ["agentConfig.complianceDpdp", "agentConfig.complianceIrdai", "agentConfig.complianceTrai"] },
   { label: "Advanced",      keys: ["agentConfig"] },
 ];
 
@@ -3190,7 +3190,6 @@ const FIELD_LABELS: Record<string, string> = {
   schedulingEventTypeId: "Event Type",
   "agentConfig.complianceDpdp": "DPDP Compliance",
   "agentConfig.complianceIrdai": "IRDAI Compliance",
-  "agentConfig.complianceHipaa": "HIPAA Compliance",
   "agentConfig.complianceTrai": "TRAI Compliance",
   agentConfig: "Advanced Config",
 };
@@ -4536,7 +4535,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
-      complianceIrdai: false, complianceDpdp: false, complianceHipaa: false, complianceTrai: false,
+      complianceIrdai: false, complianceDpdp: false, complianceTrai: false,
       knowledgeSourceIds: [],
       contextWindowTurns: undefined,
       summarizationEnabled: false,
@@ -4605,7 +4604,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       stopSpeakingBackOffSecs: (agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds ?? 1,
       complianceIrdai: (agent as any).agentConfig?.compliance?.irdai ?? false,
       complianceDpdp:  (agent as any).agentConfig?.compliance?.dpdp  ?? false,
-      complianceHipaa: (agent as any).agentConfig?.compliance?.hipaa ?? false,
       complianceTrai:  (agent as any).agentConfig?.compliance?.trai  ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       knowledgeSourceIds:       ((agent as any).knowledgeSourceIds ?? []) as number[],

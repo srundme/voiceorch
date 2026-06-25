@@ -122,7 +122,6 @@ export type AgentConfig = {
   compliance?: {
     irdai?: boolean;
     dpdp?: boolean;
-    hipaa?: boolean;
     trai?: boolean;
   };
   // IRDAI advisory prompt-check result (informational only; never blocks).

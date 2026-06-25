@@ -208,12 +208,9 @@ export async function createSession(params: {
   effectiveSystemPrompt += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
-  const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; hipaa?: boolean; trai?: boolean } | undefined;
+  const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; trai?: boolean } | undefined;
   if (complianceCfg?.dpdp) {
     effectiveSystemPrompt = appendDpdpDisclosure(effectiveSystemPrompt);
-  }
-  if (complianceCfg?.hipaa) {
-    effectiveSystemPrompt += `\n\n[HIPAA COMPLIANCE — MANDATORY] This call may involve protected health information (PHI). You MUST inform the caller: "This conversation is confidential and handled in accordance with HIPAA guidelines. Any health information you share will be kept strictly private and used only for the purpose of this advisory." Do not request sensitive medical details unnecessarily.`;
   }
   if (complianceCfg?.trai) {
     effectiveSystemPrompt = appendTraiDisclosure(effectiveSystemPrompt);
