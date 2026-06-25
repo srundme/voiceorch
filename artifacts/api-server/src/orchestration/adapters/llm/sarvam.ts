@@ -147,17 +147,20 @@ export class SarvamLLM implements LLMAdapter {
     // When tools are present, Sarvam-30b needs its reasoning trace to decide
     // whether to call a tool vs reply conversationally. With reasoning_effort:null
     // (thinking off) the model defaults to text replies and skips tool calls.
-    // Bump to "low" for tool turns so the model can reason through tool selection
-    // while keeping latency acceptable. Agent-level override is still respected.
+    // Bump to "medium" for tool turns — sarvam-30b with reasoning_effort:null skips
+    // tool calls entirely and replies conversationally. "low" enables tool use but
+    // the model still asks for confirmation. "medium" gives enough reasoning budget
+    // to follow the MANDATORY instruction and call the tool without confirming.
+    // Agent-level override of reasoningEffort is still respected (only null is bumped).
     if (hasTools && genBody["reasoning_effort"] === null) {
-      genBody["reasoning_effort"] = "low";
+      genBody["reasoning_effort"] = "medium";
     }
 
     // Sarvam-specific tool-use injection: placed at the very top of the system
-    // prompt so it overrides any conversational tendency. Without this explicit
-    // instruction, sarvam-30b asks for confirmation rather than calling the tool.
+    // prompt. Without this, sarvam-30b confirms before every action even when
+    // explicitly instructed not to.
     const effectiveSystemPrompt = hasTools
-      ? `[TOOL USE — MANDATORY] You have tools available. When you have enough information to perform a requested action, call the appropriate tool IMMEDIATELY. Do NOT say "I'll book…" or ask for confirmation — call the tool directly. Trust the information the caller has given you.\n\n${systemPrompt}`
+      ? `[TOOL USE — MANDATORY] You have tools available. Rules:\n1. When you have the caller's name, email, and time — call the tool NOW. Do NOT announce "I'll book…" first.\n2. When the caller says yes, ok, confirm, sure, or any affirmative — call the tool IMMEDIATELY. Do NOT ask any follow-up question.\n3. NEVER ask for confirmation before calling a tool. NEVER summarise what you are about to do. Just call the tool.\n\n${systemPrompt}`
       : systemPrompt;
 
     const body: Record<string, unknown> = {
@@ -256,7 +259,13 @@ export class SarvamLLM implements LLMAdapter {
         if (sawToolDelta) return;
 
         // Only forward reply text — reasoning_content is intentionally ignored.
-        const token = delta.content ?? "";
+        let token = delta.content ?? "";
+        if (!token) return;
+
+        // Strip Sarvam thinking-mode delimiter tokens that leak into delta.content
+        // when reasoning_effort is "low"/"medium"/"high". These are internal model
+        // separators and must never reach TTS or the conversation history.
+        token = token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end)\|>/g, "");
         if (!token) return;
 
         // Drop leading whitespace-only tokens (tool-turn "\n" artifact / trimmable
