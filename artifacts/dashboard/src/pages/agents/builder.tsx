@@ -2190,7 +2190,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
               {([
                 { name: "complianceIrdai", label: "IRDAI",    badge: "Insurance",   desc: "Insurance Regulatory and Development Authority of India — for insurance advisory calls"         },
                 { name: "complianceDpdp",  label: "DPDP Act", badge: "Data Privacy", desc: "Digital Personal Data Protection Act 2023 — when collecting personal data from callers"       },
-                { name: "complianceHipaa", label: "HIPAA",    badge: "Healthcare",  desc: "Health Insurance Portability and Accountability Act — for healthcare-related calls"           },
                 { name: "complianceTrai",  label: "TRAI",     badge: "Telecom",     desc: "Telecom Regulatory Authority of India — for commercial communications; includes opt-out"      },
               ] as const).map(({ name, label, badge, desc }) => (
                 <FormField key={name} control={form.control} name={name} render={({ field }) => {
