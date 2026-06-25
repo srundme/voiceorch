@@ -640,7 +640,19 @@ export class OrchestrationPipeline {
           // undefined. So we infer the caller's language from what they actually said.
           // This drives the per-turn LLM language instruction on the next turn.
           if (this.agent.languageAutoDetect) {
-            const detected = lang ?? detectScriptLanguage(text);
+            let detected = lang ?? detectScriptLanguage(text);
+            // Language-switch intent: if the caller explicitly names "English" as a
+            // standalone word inside an Indic-script utterance, treat it as a request
+            // to switch to English — overrides the script-detection result.
+            // e.g. "जी English में बात करा जी।" → script=Hindi, intent=English.
+            // Word-boundary check avoids false positives from "English teacher", etc.
+            if (detected && detected !== "en-IN" && /\bEnglish\b/i.test(text)) {
+              logger.info(
+                { callId: this.config.callId, text: text.slice(0, 60), scriptDetected: detected },
+                "Auto-detect: English-switch intent overrides script detection",
+              );
+              detected = "en-IN";
+            }
             if (detected) {
               if (detected !== this.currentLang) {
                 logger.info(
@@ -2341,13 +2353,27 @@ export class OrchestrationPipeline {
     if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
       if (this.agent.languageAutoDetect) {
-        langGuard =
-          `[LANGUAGE RULE] The caller is currently speaking in ${langName}. ` +
-          `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
-          `immediately switch your response to match their new language. ` +
-          `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
-          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-          `EXACTLY as written in your instructions; never translate or transliterate them.`;
+        if (this.currentLang === "en-IN") {
+          // English gets a stronger OVERRIDE guard because many system prompts instruct
+          // the agent to speak Hinglish/Hindi by default. When the caller explicitly
+          // switches to English we must tell the LLM to supersede that instruction.
+          langGuard =
+            `[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. ` +
+            `Respond in clear, plain English ONLY for this entire response. ` +
+            `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, ` +
+            `or any other language — the caller has explicitly asked for English. ` +
+            `Do not mix Hindi or regional words into your reply. ` +
+            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+        } else {
+          langGuard =
+            `[LANGUAGE RULE] The caller is currently speaking in ${langName}. ` +
+            `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
+            `immediately switch your response to match their new language. ` +
+            `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
+            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+        }
       } else {
         langGuard =
           `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
