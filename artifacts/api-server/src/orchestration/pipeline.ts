@@ -506,6 +506,35 @@ export class OrchestrationPipeline {
               this.safetyNet.onPartial(text);
               this.resetHangupTimer();
             }
+            // P0-C: Semantic barge-in on interims — detect caller interruption
+            // immediately during playback, before the STT provider finalizes.
+            // Reuses the same isSemanticInterrupt / bargeInRequested / bargeInCallback
+            // machinery as the final-transcript path; only responsiveness improves.
+            if (
+              this.bargeInEnabled &&
+              this.isPlaying &&
+              !this.bargeInRequested &&
+              text.trim()
+            ) {
+              if (isSemanticInterrupt(text)) {
+                this.bargeInRequested = true;
+                this.bargeInCallback?.();
+                this.logExec("Agent", "system", {
+                  status: "info",
+                  turnNumber: this._activeTurnIndex,
+                  warningFlags: ["barge_in"],
+                  metadata: {
+                    event: "Barge-in Detected",
+                    trigger: "semantic_interim",
+                    transcriptPreview: text.slice(0, 80),
+                  },
+                });
+                logger.info(
+                  { callId: this.config.callId, text },
+                  "Semantic barge-in triggered (streaming STT interim)",
+                );
+              }
+            }
             return;
           }
           if (!text.trim()) return;
