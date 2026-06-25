@@ -1,6 +1,45 @@
 import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
+ * Convert ConversationTurn[] to Anthropic's message format.
+ * Tool results use Anthropic's `tool_result` content block (nested inside a user turn).
+ * Assistant tool invocations use Anthropic's `tool_use` content block.
+ */
+function toAnthropicMessages(turns: ConversationTurn[]): Record<string, unknown>[] {
+  return turns.map((m): Record<string, unknown> => {
+    if (m.role === "tool") {
+      return {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: m.toolCallId ?? "unknown",
+            content: m.content,
+          },
+        ],
+      };
+    }
+    if (m.role === "assistant" && m.toolCalls?.length) {
+      return {
+        role: "assistant",
+        content: [
+          ...(m.content ? [{ type: "text", text: m.content }] : []),
+          ...m.toolCalls.map((tc) => ({
+            type: "tool_use",
+            id: tc.id,
+            name: tc.name,
+            input: (() => {
+              try { return JSON.parse(tc.args || "{}") as Record<string, unknown>; } catch { return {}; }
+            })(),
+          })),
+        ],
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
+}
+
+/**
  * Anthropic Claude — native Messages API with SSE streaming
  * Models: claude-opus-4-5, claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022
  * Endpoint: https://api.anthropic.com/v1/messages
@@ -48,7 +87,7 @@ export class AnthropicLLM implements LLMAdapter {
       system: useKvCache
         ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
         : systemPrompt,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: toAnthropicMessages(messages),
       stream: true,
     };
 

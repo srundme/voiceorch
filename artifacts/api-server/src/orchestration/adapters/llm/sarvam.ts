@@ -1,4 +1,5 @@
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
+import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
  * Sarvam AI — Chat Completions (OpenAI-compatible endpoint)
@@ -38,22 +39,28 @@ const TOOL_CAPABLE_MODELS = new Set(["sarvam-30b", "sarvam-105b"]);
  * Sarvam requires strictly-alternating user/assistant turns starting with a user message.
  * This function collapses any consecutive same-role messages by joining their content,
  * then drops any leading assistant turns.
+ *
+ * Tool-related turns (role="tool", or role="assistant" with toolCalls) carry structured
+ * metadata that must be preserved — they are never merged with adjacent turns.
  */
 function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[] {
   if (messages.length === 0) return messages;
 
-  // Merge consecutive same-role turns
+  const isToolRelated = (m: ConversationTurn) =>
+    m.role === "tool" || (m.role === "assistant" && (m.toolCalls?.length ?? 0) > 0);
+
+  // Merge consecutive same-role turns, but never merge tool-related turns
   const merged: ConversationTurn[] = [];
   for (const msg of messages) {
     const last = merged[merged.length - 1];
-    if (last && last.role === msg.role) {
+    if (!isToolRelated(msg) && last && !isToolRelated(last) && last.role === msg.role) {
       merged[merged.length - 1] = { role: last.role, content: `${last.content}\n${msg.content}` };
     } else {
       merged.push({ ...msg });
     }
   }
 
-  // Drop any leading assistant messages (must start with user)
+  // Drop any leading non-user messages (must start with user)
   while (merged.length > 0 && merged[0]!.role !== "user") {
     merged.shift();
   }
@@ -167,7 +174,7 @@ export class SarvamLLM implements LLMAdapter {
         ...this.buildGenerationBody(),
         messages: [
           { role: "system", content: systemPrompt },
-          ...sanitized.map((m) => ({ role: m.role, content: m.content })),
+          ...toOpenAIMessages(sanitized),
         ],
         ...(sarvamTools ? { tools: sarvamTools, tool_choice: "auto" } : {}),
       }),

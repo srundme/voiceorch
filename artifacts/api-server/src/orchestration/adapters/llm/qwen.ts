@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
  * Qwen via Groq — OpenAI-compatible API
@@ -84,8 +85,8 @@ export class QwenLLM implements LLMAdapter {
       stream_options: { include_usage: true },
       messages: [
         { role: "system", content: voiceSystemPrompt },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
+        ...toOpenAIMessages(messages),
+      ] as any,
       ...(qwenTools ? { tools: qwenTools, tool_choice: toolChoice } : {}),
     });
 

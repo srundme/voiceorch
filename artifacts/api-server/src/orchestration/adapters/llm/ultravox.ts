@@ -59,7 +59,9 @@ export class UltravoxLLM implements LLMAdapter {
       stream: true,
       messages: [
         { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       ],
     });
 

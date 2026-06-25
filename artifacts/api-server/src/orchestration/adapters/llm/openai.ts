@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
  * OpenAI — streaming chat completions with native function/tool calling
@@ -42,8 +43,8 @@ export class OpenAILLM implements LLMAdapter {
       stream_options: { include_usage: true },
       messages: [
         { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
+        ...toOpenAIMessages(messages),
+      ] as any,
       ...(openAiTools ? { tools: openAiTools, tool_choice: "auto" } : {}),
     });
 

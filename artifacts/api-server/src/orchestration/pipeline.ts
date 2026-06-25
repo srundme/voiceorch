@@ -2915,12 +2915,17 @@ export class OrchestrationPipeline {
 
     // ── If LLM called a tool, execute it and skip TTS ──
     if (triggeredToolName) {
-      // Push the assistant's tool-invocation turn to history BEFORE executing the tool.
-      // Without this, continueWithToolResult would see two consecutive "user" messages
-      // (the caller's speech + the tool result), which breaks Sarvam's strict turn
-      // alternation and confuses all LLMs lacking a tool-result role.
-      const assistantToolContent = stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))).trim() || `[calling tool: ${triggeredToolName}]`;
-      this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
+      // Push the assistant's tool-invocation turn with proper tool_calls metadata.
+      // OpenAI-compatible models (Sarvam, Groq, Mistral, DeepSeek, etc.) expect the
+      // follow-up call to have a tool_calls assistant turn + a "tool" role result with
+      // a matching tool_call_id. Without this they return 400 or loop on the tool call.
+      const _toolCallId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const assistantTextContent = stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))).trim();
+      this.conversationHistory.push({
+        role: "assistant",
+        content: assistantTextContent,
+        toolCalls: [{ id: _toolCallId, name: triggeredToolName, args: JSON.stringify(triggeredToolArgs) }],
+      });
 
       // Enqueue a brief filler (language-aware) so the caller hears something while
       // the tool runs (tool calls can take 1–3 s — without this there is dead silence).
@@ -2958,7 +2963,7 @@ export class OrchestrationPipeline {
       await playPromise; // plays filler (and any earlier backchannel) before continuing
       const toolResult = await this.handleToolCall(triggeredToolName, triggeredToolArgs);
       if (toolResult !== undefined) {
-        await this.continueWithToolResult(triggeredToolName, toolResult);
+        await this.continueWithToolResult(triggeredToolName, toolResult, 0, _toolCallId);
       }
       return;
     }
@@ -3301,8 +3306,16 @@ export class OrchestrationPipeline {
    * TTS chunk starts as soon as the LLM emits the first sentence boundary —
    * not after the full response is buffered.
    */
-  private async continueWithToolResult(toolName: string, result: string, depth: number = 0): Promise<void> {
-    this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
+  private async continueWithToolResult(toolName: string, result: string, depth: number = 0, toolCallId?: string): Promise<void> {
+    if (toolCallId) {
+      // Native tool call: use proper "tool" role with matching tool_call_id so
+      // OpenAI-compatible APIs (Sarvam, Groq, Mistral, etc.) accept the follow-up call.
+      this.conversationHistory.push({ role: "tool", content: result, toolCallId, toolName });
+    } else {
+      // Inline function tag (text-based): no tool_call_id — use user message format
+      // which the instruction-following model already understands from its system prompt.
+      this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
+    }
 
     let llmResponse = "";
     let pendingText = "";
@@ -3487,11 +3500,15 @@ export class OrchestrationPipeline {
     // ── Chained tool call — the agent invoked another tool off the result ──
     if (triggeredToolName) {
       const chainedName: string = triggeredToolName;
-      const assistantToolContent = cleanResponse || `[calling tool: ${chainedName}]`;
-      this.conversationHistory.push({ role: "assistant", content: assistantToolContent });
+      const chainedCallId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      this.conversationHistory.push({
+        role: "assistant",
+        content: cleanResponse || "",
+        toolCalls: [{ id: chainedCallId, name: chainedName, args: JSON.stringify(triggeredToolArgs) }],
+      });
       const chainedResult = await this.handleToolCall(chainedName, triggeredToolArgs);
       if (chainedResult !== undefined) {
-        await this.continueWithToolResult(chainedName, chainedResult, depth + 1);
+        await this.continueWithToolResult(chainedName, chainedResult, depth + 1, chainedCallId);
       }
       return;
     }

@@ -372,8 +372,29 @@ export interface ProviderKey {
 }
 
 export interface ConversationTurn {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
+  /**
+   * For role="tool": the tool_call_id of the native tool call this result responds to.
+   * Populated by the pipeline for native tool calls; absent for inline-function-tag results.
+   */
+  toolCallId?: string;
+  /**
+   * For role="tool": the name of the tool that was called.
+   * Used by Anthropic's tool_result format which requires the tool name.
+   */
+  toolName?: string;
+  /**
+   * For role="assistant": one or more native tool invocations made in this turn.
+   * Populated by the pipeline when the LLM returns a tool_calls finish_reason.
+   * Adapters use this to format the conversation history correctly for follow-up
+   * calls (OpenAI tool_calls format, Anthropic tool_use blocks, Gemini functionCall).
+   */
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    args: string;
+  }>;
 }
 
 export interface STTAdapter {

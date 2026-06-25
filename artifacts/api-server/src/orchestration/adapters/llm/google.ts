@@ -69,11 +69,31 @@ export class GoogleLLM implements LLMAdapter {
       } as any,
     });
 
-    // Build chat history (all turns except the last user message)
-    const rawHistory = messages.slice(0, -1).map((m) => ({
-      role: m.role === "user" ? ("user" as const) : ("model" as const),
-      parts: [{ text: m.content }],
-    }));
+    // Build chat history (all turns except the last) — map tool turns to
+    // Gemini's functionCall/functionResponse format so chained tool calls work.
+    const rawHistory = messages.slice(0, -1).map((m) => {
+      if (m.role === "tool") {
+        return {
+          role: "user" as const,
+          parts: [{ functionResponse: { name: m.toolName ?? "tool", response: { result: m.content } } }],
+        };
+      }
+      if (m.role === "assistant" && m.toolCalls?.length) {
+        return {
+          role: "model" as const,
+          parts: m.toolCalls.map((tc) => ({
+            functionCall: {
+              name: tc.name,
+              args: (() => { try { return JSON.parse(tc.args || "{}") as Record<string, unknown>; } catch { return {}; } })(),
+            },
+          })),
+        };
+      }
+      return {
+        role: m.role === "user" ? ("user" as const) : ("model" as const),
+        parts: [{ text: m.content }],
+      };
+    });
 
     // Gemini requires history to start with 'user' role.
     // If the agent sent a greeting before any user turn, drop leading model
@@ -81,7 +101,12 @@ export class GoogleLLM implements LLMAdapter {
     let firstUser = rawHistory.findIndex((h) => h.role === "user");
     const history = firstUser === -1 ? [] : rawHistory.slice(firstUser);
 
-    const lastMessage = messages[messages.length - 1]?.content ?? "";
+    // Build the "current" message — if it's a tool result, send as a FunctionResponse part.
+    const lastTurn = messages[messages.length - 1];
+    const lastMessage: string | import("@google/generative-ai").Part[] =
+      lastTurn?.role === "tool"
+        ? [{ functionResponse: { name: lastTurn.toolName ?? "tool", response: { result: lastTurn.content } } }]
+        : (lastTurn?.content ?? "");
 
     const chat = gemini.startChat({ history });
     const result = await chat.sendMessageStream(lastMessage);
