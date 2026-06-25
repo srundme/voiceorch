@@ -355,6 +355,12 @@ export class OrchestrationPipeline {
   // Seeded from the agent's primary language at construction so turn 1 already
   // has a baseline. Updated each turn via script detection when languageAutoDetect=true.
   private currentLang: string = "";
+  /** Last non-English language the caller spoke this call.
+   *  We save THIS (not currentLang) as the caller's preferredLanguage so that
+   *  an English "thanks, bye" at call-end doesn't overwrite their regional
+   *  language preference. Falls back to currentLang only if the caller spoke
+   *  nothing but English the whole call. */
+  private lastNonEnglishLang: string = "";
 
   // Repetition guard (call 548): the last spoken assistant line + how many times
   // in a row the model has repeated itself. Used by the per-turn anti-repeat nudge
@@ -632,6 +638,7 @@ export class OrchestrationPipeline {
                 );
               }
               this.currentLang = detected;
+              if (!detected.startsWith("en-")) this.lastNonEnglishLang = detected;
             }
           }
           // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
@@ -3135,10 +3142,17 @@ export class OrchestrationPipeline {
     return this.conversationHistory;
   }
 
-  /** Returns the BCP-47 language code the pipeline ended on this call.
-   *  Used by session.ts to persist it as the caller's preferredLanguage. */
+  /** Returns the BCP-47 language code the pipeline ended on this call. */
   getCurrentLang(): string {
     return this.currentLang;
+  }
+
+  /** Returns the best language to remember as this caller's preference.
+   *  = last non-English language they spoke (so an English "thanks, bye"
+   *  doesn't wipe out their Tamil/Hindi preference), falling back to
+   *  currentLang only when the caller spoke nothing but English all call. */
+  getPreferredCallerLang(): string {
+    return this.lastNonEnglishLang || this.currentLang;
   }
 
   /**

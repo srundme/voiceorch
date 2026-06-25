@@ -1544,7 +1544,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   // Persist the language the caller was using when the call ended.
                   // Only meaningful when languageAutoDetect is ON; ignored otherwise
                   // because the pipeline always ends in the agent's fixed language.
-                  finalLanguage:     session.pipeline.getCurrentLang() || null,
+                  finalLanguage:     session.pipeline.getPreferredCallerLang() || null,
                 });
                 createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
                   status: "success",
