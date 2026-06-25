@@ -14,27 +14,27 @@ import { toOpenAIMessages } from "./openai-messages.js";
  * Auth: `api-subscription-key` header (also accepts `Authorization: Bearer <key>`).
  *
  * Hybrid Thinking Mode:
- *   Thinking is ON BY DEFAULT. For voice agent conversational turns we DISABLE it
- *   by sending `reasoning_effort: null` to keep latency low.
- *   For tool turns we send `reasoning_effort: null` too — the native tool_calls API
- *   works without thinking when we use the non-streaming path (see below).
+ *   Thinking is ON BY DEFAULT. For voice agents we DISABLE it by sending
+ *   `reasoning_effort: null` to keep latency low (an agent can opt back in).
  *
- * Tool calling — non-streaming path:
- *   Sarvam-30b's streaming SSE does NOT reliably emit `delta.tool_calls`:
- *   - With reasoning_effort:null → model skips tool dispatch, emits canned text.
- *   - With reasoning_effort:"low" → model generates correct JSON args but writes
- *     them to delta.content as bare JSON (no tool name) — TTS reads them aloud.
+ * Tool calling — single STREAMING path:
+ *   Sarvam-30b emits standard OpenAI-style streaming tool calls. With
+ *   `stream:true`, `reasoning_effort:null` and `tool_choice:"auto"` it returns:
+ *     • delta.tool_calls[0] = { index, id, function:{ name, arguments:"" } }  (first)
+ *     • delta.tool_calls[0] = { index, function:{ arguments:"<fragment>" } }   (rest)
+ *       — argument fragments must be CONCATENATED across chunks by index.
+ *     • a chunk with finish_reason:"tool_calls"
+ *     • a final chunk with empty `choices` carrying `usage`, then `data: [DONE]`.
+ *   (Occasionally a whitespace-only delta.content:"\n" is interleaved — ignored.)
  *
- *   The non-streaming API works correctly per the official docs:
- *   POST with stream:false → finish_reason:"tool_calls" + message.tool_calls[].
+ *   So we stream EVERYTHING — plain replies and tool turns alike — for low TTFT,
+ *   accumulate tool-call fragments, and at end-of-stream fire either onToolCall
+ *   (a tool was requested) or onDone (a plain text reply). Reasoning content is
+ *   never forwarded to TTS.
  *
- *   Strategy:
- *     • hasTools=true  → non-streaming request; parse message.tool_calls.
- *     • hasTools=false → streaming request; low-latency TTFT as before.
- *
- * Streaming: each `data:` line is a chat.completion.chunk. `delta.content` carries
- * the reply text; the final chunk has an empty `choices` array and carries `usage`;
- * the stream ends with `data: [DONE]`.
+ * Streaming framing: each `data:` line is a chat.completion.chunk. SSE events can
+ * split across TCP reads, so we buffer and dispatch only complete `\n`-terminated
+ * lines, flushing the trailing line after the stream ends.
  */
 
 /** Models that support Sarvam's function-calling interface */
@@ -126,114 +126,6 @@ export class SarvamLLM implements LLMAdapter {
     return body;
   }
 
-  /**
-   * Non-streaming tool-call path.
-   *
-   * Sarvam's streaming SSE doesn't reliably emit delta.tool_calls.
-   * The non-streaming API returns finish_reason:"tool_calls" and
-   * message.tool_calls[] correctly per the official docs.
-   *
-   * We use stream:false here and call options.onToolCall when a tool
-   * call is detected, or onToken+onDone for a plain text reply.
-   */
-  private async chatWithTools(
-    messages: ConversationTurn[],
-    systemPrompt: string,
-    onToken: (token: string) => void,
-    onDone: (fullText: string, usage?: LLMUsage) => void,
-    options: {
-      tools: ToolDefinition[];
-      onToolCall?: (name: string, args: Record<string, unknown>) => void;
-      onUsage?: (usage: LLMUsage) => void;
-    }
-  ): Promise<void> {
-    const sanitized = sanitizeForAlternation(messages);
-
-    // Build tool definitions in the OpenAI/Sarvam format
-    const toolDefs = options.tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    }));
-
-    const resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "api-subscription-key": this.key,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.model,
-        stream: false,
-        ...this.buildGenerationBody(),
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...toOpenAIMessages(sanitized),
-        ],
-        tools: toolDefs,
-        tool_choice: "auto",
-      }),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Sarvam LLM error ${resp.status}: ${err}`);
-    }
-
-    const json = await resp.json() as {
-      choices: Array<{
-        finish_reason: string;
-        message: {
-          role: string;
-          content: string | null;
-          tool_calls?: Array<{
-            id: string;
-            type: string;
-            function: { name: string; arguments: string };
-          }>;
-        };
-      }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-
-    const usage: LLMUsage | undefined = json.usage
-      ? { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
-      : undefined;
-
-    if (usage) options.onUsage?.(usage);
-
-    const choice = json.choices[0];
-    if (!choice) {
-      onDone("", usage);
-      return;
-    }
-
-    // Tool call: finish_reason is "tool_calls" and message.tool_calls is populated
-    if (
-      choice.finish_reason === "tool_calls" &&
-      choice.message.tool_calls?.length &&
-      options.onToolCall
-    ) {
-      const tc = choice.message.tool_calls[0]!;
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
-      } catch {
-        // malformed args — call with empty args
-      }
-      options.onToolCall(tc.function.name, args);
-      return; // do NOT call onDone — pipeline expects either onToolCall or onDone, not both
-    }
-
-    // Plain text reply (model chose not to call a tool)
-    const text = choice.message.content ?? "";
-    if (text) onToken(text);
-    onDone(text, usage);
-  }
-
   async chat(
     messages: ConversationTurn[],
     systemPrompt: string,
@@ -248,20 +140,26 @@ export class SarvamLLM implements LLMAdapter {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
     const hasTools = supportsTools && (options?.tools?.length ?? 0) > 0;
 
-    // ── Tool turns: use non-streaming so message.tool_calls is populated ──────
-    // Sarvam's streaming SSE does not reliably emit delta.tool_calls.
-    // The non-streaming API returns finish_reason:"tool_calls" + message.tool_calls
-    // correctly per the official Sarvam docs.
-    if (hasTools && options?.tools) {
-      return this.chatWithTools(messages, systemPrompt, onToken, onDone, {
-        tools: options.tools,
-        onToolCall: options.onToolCall,
-        onUsage: options.onUsage,
-      });
-    }
-
-    // ── Conversational turns: streaming for low-latency TTFT ─────────────────
     const sanitized = sanitizeForAlternation(messages);
+
+    const body: Record<string, unknown> = {
+      model: this.model,
+      stream: true,
+      ...this.buildGenerationBody(),
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...toOpenAIMessages(sanitized),
+      ],
+    };
+
+    // Tools are streamed too — Sarvam emits OpenAI-style delta.tool_calls fragments.
+    if (hasTools && options?.tools) {
+      body["tools"] = options.tools.map((t) => ({
+        type: "function",
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+      body["tool_choice"] = "auto";
+    }
 
     const resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
       method: "POST",
@@ -269,15 +167,7 @@ export class SarvamLLM implements LLMAdapter {
         "api-subscription-key": this.key,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: this.model,
-        stream: true,
-        ...this.buildGenerationBody(),
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...toOpenAIMessages(sanitized),
-        ],
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
@@ -290,19 +180,36 @@ export class SarvamLLM implements LLMAdapter {
     let full = "";
     let usage: LLMUsage | undefined;
 
+    // Tool-call fragments accumulated by index. The first fragment carries id+name;
+    // later fragments carry only argument string chunks that must be concatenated.
+    const toolAcc = new Map<number, { id: string; name: string; args: string }>();
+    let sawToolDelta = false;
+    // Tracks whether any non-whitespace reply text has been forwarded, so we can
+    // drop leading whitespace-only tokens (the stray "\n" artifact in tool turns)
+    // without ever swallowing inter-word spaces in a real reply.
+    let sawRealContent = false;
+
     const handleData = (data: string): void => {
       if (data === "[DONE]") return;
       try {
         const parsed = JSON.parse(data) as {
           choices: Array<{
+            finish_reason?: string | null;
             delta?: {
               content?: string;
               reasoning_content?: string;
+              tool_calls?: Array<{
+                index?: number;
+                id?: string | null;
+                type?: string;
+                function?: { name?: string | null; arguments?: string | null };
+              }>;
             };
           }>;
           usage?: { prompt_tokens?: number; completion_tokens?: number };
         };
 
+        // Usage arrives on the final chunk (empty `choices`) — read it first.
         if (parsed.usage) {
           usage = {
             inputTokens: parsed.usage.prompt_tokens ?? 0,
@@ -313,12 +220,34 @@ export class SarvamLLM implements LLMAdapter {
         const delta = parsed.choices[0]?.delta;
         if (!delta) return;
 
+        // Accumulate streaming tool-call fragments.
+        if (delta.tool_calls?.length) {
+          for (const tc of delta.tool_calls) {
+            const idx = typeof tc.index === "number" ? tc.index : 0;
+            sawToolDelta = true;
+            const cur = toolAcc.get(idx) ?? { id: "", name: "", args: "" };
+            if (tc.id) cur.id = tc.id;
+            if (tc.function?.name) cur.name = tc.function.name;
+            if (typeof tc.function?.arguments === "string") cur.args += tc.function.arguments;
+            toolAcc.set(idx, cur);
+          }
+          return;
+        }
+
+        // Once a tool call is in flight, ignore any trailing content artifacts.
+        if (sawToolDelta) return;
+
         // Only forward reply text — reasoning_content is intentionally ignored.
         const token = delta.content ?? "";
-        if (token) {
-          full += token;
-          onToken(token);
-        }
+        if (!token) return;
+
+        // Drop leading whitespace-only tokens (tool-turn "\n" artifact / trimmable
+        // preamble); forward everything once real content has started.
+        if (!sawRealContent && /^\s*$/.test(token)) return;
+
+        sawRealContent = true;
+        full += token;
+        onToken(token);
       } catch {
         // skip malformed chunk
       }
@@ -343,7 +272,28 @@ export class SarvamLLM implements LLMAdapter {
     const tail = buffer.trim();
     if (tail.startsWith("data: ")) handleData(tail.slice(6));
 
+    // Report usage exactly once, before the terminal callback.
     if (usage) options?.onUsage?.(usage);
+
+    // Tool turn: dispatch the first (lowest-index) tool call that has a name.
+    if (toolAcc.size > 0 && options?.onToolCall) {
+      const picked = [...toolAcc.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, v]) => v)
+        .find((v) => v.name);
+      if (picked?.name) {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
+        } catch {
+          // malformed args — call with empty args
+        }
+        options.onToolCall(picked.name, args);
+        return; // exactly one terminal callback — do NOT also call onDone
+      }
+    }
+
+    // Plain text reply.
     onDone(full, usage);
   }
 }

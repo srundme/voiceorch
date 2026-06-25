@@ -1,0 +1,337 @@
+Tool Calling (Function Calling)
+Describe functions your application exposes with the tools parameter, and the model will decide when to call them — returning the function name and JSON arguments instead of (or alongside) a text reply. You execute the function yourself, append the result as a tool message, and call the API again so the model can produce its final answer.
+
+The flow is:
+
+Send the conversation plus tools definitions.
+If the model wants a tool, the response has finish_reason: "tool_calls" and message.tool_calls with the function name and stringified JSON arguments.
+Run the function, append the assistant message and a {"role": "tool", "tool_call_id": ..., "content": ...} message with the result.
+Call the API again — the model answers using the tool output.
+
+Python
+
+JavaScript
+
+cURL
+
+
+import json
+from sarvamai import SarvamAI
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for an Indian city",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name, e.g. Mumbai"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+messages = [{"role": "user", "content": "What's the weather in Mumbai right now?"}]
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+)
+message = response.choices[0].message
+if message.tool_calls:
+    tool_call = message.tool_calls[0]
+    args = json.loads(tool_call.function.arguments)
+    # Run your actual function here
+    weather = {"city": args["city"], "temperature": 31, "condition": "Humid"}
+    messages.append(
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+            ],
+        }
+    )
+    messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": json.dumps(weather),
+        }
+    )
+    final = client.chat.completions(
+        model="sarvam-105b",
+        messages=messages,
+        tools=tools,
+    )
+    print(final.choices[0].message.content)
+A tool-call response looks like:
+
+{
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Mumbai\", \"unit\": \"celsius\"}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+
+Controlling tool use with tool_choice
+Value	Behavior
+"auto" (default when tools are provided)	The model decides whether to call a tool or reply directly
+"none"	The model never calls a tool — tools are ignored
+"required"	The model must call at least one tool
+{"type": "function", "function": {"name": "get_weather"}}	Forces the model to call the named function
+function.arguments is a JSON string, not an object — always parse it (and validate against your schema) before executing the function.
+
+Structured Outputs (JSON)
+The Chat Completions API supports the OpenAI-compatible response_format parameter for getting reliably structured JSON:
+
+response_format	Behavior
+{"type": "json_schema", "json_schema": {...}}	Structured Outputs — output is constrained to match the JSON Schema you supply (recommended)
+{"type": "json_object"}	JSON mode — output is guaranteed to be valid JSON, but not a specific schema
+{"type": "text"} (default)	Plain text output
+Structured Outputs with json_schema
+Pass a JSON Schema under json_schema.schema, and set "strict": true to enforce adherence. The structured reply arrives as a JSON string in message.content — parse it before use.
+
+
+Python
+
+JavaScript
+
+cURL
+
+
+import json
+from sarvamai import SarvamAI
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {
+            "role": "user",
+            "content": "Order: 2 masala dosas and 1 filter coffee to Koramangala, Bengaluru.",
+        }
+    ],
+    request_options={
+        "additional_body_parameters": {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "food_order",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "items": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "quantity": {"type": "integer"},
+                                    },
+                                    "required": ["name", "quantity"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "city": {"type": "string"},
+                        },
+                        "required": ["items", "city"],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        }
+    },
+)
+order = json.loads(response.choices[0].message.content)
+print(order)
+# {'items': [{'name': 'masala dosa', 'quantity': 2}, {'name': 'filter coffee', 'quantity': 1}], 'city': 'Bengaluru'}
+In the current Python SDK, pass response_format through request_options={"additional_body_parameters": {...}} as shown above. The JavaScript SDK forwards response_format from the request object as-is.
+
+The json_schema object accepts:
+
+Field	Type	Description
+name	string (required)	Name of the response format. Alphanumeric characters, underscores and dashes only
+schema	object	The output structure, described as a JSON Schema object
+strict	boolean	Enable strict schema adherence when generating the output (default false)
+description	string	What the format is for — helps the model decide how to respond
+JSON mode with json_object
+When you only need valid JSON without enforcing a specific structure, use {"type": "json_object"} and describe the desired shape in your prompt:
+
+curl -X POST https://api.sarvam.ai/v1/chat/completions \
+  -H "api-subscription-key: $SARVAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sarvam-105b",
+    "messages": [
+      {"role": "system", "content": "Reply with a JSON object: {\"sentiment\": \"positive\" | \"negative\" | \"neutral\", \"confidence\": number}"},
+      {"role": "user", "content": "यह फिल्म शानदार थी!"}
+    ],
+    "response_format": {"type": "json_object"}
+  }'
+
+
+Even with Structured Outputs, validate the parsed JSON against your expected schema (e.g. with pydantic or zod) before acting on it — the schema constrains the model’s output shape, but your application logic may have stricter requirements (value ranges, business rules, etc.).
+
+Alternative: Tool calling as a JSON schema
+If your workflow is already built around tool calling, you can also get structured output by defining a single tool whose parameters schema describes the structure you want, and forcing it with tool_choice. The model’s arguments are then constrained to the schema.
+
+
+Python
+
+JavaScript
+
+
+import json
+from sarvamai import SarvamAI
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {
+            "role": "user",
+            "content": "Order: 2 masala dosas and 1 filter coffee to Koramangala, Bengaluru.",
+        }
+    ],
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "extract_order",
+                "description": "Extract a structured food order",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "quantity": {"type": "integer"},
+                                },
+                                "required": ["name", "quantity"],
+                            },
+                        },
+                        "delivery_area": {"type": "string"},
+                        "city": {"type": "string"},
+                    },
+                    "required": ["items", "city"],
+                },
+            },
+        }
+    ],
+    tool_choice={"type": "function", "function": {"name": "extract_order"}},
+)
+arguments = response.choices[0].message.tool_calls[0].function.arguments
+order = json.loads(arguments)
+print(order)
+# {'items': [{'name': 'masala dosa', 'quantity': 2}, {'name': 'filter coffee', 'quantity': 1}], 'delivery_area': 'Koramangala', 'city': 'Bengaluru'}
+Alternative: Prompt-based JSON
+For simple cases, you can also instruct the model to reply with JSON only, set a low temperature, and validate the output before using it (consider JSON mode instead, which guarantees valid JSON):
+
+import json
+from sarvamai import SarvamAI
+client = SarvamAI(api_subscription_key="YOUR_SARVAM_API_KEY")
+response = client.chat.completions(
+    model="sarvam-105b",
+    messages=[
+        {
+            "role": "system",
+            "content": (
+                "Reply with a single JSON object only — no prose, no markdown fences. "
+                'Schema: {"sentiment": "positive" | "negative" | "neutral", "confidence": number}'
+            ),
+        },
+        {"role": "user", "content": "यह फिल्म शानदार थी!"},
+    ],
+    temperature=0.1,
+)
+raw = response.choices[0].message.content
+try:
+    result = json.loads(raw)
+except json.JSONDecodeError:
+    # Retry, or strip markdown fences / extra text before parsing
+    raise
+print(result)
+
+
+Always validate model-produced JSON against your expected schema (e.g. with pydantic or zod) and add a retry path — prompt-based JSON is good, but not guaranteed.
+
+API Response Format
+Success Response Structure
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "created": 1699000000,
+  "model": "sarvam-105b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The capital of India is New Delhi. It has been the capital since 1931."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 25,
+    "total_tokens": 40
+  }
+}
+
+
+Response Fields
+Field	Type	Description
+id	string	Unique identifier for the completion request
+object	string	Always "chat.completion"
+created	integer	Unix timestamp when the completion was created
+model	string	The model used for completion
+choices[].index	integer	Index of the choice in the list
+choices[].message.role	string	Always "assistant"
+choices[].message.content	string	The generated text response (null when the model calls a tool)
+choices[].message.reasoning_content	string	Thinking steps (only when reasoning_effort is set)
+choices[].message.tool_calls	array	Tool invocations requested by the model (only when using tool calling)
+choices[].finish_reason	string	Why generation stopped: "stop", "length", "tool_calls", "content_filter"
+usage.prompt_tokens	integer	Tokens in the input prompt
+usage.completion_tokens	integer	Tokens in the generated response
+usage.total_tokens	integer	Total tokens used (prompt + completion)
+Error Responses
+All errors return a JSON object with an error field (message, code, request_id). The full error-code table, retry guidance, and SDK exception reference live on the central Errors & Troubleshooting page.
+
+Errors specific to this endpoint:
+
+HTTP Status	Error Code	When This Happens	What To Do
+400	invalid_request_error	Missing messages array or missing model field	Include both model and a valid messages array with role/content
+422	unprocessable_entity_error	Invalid model name or parameter values	Check temperature (0-2), model name, etc.
+Error Handling Code Example

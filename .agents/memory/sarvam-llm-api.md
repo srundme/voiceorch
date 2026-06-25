@@ -58,8 +58,27 @@ deprecated/removed.
   is the ONLY adapter that consumes them; other providers ignore the 5th
   `createLLMAdapter` arg.
 
+## Tool calling streams fine — accumulate delta.tool_calls (do NOT fall back to non-streaming)
+- Sarvam-30b DOES emit standard OpenAI-style streaming tool calls. Verified live:
+  with `stream:true`, `reasoning_effort:null`, `tool_choice:"auto"` the SSE carries
+  `delta.tool_calls[0]={index,id,function:{name,arguments:""}}` first, then chunks
+  with only `function.arguments` fragments to CONCATENATE by index, then a chunk
+  with `finish_reason:"tool_calls"`, then the usage chunk, then `[DONE]`.
+- **An earlier code comment claimed the stream skips dispatch / dumps tool JSON into
+  `delta.content`. That is FALSE** — the real bug was the adapter only ever read
+  `delta.content` and never parsed `delta.tool_calls`. A non-streaming fallback was
+  added as a workaround; it was removed. Use ONE streaming path for both plain
+  replies and tool turns (matches how Bolna does it).
+- **Why it matters:** the non-streaming fallback forced EVERY turn to be
+  non-streaming whenever the agent had tools — a real TTFT regression on text turns.
+- **How to apply:** accumulate `delta.tool_calls` into `Map<index,{id,name,args}>`;
+  at end-of-stream fire onToolCall (first tool) OR onDone (plain text) — exactly one.
+  Drop leading whitespace-only `delta.content` ("\n" artifact) and ignore any content
+  once a tool delta has been seen, so TTS never speaks tool-turn noise.
+- `reasoning_effort:"low"` still streams tool calls correctly but wastes ~45 reasoning
+  chunks of latency first — keep it `null` for voice.
+
 ## Other
 - Strict user/assistant alternation starting with a user turn — merge consecutive
   same-role turns and drop leading assistant turns before sending.
-- Tool calling supported on both models (OpenAI format: name + stringified JSON args).
 - `temperature` defaults to 0.2 when reasoning disabled, 0.5 when enabled (range 0–2).
