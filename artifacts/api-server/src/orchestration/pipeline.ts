@@ -2584,6 +2584,25 @@ export class OrchestrationPipeline {
       systemPromptForTurn += lines.join("\n");
     }
 
+    // ── Tool-call preamble suppression ────────────────────────────────────────
+    // OpenAI-compatible models (including Sarvam) emit EITHER content tokens OR
+    // tool_calls — never both in the same streaming response. If the model
+    // generates a text preamble like "I'll check for you…", it has already
+    // committed to a text response and will NOT call the tool in that turn.
+    // This instruction block tells the model to skip the preamble and call the
+    // tool directly so the pipeline's onToolCall fires in the same turn.
+    if (toolDefs.length > 0) {
+      systemPromptForTurn += [
+        "",
+        "",
+        "[TOOL CALLING — MANDATORY]",
+        "When the caller's request requires a tool call, call the tool IMMEDIATELY — do NOT emit any text before the tool call.",
+        "Never say 'I'll check', 'Let me look up', 'One moment', 'Please wait' or any similar preamble — those phrases prevent the tool from running in the same turn.",
+        "The system automatically plays a brief wait tone to the caller while the tool runs; you do not need to announce it.",
+        "If you are missing a required parameter, ask for it in a single short question — do not say you will look it up first.",
+      ].join("\n");
+    }
+
     // ── Token Optimization (Layers 1-4) ──────────────────────────────────────
     const tokenOptEnabled = await fetchTokenOptEnabled();
     const fullHistoryLen = this.conversationHistory.length;
@@ -3393,6 +3412,20 @@ export class OrchestrationPipeline {
       toolSystemPrompt = toolSystemPrompt
         .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
         .replace(/\s*\{caller_salutation\}\s*/g, " ");
+    }
+
+    // Tool-call preamble suppression (same guard as processTurn — chained calls must
+    // also not emit "I'll check" text before the next tool call in the chain).
+    if (attachTools) {
+      toolSystemPrompt += [
+        "",
+        "",
+        "[TOOL CALLING — MANDATORY]",
+        "When the caller's request requires a tool call, call the tool IMMEDIATELY — do NOT emit any text before the tool call.",
+        "Never say 'I'll check', 'Let me look up', 'One moment', 'Please wait' or any similar preamble — those phrases prevent the tool from running in the same turn.",
+        "The system automatically plays a brief wait tone to the caller while the tool runs; you do not need to announce it.",
+        "If you are missing a required parameter, ask for it in a single short question — do not say you will look it up first.",
+      ].join("\n");
     }
 
     // Inject active reschedule context (same as processTurn) so the LLM keeps the
