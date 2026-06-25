@@ -157,6 +157,19 @@ export class SarvamLLM implements LLMAdapter {
     // Merge any consecutive same-role turns before sending.
     const sanitized = sanitizeForAlternation(messages);
 
+    // Build the generation body; override reasoning_effort when tools are attached.
+    // Sarvam-30b bypasses its function-calling path entirely when thinking is OFF
+    // (reasoning_effort:null): TTFT drops to ~300ms and the model emits a short
+    // canned text reply instead of generating tool_calls in the delta. Enabling
+    // "low" thinking for tool turns gives the model enough reasoning budget to
+    // evaluate the tool schemas and emit a proper function call.  We only apply
+    // this override when the caller hasn't explicitly set reasoningEffort, so
+    // agent-level config still wins.
+    const genBody = this.buildGenerationBody();
+    if (sarvamTools && this.genParams.reasoningEffort === undefined) {
+      genBody["reasoning_effort"] = "low";
+    }
+
     const resp = await fetch("https://api.sarvam.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -166,12 +179,7 @@ export class SarvamLLM implements LLMAdapter {
       body: JSON.stringify({
         model: this.model,
         stream: true,
-        // Generation params (temperature/top_p/penalties/seed/stop/max_tokens/
-        // wiki_grounding) resolved from agent config. Also supplies
-        // reasoning_effort, which defaults to null (Hybrid Thinking disabled) for
-        // low-latency voice — avoiding reasoning_content latency/cost and the
-        // empty-content-on-short-reply trap — unless explicitly overridden.
-        ...this.buildGenerationBody(),
+        ...genBody,
         messages: [
           { role: "system", content: systemPrompt },
           ...toOpenAIMessages(sanitized),

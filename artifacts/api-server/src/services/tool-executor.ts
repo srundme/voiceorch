@@ -317,7 +317,13 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
   // LLM adapter. Done in one place so custom tools, native scheduling, transfers,
   // webhook, and the built-in end_call all stay valid (e.g. Gemini 400 "Invalid
   // function name" on spaces/non-ASCII names).
-  return defs.map((d) => ({ ...d, name: sanitizeToolName(d.name) }));
+  const normalized = defs.map((d) => ({ ...d, name: sanitizeToolName(d.name) }));
+
+  // Drop any tool whose name sanitized to the fallback sentinel ("tool").  This
+  // happens when an agent tool has a blank or entirely non-ASCII name.  Sending a
+  // tool literally named "tool" confuses every model — it looks like a type field,
+  // not a function name — and can cause the LLM to stall or ignore all tools.
+  return normalized.filter((d) => d.name !== FALLBACK_TOOL_NAME);
 }
 
 // ── Native scheduling executors ───────────────────────────────────────────────
