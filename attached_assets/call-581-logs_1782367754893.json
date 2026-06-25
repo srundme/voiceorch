@@ -1,0 +1,2552 @@
+[
+  {
+    "id": 16117,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.375Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 36,
+      "agentName": "New Agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "sarvam",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "94270980-61d8-4f54-bc99-a83d76357fdb"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 581,
+      "sessionId": "live-581",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": false,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-25T06:07:18.369Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 16120,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.398Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 16119,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.398Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "model": "sarvam-30b"
+    }
+  },
+  {
+    "id": 16118,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.398Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "hi-IN"
+    }
+  },
+  {
+    "id": 16121,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.401Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 16122,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.401Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "7ce3b277f9d9",
+      "promptLength": 3364,
+      "preview": "you are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June 2026. Current time is 11:37 am (Asia/Kolkat"
+    }
+  },
+  {
+    "id": 16123,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.401Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "94270980-61d8-4f54-bc99-a83d76357fdb"
+    }
+  },
+  {
+    "id": 16124,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.401Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-36",
+        "from_number": "webcall-user-101122737730832668494",
+        "agent_name": "New Agent",
+        "caller_number": "webcall-user-101122737730832668494",
+        "date": "Thursday, June 25, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "you are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June 2026. Current time is 11:37 am (Asia/Kolkata).\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in hi-IN at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in hi-IN regardless of what language the caller uses. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never transla"
+    },
+    "metadata": null
+  },
+  {
+    "id": 16125,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:18.401Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 16127,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:22.057Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3684,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17920,
+      "textLength": 5,
+      "firstByteMs": 3103
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 3684
+    }
+  },
+  {
+    "id": 16126,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:22.057Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 560,
+      "turnNumber": 0,
+      "durationMs": 3685
+    }
+  },
+  {
+    "id": 16128,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:23.484Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello Hello",
+      "endDetectToFinalMs": 90,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16129,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:24.991Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:37 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16130,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:25.418Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 433,
+      "turnNumber": 1,
+      "durationMs": 433
+    }
+  },
+  {
+    "id": 16131,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:25.422Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "नमस्ते!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16132,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:25.422Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16133,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:25.501Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 433,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "नमस्ते! आज मैं पॉलिसी इंश्योरेंस ब्रोकिंग के बारे में बात करने के लिए यहाँ हूँ। क्या आप अपनी पॉलिसी से संबंधित किसी विशेष जानकारी के बारे में जानना चाहेंगे?"
+    },
+    "metadata": {
+      "inputTokens": 1507,
+      "outputTokens": 39,
+      "model": "sarvam-30b",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16137,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:26.520Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 960,
+      "turnNumber": 1,
+      "durationMs": 1098
+    }
+  },
+  {
+    "id": 16134,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:26.520Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1097,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 30720,
+      "textLength": 7,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1097
+    }
+  },
+  {
+    "id": 16136,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:26.520Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आज मैं पॉलिसी इंश्योरेंस ब्रोकिंग के बारे में बात करने के लिए यहाँ हूँ।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16135,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:26.520Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16139,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:30.589Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4068,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 122878,
+      "textLength": 71,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 4068
+    }
+  },
+  {
+    "id": 16140,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:30.589Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3840,
+      "turnNumber": 1,
+      "durationMs": 4069
+    }
+  },
+  {
+    "id": 16138,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:30.589Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16141,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:30.589Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप अपनी पॉलिसी से संबंधित किसी विशेष जानकारी के बारे में जानना चाहेंगे?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 16143,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:35.501Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4911,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145918,
+      "textLength": 76,
+      "firstByteMs": 266
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 4911
+    }
+  },
+  {
+    "id": 16142,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:35.501Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4560,
+      "turnNumber": 1,
+      "durationMs": 4911
+    }
+  },
+  {
+    "id": 16144,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:40.310Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "हाँ हाँ मैं Policy यही है।",
+      "endDetectToFinalMs": 180,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16145,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:40.411Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:37 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16146,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.133Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 721,
+      "turnNumber": 2,
+      "durationMs": 721
+    }
+  },
+  {
+    "id": 16147,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.156Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16148,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.156Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "बिल्कुल!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16149,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.268Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 721,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "बिल्कुल! आपकी पॉलिसी के बारे में बात करते हैं। क्या आप अपनी पॉलिसी की कोई खास जानकारी जानना चाहते हैं या कोई सवाल है?"
+    },
+    "metadata": {
+      "inputTokens": 1597,
+      "outputTokens": 32,
+      "model": "sarvam-30b",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16151,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.912Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 756,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20480,
+      "textLength": 8,
+      "firstByteMs": 133
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 756
+    }
+  },
+  {
+    "id": 16150,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.912Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 640,
+      "turnNumber": 2,
+      "durationMs": 756
+    }
+  },
+  {
+    "id": 16152,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.912Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आपकी पॉलिसी के बारे में बात करते हैं।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16153,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:41.912Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16156,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:44.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2605,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 74238,
+      "textLength": 37,
+      "firstByteMs": 264
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 2605
+    }
+  },
+  {
+    "id": 16155,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:44.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2320,
+      "turnNumber": 2,
+      "durationMs": 2605
+    }
+  },
+  {
+    "id": 16157,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:44.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16154,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:44.517Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप अपनी पॉलिसी की कोई खास जानकारी जानना चाहते हैं या कोई सवाल है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 16158,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:49.315Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4798,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 143358,
+      "textLength": 70,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 4798
+    }
+  },
+  {
+    "id": 16159,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:49.315Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4480,
+      "turnNumber": 2,
+      "durationMs": 4798
+    }
+  },
+  {
+    "id": 16160,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:55.936Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "नहीं सवाल है भाई ये। मैं ICICI Lombard Policy है ये।",
+      "endDetectToFinalMs": 711,
+      "mergedSegments": 3,
+      "pauseCount": 2
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16161,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:56.039Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:37 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16162,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:56.198Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 161,
+      "turnNumber": 3,
+      "durationMs": 161
+    }
+  },
+  {
+    "id": 16163,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:56.254Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, ICICI Lombard की पॉलिसी है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16164,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:56.255Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16165,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:56.310Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 161,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, ICICI Lombard की पॉलिसी है। क्या आप जानना चाहेंगे कि आपकी पॉलिसी में क्या-क्या benefits मिल रहे हैं?"
+    },
+    "metadata": {
+      "inputTokens": 1646,
+      "outputTokens": 29,
+      "model": "sarvam-30b",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16166,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:58.898Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2643,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79358,
+      "textLength": 35,
+      "firstByteMs": 160
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 2643
+    }
+  },
+  {
+    "id": 16168,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:58.898Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2480,
+      "turnNumber": 3,
+      "durationMs": 2644
+    }
+  },
+  {
+    "id": 16167,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:58.898Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16169,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:07:58.911Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप जानना चाहेंगे कि आपकी पॉलिसी में क्या-क्या benefits मिल रहे हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 16170,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:03.471Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4573,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 138238,
+      "textLength": 72,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 4573
+    }
+  },
+  {
+    "id": 16171,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:03.471Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4320,
+      "turnNumber": 3,
+      "durationMs": 4573
+    }
+  },
+  {
+    "id": 16172,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:08.339Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "अच्छा benefits है। थोड़ा problem आ सकता है।",
+      "endDetectToFinalMs": 157,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16173,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:08.441Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:38 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16174,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:08.652Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 213,
+      "turnNumber": 4,
+      "durationMs": 213
+    }
+  },
+  {
+    "id": 16175,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:08.709Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16176,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:08.709Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, ICICI Lombard की पॉलिसी है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16177,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:08.767Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 213,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, ICICI Lombard की पॉलिसी है। क्या आप जानना चाहेंगे कि आपकी पॉलिसी में क्या-क्या benefits मिल रहे हैं?"
+    },
+    "metadata": {
+      "inputTokens": 1692,
+      "outputTokens": 29,
+      "model": "sarvam-30b",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16178,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:11.615Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2906,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 35,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 2906
+    }
+  },
+  {
+    "id": 16181,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:11.615Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2720,
+      "turnNumber": 4,
+      "durationMs": 2906
+    }
+  },
+  {
+    "id": 16179,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:11.615Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16180,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:11.615Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप जानना चाहेंगे कि आपकी पॉलिसी में क्या-क्या benefits मिल रहे हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 16182,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:16.008Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4393,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 133118,
+      "textLength": 72,
+      "firstByteMs": 149
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 4393
+    }
+  },
+  {
+    "id": 16183,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:16.008Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4160,
+      "turnNumber": 4,
+      "durationMs": 4393
+    }
+  },
+  {
+    "id": 16184,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:20.901Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "benefits 5 years पानी से भैया।",
+      "endDetectToFinalMs": 143,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16185,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:21.003Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:38 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16186,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:21.196Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 194,
+      "turnNumber": 5,
+      "durationMs": 194
+    }
+  },
+  {
+    "id": 16187,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:21.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16188,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:21.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, 5 साल की water coverage है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16189,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:21.271Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 194,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, 5 साल की water coverage है। क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "metadata": {
+      "inputTokens": 1739,
+      "outputTokens": 25,
+      "model": "sarvam-30b",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16190,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:23.767Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2320,
+      "turnNumber": 5,
+      "durationMs": 2516
+    }
+  },
+  {
+    "id": 16191,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:23.768Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2515,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 74238,
+      "textLength": 35,
+      "firstByteMs": 155
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 2515
+    }
+  },
+  {
+    "id": 16192,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:23.768Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16193,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:23.785Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 16194,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:26.295Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2527,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 74238,
+      "textLength": 45,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 2527
+    }
+  },
+  {
+    "id": 16195,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:26.295Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2320,
+      "turnNumber": 5,
+      "durationMs": 2527
+    }
+  },
+  {
+    "id": 16196,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:29.696Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Water coverage नहीं है, Hospital coverage.",
+      "endDetectToFinalMs": 234,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16197,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:29.799Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:38 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 12,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16198,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:30.005Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 207,
+      "turnNumber": 6,
+      "durationMs": 207
+    }
+  },
+  {
+    "id": 16200,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:30.067Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16199,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:30.067Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16201,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:30.112Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 207,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है। क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "metadata": {
+      "inputTokens": 1778,
+      "outputTokens": 25,
+      "model": "sarvam-30b",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16202,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:33.205Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3138,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94718,
+      "textLength": 38,
+      "firstByteMs": 156
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 3138
+    }
+  },
+  {
+    "id": 16204,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:33.205Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2960,
+      "turnNumber": 6,
+      "durationMs": 3138
+    }
+  },
+  {
+    "id": 16203,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:33.205Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16205,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:33.205Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 16206,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:35.975Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2770,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81918,
+      "textLength": 45,
+      "firstByteMs": 145
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 2770
+    }
+  },
+  {
+    "id": 16207,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:35.975Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2560,
+      "turnNumber": 6,
+      "durationMs": 2770
+    }
+  },
+  {
+    "id": 16208,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:39.042Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Claim नहीं है।",
+      "endDetectToFinalMs": 149,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16209,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:39.143Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:38 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 14,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16210,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:39.315Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 172,
+      "turnNumber": 7,
+      "durationMs": 172
+    }
+  },
+  {
+    "id": 16211,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:39.387Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16212,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:39.387Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16213,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:39.438Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 172,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है। क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "metadata": {
+      "inputTokens": 1817,
+      "outputTokens": 25,
+      "model": "sarvam-30b",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16216,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:41.980Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2592,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 38,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 2592
+    }
+  },
+  {
+    "id": 16214,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:41.980Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2400,
+      "turnNumber": 7,
+      "durationMs": 2593
+    }
+  },
+  {
+    "id": 16215,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:41.980Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16217,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:41.980Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 16219,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:44.637Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2657,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79358,
+      "textLength": 45,
+      "firstByteMs": 138
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 2657
+    }
+  },
+  {
+    "id": 16218,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:44.637Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2480,
+      "turnNumber": 7,
+      "durationMs": 2657
+    }
+  },
+  {
+    "id": 16220,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:47.571Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "नहीं जी दिक्कत नहीं आ रही।",
+      "endDetectToFinalMs": 213,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16221,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:47.673Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:38 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 16,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16222,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:47.826Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 155,
+      "turnNumber": 8,
+      "durationMs": 155
+    }
+  },
+  {
+    "id": 16223,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:47.890Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16224,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:47.890Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16225,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:47.910Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 155,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है। क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "metadata": {
+      "inputTokens": 1859,
+      "outputTokens": 25,
+      "model": "sarvam-30b",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16226,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:50.780Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2890,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 38,
+      "firstByteMs": 145
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 2890
+    }
+  },
+  {
+    "id": 16228,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:50.780Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2720,
+      "turnNumber": 8,
+      "durationMs": 2890
+    }
+  },
+  {
+    "id": 16227,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:50.780Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16229,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:50.780Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 16230,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:53.429Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2649,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 45,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 2649
+    }
+  },
+  {
+    "id": 16231,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:53.429Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2400,
+      "turnNumber": 8,
+      "durationMs": 2649
+    }
+  },
+  {
+    "id": 16243,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:56.109Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Happy Tata Amar है। जय महाराष्ट्र।",
+      "endDetectToFinalMs": 220,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16245,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:56.210Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Hindi. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Hindi word.\n\n[CURRENT DATE & TIME] Thursday, June 25, 2026 at 11:38 AM GMT+5:30 (Asia/Kolkata)\n\nyou are infant from policy insurance broking and you will speak in hinglish professional and colloquial way.\n\n[DATE/TIME CONTEXT] Today is Thursday, 25 June ",
+      "historyLength": 18,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16247,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:56.421Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 211,
+      "turnNumber": 9,
+      "durationMs": 211
+    }
+  },
+  {
+    "id": 16248,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:56.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16249,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:56.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16250,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:56.506Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 211,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी हाँ, 5 साल की hospital coverage है। क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "metadata": {
+      "inputTokens": 1902,
+      "outputTokens": 25,
+      "model": "sarvam-30b",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16257,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:59.384Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2898,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 87038,
+      "textLength": 38,
+      "firstByteMs": 175
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 2898
+    }
+  },
+  {
+    "id": 16255,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:59.384Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16258,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:59.384Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2720,
+      "turnNumber": 9,
+      "durationMs": 2899
+    }
+  },
+  {
+    "id": 16256,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:08:59.384Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको claim करने में कोई दिक्कत आ रही है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 16263,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:09:02.123Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2739,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 76798,
+      "textLength": 45,
+      "firstByteMs": 278
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 2739
+    }
+  },
+  {
+    "id": 16264,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:09:02.123Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2400,
+      "turnNumber": 9,
+      "durationMs": 2740
+    }
+  },
+  {
+    "id": 16265,
+    "callId": 581,
+    "agentId": 36,
+    "ts": "2026-06-25T06:09:02.626Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "TTS",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 104,
+        "turns": 9,
+        "lastComponent": "TTS",
+        "lastUserTranscript": "Happy Tata Amar है। जय महाराष्ट्र।",
+        "lastAgentResponse": "जी हाँ, 5 साल की hospital coverage है। क्या आपको claim करने में कोई दिक्कत आ रही है?",
+        "recordingStatus": "disabled",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 104,
+      "turns": 9,
+      "avgSttMs": 0,
+      "avgLlmMs": 282,
+      "avgTtsMs": 481
+    }
+  }
+]
