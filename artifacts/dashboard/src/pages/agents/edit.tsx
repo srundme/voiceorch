@@ -876,7 +876,7 @@ export default function AgentEdit() {
                         <FormItem>
                           <FormLabel>Post-Call Webhook URL</FormLabel>
                           <FormControl>
-                            <Input placeholder="https://your-server.com/webhook/calls" {...field} />
+                            <Input placeholder="https://your-server.com/webhook/calls" autoComplete="off" {...field} />
                           </FormControl>
                           {wasCleared && (
                             <p className="text-xs text-amber-500 flex items-center gap-1">
@@ -902,7 +902,7 @@ export default function AgentEdit() {
                       <FormItem>
                         <FormLabel>Webhook Signing Secret</FormLabel>
                         <FormControl>
-                          <Input type="password" placeholder="Optional — enables HMAC signature header" {...field} />
+                          <Input type="password" placeholder="Optional — enables HMAC signature header" autoComplete="new-password" {...field} />
                         </FormControl>
                         <FormDescription>
                           When set, each webhook request includes an <code>X-SnapServe-Signature: sha256=…</code> header.

@@ -2516,6 +2516,7 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
                   <Input
                     placeholder="https://your-server.com/voiceorch-webhook"
                     className="h-9 text-sm font-mono bg-background/50"
+                    autoComplete="off"
                     {...field}
                   />
                 </FormControl>
@@ -2544,6 +2545,7 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
                   type="password"
                   placeholder="Shared HMAC secret for signature verification"
                   className="h-9 text-xs bg-background/50"
+                  autoComplete="new-password"
                   {...field}
                 />
               </FormControl>
