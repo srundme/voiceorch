@@ -209,9 +209,6 @@ export async function createSession(params: {
 
   // P1-K: Inject regulatory compliance disclosures into the system prompt
   const complianceCfg = agentCfg["compliance"] as { irdai?: boolean; dpdp?: boolean; hipaa?: boolean; trai?: boolean } | undefined;
-  if (complianceCfg?.irdai) {
-    effectiveSystemPrompt += `\n\n[IRDAI COMPLIANCE — MANDATORY] You are governed by the Insurance Regulatory and Development Authority of India (IRDAI). At the very start of every call, BEFORE any product discussion, you MUST say: "This call is for insurance advisory purposes and is regulated by the Insurance Regulatory and Development Authority of India (IRDAI). The information shared is for reference only and does not constitute a guaranteed offer or contract of insurance." Never skip this disclosure.`;
-  }
   if (complianceCfg?.dpdp) {
     effectiveSystemPrompt = appendDpdpDisclosure(effectiveSystemPrompt);
   }
