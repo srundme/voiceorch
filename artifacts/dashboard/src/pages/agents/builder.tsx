@@ -585,11 +585,10 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   <p className="text-[10px] font-medium text-blue-100/80">Auto-detect Language</p>
                   <p className="text-[9px] text-blue-300/50">Follow caller's language mid-call — off enforces a single language</p>
                 </div>
-                <button type="button"
-                  onClick={() => form.setValue("languageAutoDetect", !langAutoDetect, { shouldDirty: true })}
-                  className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${langAutoDetect ? "bg-blue-500" : "bg-white/10"}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${langAutoDetect ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
+                <Switch
+                  checked={langAutoDetect}
+                  onCheckedChange={(v) => form.setValue("languageAutoDetect", v, { shouldDirty: true })}
+                />
               </div>
             </div>
           )}
