@@ -136,6 +136,50 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
   "ar-EG": "Arabic", "ru-RU": "Russian",
 };
 
+/**
+ * Detect the dominant BCP-47 language from the Unicode script of a transcript.
+ * Sarvam STT does NOT return a detected language in its callback, so we infer it
+ * from the script of the transcribed text. This drives per-turn language injection
+ * when `languageAutoDetect` is ON.
+ *
+ * Priority: Tamil > Devanagari (Hindi) > Malayalam > Telugu > Kannada > Bengali >
+ *           Gujarati > Gurmukhi (Punjabi) > Odia > Latin-only (English) > null.
+ *
+ * Mixed scripts: the script with the most characters wins.
+ */
+function detectScriptLanguage(text: string): string | null {
+  let tamil = 0, devanagari = 0, malayalam = 0, telugu = 0, kannada = 0;
+  let bengali = 0, gujarati = 0, gurmukhi = 0, odia = 0, latin = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp >= 0x0B80 && cp <= 0x0BFF) tamil++;
+    else if (cp >= 0x0900 && cp <= 0x097F) devanagari++;
+    else if (cp >= 0x0D00 && cp <= 0x0D7F) malayalam++;
+    else if (cp >= 0x0C00 && cp <= 0x0C7F) telugu++;
+    else if (cp >= 0x0C80 && cp <= 0x0CFF) kannada++;
+    else if (cp >= 0x0980 && cp <= 0x09FF) bengali++;
+    else if (cp >= 0x0A80 && cp <= 0x0AFF) gujarati++;
+    else if (cp >= 0x0A00 && cp <= 0x0A7F) gurmukhi++;
+    else if (cp >= 0x0B00 && cp <= 0x0B7F) odia++;
+    else if ((cp >= 0x0041 && cp <= 0x005A) || (cp >= 0x0061 && cp <= 0x007A)) latin++;
+  }
+  const scores: Array<[number, string]> = [
+    [tamil,      "ta-IN"],
+    [devanagari, "hi-IN"],
+    [malayalam,  "ml-IN"],
+    [telugu,     "te-IN"],
+    [kannada,    "kn-IN"],
+    [bengali,    "bn-IN"],
+    [gujarati,   "gu-IN"],
+    [gurmukhi,   "pa-IN"],
+    [odia,       "or-IN"],
+    [latin,      "en-IN"],
+  ];
+  const best = scores.reduce((a, b) => (b[0] > a[0] ? b : a));
+  // Only return a result if at least 1 non-whitespace non-punctuation character matches.
+  return best[0] > 0 ? best[1] : null;
+}
+
 /** Transcript phrases that strongly suggest the caller is handing the phone to someone else. */
 const HANDOFF_PHRASES = [
   // English
@@ -307,7 +351,9 @@ export class OrchestrationPipeline {
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
 
-  // Tracks the configured agent language for per-turn LLM language injection.
+  // Tracks the current call language for per-turn LLM language injection.
+  // Seeded from the agent's primary language at construction so turn 1 already
+  // has a baseline. Updated each turn via script detection when languageAutoDetect=true.
   private currentLang: string = "";
 
   // Repetition guard (call 548): the last spoken assistant line + how many times
@@ -566,10 +612,21 @@ export class OrchestrationPipeline {
           if (!text.trim()) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
-          // Auto-detect mode: update currentLang from STT so the per-turn LLM
-          // language instruction follows the caller when they switch languages.
-          if (lang && this.agent.languageAutoDetect) {
-            this.currentLang = lang;
+          // Auto-detect mode: update currentLang from the transcript's Unicode script.
+          // Sarvam STT does NOT return a detectedLanguage — the `lang` arg is always
+          // undefined. So we infer the caller's language from what they actually said.
+          // This drives the per-turn LLM language instruction on the next turn.
+          if (this.agent.languageAutoDetect) {
+            const detected = lang ?? detectScriptLanguage(text);
+            if (detected) {
+              if (detected !== this.currentLang) {
+                logger.info(
+                  { callId: this.config.callId, from: this.currentLang, to: detected, text: text.slice(0, 60) },
+                  "Auto-detect: caller language switch detected",
+                );
+              }
+              this.currentLang = detected;
+            }
           }
           // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
           // transcript that is later discarded (tail-echo) does NOT clear the stall.
@@ -2245,19 +2302,34 @@ export class OrchestrationPipeline {
     // fall back to launching it here so it still overlaps with backchannel TTS.
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
-    // Language guard placed at BOTH top (highest LLM attention) and bottom (recency).
-    // This prevents Gemini/GPT from drifting to English even when confused by an
-    // unrecognised name, unfamiliar word, or code-switching in the transcript.
+    // Language guard — placed at BOTH top and bottom of the system prompt so it
+    // survives both long prompts (top = high attention) and recency bias (bottom).
+    //
+    // Two modes:
+    //   languageAutoDetect=true  → "FOLLOW CALLER" guide: tell the LLM which
+    //     language the caller is currently using and ask it to match. No "NEVER
+    //     switch" clause — switching is the entire point.
+    //   languageAutoDetect=false → "ABSOLUTE RULE": enforce one language forever.
     let langGuard = "";
     if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
-      langGuard =
-        `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
-        `This applies to EVERY reply without exception — including when you are confused, ` +
-        `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
-        `Never switch to English or any other language under any circumstances. ` +
-        `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
-        `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+      if (this.agent.languageAutoDetect) {
+        langGuard =
+          `[LANGUAGE RULE] The caller is currently speaking in ${langName}. ` +
+          `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
+          `immediately switch your response to match their new language. ` +
+          `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
+          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+          `EXACTLY as written in your instructions; never translate or transliterate them.`;
+      } else {
+        langGuard =
+          `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
+          `This applies to EVERY reply without exception — including when you are confused, ` +
+          `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
+          `Never switch to English or any other language under any circumstances. ` +
+          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
+          `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+      }
     }
     systemPromptForTurn = langGuard
       ? `${langGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${langGuard}`
@@ -2477,9 +2549,12 @@ export class OrchestrationPipeline {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
         const langName = LANG_DISPLAY_NAMES[this.currentLang!] ?? this.currentLang!;
+        const reminder = this.agent.languageAutoDetect
+          ? `[Language: caller is speaking ${langName} — respond in ${langName}; switch immediately if they change language]`
+          : `[Reminder: reply in ${langName} only]`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
-          { ...lastTurn, content: `${lastTurn.content}\n\n[Reminder: reply in ${langName} only]` },
+          { ...lastTurn, content: `${lastTurn.content}\n\n${reminder}` },
         ];
       }
     }
