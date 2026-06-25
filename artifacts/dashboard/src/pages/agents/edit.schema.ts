@@ -42,6 +42,7 @@ export const agentFormSchema = z.object({
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
   timezone:               z.string().optional(),
   autoSwitchToEnglish:    z.boolean().optional(),
+  languageAutoDetect:     z.boolean().optional(),
   machineDetectionMode:   z.enum(["disabled", "enable", "detect_message_end"]).optional(),
   voicemailAction:        z.enum(["hangup", "leave_message", "continue"]).optional(),
   voicemailMessage:       z.string().optional(),

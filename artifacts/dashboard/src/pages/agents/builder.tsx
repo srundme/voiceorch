@@ -579,6 +579,18 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   )} />
                 )}
               </div>
+              <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
+                <div className="flex items-center justify-between pt-1">
+                  <div>
+                    <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
+                    <p className="text-[9px] text-muted-foreground/60">Follow caller's language mid-call — off enforces a single language</p>
+                  </div>
+                  <button type="button" onClick={() => field.onChange(!field.value)}
+                    className={`relative w-8 h-4 rounded-full transition-colors ${field.value ? "bg-blue-500" : "bg-muted-foreground/30"}`}>
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${field.value ? "translate-x-4" : "translate-x-0.5"}`} />
+                  </button>
+                </div>
+              )} />
             </div>
           )}
 
@@ -4520,7 +4532,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
-      tools: [], genderDetectionEnabled: false, recordingEnabled: false,
+      tools: [], genderDetectionEnabled: false, recordingEnabled: false, languageAutoDetect: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
@@ -4583,6 +4595,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
+      languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
       startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
