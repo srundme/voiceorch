@@ -144,16 +144,19 @@ export class SarvamLLM implements LLMAdapter {
 
     const genBody = this.buildGenerationBody();
 
-    // When tools are present, Sarvam-30b needs its reasoning trace to decide
+    // When tools are present, Sarvam models need their reasoning trace to decide
     // whether to call a tool vs reply conversationally. With reasoning_effort:null
     // (thinking off) the model defaults to text replies and skips tool calls.
-    // Bump to "medium" for tool turns — sarvam-30b with reasoning_effort:null skips
-    // tool calls entirely and replies conversationally. "low" enables tool use but
-    // the model still asks for confirmation. "medium" gives enough reasoning budget
-    // to follow the MANDATORY instruction and call the tool without confirming.
-    // Agent-level override of reasoningEffort is still respected (only null is bumped).
+    //
+    // Model-specific budget for tool turns (agent-level override still respected):
+    //   sarvam-30b  → "medium": 30b with "low" still asks for confirmation before
+    //                 calling; "medium" gives enough budget to call immediately.
+    //   sarvam-105b → "low":    105b with "medium" reasoning generates thousands of
+    //                 reasoning tokens and produces an EMPTY final response, causing
+    //                 10–15 s silent turns. 105b is powerful enough at "low" to call
+    //                 tools correctly without over-reasoning.
     if (hasTools && genBody["reasoning_effort"] === null) {
-      genBody["reasoning_effort"] = "medium";
+      genBody["reasoning_effort"] = this.model === "sarvam-105b" ? "low" : "medium";
     }
 
     // Sarvam-specific tool-use injection: placed at the very top of the system
