@@ -1,0 +1,110 @@
+## UX Improvement – Visual Version Comparison
+
+The Technical comparison view clearly labels the two versions as:
+
+* **Current**
+* **Previous**
+
+This makes it immediately obvious which version is the latest and which version is being compared.
+
+However, the **Visual Comparison** view does not include these labels. Users have to infer which side represents the current version based on position, which creates unnecessary cognitive load.
+
+### Required UX Improvements
+
+Add the same version labeling to the Visual Comparison view.
+
+### Left Panel
+
+Display:
+
+* **CURRENT VERSION** (small green uppercase label)
+* Version Name (e.g. `draft-4`)
+* Version Description
+* Timestamp
+* Green accent/border indicating this is the active version
+
+Example:
+
+```
+CURRENT VERSION
+draft-4 • Multiple Changes
+Jun 25, 2026 • 20:04
+```
+
+---
+
+### Right Panel
+
+Display:
+
+* **COMPARED AGAINST** (small gray uppercase label)
+* Version Name
+* Timestamp
+
+Example:
+
+```
+COMPARED AGAINST
+draft-2 • Multiple Changes
+Jun 25, 2026 • 19:55
+```
+
+---
+
+### Visual Indicators
+
+Use consistent visual cues throughout the comparison page:
+
+* 🟢 Green = Current Version
+* ⚪ Gray = Compared Version
+
+These colors should be reflected in:
+
+* Header cards
+* Section titles
+* Diff indicators
+* Badges
+
+---
+
+### Sticky Header
+
+Keep the version cards pinned while scrolling through long comparisons so users always know:
+
+* Which version is on the left
+* Which version is on the right
+
+---
+
+### Mobile/Desktop Consistency
+
+Maintain the same labels regardless of whether the comparison is:
+
+* Side-by-side
+* Stacked
+* Responsive layout
+
+The labels should never disappear.
+
+---
+
+### Additional UX Improvements
+
+Include summary badges directly below the version cards:
+
+```
+Changes
+- 1 Removal
+~ 3 Modifications
++ 2 Additions
+```
+
+These should update dynamically based on the selected versions.
+
+---
+
+### Goal
+
+The user should be able to identify the current version and the comparison version within one second, without relying on position or guesswork.
+
+The Visual Comparison should match the clarity and usability of the Technical Comparison while maintaining a polished, modern design consistent with the SnapServe AI interface.
