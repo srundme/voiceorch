@@ -2,6 +2,7 @@ import * as agnost from "agnostai";
 import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
+import { SpeakerVerifier } from "./speakerVerifier.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks } from "./reasoningFilter.js";
@@ -362,6 +363,10 @@ export class OrchestrationPipeline {
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
 
+  // Mid-call voice biometric speaker verification — opt-in, warning-only.
+  // null unless the agent enables voiceVerificationEnabled.
+  private speakerVerifier: SpeakerVerifier | null = null;
+
   // Tracks the current call language for per-turn LLM language injection.
   // Seeded from the agent's primary language at construction so turn 1 already
   // has a baseline. Updated each turn via script detection when languageAutoDetect=true.
@@ -433,6 +438,28 @@ export class OrchestrationPipeline {
           : new GenderDetector(config.callId);
     } else {
       this.genderDetector = null as unknown as GenderDetector;
+    }
+
+    // Mid-call voice biometric speaker verification (opt-in). Mirrors the gender
+    // detector lifecycle so it adds ZERO latency: fed on the same audio frames,
+    // fired fire-and-forget after each turn. Warning-only — it writes a compliance
+    // execution-log row on a sustained voice mismatch and never touches call control.
+    if (config.agentConfig.voiceVerificationEnabled) {
+      this.speakerVerifier = new SpeakerVerifier(config.callId, {
+        onMismatch: (info) => {
+          logWarningEvent(this.logFn, EXEC_COMPONENTS.Compliance, "Voice Mismatch Detected", ["voice_mismatch"], {
+            turnNumber: this._activeTurnIndex,
+            detail: {
+              reason: `Possible speaker change mid-call — voice similarity ${info.similarity} stayed below the ${info.threshold} threshold (window ${info.window}). Warning only; the call was not interrupted.`,
+              similarity: info.similarity,
+              rollingAverage: info.rollingAverage,
+              threshold: info.threshold,
+              window: info.window,
+              consecutiveLow: info.consecutiveLow,
+            },
+          });
+        },
+      });
     }
 
     const keys = config.providerKeys;
@@ -934,6 +961,9 @@ export class OrchestrationPipeline {
     if (this.streamSTT) {
       // Feed all frames (not just speech) — librosa pyin handles silence gracefully
       this.genderDetector?.addSpeechChunk(pcm8k);
+      // Feed the verifier caller audio only — skip while the agent is speaking so
+      // its own TTS echo can't pollute the enrollment/verification voiceprint.
+      if (!this.isPlaying) this.speakerVerifier?.addSpeechChunk(pcm8k);
       // KB prefetch: fire on the first frame of a new speech segment so the lookup
       // runs during the utterance rather than after STT resolves.
       if (!this.inSpeechSegment && !this.isProcessing && this.agent.knowledgeSourceIds.length > 0) {
@@ -950,6 +980,8 @@ export class OrchestrationPipeline {
 
     // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops)
     this.genderDetector?.addSpeechChunk(pcm8k);
+    // Verifier: caller audio only — skip while the agent is speaking (echo guard).
+    if (!this.isPlaying) this.speakerVerifier?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) {
@@ -2196,6 +2228,10 @@ export class OrchestrationPipeline {
     // Non-blocking: updates genderDetector.gender for the next turn's salutation.
     // GenderDetector (v0) auto-fires via addSpeechChunk and treats this as a no-op.
     if (this.genderDetector && !this.genderDetector.locked) this.genderDetector.runDetection();
+
+    // Mid-call speaker verification — same fire-and-forget cadence as gender.
+    // No-op until the agent opts in; never blocks the turn.
+    this.speakerVerifier?.runDetection();
 
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept

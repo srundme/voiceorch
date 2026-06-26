@@ -1,0 +1,329 @@
+# Open Source Launch & Product Hunt Readiness Plan for SnapServe AI
+
+We are preparing to launch SnapServe AI as an open-source project and simultaneously launch it on Product Hunt.
+
+I need you to act as both an Open Source Architect and Product Launch Consultant.
+
+Your objective is to create a complete launch strategy and implement everything required before making the GitHub repository public.
+
+## Deliverables
+
+Provide a complete implementation plan covering:
+
+### 1. Open Source Strategy
+
+Help determine the best approach for the first public release.
+
+Questions to answer:
+
+* What parts of SnapServe AI should be open sourced?
+* Should we open source the complete application (Frontend + Backend)?
+* Should we separate the SaaS platform from the open-source core?
+* Which features should remain proprietary?
+* What is the recommended architecture for an open-core business model?
+
+Provide your recommendation with pros and cons.
+
+---
+
+## 2. GitHub Repository Preparation
+
+Before making the repository public, audit the project and identify everything that must be cleaned up.
+
+Verify:
+
+* API Keys
+* Secrets
+* Environment Variables
+* Database Credentials
+* OAuth Credentials
+* Webhook Secrets
+* Internal URLs
+* Hardcoded Emails
+* Test Accounts
+* Temporary Files
+* Debug Code
+* Development-only Features
+* Admin-only Features
+
+Generate a checklist of everything that must be removed or replaced before publishing.
+
+---
+
+## 3. Repository Structure
+
+Recommend the ideal repository structure.
+
+Example:
+
+/apps
+/packages
+/docs
+/examples
+/scripts
+/templates
+
+Determine whether the repository should be:
+
+* Monorepo
+* Multiple repositories
+
+Explain why.
+
+---
+
+## 4. GitHub Documentation
+
+Create all required documentation.
+
+At minimum:
+
+* README.md
+* CONTRIBUTING.md
+* CODE_OF_CONDUCT.md
+* SECURITY.md
+* LICENSE
+* CHANGELOG.md
+* ROADMAP.md
+* SUPPORT.md
+* FAQ.md
+* Architecture.md
+
+Recommend any additional documentation that should exist.
+
+---
+
+## 5. README Design
+
+Design a world-class README.
+
+Include:
+
+* Product Overview
+* Features
+* Architecture Diagram
+* Screenshots
+* Demo GIF
+* Installation Guide
+* Docker Setup
+* Local Development
+* Environment Variables
+* Deployment Guide
+* API Documentation
+* Example Configurations
+* Community Links
+* Contribution Guide
+* Star History
+* License
+
+---
+
+## 6. Installation Experience
+
+The installation process should be as simple as possible.
+
+Recommend:
+
+* Docker Compose
+* One-command installation
+* Local development setup
+* Railway deployment
+* Replit deployment
+* Self-hosting guide
+
+---
+
+## 7. Environment Variables
+
+Automatically generate:
+
+.env.example
+
+Remove all secrets.
+
+Document every required variable with descriptions.
+
+---
+
+## 8. Open Source License
+
+Recommend the best license.
+
+Compare:
+
+* MIT
+* Apache 2.0
+* GPL
+* AGPL
+* Business Source License (BSL)
+
+Explain which license is most suitable if we plan to build a commercial SaaS while maintaining an open-source community.
+
+---
+
+## 9. Community Preparation
+
+Prepare GitHub for community contributions.
+
+Include:
+
+* GitHub Discussions
+* GitHub Issues Templates
+* Pull Request Template
+* Bug Report Template
+* Feature Request Template
+* Labels
+* Milestones
+* Project Board
+* Release Workflow
+
+---
+
+## 10. CI/CD
+
+Prepare GitHub Actions.
+
+Include:
+
+* Build Validation
+* Lint
+* Type Check
+* Tests
+* Docker Build
+* Security Scan
+* Release Workflow
+
+---
+
+## 11. Security Review
+
+Audit the repository for:
+
+* Secret Leakage
+* Dependency Vulnerabilities
+* Sensitive Files
+* Authentication Risks
+* Admin Backdoors
+* Debug Endpoints
+* Rate Limiting
+* CORS Configuration
+
+Provide a report.
+
+---
+
+## 12. Open Source Branding
+
+Prepare assets including:
+
+* GitHub Banner
+* Logo
+* Product Icon
+* Social Preview Image
+* README Images
+* Architecture Diagram
+
+---
+
+## 13. Product Hunt Launch Preparation
+
+Create a complete Product Hunt launch checklist.
+
+Include:
+
+* Product Name
+* Tagline
+* Short Description
+* Long Description
+* First Comment
+* Screenshots
+* Demo Video
+* Thumbnail
+* Website
+* GitHub Link
+* Documentation
+* Pricing Page
+* FAQs
+* Founder Profile
+* Social Media Assets
+* Launch Day Timeline
+* Post-launch Marketing Plan
+
+---
+
+## 14. Open Source Release Checklist
+
+Generate a final release checklist.
+
+Examples:
+
+* Repository audit completed
+* Secrets removed
+* License added
+* Documentation completed
+* Installation verified
+* Docker tested
+* Railway deployment tested
+* Replit deployment tested
+* GitHub Actions passing
+* Example environment file added
+* Release tagged
+* Version 1.0.0 created
+* Product Hunt assets completed
+
+---
+
+## 15. Repository Audit
+
+Scan the existing project and identify:
+
+* Files that should not be public
+* Internal configuration files
+* Temporary scripts
+* Test data
+* Credentials
+* Experimental code
+* Unused files
+* Duplicate files
+
+Recommend what should be removed before launch.
+
+---
+
+## 16. SaaS vs Open Source Separation
+
+Recommend the best long-term architecture.
+
+Specifically identify:
+
+* What should remain open source
+* What should remain part of the commercial SaaS
+* Which enterprise features should be exclusive
+* How to avoid exposing proprietary infrastructure while still providing a fully usable open-source version
+
+---
+
+## Final Deliverable
+
+Produce a comprehensive launch plan with implementation tasks prioritized into:
+
+Phase 1 – Repository Cleanup
+
+Phase 2 – Documentation
+
+Phase 3 – Open Source Readiness
+
+Phase 4 – GitHub Publication
+
+Phase 5 – Product Hunt Launch
+
+Phase 6 – Post-launch Community Growth
+
+For every task, indicate:
+
+* Priority (Critical / High / Medium / Low)
+* Estimated implementation time
+* Dependencies
+* Expected outcome
+
+Do not provide only recommendations. Wherever possible, implement the required files, templates, documentation, workflows, and repository improvements directly in the project so that the repository is production-ready for a public open-source launch.

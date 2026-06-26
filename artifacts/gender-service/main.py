@@ -23,7 +23,7 @@ import os
 import httpx
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import APIRouter, FastAPI, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -35,6 +35,16 @@ from pydantic import BaseModel
 _ml_v2_readiness: dict = {
     "ok": False,
     "checks": {"soundfile": False, "torch": False, "transformers": False, "wav2vec2_model": False},
+    "errors": {},
+    "checked": False,
+}
+
+
+# Readiness state for the ECAPA-TDNN speaker-verification pipeline. Populated by
+# the background warmup at startup and surfaced via GET /voice-analysis/speaker/health.
+_speaker_readiness: dict = {
+    "ok": False,
+    "checks": {"torch": False, "speechbrain": False, "ecapa_model": False},
     "errors": {},
     "checked": False,
 }
@@ -116,6 +126,26 @@ async def _bg_warmup() -> None:
         else:
             print(f"[warmup] gender-ml-v2 NOT ready — errors: {_ml_v2_readiness['errors']}", flush=True)
     await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _warmup_ml_v2)
+
+    def _warmup_speaker():
+        global _speaker_readiness
+        try:
+            from speaker_recognition import check_speaker_dependencies  # noqa: PLC0415
+            _speaker_readiness = check_speaker_dependencies()
+        except Exception as exc:  # noqa: BLE001
+            import traceback  # noqa: PLC0415
+            _speaker_readiness = {
+                "ok": False,
+                "checks": {"torch": False, "speechbrain": False, "ecapa_model": False},
+                "errors": {"import": f"{type(exc).__name__}: {exc}"},
+                "checked": True,
+            }
+            print(f"[warmup] speaker (ECAPA) warmup crashed: {traceback.format_exc()}", flush=True)
+        if _speaker_readiness["ok"]:
+            print("[warmup] speaker (ECAPA-TDNN) dependencies ready (torch, speechbrain, ecapa_model)", flush=True)
+        else:
+            print(f"[warmup] speaker (ECAPA-TDNN) NOT ready — errors: {_speaker_readiness['errors']}", flush=True)
+    await loop.run_in_executor(concurrent.futures.ThreadPoolExecutor(max_workers=1), _warmup_speaker)
 
 
 
@@ -362,6 +392,86 @@ async def detect_gender_ml_v2_upload(file: UploadFile = File(...)):
             "error": "processing_failed",
         }
 
+
+
+# ── Speaker verification (ECAPA-TDNN) ─────────────────────────────────────────
+
+@router.get("/speaker/health")
+def speaker_health(response: Response):
+    """Readiness probe for the ECAPA-TDNN speaker-verification pipeline.
+
+    Returns 200 only once torch + speechbrain import and the ECAPA model loads;
+    otherwise 503 with the failing checks. Mirrors /ready for gender-ml-v2.
+    """
+    if _speaker_readiness.get("checked"):
+        result = _speaker_readiness
+    else:
+        from speaker_recognition import check_speaker_dependencies  # noqa: PLC0415
+        result = check_speaker_dependencies()
+    if not result.get("ok"):
+        response.status_code = 503
+    return {"service": "voice-analysis-speaker", **result}
+
+
+@router.post("/speaker/embed")
+async def speaker_embed(file: UploadFile = File(...)):
+    """Compute the 192-dim ECAPA speaker embedding for an uploaded WAV.
+
+    Used for enrollment: the orchestrator sends the first ~12–15 s of caller
+    speech and caches the returned embedding in memory as the call's reference.
+
+    Returns: { "embedding": float[192], "dim": 192, "rms": float }
+    Never 500s — degrades to { "embedding": null, "error": "..." } so the
+    orchestrator treats any failure as "skip enrollment, try again later".
+    """
+    import traceback  # noqa: PLC0415
+
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    try:
+        from speaker_recognition import embed_audio_bytes, audio_rms  # noqa: PLC0415
+        emb = embed_audio_bytes(audio_bytes)
+        return {"embedding": emb, "dim": len(emb), "rms": audio_rms(audio_bytes)}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[speaker/embed] failure: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
+        return {"embedding": None, "dim": 0, "rms": 0.0, "error": "processing_failed"}
+
+
+@router.post("/speaker/verify")
+async def speaker_verify(
+    file: UploadFile = File(...),
+    reference_embedding: str = Form(...),
+):
+    """Compare an uploaded WAV against a cached reference embedding.
+
+    The orchestrator sends each ~20–30 s verification window plus the JSON-encoded
+    reference embedding (a form field). Returns the cosine similarity plus the new
+    embedding (so the caller can refine the reference if it wishes).
+
+    Returns: { "similarity": float, "embedding": float[192], "dim": 192, "rms": float }
+    Never 500s — degrades to { "similarity": null, "error": "..." }.
+    """
+    import json         # noqa: PLC0415
+    import traceback    # noqa: PLC0415
+
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    try:
+        ref = json.loads(reference_embedding)
+        if not isinstance(ref, list) or not ref:
+            raise ValueError("reference_embedding must be a non-empty JSON array")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Invalid reference_embedding: {exc}")
+    try:
+        from speaker_recognition import embed_audio_bytes, audio_rms, cosine_similarity  # noqa: PLC0415
+        emb = embed_audio_bytes(audio_bytes)
+        sim = cosine_similarity(emb, ref)
+        return {"similarity": sim, "embedding": emb, "dim": len(emb), "rms": audio_rms(audio_bytes)}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[speaker/verify] failure: {type(exc).__name__}: {exc}\n{traceback.format_exc()}", flush=True)
+        return {"similarity": None, "embedding": None, "dim": 0, "rms": 0.0, "error": "processing_failed"}
 
 
 # ── Register router & run ─────────────────────────────────────────────────────
