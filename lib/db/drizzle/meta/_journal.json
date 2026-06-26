@@ -162,6 +162,13 @@
       "when": 1783300000000,
       "tag": "0022_wallet_txn_unique_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783400000000,
+      "tag": "0023_callback_secret_and_briefing_token",
+      "breakpoints": true
     }
   ]
 }
