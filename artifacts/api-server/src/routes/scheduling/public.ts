@@ -572,10 +572,27 @@ router.post("/scheduling/public/bookings/reschedule", async (req, res): Promise<
       lockConflict = true; return;
     }
 
-    // Mark old booking as rescheduled
-    await tx.update(bookingsTable)
+    // Mark old booking as rescheduled — only if it is still active.
+    // This is the atomic single-use guard: concurrent requests that reuse the
+    // same reschedule token but target different slots each acquire a different
+    // slot-specific advisory lock, so they do NOT contend with each other via
+    // the lock above. Making the UPDATE conditional on the current status and
+    // checking the affected row count ensures exactly one reschedule wins,
+    // regardless of how many parallel requests reach this point simultaneously.
+    const markedRescheduled = await tx.update(bookingsTable)
       .set({ status: "rescheduled", updatedAt: new Date() })
-      .where(eq(bookingsTable.id, booking.id));
+      .where(
+        and(
+          eq(bookingsTable.id, booking.id),
+          or(eq(bookingsTable.status, "pending"), eq(bookingsTable.status, "confirmed")),
+        ),
+      )
+      .returning({ id: bookingsTable.id });
+
+    if (markedRescheduled.length === 0) {
+      // Another concurrent request already consumed this reschedule token.
+      lockConflict = true; return;
+    }
 
     // Create new booking for the new slot
     const [inserted] = await tx.insert(bookingsTable).values({
