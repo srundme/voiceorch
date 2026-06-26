@@ -831,17 +831,18 @@ export async function createSession(params: {
           let briefingToken: string | undefined;
           if (isWarm && agent.userId) {
             try {
-              const token = randomBytes(32).toString("hex");
+              // Generate an unguessable per-transfer token used to authenticate the
+              // warm-briefing-xml request (prevents sequential-ID enumeration).
+              briefingToken = randomBytes(32).toString("hex");
               const [row] = await db.insert(callTransfersTable).values({
                 callId:       callRecord.id,
                 userId:       agent.userId,
                 transferTo:   to,
                 summary:      operatorSummary,
                 status:       "initiated",
-                briefingToken: token,
-              }).returning({ id: callTransfersTable.id, briefingToken: callTransfersTable.briefingToken });
-              transferId    = row?.id;
-              briefingToken = row?.briefingToken ?? undefined;
+                briefingToken,
+              }).returning({ id: callTransfersTable.id });
+              transferId = row?.id;
               logger.info({ callId: callRecord.id, transferId }, "Warm transfer: DB record created");
             } catch (err) {
               logger.error({ callId: callRecord.id, err }, "Warm transfer: failed to persist summary — falling back to cold");

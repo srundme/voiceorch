@@ -18,6 +18,15 @@ import { and, eq, lte } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz } from "./telephony/dial.js";
 import { logger } from "../lib/logger.js";
 import { decryptKey } from "../lib/crypto.js";
+import { createHmac } from "node:crypto";
+import { APP_SECRET } from "../lib/app-secret.js";
+
+/** HMAC-SHA256 signature over the callback-row ID.
+ *  Embedded in status/hangup callback URLs so the status handler can verify
+ *  the URL was issued by our server, not forged by an attacker who guessed cbId. */
+function makeCbSig(cbId: number): string {
+  return createHmac("sha256", APP_SECRET).update(`cbid:${cbId}`).digest("hex");
+}
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -84,11 +93,12 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       : {} as Record<string, string>;
 
     const leadQs = cb.campaignLeadId ? `&campaignLeadId=${cb.campaignLeadId}` : "";
-    // Pass cbId + agentId + callbackSecret in the status/hangup URL.
-    // The status webhook validates the secret against the DB row before
-    // allowing scheduleNextRedial — prevents cbId enumeration attacks.
-    const secretQs = cb.callbackSecret ? `&cbSecret=${encodeURIComponent(cb.callbackSecret)}` : "";
-    const statusQs = `?cbId=${cb.id}&agentId=${cb.agentId}${secretQs}`;
+    // Pass cbId + cbSig in the status/hangup URL so no-answer detection
+    // can link back to this row and schedule the next retry.
+    // cbSig = HMAC(APP_SECRET, "cbid:<id>") lets the status handler verify the
+    // URL was issued by our server, preventing forged cbId enumeration.
+    const cbSig   = makeCbSig(cb.id);
+    const statusQs = `?cbId=${cb.id}&cbSig=${cbSig}`;
 
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");

@@ -17,6 +17,7 @@ export const callTransfersTable = pgTable(
      * Unguessable capability token embedded in warm-briefing whisper URLs.
      * The provider must present this token to fetch the briefing XML; without
      * it the endpoint returns 403. Generated at insert time with 32 random bytes.
+     * Prevents sequential-ID enumeration of cross-tenant call summaries.
      */
     briefingToken:      text("briefing_token"),
     initiatedAt:        timestamp("initiated_at", { withTimezone: true }).notNull().defaultNow(),

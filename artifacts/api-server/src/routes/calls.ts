@@ -603,14 +603,14 @@ router.patch("/calls/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   if (existing.userId && existing.userId !== userId) {
-    res.status(404).json({ error: "Call not found" });
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   if (!existing.userId) {
     const [agent] = await db.select({ userId: agentsTable.userId })
       .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
     if (agent?.userId && agent.userId !== userId) {
-      res.status(404).json({ error: "Call not found" });
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
   }
@@ -739,16 +739,16 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Ownership check: the call must belong to the authenticated user
+  // Ownership check — prevent cross-tenant billing manipulation
   if (existing.userId && existing.userId !== userId) {
-    res.status(404).json({ error: "Call not found" });
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   if (!existing.userId) {
     const [agent] = await db.select({ userId: agentsTable.userId })
       .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
     if (agent?.userId && agent.userId !== userId) {
-      res.status(404).json({ error: "Call not found" });
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
   }

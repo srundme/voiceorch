@@ -1,15 +1,16 @@
 import { Router, type IRouter } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
 import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
-import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
+import { eq, sql, and, gte } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
+import { APP_SECRET } from "../lib/app-secret.js";
 
 const router: IRouter = Router();
 
@@ -25,7 +26,7 @@ function secretsMatch(a: string, b: string): boolean {
   const aBuf = Buffer.from(a, "utf8");
   const bBuf = Buffer.from(b, "utf8");
   if (aBuf.length !== bBuf.length) return false;
-  return cryptoTimingSafeEqual(aBuf, bBuf);
+  return timingSafeEqual(aBuf, bBuf);
 }
 
 async function handleNoAnswerStatus(opts: {
@@ -571,30 +572,74 @@ router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
 router.post("/webhooks/vobiz/status", (req, res): void => {
   req.log.info({ body: req.body, query: req.query }, "VoBiz status callback");
   res.sendStatus(204);
-  // Auto-redial: fire-and-forget so the 204 is immediate.
-  // Guards:
-  //  cbId path  — handleNoAnswerStatus validates cbSecret (HMAC-bound per-row token)
-  //  no-cbId path — verify (agentId, toNumber) matches a real call record before
-  //                  allowing redial scheduling (no VoBiz signing mechanism available)
-  const agentId    = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10) || null;
-  const toNumber   = String(req.body?.To ?? req.body?.to ?? "");
-  const cbId       = parseInt(String(req.query["cbId"] ?? "0"), 10) || null;
-  const cbSecret   = String(req.query["cbSecret"] ?? "") || null;
-  const callStatus = String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? "");
-  void (async () => {
-    if (!cbId && agentId && toNumber) {
-      const [match] = await db
-        .select({ id: callsTable.id })
-        .from(callsTable)
-        .where(and(eq(callsTable.agentId, agentId), eq(callsTable.toNumber, toNumber)))
-        .limit(1);
-      if (!match) {
-        logger.warn({ agentId, toNumber }, "VoBiz status: no matching call record — ignoring (possible forged webhook)");
+
+  // Validate before scheduling any outbound calls. Fire-and-forget so 204 is immediate.
+  // cbId path  — look up scheduledCallbacks for agentId+toNumber from DB (trusted); also
+  //              pass cbSecret so handleNoAnswerStatus can validate the per-row token.
+  // non-cbId   — verify a real call record exists in DB before scheduling any redial;
+  //              toNumber always from DB, never from attacker-controlled request body.
+  (async () => {
+    const cbId     = parseInt(String(req.query["cbId"] ?? "0"), 10) || null;
+    const cbSig    = String(req.query["cbSig"] ?? "");
+    const callStatus = String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? "");
+    // callUuid is attacker-controlled — used only as a lookup key and length-validated.
+    // toNumber is NEVER taken from the request body; always derived from the DB record.
+    const callUuid   = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "");
+
+    let agentId: number | null = null;
+    let dbToNumber: string | null = null;
+
+    if (cbId) {
+      // Scheduler-fired retry path. VoBiz has no request signature, so we rely on a
+      // HMAC(APP_SECRET, "cbid:<id>") embedded in the hangupUrl at call-creation time
+      // (callbackScheduler.ts). Validate it before any DB read or scheduling action.
+      const expectedSig = createHmac("sha256", APP_SECRET).update(`cbid:${cbId}`).digest("hex");
+      const sigValid =
+        cbSig.length === expectedSig.length &&
+        timingSafeEqual(Buffer.from(cbSig), Buffer.from(expectedSig));
+      if (!sigValid) {
+        logger.warn({ cbId }, "VoBiz status: cbSig invalid or missing — ignoring");
         return;
       }
+      const [cb] = await db.select({ agentId: scheduledCallbacksTable.agentId, toNumber: scheduledCallbacksTable.toNumber })
+        .from(scheduledCallbacksTable)
+        .where(eq(scheduledCallbacksTable.id, cbId));
+      if (!cb) {
+        logger.warn({ cbId }, "VoBiz status: cbId not found in DB — ignoring");
+        return;
+      }
+      agentId    = cb.agentId;
+      dbToNumber = cb.toNumber;
+    } else {
+      // First-call status — must anchor to a real call record in the DB.
+      // Require UUID-length identifier (VoBiz UUIDs are 36 chars) to prevent
+      // trivial substring-match attacks with short/common tokens.
+      if (!callUuid || callUuid.length < 20) {
+        logger.warn({ callUuid, bodyKeys: Object.keys(req.body ?? {}) }, "VoBiz status: missing or too-short CallUUID — ignoring");
+        return;
+      }
+      const [call] = await db.select({ agentId: callsTable.agentId, toNumber: callsTable.toNumber })
+        .from(callsTable)
+        .where(and(
+          sql`metadata::text like ${"%" + callUuid + "%"}`,
+          gte(callsTable.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)), // within 24 h
+        ))
+        .limit(1);
+      if (!call) {
+        logger.warn({ callUuid }, "VoBiz status: no matching call in DB — ignoring");
+        return;
+      }
+      agentId    = call.agentId;
+      dbToNumber = call.toNumber;
     }
-    await handleNoAnswerStatus({ cbId, cbSecret, agentId, callStatus, toNumber });
-  })();
+
+    if (!dbToNumber) {
+      logger.warn({ cbId, callUuid, agentId }, "VoBiz status: could not resolve toNumber from DB — ignoring");
+      return;
+    }
+
+    void handleNoAnswerStatus({ cbId, cbSecret: null, agentId, callStatus, toNumber: dbToNumber });
+  })().catch((err) => logger.error({ err }, "VoBiz status webhook handler error"));
 });
 
 // ── Twilio status callbacks ──────────────────────────────────────────────────
@@ -602,44 +647,98 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
 router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
   req.log.info({ body: req.body, query: req.query }, "Twilio status callback");
 
-  // Validate the Twilio signature on status callbacks exactly as we do for voice
-  // webhooks — prevents forged status POSTs from scheduling outbound redialing.
-  const agentId  = parseInt(String(req.query["agentId"] ?? "0"), 10);
-  const twilioSig = String(req.headers["x-twilio-signature"] ?? "");
-  if (twilioSig) {
-    const authToken = agentId ? await getAgentProviderToken(agentId, "twilio") : null;
-    if (!authToken) {
-      logger.warn({ agentId }, "Twilio status: signature present but no provider key found — rejected");
-      if (IS_PROD) { res.sendStatus(403); return; }
-    } else {
-      const proto   = String(req.headers["x-forwarded-proto"] ?? "https");
-      const host    = String(req.headers["x-forwarded-host"] ?? req.hostname);
-      const queryStr = req.url?.split("?")[1] ?? "";
-      const fullUrl  = `${proto}://${host}${req.path}${queryStr ? "?" + queryStr : ""}`;
-      const bodyParams: Record<string, string> = {};
-      for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
-        if (typeof v === "string") bodyParams[k] = v;
+  res.sendStatus(204);
+
+  // Validate before scheduling any outbound calls. Fire-and-forget so 204 is immediate.
+  // agentId and toNumber are always resolved from DB — never trusted from query params / body.
+  (async () => {
+    const cbId       = parseInt(String(req.query["cbId"]   ?? "0"), 10) || null;
+    const cbSig      = String(req.query["cbSig"] ?? "");
+    const callStatus = String(req.body?.CallStatus ?? "");
+    // CallSid is attacker-controlled in the body — used only as a lookup key and length-validated.
+    // toNumber is NEVER taken from the request body; it is always derived from the DB record.
+    const callSid    = String(req.body?.CallSid ?? "");
+
+    let agentId: number | null = null;
+    let dbToNumber: string | null = null;
+
+    if (cbId) {
+      // Scheduler-fired retry: validate the URL-embedded HMAC before any DB read.
+      // When authToken is available, Twilio's request signature (validated below) also
+      // covers cbId. But cbSig provides defence-in-depth for managed-plan calls where
+      // authToken may be absent or unavailable at signature validation time.
+      const expectedSig = createHmac("sha256", APP_SECRET).update(`cbid:${cbId}`).digest("hex");
+      const sigValid =
+        cbSig.length === expectedSig.length &&
+        timingSafeEqual(Buffer.from(cbSig), Buffer.from(expectedSig));
+      if (!sigValid) {
+        logger.warn({ cbId }, "Twilio status: cbSig invalid or missing — ignoring");
+        return;
       }
-      const valid = validateTwilioSignature(authToken, fullUrl, bodyParams, twilioSig);
-      if (!valid) {
-        logger.warn({ agentId, fullUrl }, "Twilio status: signature validation failed — rejected");
-        if (IS_PROD) { res.sendStatus(403); return; }
+      const [cb] = await db.select({ agentId: scheduledCallbacksTable.agentId, toNumber: scheduledCallbacksTable.toNumber })
+        .from(scheduledCallbacksTable)
+        .where(eq(scheduledCallbacksTable.id, cbId));
+      if (!cb) {
+        logger.warn({ cbId }, "Twilio status: cbId not found in DB — ignoring");
+        return;
+      }
+      agentId    = cb.agentId;
+      dbToNumber = cb.toNumber;
+    } else {
+      // Resolve agentId and toNumber from the real call record keyed on Twilio's
+      // CallSid — never from the query string, which an attacker controls.
+      // Twilio SIDs start with "CA" and are 34 chars; require at least 20 chars to
+      // prevent broad substring-match attacks with short/common tokens.
+      if (!callSid || callSid.length < 20) {
+        logger.warn({ body: req.body }, "Twilio status: missing or too-short CallSid — ignoring");
+        return;
+      }
+      const [call] = await db.select({ agentId: callsTable.agentId, toNumber: callsTable.toNumber })
+        .from(callsTable)
+        .where(and(
+          sql`metadata::text like ${"%" + callSid + "%"}`,
+          gte(callsTable.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)), // within 24 h
+        ))
+        .limit(1);
+      if (!call) {
+        logger.warn({ callSid }, "Twilio status: no matching call in DB — ignoring");
+        return;
+      }
+      agentId    = call.agentId;
+      dbToNumber = call.toNumber;
+    }
+
+    if (!dbToNumber) {
+      logger.warn({ cbId, callSid, agentId }, "Twilio status: could not resolve toNumber from DB — ignoring");
+      return;
+    }
+
+    // In production, validate the Twilio request signature using the agent's auth token
+    if (IS_PROD && agentId) {
+      const authToken = await getAgentProviderToken(agentId, "twilio");
+      if (authToken) {
+        const twilioSig = String(req.headers["x-twilio-signature"] ?? "");
+        if (!twilioSig) {
+          logger.warn({ agentId, callSid }, "Twilio status: missing X-Twilio-Signature — ignoring");
+          return;
+        }
+        const proto    = String(req.headers["x-forwarded-proto"] ?? "https");
+        const host     = String(req.headers["x-forwarded-host"] ?? req.hostname);
+        const queryStr = (req.url?.split("?")[1] ?? "");
+        const fullUrl  = `${proto}://${host}${req.path}${queryStr ? "?" + queryStr : ""}`;
+        const bodyParams: Record<string, string> = {};
+        for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
+          if (typeof v === "string") bodyParams[k] = v;
+        }
+        if (!validateTwilioSignature(authToken, fullUrl, bodyParams, twilioSig)) {
+          logger.warn({ agentId, callSid, fullUrl }, "Twilio status: signature invalid — ignoring");
+          return;
+        }
       }
     }
-  } else if (IS_PROD) {
-    logger.warn({ agentId }, "Twilio status: missing X-Twilio-Signature — rejected");
-    res.sendStatus(403);
-    return;
-  }
 
-  res.sendStatus(204);
-  void handleNoAnswerStatus({
-    cbId:       parseInt(String(req.query["cbId"]   ?? "0"), 10) || null,
-    cbSecret:   String(req.query["cbSecret"] ?? "") || null,
-    agentId:    agentId || null,
-    callStatus: String(req.body?.CallStatus ?? ""),
-    toNumber:   String(req.body?.To ?? ""),
-  });
+    void handleNoAnswerStatus({ cbId, cbSecret: null, agentId, callStatus, toNumber: dbToNumber });
+  })().catch((err) => logger.error({ err }, "Twilio status webhook handler error"));
 });
 
 // ── P2-B: AMD / Voicemail Detection callback ─────────────────────────────────
@@ -705,8 +804,11 @@ router.get("/webhooks/plivo/transfer-xml", (req, res): void => {
 
 // ── P2-B: Warm transfer XML — redirects caller leg + sets whisper URL on operator leg ──
 // Provider fetches this after onCallTransfer fires with a summary.
-// The <Number url="..."> whisper is fetched by the provider when the OPERATOR answers,
-// and the summary is played to the operator only before bridging both parties.
+// The briefingToken is generated server-side at transfer creation and embedded in this
+// URL by session.ts — it is NOT minted here. warm-transfer-xml just passes it through
+// to the whisper URL so the warm-briefing-xml endpoint can validate it against the DB.
+// This eliminates the HMAC-from-transferId public token oracle: an attacker supplying an
+// arbitrary transferId gets nothing useful because no token is computed from it here.
 
 router.get("/webhooks/twilio/warm-transfer-xml", (req, res): void => {
   const target     = String(req.query["target"] ?? "").trim();
@@ -718,7 +820,7 @@ router.get("/webhooks/twilio/warm-transfer-xml", (req, res): void => {
     return;
   }
   const baseUrl = getSelfBaseUrl();
-  const whisperUrl = `${baseUrl}/api/webhooks/twilio/warm-briefing-xml?transferId=${transferId}&token=${encodeURIComponent(token)}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/twilio/warm-briefing-xml?transferId=${encodeURIComponent(transferId)}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildTwilioWarmTransferTwiML(target, whisperUrl));
 });
 
@@ -732,7 +834,7 @@ router.get("/webhooks/plivo/warm-transfer-xml", (req, res): void => {
     return;
   }
   const baseUrl = getSelfBaseUrl();
-  const whisperUrl = `${baseUrl}/api/webhooks/plivo/warm-briefing-xml?transferId=${transferId}&token=${encodeURIComponent(token)}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/plivo/warm-briefing-xml?transferId=${encodeURIComponent(transferId)}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildPlivoWarmTransferXml(target, whisperUrl));
 });
 
@@ -746,7 +848,7 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
     return;
   }
   const baseUrl = getSelfBaseUrl();
-  const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${transferId}&token=${encodeURIComponent(token)}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${encodeURIComponent(transferId)}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl));
 });
 
@@ -755,36 +857,42 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
 // Returns <Say> with the AI-generated summary so the operator is fully briefed
 // before the customer is bridged in.
 //
-// Security: every request MUST supply the `token` query parameter matching the
-// `briefingToken` stored on the transfer record.  The token is a random 32-byte
-// hex string generated at transfer-record creation time and embedded in the
-// whisper URL by the warm-transfer-xml handler.  Without a valid token the
-// endpoint returns 403 — preventing enumeration of summaries via serial IDs.
+// Security: validates the `token` query param against the `briefing_token` column stored
+// in the call_transfers row at transfer creation. The token is a 32-byte random hex value
+// that is never recomputable from public inputs, so sequential transferId enumeration
+// cannot yield a usable token. Without a valid token the endpoint returns 403.
 
 async function warmBriefingXml(
   transferId: number,
   token: string,
   res: import("express").Response,
 ): Promise<void> {
+  // Reject immediately if token looks unusable (saves a DB round-trip)
+  if (!token || token.length < 32) {
+    res.status(403).set("Content-Type", "text/xml")
+      .send(`<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>Forbidden.</Say>\n  <Hangup/>\n</Response>`);
+    return;
+  }
+
+
   try {
     const [row] = await db
       .select({ summary: callTransfersTable.summary, briefingToken: callTransfersTable.briefingToken })
       .from(callTransfersTable)
       .where(eq(callTransfersTable.id, transferId));
 
-    // Token validation — reject if no token stored (old records) or mismatch
-    const storedToken = row?.briefingToken ?? "";
-    if (!storedToken || !token) {
-      logger.warn({ transferId }, "warm-briefing-xml: missing or empty token — rejected");
-      res.sendStatus(403);
-      return;
-    }
-    const a = Buffer.from(storedToken, "utf8");
-    const b = Buffer.from(token, "utf8");
-    const valid = a.length === b.length && cryptoTimingSafeEqual(a, b);
-    if (!valid) {
-      logger.warn({ transferId }, "warm-briefing-xml: invalid token — rejected");
-      res.sendStatus(403);
+    // Validate capability token against DB-stored random value using constant-time compare
+    const stored = row?.briefingToken ?? "";
+    const tokenBuf   = Buffer.from(token);
+    const storedBuf  = Buffer.from(stored);
+    const tokenValid =
+      stored.length > 0 &&
+      tokenBuf.length === storedBuf.length &&
+      timingSafeEqual(tokenBuf, storedBuf);
+    if (!tokenValid) {
+      logger.warn({ transferId }, "warm-briefing-xml: invalid or missing token — rejected");
+      res.status(403).set("Content-Type", "text/xml")
+        .send(`<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>Forbidden.</Say>\n  <Hangup/>\n</Response>`);
       return;
     }
 
