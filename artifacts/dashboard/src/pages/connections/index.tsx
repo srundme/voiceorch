@@ -43,15 +43,21 @@ interface CapturedPayload {
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: ConnectionStatus }) {
+function StatusBadge({ status, pulse = false }: { status: ConnectionStatus; pulse?: boolean }) {
   const cfg = {
     connected: { color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20", dot: "bg-emerald-500", label: "Connected" },
     waiting:   { color: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",         dot: "bg-zinc-400",    label: "Waiting" },
     error:     { color: "bg-red-500/15 text-red-400 border-red-500/20",            dot: "bg-red-500",     label: "Error" },
   }[status];
+  const showPulse = pulse && status === "connected";
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${cfg.color}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      <span className="relative flex items-center justify-center w-1.5 h-1.5">
+        {showPulse && (
+          <span className={`absolute inline-flex w-full h-full rounded-full ${cfg.dot} opacity-75 animate-ping`} />
+        )}
+        <span className={`relative w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      </span>
       {cfg.label}
     </span>
   );
@@ -491,7 +497,15 @@ function HmacConfigDialog({
 
 // ── Connection Card ───────────────────────────────────────────────────────────
 
-function ConnectionCard({ connection, onRefresh }: { connection: Connection; onRefresh: () => void }) {
+function ConnectionCard({
+  connection,
+  onRefresh,
+  hasNewEvent = false,
+}: {
+  connection: Connection;
+  onRefresh: () => void;
+  hasNewEvent?: boolean;
+}) {
   const [listenOpen, setListenOpen] = useState(false);
   const [hmacOpen, setHmacOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -516,7 +530,7 @@ function ConnectionCard({ connection, onRefresh }: { connection: Connection; onR
                 <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted border border-border">
                   {typeLabel}
                 </span>
-                <StatusBadge status={connection.status as ConnectionStatus} />
+                <StatusBadge status={connection.status as ConnectionStatus} pulse={hasNewEvent} />
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <code className="text-[11px] text-muted-foreground font-mono truncate max-w-[280px]">{connection.webhookUrl}</code>
@@ -780,8 +794,43 @@ function ZapierMakeRecipe({ firstWebhookUrl }: { firstWebhookUrl: string }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ConnectionsPage() {
-  const { data: connections = [], isLoading, refetch } = useListConnections();
+  const { data: connections = [], isLoading, refetch } = useListConnections({
+    query: { refetchInterval: 30_000 },
+  });
   const qc = useQueryClient();
+
+  // Track previous lastEventAt values to detect new events across refetch cycles
+  const prevLastEventAt = useRef<Record<number, string | null>>({});
+  const [newEventIds, setNewEventIds] = useState<Set<number>>(new Set());
+  const clearTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (connections.length === 0) return;
+    const prev = prevLastEventAt.current;
+    const isFirstLoad = Object.keys(prev).length === 0;
+
+    if (!isFirstLoad) {
+      const freshIds = new Set<number>();
+      for (const c of connections) {
+        const prevTs = prev[c.id] ?? null;
+        const curTs  = c.lastEventAt ?? null;
+        if (curTs && curTs !== prevTs) freshIds.add(c.id);
+      }
+      if (freshIds.size > 0) {
+        setNewEventIds(freshIds);
+        if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+        clearTimerRef.current = setTimeout(() => setNewEventIds(new Set()), 6_000);
+      }
+    }
+
+    for (const c of connections) {
+      prev[c.id] = c.lastEventAt ?? null;
+    }
+  }, [connections]);
+
+  useEffect(() => () => {
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+  }, []);
 
   const webhookConnections  = connections.filter(c => c.type === "webhook");
   const metaConnections     = connections.filter(c => c.type === "meta_lead_ads");
@@ -844,10 +893,10 @@ export default function ConnectionsPage() {
             ) : (
               <div className="space-y-3">
                 {webhookConnections.map(c => (
-                  <ConnectionCard key={`wh-${c.id}`} connection={c} onRefresh={handleRefresh} />
+                  <ConnectionCard key={`wh-${c.id}`} connection={c} onRefresh={handleRefresh} hasNewEvent={newEventIds.has(c.id)} />
                 ))}
                 {metaConnections.map(c => (
-                  <ConnectionCard key={`meta-${c.id}`} connection={c} onRefresh={handleRefresh} />
+                  <ConnectionCard key={`meta-${c.id}`} connection={c} onRefresh={handleRefresh} hasNewEvent={newEventIds.has(c.id)} />
                 ))}
               </div>
             )}
