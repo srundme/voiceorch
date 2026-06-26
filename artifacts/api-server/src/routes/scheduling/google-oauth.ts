@@ -8,6 +8,7 @@ import {
   revokeConnection,
   listConnectionCalendars,
   getValidAccessToken,
+  verifyOAuthState,
 } from "../../services/scheduling/google-calendar.js";
 import { logger } from "../../lib/logger.js";
 import { getAppDomain, getAppOrigins, getSelfBaseUrl } from "../../lib/app-domain.js";
@@ -176,30 +177,24 @@ router.get("/scheduling/google/connect-url", requireAuth, async (req, res): Prom
 });
 
 // ── OAuth callback — no requireAuth: Google redirects here ──────────────────
-// State is JSON { clerkId, returnTo } — tells us who connected and where to redirect.
+// State is a signed token (HMAC-SHA256) produced by signOAuthState().
+// The callback MUST verify the signature before trusting any field — an
+// unverified state allows cross-tenant account binding (attacker forges
+// clerkId to attach their Google account to a victim's tenant).
 
 router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   const { code, error, state: rawState } = req.query as {
     code?: string; error?: string; state?: string;
   };
 
-  // Decode state — support both legacy string (plain clerkId) and new JSON format
-  let clerkId: string | undefined;
-  let returnTo     = "conferencing";
-  let returnOrigin: string | undefined;
-  let stateConnectionId: string | undefined;
-  if (rawState) {
-    try {
-      const parsed = JSON.parse(rawState) as { clerkId?: string; returnTo?: string; returnOrigin?: string; connectionId?: string };
-      clerkId           = parsed.clerkId;
-      returnTo          = parsed.returnTo ?? "conferencing";
-      returnOrigin      = parsed.returnOrigin;
-      stateConnectionId = parsed.connectionId;
-    } catch {
-      // Legacy: state was just the clerkId string
-      clerkId = rawState;
-    }
-  }
+  // Verify the server-signed state token. Returns null for missing, malformed,
+  // tampered, or expired tokens — all of which should abort the flow.
+  const statePayload = verifyOAuthState(rawState);
+
+  const clerkId           = statePayload?.clerkId;
+  const returnTo          = statePayload?.returnTo ?? "conferencing";
+  const returnOrigin      = statePayload?.returnOrigin;
+  const stateConnectionId = statePayload?.connectionId;
 
   // The Calendars page lives at /app/scheduling/calendars (where the BroadcastChannel
   // handler lives); the Conferencing tab lives at /app/settings/conferencing or
@@ -214,8 +209,11 @@ router.get("/scheduling/google/callback", async (req, res): Promise<void> => {
   const base = returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : DASHBOARD_BASE();
   const redirectBase = `${base}${redirectPath}`;
 
-  if (error || !code || !clerkId) {
-    logger.warn({ clerkId, error }, "Google OAuth callback error or missing params");
+  if (error || !code || !clerkId || !statePayload) {
+    logger.warn(
+      { clerkId, error, stateVerified: !!statePayload },
+      "Google OAuth callback error, missing params, or invalid/expired state token",
+    );
     res.redirect(`${redirectBase}?gcal=error`);
     return;
   }

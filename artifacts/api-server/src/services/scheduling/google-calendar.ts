@@ -13,9 +13,92 @@ import { google } from "googleapis";
 import { db, googleCalendarConnectionsTable } from "@workspace/db";
 import { eq, asc, sql } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
+import { createHmac, randomBytes } from "node:crypto";
 import { logger } from "../../lib/logger.js";
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
 import { getSelfBaseUrl } from "../../lib/app-domain.js";
+import { APP_SECRET } from "../../lib/app-secret.js";
+
+// ── OAuth state signing ──────────────────────────────────────────────────────
+//
+// The OAuth `state` parameter is passed through the browser (Google redirects
+// it back verbatim). Without a server-side signature an attacker could forge a
+// state blob naming a victim's clerkId and bind their own Google account to that
+// tenant. We prevent this by HMAC-SHA256-signing the state payload with
+// SESSION_SECRET. The callback verifies the signature before trusting any field.
+//
+// Format: base64url(payload_json) + "." + hmac_hex
+// Expiry: 10 minutes — covers any realistic OAuth consent round-trip.
+
+const STATE_HMAC_ALGO  = "sha256";
+const STATE_TTL_MS     = 10 * 60 * 1000; // 10 minutes
+
+export interface OAuthStatePayload {
+  clerkId: string;
+  returnTo: string;
+  returnOrigin?: string;
+  connectionId?: string;
+  /** Unix timestamp (ms) after which this state token is no longer valid. */
+  exp: number;
+  /** Random nonce to prevent accidental replay within the TTL window. */
+  nonce: string;
+}
+
+function stateHmac(encodedPayload: string): string {
+  return createHmac(STATE_HMAC_ALGO, APP_SECRET)
+    .update(encodedPayload)
+    .digest("hex");
+}
+
+/**
+ * Produce a tamper-proof, short-lived state token for the Google OAuth flow.
+ * The token is safe to embed as the `state` query parameter sent to Google.
+ */
+export function signOAuthState(payload: Omit<OAuthStatePayload, "exp" | "nonce">): string {
+  const full: OAuthStatePayload = {
+    ...payload,
+    exp: Date.now() + STATE_TTL_MS,
+    nonce: randomBytes(12).toString("hex"),
+  };
+  const encoded = Buffer.from(JSON.stringify(full)).toString("base64url");
+  const sig     = stateHmac(encoded);
+  return `${encoded}.${sig}`;
+}
+
+/**
+ * Verify and decode a state token produced by `signOAuthState`.
+ * Returns the payload on success, or `null` when the token is missing,
+ * malformed, has an invalid signature, or has expired.
+ */
+export function verifyOAuthState(raw: string | undefined): OAuthStatePayload | null {
+  if (!raw) return null;
+  const dotIdx = raw.lastIndexOf(".");
+  if (dotIdx < 0) return null;
+
+  const encoded = raw.slice(0, dotIdx);
+  const sig     = raw.slice(dotIdx + 1);
+
+  const expectedSig = stateHmac(encoded);
+  // Constant-time comparison to prevent timing attacks
+  if (sig.length !== expectedSig.length) return null;
+  let diff = 0;
+  for (let i = 0; i < sig.length; i++) {
+    diff |= sig.charCodeAt(i) ^ expectedSig.charCodeAt(i);
+  }
+  if (diff !== 0) return null;
+
+  let payload: OAuthStatePayload;
+  try {
+    payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as OAuthStatePayload;
+  } catch {
+    return null;
+  }
+
+  if (typeof payload.clerkId !== "string" || !payload.clerkId) return null;
+  if (typeof payload.exp !== "number" || Date.now() > payload.exp) return null;
+
+  return payload;
+}
 
 // Full calendar scope is required for conferenceDataVersion=1 (Google Meet creation).
 // calendar.events alone returns 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT when creating
@@ -61,8 +144,9 @@ export function makePlatformOAuth2Client(redirectUri?: string) {
 
 /**
  * Generate the Google OAuth consent screen URL.
- * `state` is a JSON object `{ clerkId, returnTo? }` so the callback can map
- * the account AND redirect back to whichever page initiated the flow.
+ * `state` is a signed token (HMAC-SHA256) so the callback can safely map
+ * the account AND redirect back to whichever page initiated the flow,
+ * without trusting client-supplied data.
  */
 export function getAuthUrl(
   clerkId: string,
@@ -72,7 +156,7 @@ export function getAuthUrl(
   connectionId?: string,
 ): string {
   const client = makePlatformOAuth2Client(redirectUri);
-  const state = JSON.stringify({
+  const state = signOAuthState({
     clerkId,
     returnTo: returnTo ?? "conferencing",
     // Pass the caller's origin so the callback can redirect back to the right domain
