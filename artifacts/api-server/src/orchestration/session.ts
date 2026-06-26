@@ -368,7 +368,7 @@ export async function createSession(params: {
     // 1. Caller memory (3-layer: profile + facts + archive)
     callerPhone
       ? loadCallerContext(params.agentId, callerPhone, personaHash).catch((memErr) => {
-          logger.warn({ agentId: params.agentId, callerPhone, memErr }, "Failed to load caller context — continuing without memory");
+          logger.warn({ agentId: params.agentId, callerPhone, memErr }, `Failed to load caller context — ${memErr instanceof Error ? memErr.message : String(memErr)} — continuing without memory`);
           return null;
         })
       : Promise.resolve(null),
@@ -1570,7 +1570,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 }
               }
             } catch (memErr) {
-              logger.warn({ sessionId, memErr }, "Post-call caller memory update failed");
+              logger.warn({ sessionId, memErr }, `Post-call caller memory update failed — ${memErr instanceof Error ? memErr.message : String(memErr)}`);
             }
           })();
         }
