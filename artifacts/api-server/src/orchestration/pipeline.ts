@@ -284,6 +284,12 @@ export class OrchestrationPipeline {
   // (content-based self-echo rejection — additive to the time-window tail-echo
   // guard). Entries expire so stale agent speech can't suppress later caller input.
   private recentAgentSpeech: Array<{ tokens: Set<string>; estEndAt: number }> = [];
+  // Input-level self-echo gate (carrier / Live Call path only): counts streaming-STT
+  // frames dropped because they are the low-level carrier echo of our own TTS during
+  // playback, and throttles the log line so the suppression is observable without
+  // flooding. Reset on each emitted log line.
+  private selfEchoDropCount = 0;
+  private lastSelfEchoDropLogAt = 0;
 
   // Voicemail-delivery mode (Vobiz AMD leave_message). When set, the conversation
   // pipeline is bypassed: inbound audio only drives greeting-end detection and
@@ -473,6 +479,23 @@ export class OrchestrationPipeline {
       if (matched / tokens.length >= SELF_ECHO_MIN_OVERLAP) return true;
     }
     return false;
+  }
+
+  /** Throttled log for the input-level self-echo gate. Records how many frames were
+   *  dropped at the recognizer feed because they were the agent's own carrier echo
+   *  during playback, emitting at most one line per second so a multi-second greeting
+   *  doesn't flood the logs. */
+  private logSelfEchoDrop(): void {
+    this.selfEchoDropCount++;
+    const now = Date.now();
+    if (now - this.lastSelfEchoDropLogAt >= 1000) {
+      logger.info(
+        { callId: this.config.callId, droppedFrames: this.selfEchoDropCount },
+        "Streaming STT: gating self-echo frames at input during agent playback (half-duplex)",
+      );
+      this.lastSelfEchoDropLogAt = now;
+      this.selfEchoDropCount = 0;
+    }
   }
 
   constructor(config: SessionConfig) {
@@ -1081,6 +1104,28 @@ export class OrchestrationPipeline {
       // Feed the verifier caller audio only — skip while the agent is speaking so
       // its own TTS echo can't pollute the enrollment/verification voiceprint.
       if (!this.isPlaying) this.speakerVerifier?.addSpeechChunk(pcm8k);
+
+      // ── Input-level self-echo gate (Live Call / carrier path only) ─────────────
+      // Root fix for the greeting-startup delay: on the carrier path there is no
+      // acoustic echo cancellation, so our own TTS is echoed back and, if fed to the
+      // recognizer, gets transcribed as a phantom caller turn that restarts/interrupts
+      // the greeting (call 772). Stop forwarding the agent's own audio to STT while it
+      // is speaking, plus the post-playback tail window (bargeInHoldUntil, re-armed at
+      // playback end by armTailEchoGrace) that covers the closing word's returning echo.
+      // This is a SELECTIVE half-duplex gate, not a hard mute: a frame whose energy
+      // exceeds the barge-in threshold is a genuinely loud caller and still passes
+      // through so streaming-STT barge-in works mid-greeting; only the low-level
+      // carrier echo of our own TTS is dropped. Web calls rely on browser AEC and keep
+      // full-duplex, so the gate is restricted to telephonyProvider !== "webcall".
+      if (
+        this.config.telephonyProvider !== "webcall" &&
+        (this.isPlaying || Date.now() < this.bargeInHoldUntil) &&
+        !hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)
+      ) {
+        this.logSelfEchoDrop();
+        return;
+      }
+
       // KB prefetch: fire on the first frame of a new speech segment so the lookup
       // runs during the utterance rather than after STT resolves.
       if (!this.inSpeechSegment && !this.isProcessing && this.agent.knowledgeSourceIds.length > 0) {
