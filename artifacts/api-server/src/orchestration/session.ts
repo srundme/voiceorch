@@ -1322,10 +1322,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           let callSummary = "";
           let dispositionResult: Record<string, unknown> | null = null;
 
-          // 1. Generate call summary (when agent has Auto Summarization enabled).
-          // No transcript-length gate: every completed call gets a summary when enabled.
-          const summarizationEnabled = (agCfgForWebhook["summarizationEnabled"] as boolean | undefined) ?? false;
-          if (summarizationEnabled && ag.userId) {
+          // 1. Generate call summary — always runs for every completed call.
+          // Uses BYOP key when available; falls back to platform managed key (Groq).
+          if (ag.userId) {
             try {
               const hasTranscript = !!(transcript && transcript.trim().length > 0);
               if (!hasTranscript) {
@@ -1340,9 +1339,20 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                     eq(providersTable.providerName, ag.llmProvider)
                   )
                 );
-                const llmKey = llmProvs[0]?.apiKey;
-                if (llmKey) {
-                  const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
+                let sumLlmKey: string | null = llmProvs[0]?.apiKey ?? null;
+                let sumLlmProvider = ag.llmProvider;
+                let sumLlmModel = ag.llmModel;
+                // Managed plan: no BYOP key → fall back to platform managed key (Groq)
+                if (!sumLlmKey) {
+                  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+                  sumLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                  if (sumLlmKey) {
+                    sumLlmProvider = "groq";
+                    sumLlmModel = "llama-3.3-70b-versatile";
+                  }
+                }
+                if (sumLlmKey) {
+                  const llm = createLLMAdapter(sumLlmProvider, sumLlmKey, sumLlmModel);
                   const customPrompt = (agCfgForWebhook["summarizationPrompt"] as string | undefined) ?? "";
                   const userContent = customPrompt
                     ? `${customPrompt}\n\nTranscript:\n${transcript.slice(0, 6000)}`
@@ -1503,27 +1513,22 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 ),
               );
               let memLlmKey: string | null = memLlmProvs[0]?.apiKey ?? null;
-              // Managed plan: no BYOP key → fall back to platform managed key
+              let memLlmProvider = session.agentLlmProvider;
+              let memLlmModel    = session.agentLlmModel;
+              // Managed plan: no BYOP key → fall back to platform managed key (Groq).
+              // IMPORTANT: the managed key is a Groq API key, so we must also switch
+              // the provider to "groq" and use a Groq-compatible model — otherwise
+              // createLLMAdapter("openai", groqKey, ...) would fail with 401.
               if (!memLlmKey) {
-                const MANAGED_LLM: Record<string, string> = {
-                  qwen: "managed_qwen_key", groq: "managed_qwen_key",
-                  google: "managed_gemini_key", gemini: "managed_gemini_key",
-                  openai: "managed_openai_key",
-                  deepseek: "managed_qwen_key",
-                  anthropic: "managed_openai_key",
-                  mistral: "managed_openai_key",
-                  cohere: "managed_openai_key",
-                };
-                const settingsKey = MANAGED_LLM[session.agentLlmProvider.toLowerCase()];
-                if (settingsKey) {
-                  const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, settingsKey));
-                  memLlmKey = row?.value ?? null;
+                const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+                memLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+                if (memLlmKey) {
+                  memLlmProvider = "groq";
+                  memLlmModel    = "llama-3.3-70b-versatile";
                 }
-                // Final fallback: GROQ_API_KEY env var (seeds managed_qwen_key at startup)
-                if (!memLlmKey) memLlmKey = process.env["GROQ_API_KEY"] ?? null;
               }
               if (memLlmKey) {
-                const memLlm = createLLMAdapter(session.agentLlmProvider, memLlmKey, session.agentLlmModel);
+                const memLlm = createLLMAdapter(memLlmProvider, memLlmKey, memLlmModel);
                 const history = session.pipeline.getHistory();
                 await updateCallerProfile({
                   agentId:           call.agentId,
