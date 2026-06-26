@@ -58,6 +58,8 @@ tags:
     description: Email+password authentication and password reset
   - name: connections
     description: Connections hub — inbound lead source management, listen mode, and HMAC config
+  - name: crm
+    description: CRM connectors — HubSpot and Zoho OAuth connect, contact import, and call-outcome writeback
 
 paths:
   /healthz:
@@ -5836,6 +5838,213 @@ paths:
         "204":
           description: Stopped
 
+  # ── CRM Connectors ──────────────────────────────────────────────────────────
+  /crm/connections:
+    get:
+      operationId: listCrmConnections
+      tags: [crm]
+      summary: List all CRM connections for the authenticated user
+      responses:
+        "200":
+          description: List of CRM connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CrmConnection"
+
+  /crm/connections/{id}:
+    patch:
+      operationId: updateCrmConnection
+      tags: [crm]
+      summary: Update CRM connection field mapping
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmConnectionUpdate"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrmConnection"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteCrmConnection
+      tags: [crm]
+      summary: Disconnect a CRM connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Disconnected
+        "404":
+          description: Not found
+
+  /crm/connect/{provider}:
+    get:
+      operationId: startCrmConnect
+      tags: [crm]
+      summary: Begin OAuth flow for a CRM provider (redirects to provider consent screen)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [hubspot, zoho]
+        - name: returnOrigin
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to provider OAuth screen
+        "400":
+          description: Provider not configured or unsupported
+
+  /crm/callback/{provider}:
+    get:
+      operationId: crmOAuthCallback
+      tags: [crm]
+      summary: OAuth callback — exchanges code for tokens (no auth required, uses state param)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [hubspot, zoho]
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect back to dashboard with result
+
+  /crm/connections/{id}/lists:
+    get:
+      operationId: listCrmLists
+      tags: [crm]
+      summary: List contact lists (HubSpot) or views (Zoho) for a CRM connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lists / views
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrmListsPage"
+        "404":
+          description: Connection not found
+
+  /crm/connections/{id}/contacts:
+    get:
+      operationId: listCrmContacts
+      tags: [crm]
+      summary: Browse contacts/leads from a connected CRM account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: listId
+          in: query
+          required: false
+          description: Filter contacts to a specific list (HubSpot) or view (Zoho)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Contacts page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrmContactsPage"
+        "400":
+          description: Invalid connection
+        "404":
+          description: Connection not found
+
+  /crm/connections/{id}/import:
+    post:
+      operationId: importCrmContacts
+      tags: [crm]
+      summary: Import selected contacts from CRM into a campaign batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmImportBody"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CrmImportResult"
+        "400":
+          description: Validation error
+        "404":
+          description: Connection or campaign not found
+
 components:
   parameters:
     AdminToken:
@@ -10545,3 +10754,97 @@ components:
           type: object
           nullable: true
           additionalProperties: { type: string }
+
+    CrmConnectionUpdate:
+      type: object
+      properties:
+        fieldMapping:
+          type: object
+          additionalProperties: { type: string }
+
+    CrmConnection:
+      type: object
+      required: [id, provider, accountId, accountName, createdAt]
+      properties:
+        id:            { type: integer }
+        provider:
+          type: string
+          enum: [hubspot, zoho]
+        accountId:     { type: string }
+        accountName:   { type: ["string", "null"] }
+        fieldMapping:
+          type: object
+          additionalProperties: { type: string }
+        lastSyncAt:    { type: ["string", "null"], format: date-time }
+        lastErrorAt:   { type: ["string", "null"], format: date-time }
+        lastError:     { type: ["string", "null"] }
+        createdAt:     { type: string, format: date-time }
+
+    CrmContact:
+      type: object
+      required: [id, phone]
+      properties:
+        id:        { type: string }
+        phone:     { type: string }
+        name:      { type: ["string", "null"] }
+        email:     { type: ["string", "null"] }
+        company:   { type: ["string", "null"] }
+        rawFields:
+          type: object
+          additionalProperties: { type: string }
+
+    CrmContactsPage:
+      type: object
+      required: [contacts]
+      properties:
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrmContact"
+        nextCursor:  { type: ["string", "null"] }
+        total:       { type: ["integer", "null"] }
+
+    CrmListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:    { type: string }
+        name:  { type: string }
+        type:  { type: string }
+        count: { type: integer }
+
+    CrmListsPage:
+      type: object
+      required: [lists]
+      properties:
+        lists:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrmListItem"
+
+    CrmImportBody:
+      type: object
+      required: [campaignId, contacts, fieldMapping]
+      properties:
+        campaignId:    { type: integer }
+        batchName:     { type: string }
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrmContact"
+        fieldMapping:
+          type: object
+          additionalProperties: { type: string }
+        duplicatePolicy:
+          type: string
+          enum: [ignore, skip, reject_with_report]
+
+    CrmImportResult:
+      type: object
+      required: [batchId, leadsCreated, duplicatesFound, invalidPhones, dncBlocked]
+      properties:
+        batchId:         { type: integer }
+        leadsCreated:    { type: integer }
+        duplicatesFound: { type: integer }
+        invalidPhones:   { type: integer }
+        dncBlocked:      { type: integer }

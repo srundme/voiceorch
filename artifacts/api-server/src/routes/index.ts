@@ -59,6 +59,7 @@ import dispositionRouter from "./disposition.js";
 import docsRouter from "./docs.js";
 import callbacksRouter from "./callbacks.js";
 import connectionsRouter from "./connections.js";
+import crmRouter from "./crm.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -139,5 +140,6 @@ router.use(dispositionRouter);
 router.use(agentVersionsRouter);
 router.use(callbacksRouter);
 router.use(connectionsRouter);
+router.use(crmRouter);
 
 export default router;

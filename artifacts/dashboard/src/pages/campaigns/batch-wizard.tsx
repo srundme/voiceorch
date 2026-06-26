@@ -414,16 +414,43 @@ function Step2({
             );
           })}
         </div>
-        <div className="grid grid-cols-3 gap-3 opacity-40 pointer-events-none">
-          {["HubSpot", "Salesforce", "Zoho"].map(name => (
-            <div key={name} className="p-4 rounded-xl border border-border space-y-2">
-              <Globe className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">{name}</p>
-                <p className="text-[11px] text-muted-foreground">Coming Soon</p>
-              </div>
-            </div>
-          ))}
+        {/* CRM tiles — navigate to Connections page to set up and import */}
+        <div className="space-y-2 mt-1">
+          <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">CRM Import</p>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { id: "hubspot", name: "HubSpot",  icon: <span className="text-orange-400 font-bold text-sm">HS</span> },
+              { id: "zoho",   name: "Zoho CRM", icon: <span className="text-blue-400 font-bold text-sm">ZO</span> },
+              { id: "sf",     name: "Salesforce", icon: <Globe className="w-4 h-4 text-muted-foreground" />, disabled: true },
+            ].map(crm => (
+              <button
+                key={crm.id}
+                type="button"
+                disabled={crm.disabled}
+                onClick={crm.disabled ? undefined : () => { window.location.href = `${BASE}/app/connections#crm-connect=${crm.id}`; }}
+                className={cn(
+                  "p-4 rounded-xl border text-left transition-all space-y-2",
+                  crm.disabled
+                    ? "border-border opacity-40 pointer-events-none"
+                    : "border-border hover:border-primary/50 hover:bg-muted/30",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  {crm.icon}
+                  {!crm.disabled && <ExternalLink className="w-3 h-3 text-muted-foreground" />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{crm.name}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {crm.disabled ? "Coming Soon" : "Connect & import →"}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Click HubSpot or Zoho CRM to connect your account and import contacts into a campaign from the Connections page.
+          </p>
         </div>
       </div>
     </div>

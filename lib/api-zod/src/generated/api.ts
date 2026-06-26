@@ -6085,3 +6085,156 @@ export const StopConnectionListenParams = zod.object({
 })
 
 
+/**
+ * @summary List all CRM connections for the authenticated user
+ */
+export const ListCrmConnectionsResponseItem = zod.object({
+  "id": zod.number(),
+  "provider": zod.enum(['hubspot', 'zoho']),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullable(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
+  "lastSyncAt": zod.coerce.date().nullish(),
+  "lastErrorAt": zod.coerce.date().nullish(),
+  "lastError": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListCrmConnectionsResponse = zod.array(ListCrmConnectionsResponseItem)
+
+
+/**
+ * @summary Update CRM connection field mapping
+ */
+export const UpdateCrmConnectionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCrmConnectionBody = zod.object({
+  "fieldMapping": zod.record(zod.string(), zod.string()).optional()
+})
+
+export const UpdateCrmConnectionResponse = zod.object({
+  "id": zod.number(),
+  "provider": zod.enum(['hubspot', 'zoho']),
+  "accountId": zod.string(),
+  "accountName": zod.string().nullable(),
+  "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
+  "lastSyncAt": zod.coerce.date().nullish(),
+  "lastErrorAt": zod.coerce.date().nullish(),
+  "lastError": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Disconnect a CRM connection
+ */
+export const DeleteCrmConnectionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Begin OAuth flow for a CRM provider (redirects to provider consent screen)
+ */
+export const StartCrmConnectParams = zod.object({
+  "provider": zod.enum(['hubspot', 'zoho'])
+})
+
+export const StartCrmConnectQueryParams = zod.object({
+  "returnOrigin": zod.coerce.string().optional()
+})
+
+
+/**
+ * @summary OAuth callback — exchanges code for tokens (no auth required, uses state param)
+ */
+export const CrmOAuthCallbackParams = zod.object({
+  "provider": zod.enum(['hubspot', 'zoho'])
+})
+
+export const CrmOAuthCallbackQueryParams = zod.object({
+  "code": zod.coerce.string().optional(),
+  "state": zod.coerce.string().optional(),
+  "error": zod.coerce.string().optional()
+})
+
+
+/**
+ * @summary List contact lists (HubSpot) or views (Zoho) for a CRM connection
+ */
+export const ListCrmListsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCrmListsResponse = zod.object({
+  "lists": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.string().optional(),
+  "count": zod.number().optional()
+}))
+})
+
+
+/**
+ * @summary Browse contacts/leads from a connected CRM account
+ */
+export const ListCrmContactsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const listCrmContactsQueryLimitDefault = 50;
+
+export const ListCrmContactsQueryParams = zod.object({
+  "query": zod.coerce.string().optional(),
+  "after": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listCrmContactsQueryLimitDefault),
+  "listId": zod.coerce.string().optional().describe('Filter contacts to a specific list (HubSpot) or view (Zoho)')
+})
+
+export const ListCrmContactsResponse = zod.object({
+  "contacts": zod.array(zod.object({
+  "id": zod.string(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "rawFields": zod.record(zod.string(), zod.string()).optional()
+})),
+  "nextCursor": zod.string().nullish(),
+  "total": zod.number().nullish()
+})
+
+
+/**
+ * @summary Import selected contacts from CRM into a campaign batch
+ */
+export const ImportCrmContactsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ImportCrmContactsBody = zod.object({
+  "campaignId": zod.number(),
+  "batchName": zod.string().optional(),
+  "contacts": zod.array(zod.object({
+  "id": zod.string(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "company": zod.string().nullish(),
+  "rawFields": zod.record(zod.string(), zod.string()).optional()
+})),
+  "fieldMapping": zod.record(zod.string(), zod.string()),
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).optional()
+})
+
+export const ImportCrmContactsResponse = zod.object({
+  "batchId": zod.number(),
+  "leadsCreated": zod.number(),
+  "duplicatesFound": zod.number(),
+  "invalidPhones": zod.number(),
+  "dncBlocked": zod.number()
+})
+
+

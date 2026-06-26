@@ -176,6 +176,13 @@
       "when": 1783500000000,
       "tag": "0024_connections_hub",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1783600000000,
+      "tag": "0025_crm_connections",
+      "breakpoints": true
     }
   ]
 }

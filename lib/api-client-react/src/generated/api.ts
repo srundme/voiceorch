@@ -118,6 +118,13 @@ import type {
   CreateAmbientSoundBody,
   CreateCallbackFromIncoming200,
   CreateCallbackFromIncomingBody,
+  CrmConnection,
+  CrmConnectionUpdate,
+  CrmContactsPage,
+  CrmImportBody,
+  CrmImportResult,
+  CrmListsPage,
+  CrmOAuthCallbackParams,
   CsvImportBody,
   CsvImportResult,
   DailyCallVolume,
@@ -192,6 +199,7 @@ import type {
   ListCampaignLeadsParams,
   ListCampaignLiveQueueLeadsParams,
   ListCampaignTransfersParams,
+  ListCrmContactsParams,
   ListEventTypesParams,
   ListMetaCampaignLeads200,
   ListMetaCampaignLeadsParams,
@@ -260,6 +268,7 @@ import type {
   SchedulingCalendarInput,
   SchedulingCalendarUpdate,
   SnapServeExecutionsResponse,
+  StartCrmConnectParams,
   TestToolBody,
   TestToolResponse,
   TimeSlot,
@@ -19386,5 +19395,640 @@ export const useStopConnectionListen = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getStopConnectionListenMutationOptions(options));
+    }
+
+export const getListCrmConnectionsUrl = () => {
+
+
+
+
+  return `/api/crm/connections`
+}
+
+/**
+ * @summary List all CRM connections for the authenticated user
+ */
+export const listCrmConnections = async ( options?: RequestInit): Promise<CrmConnection[]> => {
+
+  return customFetch<CrmConnection[]>(getListCrmConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCrmConnectionsQueryKey = () => {
+    return [
+    `/api/crm/connections`
+    ] as const;
+    }
+
+
+export const getListCrmConnectionsQueryOptions = <TData = Awaited<ReturnType<typeof listCrmConnections>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCrmConnectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCrmConnections>>> = ({ signal }) => listCrmConnections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCrmConnections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCrmConnectionsQueryResult = NonNullable<Awaited<ReturnType<typeof listCrmConnections>>>
+export type ListCrmConnectionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all CRM connections for the authenticated user
+ */
+
+export function useListCrmConnections<TData = Awaited<ReturnType<typeof listCrmConnections>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCrmConnectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateCrmConnectionUrl = (id: number,) => {
+
+
+
+
+  return `/api/crm/connections/${id}`
+}
+
+/**
+ * @summary Update CRM connection field mapping
+ */
+export const updateCrmConnection = async (id: number,
+    crmConnectionUpdate: CrmConnectionUpdate, options?: RequestInit): Promise<CrmConnection> => {
+
+  return customFetch<CrmConnection>(getUpdateCrmConnectionUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      crmConnectionUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateCrmConnectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCrmConnection>>, TError,{id: number;data: BodyType<CrmConnectionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCrmConnection>>, TError,{id: number;data: BodyType<CrmConnectionUpdate>}, TContext> => {
+
+const mutationKey = ['updateCrmConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCrmConnection>>, {id: number;data: BodyType<CrmConnectionUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCrmConnection(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCrmConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof updateCrmConnection>>>
+    export type UpdateCrmConnectionMutationBody = BodyType<CrmConnectionUpdate>
+    export type UpdateCrmConnectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Update CRM connection field mapping
+ */
+export const useUpdateCrmConnection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCrmConnection>>, TError,{id: number;data: BodyType<CrmConnectionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCrmConnection>>,
+        TError,
+        {id: number;data: BodyType<CrmConnectionUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCrmConnectionMutationOptions(options));
+    }
+
+export const getDeleteCrmConnectionUrl = (id: number,) => {
+
+
+
+
+  return `/api/crm/connections/${id}`
+}
+
+/**
+ * @summary Disconnect a CRM connection
+ */
+export const deleteCrmConnection = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCrmConnectionUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCrmConnectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCrmConnection>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCrmConnection>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteCrmConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCrmConnection>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteCrmConnection(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCrmConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCrmConnection>>>
+
+    export type DeleteCrmConnectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Disconnect a CRM connection
+ */
+export const useDeleteCrmConnection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCrmConnection>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCrmConnection>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCrmConnectionMutationOptions(options));
+    }
+
+export const getStartCrmConnectUrl = (provider: 'hubspot' | 'zoho',
+    params?: StartCrmConnectParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/crm/connect/${provider}?${stringifiedParams}` : `/api/crm/connect/${provider}`
+}
+
+/**
+ * @summary Begin OAuth flow for a CRM provider (redirects to provider consent screen)
+ */
+export const startCrmConnect = async (provider: 'hubspot' | 'zoho',
+    params?: StartCrmConnectParams, options?: RequestInit): Promise<unknown> => {
+
+  return customFetch<unknown>(getStartCrmConnectUrl(provider,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStartCrmConnectQueryKey = (provider: 'hubspot' | 'zoho',
+    params?: StartCrmConnectParams,) => {
+    return [
+    `/api/crm/connect/${provider}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getStartCrmConnectQueryOptions = <TData = Awaited<ReturnType<typeof startCrmConnect>>, TError = ErrorType<void>>(provider: 'hubspot' | 'zoho',
+    params?: StartCrmConnectParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof startCrmConnect>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartCrmConnectQueryKey(provider,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startCrmConnect>>> = ({ signal }) => startCrmConnect(provider,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(provider), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startCrmConnect>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type StartCrmConnectQueryResult = NonNullable<Awaited<ReturnType<typeof startCrmConnect>>>
+export type StartCrmConnectQueryError = ErrorType<void>
+
+
+/**
+ * @summary Begin OAuth flow for a CRM provider (redirects to provider consent screen)
+ */
+
+export function useStartCrmConnect<TData = Awaited<ReturnType<typeof startCrmConnect>>, TError = ErrorType<void>>(
+ provider: 'hubspot' | 'zoho',
+    params?: StartCrmConnectParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof startCrmConnect>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getStartCrmConnectQueryOptions(provider,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCrmOAuthCallbackUrl = (provider: 'hubspot' | 'zoho',
+    params?: CrmOAuthCallbackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/crm/callback/${provider}?${stringifiedParams}` : `/api/crm/callback/${provider}`
+}
+
+/**
+ * @summary OAuth callback — exchanges code for tokens (no auth required, uses state param)
+ */
+export const crmOAuthCallback = async (provider: 'hubspot' | 'zoho',
+    params?: CrmOAuthCallbackParams, options?: RequestInit): Promise<unknown> => {
+
+  return customFetch<unknown>(getCrmOAuthCallbackUrl(provider,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCrmOAuthCallbackQueryKey = (provider: 'hubspot' | 'zoho',
+    params?: CrmOAuthCallbackParams,) => {
+    return [
+    `/api/crm/callback/${provider}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCrmOAuthCallbackQueryOptions = <TData = Awaited<ReturnType<typeof crmOAuthCallback>>, TError = ErrorType<void>>(provider: 'hubspot' | 'zoho',
+    params?: CrmOAuthCallbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof crmOAuthCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCrmOAuthCallbackQueryKey(provider,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof crmOAuthCallback>>> = ({ signal }) => crmOAuthCallback(provider,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(provider), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof crmOAuthCallback>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CrmOAuthCallbackQueryResult = NonNullable<Awaited<ReturnType<typeof crmOAuthCallback>>>
+export type CrmOAuthCallbackQueryError = ErrorType<void>
+
+
+/**
+ * @summary OAuth callback — exchanges code for tokens (no auth required, uses state param)
+ */
+
+export function useCrmOAuthCallback<TData = Awaited<ReturnType<typeof crmOAuthCallback>>, TError = ErrorType<void>>(
+ provider: 'hubspot' | 'zoho',
+    params?: CrmOAuthCallbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof crmOAuthCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCrmOAuthCallbackQueryOptions(provider,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCrmListsUrl = (id: number,) => {
+
+
+
+
+  return `/api/crm/connections/${id}/lists`
+}
+
+/**
+ * @summary List contact lists (HubSpot) or views (Zoho) for a CRM connection
+ */
+export const listCrmLists = async (id: number, options?: RequestInit): Promise<CrmListsPage> => {
+
+  return customFetch<CrmListsPage>(getListCrmListsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCrmListsQueryKey = (id: number,) => {
+    return [
+    `/api/crm/connections/${id}/lists`
+    ] as const;
+    }
+
+
+export const getListCrmListsQueryOptions = <TData = Awaited<ReturnType<typeof listCrmLists>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCrmListsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCrmLists>>> = ({ signal }) => listCrmLists(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCrmListsQueryResult = NonNullable<Awaited<ReturnType<typeof listCrmLists>>>
+export type ListCrmListsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List contact lists (HubSpot) or views (Zoho) for a CRM connection
+ */
+
+export function useListCrmLists<TData = Awaited<ReturnType<typeof listCrmLists>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCrmListsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListCrmContactsUrl = (id: number,
+    params?: ListCrmContactsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/crm/connections/${id}/contacts?${stringifiedParams}` : `/api/crm/connections/${id}/contacts`
+}
+
+/**
+ * @summary Browse contacts/leads from a connected CRM account
+ */
+export const listCrmContacts = async (id: number,
+    params?: ListCrmContactsParams, options?: RequestInit): Promise<CrmContactsPage> => {
+
+  return customFetch<CrmContactsPage>(getListCrmContactsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCrmContactsQueryKey = (id: number,
+    params?: ListCrmContactsParams,) => {
+    return [
+    `/api/crm/connections/${id}/contacts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCrmContactsQueryOptions = <TData = Awaited<ReturnType<typeof listCrmContacts>>, TError = ErrorType<void>>(id: number,
+    params?: ListCrmContactsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCrmContactsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCrmContacts>>> = ({ signal }) => listCrmContacts(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCrmContacts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCrmContactsQueryResult = NonNullable<Awaited<ReturnType<typeof listCrmContacts>>>
+export type ListCrmContactsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Browse contacts/leads from a connected CRM account
+ */
+
+export function useListCrmContacts<TData = Awaited<ReturnType<typeof listCrmContacts>>, TError = ErrorType<void>>(
+ id: number,
+    params?: ListCrmContactsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCrmContactsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getImportCrmContactsUrl = (id: number,) => {
+
+
+
+
+  return `/api/crm/connections/${id}/import`
+}
+
+/**
+ * @summary Import selected contacts from CRM into a campaign batch
+ */
+export const importCrmContacts = async (id: number,
+    crmImportBody: CrmImportBody, options?: RequestInit): Promise<CrmImportResult> => {
+
+  return customFetch<CrmImportResult>(getImportCrmContactsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      crmImportBody,)
+  }
+);}
+
+
+
+
+export const getImportCrmContactsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importCrmContacts>>, TError,{id: number;data: BodyType<CrmImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importCrmContacts>>, TError,{id: number;data: BodyType<CrmImportBody>}, TContext> => {
+
+const mutationKey = ['importCrmContacts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importCrmContacts>>, {id: number;data: BodyType<CrmImportBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  importCrmContacts(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportCrmContactsMutationResult = NonNullable<Awaited<ReturnType<typeof importCrmContacts>>>
+    export type ImportCrmContactsMutationBody = BodyType<CrmImportBody>
+    export type ImportCrmContactsMutationError = ErrorType<void>
+
+    /**
+ * @summary Import selected contacts from CRM into a campaign batch
+ */
+export const useImportCrmContacts = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importCrmContacts>>, TError,{id: number;data: BodyType<CrmImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importCrmContacts>>,
+        TError,
+        {id: number;data: BodyType<CrmImportBody>},
+        TContext
+      > => {
+      return useMutation(getImportCrmContactsMutationOptions(options));
     }
 

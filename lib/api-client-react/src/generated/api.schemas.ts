@@ -4329,6 +4329,98 @@ export interface ListenPollResult {
   flatFields?: ListenPollResultFlatFields;
 }
 
+export type CrmConnectionUpdateFieldMapping = {[key: string]: string};
+
+export interface CrmConnectionUpdate {
+  fieldMapping?: CrmConnectionUpdateFieldMapping;
+}
+
+export type CrmConnectionProvider = typeof CrmConnectionProvider[keyof typeof CrmConnectionProvider];
+
+
+export const CrmConnectionProvider = {
+  hubspot: 'hubspot',
+  zoho: 'zoho',
+} as const;
+
+export type CrmConnectionFieldMapping = {[key: string]: string};
+
+export interface CrmConnection {
+  id: number;
+  provider: CrmConnectionProvider;
+  accountId: string;
+  /** @nullable */
+  accountName: string | null;
+  fieldMapping?: CrmConnectionFieldMapping;
+  /** @nullable */
+  lastSyncAt?: string | null;
+  /** @nullable */
+  lastErrorAt?: string | null;
+  /** @nullable */
+  lastError?: string | null;
+  createdAt: string;
+}
+
+export type CrmContactRawFields = {[key: string]: string};
+
+export interface CrmContact {
+  id: string;
+  phone: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  company?: string | null;
+  rawFields?: CrmContactRawFields;
+}
+
+export interface CrmContactsPage {
+  contacts: CrmContact[];
+  /** @nullable */
+  nextCursor?: string | null;
+  /** @nullable */
+  total?: number | null;
+}
+
+export interface CrmListItem {
+  id: string;
+  name: string;
+  type?: string;
+  count?: number;
+}
+
+export interface CrmListsPage {
+  lists: CrmListItem[];
+}
+
+export type CrmImportBodyFieldMapping = {[key: string]: string};
+
+export type CrmImportBodyDuplicatePolicy = typeof CrmImportBodyDuplicatePolicy[keyof typeof CrmImportBodyDuplicatePolicy];
+
+
+export const CrmImportBodyDuplicatePolicy = {
+  ignore: 'ignore',
+  skip: 'skip',
+  reject_with_report: 'reject_with_report',
+} as const;
+
+export interface CrmImportBody {
+  campaignId: number;
+  batchName?: string;
+  contacts: CrmContact[];
+  fieldMapping: CrmImportBodyFieldMapping;
+  duplicatePolicy?: CrmImportBodyDuplicatePolicy;
+}
+
+export interface CrmImportResult {
+  batchId: number;
+  leadsCreated: number;
+  duplicatesFound: number;
+  invalidPhones: number;
+  dncBlocked: number;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */
@@ -4976,5 +5068,25 @@ export type RescheduleCallback200 = {
   id: number;
   scheduledAt: string;
   status: string;
+};
+
+export type StartCrmConnectParams = {
+returnOrigin?: string;
+};
+
+export type CrmOAuthCallbackParams = {
+code?: string;
+state?: string;
+error?: string;
+};
+
+export type ListCrmContactsParams = {
+query?: string;
+after?: string;
+limit?: number;
+/**
+ * Filter contacts to a specific list (HubSpot) or view (Zoho)
+ */
+listId?: string;
 };
 

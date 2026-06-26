@@ -870,6 +870,11 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     callEvents: [],
   }).catch(() => {});
 
+  // CRM writeback (fire-and-forget — push call outcome to HubSpot/Zoho if lead was CRM-sourced)
+  import("../services/crm/writeback.js").then(({ writeCrmCallOutcome }) => {
+    writeCrmCallOutcome(call.id).catch(() => {});
+  }).catch(() => {});
+
   const enriched = await enrichCall(call);
   res.json(EndCallResponse.parse(enriched));
 });
