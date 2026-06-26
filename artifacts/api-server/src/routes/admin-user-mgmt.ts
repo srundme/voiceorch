@@ -48,7 +48,12 @@ router.get("/impersonate/exchange", async (req, res): Promise<void> => {
     }
 
     const sessionJwt = createSessionToken(
-      { sub: redeemed.targetUserId, email: redeemed.targetUserEmail ?? null, name: redeemed.targetUserName ?? null },
+      {
+        sub: redeemed.targetUserId,
+        email: redeemed.targetUserEmail ?? null,
+        name: redeemed.targetUserName ?? null,
+        imp: redeemed.sessionToken,
+      },
       2 * 60 * 60,
     );
 
@@ -605,9 +610,11 @@ router.delete("/admin/impersonate/sessions/:sessionToken", async (req, res): Pro
       beforeValue: { sessionToken: sessionToken!.slice(0, 8) + "..." },
     });
 
-    // Invalidate the in-process impersonation cache so detectImpersonation
-    // stops attributing subsequent requests to this session immediately.
-    invalidateImpersonationCache(session.targetUserId);
+    // Invalidate both the by-userId cache (detectImpersonation audit tags) and
+    // the by-sessionToken cache (attachSession revocation check) immediately so
+    // any retained impersonation JWT is denied within this process on the next
+    // request — no need to wait for the 5 s TTL.
+    invalidateImpersonationCache(session.targetUserId, sessionToken);
 
     res.json({ ok: true });
   } catch (err) {

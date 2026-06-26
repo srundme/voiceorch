@@ -22,6 +22,13 @@ export interface SessionPayload {
   name: string | null;
   iat: number;
   exp: number;
+  /**
+   * Present only on impersonation tokens. Carries the opaque
+   * admin_impersonation_sessions.session_token so that attachSession can
+   * check server-side revocation on every request — impersonation JWTs are
+   * NOT purely stateless.
+   */
+  imp?: string;
 }
 
 function b64url(input: string | Buffer): string {
@@ -33,7 +40,7 @@ function sign(data: string): string {
 }
 
 export function createSessionToken(
-  input: { sub: string; email: string | null; name: string | null },
+  input: { sub: string; email: string | null; name: string | null; imp?: string },
   ttlSec: number = DEFAULT_TTL_SEC,
 ): string {
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -44,6 +51,7 @@ export function createSessionToken(
     name: input.name,
     iat: now,
     exp: now + ttlSec,
+    ...(input.imp ? { imp: input.imp } : {}),
   };
   const body = b64url(JSON.stringify(payload));
   const data = `${header}.${body}`;

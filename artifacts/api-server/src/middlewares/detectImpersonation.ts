@@ -16,6 +16,10 @@ interface ImpersonationSession {
 const cache = new Map<string, { session: ImpersonationSession | null; expiresAt: number }>();
 const CACHE_TTL_MS = 5_000;
 
+// Secondary cache keyed by impersonation sessionToken for fast revocation checks
+// in attachSession. Same 5 s TTL; cleared on invalidateImpersonationCache.
+const activeBySessionToken = new Map<string, { active: boolean; expiresAt: number }>();
+
 async function lookupImpersonationSession(clerkUserId: string): Promise<ImpersonationSession | null> {
   const now = Date.now();
   const cached = cache.get(clerkUserId);
@@ -47,10 +51,48 @@ async function lookupImpersonationSession(clerkUserId: string): Promise<Imperson
 
 /**
  * Call this immediately after ending an impersonation session so the in-process
- * cache doesn't keep attributing subsequent requests for up to 30 s.
+ * cache doesn't keep attributing subsequent requests for up to 30 s, and so
+ * attachSession revocation checks see the ended state immediately.
  */
-export function invalidateImpersonationCache(clerkUserId: string): void {
+export function invalidateImpersonationCache(clerkUserId: string, sessionToken?: string): void {
   cache.delete(clerkUserId);
+  if (sessionToken) activeBySessionToken.delete(sessionToken);
+}
+
+/**
+ * Check whether an impersonation session (identified by its opaque session
+ * token, embedded as the `imp` claim in impersonation JWTs) is still active.
+ *
+ * Returns false if the row is missing, has endedAt set, or has expired.
+ * Used by attachSession to revoke impersonation JWTs server-side the moment
+ * an admin ends the session.
+ */
+export async function isImpersonationSessionActive(sessionToken: string): Promise<boolean> {
+  const now = Date.now();
+  const cached = activeBySessionToken.get(sessionToken);
+  if (cached && cached.expiresAt > now) return cached.active;
+
+  try {
+    const [row] = await db
+      .select({ sessionToken: adminImpersonationSessionsTable.sessionToken })
+      .from(adminImpersonationSessionsTable)
+      .where(
+        and(
+          eq(adminImpersonationSessionsTable.sessionToken, sessionToken),
+          isNull(adminImpersonationSessionsTable.endedAt),
+          gt(adminImpersonationSessionsTable.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+
+    const active = !!row;
+    activeBySessionToken.set(sessionToken, { active, expiresAt: now + CACHE_TTL_MS });
+    return active;
+  } catch (err) {
+    logger.error({ err }, "isImpersonationSessionActive: DB lookup failed");
+    // Fail closed: treat as revoked if we can't confirm it's active.
+    return false;
+  }
 }
 
 // Known route segment → stable resource type mapping.

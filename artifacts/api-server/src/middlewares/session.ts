@@ -10,14 +10,28 @@
  * Accepts the token via `Authorization: Bearer <jwt>` or `?token=<jwt>` (the
  * latter for EventSource, which cannot set custom headers). Never rejects — it
  * only annotates the request; enforcement is left to `requireAuth`.
+ *
+ * Impersonation tokens carry an `imp` claim (the opaque session token stored in
+ * admin_impersonation_sessions). For these tokens we do a fast DB/cache check to
+ * confirm the session is still active before granting identity. This makes
+ * impersonation JWTs server-side revocable: when an admin ends a session, any
+ * retained bearer token is denied within the cache TTL (≤ 5 s).
  */
 import type { Request, Response, NextFunction } from "express";
 import { extractRequestToken, verifySessionToken, type SessionPayload } from "../lib/session.js";
+import { isImpersonationSessionActive } from "./detectImpersonation.js";
 
-export function attachSession(req: Request, _res: Response, next: NextFunction): void {
+export async function attachSession(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const token = extractRequestToken(req);
   const payload = token ? verifySessionToken(token) : null;
   if (payload) {
+    if (payload.imp) {
+      const active = await isImpersonationSessionActive(payload.imp);
+      if (!active) {
+        next();
+        return;
+      }
+    }
     (req as unknown as { sessionPayload: SessionPayload }).sessionPayload = payload;
     (req as unknown as { clerkUserId: string }).clerkUserId = payload.sub;
   }
