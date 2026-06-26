@@ -502,7 +502,8 @@ router.get("/calls", requireAuth, async (req, res): Promise<void> => {
   res.json(ListCallsResponse.parse(enriched));
 });
 
-router.post("/calls", async (req, res): Promise<void> => {
+router.post("/calls", requireAuth, async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
   const parsed = InitiateCallBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
@@ -512,6 +513,12 @@ router.post("/calls", async (req, res): Promise<void> => {
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, parsed.data.agentId));
   if (!agent) {
     res.status(400).json({ error: "Agent not found" });
+    return;
+  }
+
+  // Ownership: only the agent's owner may create call records under it
+  if (agent.userId !== userId) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 
@@ -574,7 +581,7 @@ router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(GetCallResponse.parse(enriched));
 });
 
-router.patch("/calls/:id", async (req, res): Promise<void> => {
+router.patch("/calls/:id", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
@@ -584,6 +591,28 @@ router.patch("/calls/:id", async (req, res): Promise<void> => {
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
     return;
+  }
+
+  const { userId } = getAuth(req);
+
+  // Ownership check: load the call and verify it belongs to the authenticated user
+  const [existing] = await db.select({ userId: callsTable.userId, agentId: callsTable.agentId })
+    .from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!existing) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (existing.userId && existing.userId !== userId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!existing.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
+    if (agent?.userId && agent.userId !== userId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
   }
 
   const updateData: Record<string, unknown> = { ...parsed.data };
@@ -695,17 +724,33 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
   res.json(await enrichCall(updated ?? call));
 });
 
-router.patch("/calls/:id/end", async (req, res): Promise<void> => {
+router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   const params = EndCallParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Validation failed", issues: params.error.issues });
     return;
   }
 
+  const { userId } = getAuth(req);
+
   const [existing] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
   if (!existing) {
     res.status(404).json({ error: "Call not found" });
     return;
+  }
+
+  // Ownership check: the call must belong to the authenticated user
+  if (existing.userId && existing.userId !== userId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!existing.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, existing.agentId));
+    if (agent?.userId && agent.userId !== userId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
   }
 
   const endedAt = new Date();

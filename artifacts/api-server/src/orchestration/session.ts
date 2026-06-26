@@ -1,4 +1,4 @@
-import { createHmac, createHash } from "crypto";
+import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
@@ -826,18 +826,22 @@ export async function createSession(params: {
             getSelfBaseUrl()
           ).replace(/\/$/, "");
 
-          // ── For warm_summary mode: persist summary + get transferId for whisper URL ──
+          // ── For warm_summary mode: persist summary + get transferId/token for whisper URL ──
           let transferId: number | undefined;
+          let briefingToken: string | undefined;
           if (isWarm && agent.userId) {
             try {
+              const token = randomBytes(32).toString("hex");
               const [row] = await db.insert(callTransfersTable).values({
-                callId:   callRecord.id,
-                userId:   agent.userId,
-                transferTo: to,
-                summary:  operatorSummary,
-                status:   "initiated",
-              }).returning({ id: callTransfersTable.id });
-              transferId = row?.id;
+                callId:       callRecord.id,
+                userId:       agent.userId,
+                transferTo:   to,
+                summary:      operatorSummary,
+                status:       "initiated",
+                briefingToken: token,
+              }).returning({ id: callTransfersTable.id, briefingToken: callTransfersTable.briefingToken });
+              transferId    = row?.id;
+              briefingToken = row?.briefingToken ?? undefined;
               logger.info({ callId: callRecord.id, transferId }, "Warm transfer: DB record created");
             } catch (err) {
               logger.error({ callId: callRecord.id, err }, "Warm transfer: failed to persist summary — falling back to cold");
@@ -857,8 +861,8 @@ export async function createSession(params: {
             const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
             const accountSid = cfg["accountSid"] ?? "";
             let xmlUrl: string;
-            if (isWarm && transferId) {
-              xmlUrl = `${baseUrl}/api/webhooks/twilio/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}`;
+            if (isWarm && transferId && briefingToken) {
+              xmlUrl = `${baseUrl}/api/webhooks/twilio/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
             } else {
               xmlUrl = `${baseUrl}/api/webhooks/twilio/transfer-xml?target=${encodeURIComponent(to)}`;
             }
@@ -869,8 +873,8 @@ export async function createSession(params: {
             const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
             const authId = cfg["authId"] ?? "";
             let xmlUrl: string;
-            if (isWarm && transferId) {
-              xmlUrl = `${baseUrl}/api/webhooks/plivo/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}`;
+            if (isWarm && transferId && briefingToken) {
+              xmlUrl = `${baseUrl}/api/webhooks/plivo/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
             } else {
               xmlUrl = `${baseUrl}/api/webhooks/plivo/transfer-xml?target=${encodeURIComponent(to)}`;
             }
@@ -881,8 +885,8 @@ export async function createSession(params: {
             const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
             const authId = cfg["authId"] ?? "";
             let xmlUrl: string;
-            if (isWarm && transferId) {
-              xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}`;
+            if (isWarm && transferId && briefingToken) {
+              xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
             } else {
               xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}`;
             }

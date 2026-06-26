@@ -21,4 +21,11 @@ export const scheduledCallbacksTable = pgTable("scheduled_callbacks", {
   redialIntervalMinutes: integer("redial_interval_minutes").notNull().default(30),
   cancelledAt:           timestamp("cancelled_at"),
   notes:                 text("notes"),
+  /**
+   * Unguessable per-row secret embedded in the status-callback URL.
+   * The telephony provider echoes it back on the status webhook; we verify
+   * it before trusting the cbId and scheduling the next retry.  This prevents
+   * enumeration of serial cbId values to trigger arbitrary outbound redialing.
+   */
+  callbackSecret:        text("callback_secret"),
 });

@@ -13,6 +13,12 @@ export const callTransfersTable = pgTable(
     summary:            text("summary"),
     status:             text("status").notNull().default("initiated"),
     providerTransferId: text("provider_transfer_id"),
+    /**
+     * Unguessable capability token embedded in warm-briefing whisper URLs.
+     * The provider must present this token to fetch the briefing XML; without
+     * it the endpoint returns 403. Generated at insert time with 32 random bytes.
+     */
+    briefingToken:      text("briefing_token"),
     initiatedAt:        timestamp("initiated_at", { withTimezone: true }).notNull().defaultNow(),
     connectedAt:        timestamp("connected_at", { withTimezone: true }),
     completedAt:        timestamp("completed_at", { withTimezone: true }),

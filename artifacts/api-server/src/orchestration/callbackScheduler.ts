@@ -84,9 +84,11 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       : {} as Record<string, string>;
 
     const leadQs = cb.campaignLeadId ? `&campaignLeadId=${cb.campaignLeadId}` : "";
-    // Pass cbId + agentId in the status/hangup URL so no-answer detection
-    // can link back to this row and schedule the next retry.
-    const statusQs = `?cbId=${cb.id}&agentId=${cb.agentId}`;
+    // Pass cbId + agentId + callbackSecret in the status/hangup URL.
+    // The status webhook validates the secret against the DB row before
+    // allowing scheduleNextRedial — prevents cbId enumeration attacks.
+    const secretQs = cb.callbackSecret ? `&cbSecret=${encodeURIComponent(cb.callbackSecret)}` : "";
+    const statusQs = `?cbId=${cb.id}&agentId=${cb.agentId}${secretQs}`;
 
     if (provider === "twilio") {
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");

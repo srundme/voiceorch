@@ -5,11 +5,17 @@
  * redials when the caller calls back themselves.
  */
 
+import { randomBytes } from "node:crypto";
 import { db, scheduledCallbacksTable } from "@workspace/db";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 type CallbackRow = typeof scheduledCallbacksTable.$inferSelect;
+
+/** Generate an unguessable per-row secret for status-callback URL binding. */
+function genCallbackSecret(): string {
+  return randomBytes(24).toString("hex");
+}
 
 /**
  * After a no-answer outbound call fires, check the daily cap and schedule the
@@ -60,6 +66,7 @@ export async function scheduleNextRedial(prev: CallbackRow): Promise<void> {
     attemptCount:          nextAttempt,
     maxAttempts:           maxAttempts,
     redialIntervalMinutes: prev.redialIntervalMinutes ?? 30,
+    callbackSecret:        genCallbackSecret(),
   });
 
   logger.info(
@@ -112,6 +119,7 @@ export async function scheduleCallbackRequested(opts: {
     reason:            "callback_requested",
     maxAttempts:       1,
     notes:             opts.notes ?? null,
+    callbackSecret:    genCallbackSecret(),
   }).returning({ id: scheduledCallbacksTable.id });
 
   logger.info(
@@ -169,6 +177,7 @@ export async function scheduleNoAnswerRedial(opts: {
     attemptCount:          todayCount + 1,
     maxAttempts:           maxAttempts,
     redialIntervalMinutes: intervalMinutes,
+    callbackSecret:        genCallbackSecret(),
   }).returning({ id: scheduledCallbacksTable.id });
 
   logger.info(

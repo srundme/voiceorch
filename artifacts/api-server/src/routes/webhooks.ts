@@ -5,6 +5,7 @@ import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
 import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
+import { timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
@@ -18,8 +19,18 @@ const IS_PROD = process.env["NODE_ENV"] === "production";
 
 const NO_ANSWER_STATUSES = new Set(["no-answer", "no_answer", "busy", "failed", "noanswer"]);
 
+/** Constant-time string comparison for status-callback secrets. */
+function secretsMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  if (aBuf.length !== bBuf.length) return false;
+  return cryptoTimingSafeEqual(aBuf, bBuf);
+}
+
 async function handleNoAnswerStatus(opts: {
   cbId: number | null;
+  cbSecret: string | null;
   agentId: number | null;
   callStatus: string;
   toNumber: string;
@@ -28,16 +39,30 @@ async function handleNoAnswerStatus(opts: {
 
   try {
     if (opts.cbId) {
-      // This was a scheduler-fired callback — look up row and schedule next retry
+      // This was a scheduler-fired callback — look up row and validate the
+      // per-row secret before scheduling the next retry.  This prevents
+      // enumeration of serial cbId values to trigger arbitrary outbound calls.
       const [cb] = await db
         .select()
         .from(scheduledCallbacksTable)
         .where(eq(scheduledCallbacksTable.id, opts.cbId));
-      if (cb) await scheduleNextRedial(cb);
+      if (!cb) {
+        logger.warn({ cbId: opts.cbId }, "handleNoAnswerStatus: cbId not found — ignoring");
+        return;
+      }
+      // Validate secret if the row has one (new rows always will; legacy rows
+      // without a secret are still accepted so existing redialing isn't broken).
+      if (cb.callbackSecret && !secretsMatch(cb.callbackSecret, opts.cbSecret ?? "")) {
+        logger.warn({ cbId: opts.cbId }, "handleNoAnswerStatus: cbSecret mismatch — ignoring (possible forged webhook)");
+        return;
+      }
+      await scheduleNextRedial(cb);
       return;
     }
 
-    // First outbound call (no cbId) — start a retry chain if we have agentId + toNumber
+    // First outbound call (no cbId) — start a retry chain if we have agentId + toNumber.
+    // Caller is already guarded by the (agentId, toNumber) call-record existence check
+    // performed before invoking this helper from the status route handlers.
     if (opts.agentId && opts.toNumber) {
       await scheduleNoAnswerRedial({ agentId: opts.agentId, toNumber: opts.toNumber });
     }
@@ -546,23 +571,72 @@ router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
 router.post("/webhooks/vobiz/status", (req, res): void => {
   req.log.info({ body: req.body, query: req.query }, "VoBiz status callback");
   res.sendStatus(204);
-  // Auto-redial: fire-and-forget so the 204 is immediate
-  void handleNoAnswerStatus({
-    cbId:       parseInt(String(req.query["cbId"]   ?? "0"), 10) || null,
-    agentId:    parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10) || null,
-    callStatus: String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? ""),
-    toNumber:   String(req.body?.To ?? req.body?.to ?? ""),
-  });
+  // Auto-redial: fire-and-forget so the 204 is immediate.
+  // Guards:
+  //  cbId path  — handleNoAnswerStatus validates cbSecret (HMAC-bound per-row token)
+  //  no-cbId path — verify (agentId, toNumber) matches a real call record before
+  //                  allowing redial scheduling (no VoBiz signing mechanism available)
+  const agentId    = parseInt(String(req.query["agentId"] ?? req.body?.agentId ?? "0"), 10) || null;
+  const toNumber   = String(req.body?.To ?? req.body?.to ?? "");
+  const cbId       = parseInt(String(req.query["cbId"] ?? "0"), 10) || null;
+  const cbSecret   = String(req.query["cbSecret"] ?? "") || null;
+  const callStatus = String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? "");
+  void (async () => {
+    if (!cbId && agentId && toNumber) {
+      const [match] = await db
+        .select({ id: callsTable.id })
+        .from(callsTable)
+        .where(and(eq(callsTable.agentId, agentId), eq(callsTable.toNumber, toNumber)))
+        .limit(1);
+      if (!match) {
+        logger.warn({ agentId, toNumber }, "VoBiz status: no matching call record — ignoring (possible forged webhook)");
+        return;
+      }
+    }
+    await handleNoAnswerStatus({ cbId, cbSecret, agentId, callStatus, toNumber });
+  })();
 });
 
 // ── Twilio status callbacks ──────────────────────────────────────────────────
 
-router.post("/webhooks/twilio/status", (req, res): void => {
+router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
   req.log.info({ body: req.body, query: req.query }, "Twilio status callback");
+
+  // Validate the Twilio signature on status callbacks exactly as we do for voice
+  // webhooks — prevents forged status POSTs from scheduling outbound redialing.
+  const agentId  = parseInt(String(req.query["agentId"] ?? "0"), 10);
+  const twilioSig = String(req.headers["x-twilio-signature"] ?? "");
+  if (twilioSig) {
+    const authToken = agentId ? await getAgentProviderToken(agentId, "twilio") : null;
+    if (!authToken) {
+      logger.warn({ agentId }, "Twilio status: signature present but no provider key found — rejected");
+      if (IS_PROD) { res.sendStatus(403); return; }
+    } else {
+      const proto   = String(req.headers["x-forwarded-proto"] ?? "https");
+      const host    = String(req.headers["x-forwarded-host"] ?? req.hostname);
+      const queryStr = req.url?.split("?")[1] ?? "";
+      const fullUrl  = `${proto}://${host}${req.path}${queryStr ? "?" + queryStr : ""}`;
+      const bodyParams: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.body as Record<string, unknown>)) {
+        if (typeof v === "string") bodyParams[k] = v;
+      }
+      const valid = validateTwilioSignature(authToken, fullUrl, bodyParams, twilioSig);
+      if (!valid) {
+        logger.warn({ agentId, fullUrl }, "Twilio status: signature validation failed — rejected");
+        if (IS_PROD) { res.sendStatus(403); return; }
+      }
+    }
+  } else if (IS_PROD) {
+    logger.warn({ agentId }, "Twilio status: missing X-Twilio-Signature — rejected");
+    res.sendStatus(403);
+    return;
+  }
+
   res.sendStatus(204);
   void handleNoAnswerStatus({
     cbId:       parseInt(String(req.query["cbId"]   ?? "0"), 10) || null,
-    agentId:    parseInt(String(req.query["agentId"] ?? "0"), 10) || null,
+    cbSecret:   String(req.query["cbSecret"] ?? "") || null,
+    agentId:    agentId || null,
     callStatus: String(req.body?.CallStatus ?? ""),
     toNumber:   String(req.body?.To ?? ""),
   });
@@ -637,39 +711,42 @@ router.get("/webhooks/plivo/transfer-xml", (req, res): void => {
 router.get("/webhooks/twilio/warm-transfer-xml", (req, res): void => {
   const target     = String(req.query["target"] ?? "").trim();
   const transferId = String(req.query["transferId"] ?? "").trim();
-  if (!target || !transferId) {
+  const token      = String(req.query["token"] ?? "").trim();
+  if (!target || !transferId || !token) {
     res.status(400).set("Content-Type", "text/xml")
       .send("<Response><Say>Warm transfer parameters missing.</Say><Hangup/></Response>");
     return;
   }
   const baseUrl = getSelfBaseUrl();
-  const whisperUrl = `${baseUrl}/api/webhooks/twilio/warm-briefing-xml?transferId=${transferId}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/twilio/warm-briefing-xml?transferId=${transferId}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildTwilioWarmTransferTwiML(target, whisperUrl));
 });
 
 router.get("/webhooks/plivo/warm-transfer-xml", (req, res): void => {
   const target     = String(req.query["target"] ?? "").trim();
   const transferId = String(req.query["transferId"] ?? "").trim();
-  if (!target || !transferId) {
+  const token      = String(req.query["token"] ?? "").trim();
+  if (!target || !transferId || !token) {
     res.status(400).set("Content-Type", "text/xml")
       .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
     return;
   }
   const baseUrl = getSelfBaseUrl();
-  const whisperUrl = `${baseUrl}/api/webhooks/plivo/warm-briefing-xml?transferId=${transferId}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/plivo/warm-briefing-xml?transferId=${transferId}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildPlivoWarmTransferXml(target, whisperUrl));
 });
 
 router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
   const target     = String(req.query["target"] ?? "").trim();
   const transferId = String(req.query["transferId"] ?? "").trim();
-  if (!target || !transferId) {
+  const token      = String(req.query["token"] ?? "").trim();
+  if (!target || !transferId || !token) {
     res.status(400).set("Content-Type", "text/xml")
       .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
     return;
   }
   const baseUrl = getSelfBaseUrl();
-  const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${transferId}`;
+  const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${transferId}&token=${encodeURIComponent(token)}`;
   res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl));
 });
 
@@ -677,13 +754,40 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
 // Provider fetches this when the <Number url="..."> destination picks up.
 // Returns <Say> with the AI-generated summary so the operator is fully briefed
 // before the customer is bridged in.
+//
+// Security: every request MUST supply the `token` query parameter matching the
+// `briefingToken` stored on the transfer record.  The token is a random 32-byte
+// hex string generated at transfer-record creation time and embedded in the
+// whisper URL by the warm-transfer-xml handler.  Without a valid token the
+// endpoint returns 403 — preventing enumeration of summaries via serial IDs.
 
-async function warmBriefingXml(transferId: number, res: import("express").Response): Promise<void> {
+async function warmBriefingXml(
+  transferId: number,
+  token: string,
+  res: import("express").Response,
+): Promise<void> {
   try {
     const [row] = await db
-      .select({ summary: callTransfersTable.summary })
+      .select({ summary: callTransfersTable.summary, briefingToken: callTransfersTable.briefingToken })
       .from(callTransfersTable)
       .where(eq(callTransfersTable.id, transferId));
+
+    // Token validation — reject if no token stored (old records) or mismatch
+    const storedToken = row?.briefingToken ?? "";
+    if (!storedToken || !token) {
+      logger.warn({ transferId }, "warm-briefing-xml: missing or empty token — rejected");
+      res.sendStatus(403);
+      return;
+    }
+    const a = Buffer.from(storedToken, "utf8");
+    const b = Buffer.from(token, "utf8");
+    const valid = a.length === b.length && cryptoTimingSafeEqual(a, b);
+    if (!valid) {
+      logger.warn({ transferId }, "warm-briefing-xml: invalid token — rejected");
+      res.sendStatus(403);
+      return;
+    }
+
     const summary = row?.summary?.trim()
       || "A customer is being transferred to you. Please assist them.";
     const escaped = summary
@@ -703,21 +807,24 @@ async function warmBriefingXml(transferId: number, res: import("express").Respon
 }
 
 router.get("/webhooks/twilio/warm-briefing-xml", async (req, res): Promise<void> => {
-  const id = parseInt(String(req.query["transferId"] ?? ""), 10);
+  const id    = parseInt(String(req.query["transferId"] ?? ""), 10);
+  const token = String(req.query["token"] ?? "");
   if (!id) { res.status(400).send("Missing transferId"); return; }
-  await warmBriefingXml(id, res);
+  await warmBriefingXml(id, token, res);
 });
 
 router.get("/webhooks/plivo/warm-briefing-xml", async (req, res): Promise<void> => {
-  const id = parseInt(String(req.query["transferId"] ?? ""), 10);
+  const id    = parseInt(String(req.query["transferId"] ?? ""), 10);
+  const token = String(req.query["token"] ?? "");
   if (!id) { res.status(400).send("Missing transferId"); return; }
-  await warmBriefingXml(id, res);
+  await warmBriefingXml(id, token, res);
 });
 
 router.get("/webhooks/vobiz/warm-briefing-xml", async (req, res): Promise<void> => {
-  const id = parseInt(String(req.query["transferId"] ?? ""), 10);
+  const id    = parseInt(String(req.query["transferId"] ?? ""), 10);
+  const token = String(req.query["token"] ?? "");
   if (!id) { res.status(400).send("Missing transferId"); return; }
-  await warmBriefingXml(id, res);
+  await warmBriefingXml(id, token, res);
 });
 
 // ── Recording callbacks ────────────────────────────────────────────────────────
