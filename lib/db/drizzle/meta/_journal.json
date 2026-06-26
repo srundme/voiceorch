@@ -141,6 +141,13 @@
       "when": 1783000000000,
       "tag": "0019_kyc_webhook_token",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783100000000,
+      "tag": "0020_otp_attempt_counter",
+      "breakpoints": true
     }
   ]
 }
