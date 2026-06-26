@@ -124,6 +124,8 @@ export interface SpeakerVerifierOpts {
   onMismatch: (info: SpeakerMismatchInfo) => void;
   /** Optional: notified once the reference voiceprint is enrolled. */
   onEnrolled?: () => void;
+  /** Optional: notified after each verification window (including the skipped baseline). */
+  onWindowResult?: (info: { window: number; similarity: number; threshold: number; baseline: boolean; match: boolean }) => void;
   log?: typeof rootLogger;
 }
 
@@ -151,12 +153,14 @@ export class SpeakerVerifier {
   private readonly callId: number;
   private readonly onMismatch: SpeakerVerifierOpts["onMismatch"];
   private readonly onEnrolled?: SpeakerVerifierOpts["onEnrolled"];
+  private readonly onWindowResult?: SpeakerVerifierOpts["onWindowResult"];
   private readonly log: typeof rootLogger;
 
   constructor(callId: number, opts: SpeakerVerifierOpts) {
     this.callId = callId;
     this.onMismatch = opts.onMismatch;
     this.onEnrolled = opts.onEnrolled;
+    this.onWindowResult = opts.onWindowResult;
     this.log = opts.log ?? rootLogger;
   }
 
@@ -289,6 +293,7 @@ export class SpeakerVerifier {
           { callId: this.callId, similarity: Number(sim.toFixed(4)), window: this.windowCount },
           "Speaker verification: baseline window (not evaluated for mismatch)",
         );
+        try { this.onWindowResult?.({ window: this.windowCount, similarity: Number(sim.toFixed(4)), threshold: THRESHOLD, baseline: true, match: true }); } catch { /* ignore */ }
         return;
       }
 
@@ -303,6 +308,7 @@ export class SpeakerVerifier {
         { callId: this.callId, similarity: Number(sim.toFixed(4)), rollingAverage: Number(rollingAverage.toFixed(4)), threshold: THRESHOLD, consecutiveLow: this.consecutiveLow, window: this.windowCount },
         "Speaker verification window evaluated",
       );
+      try { this.onWindowResult?.({ window: this.windowCount, similarity: Number(sim.toFixed(4)), threshold: THRESHOLD, baseline: false, match: !isLow }); } catch { /* ignore */ }
 
       const sustained =
         this.consecutiveLow >= MIN_CONSECUTIVE_LOW ||

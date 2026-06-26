@@ -532,6 +532,27 @@ export class OrchestrationPipeline {
           // its system prompt. Never interrupts or ends the call.
           this.pendingSpeakerChallenge = true;
         },
+        onEnrolled: () => {
+          this.logFn(EXEC_COMPONENTS.Compliance, "system", {
+            status: "info",
+            metadata: { event: "Voice Verification: Enrolled", detail: "Caller voiceprint established — monitoring for speaker changes" },
+          });
+        },
+        onWindowResult: (info) => {
+          this.logFn(EXEC_COMPONENTS.Compliance, "system", {
+            status: "info",
+            metadata: {
+              event: info.baseline ? "Voice Verification: Baseline" : "Voice Verification: Window Checked",
+              window: info.window,
+              similarity: info.similarity,
+              threshold: info.threshold,
+              match: info.match,
+              detail: info.baseline
+                ? `Baseline window ${info.window} (skipped — calibrating) — similarity: ${info.similarity}`
+                : `Window ${info.window} — similarity: ${info.similarity} / threshold: ${info.threshold} — ${info.match ? "✓ same speaker" : "⚠ voice change suspected"}`,
+            },
+          });
+        },
       });
     }
 
