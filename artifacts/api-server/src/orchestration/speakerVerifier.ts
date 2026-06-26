@@ -59,8 +59,9 @@ const THRESHOLD = (() => {
   return Number.isFinite(v) && v > 0 && v < 1 ? v : 0.5;
 })();
 
-/** Consecutive low windows required to raise a mismatch (belt-and-braces with the rolling avg). */
-const MIN_CONSECUTIVE_LOW = Math.round(_num("SPEAKER_VERIFY_MIN_CONSECUTIVE", 2));
+/** Consecutive low windows required to raise a mismatch. Default 1 = one bad window triggers;
+ *  raise via SPEAKER_VERIFY_MIN_CONSECUTIVE env var for extra conservatism. */
+const MIN_CONSECUTIVE_LOW = Math.round(_num("SPEAKER_VERIFY_MIN_CONSECUTIVE", 1));
 /** Minimum gap between repeat mismatch alerts on the same call (anti-spam). */
 const COOLDOWN_MS = _num("SPEAKER_VERIFY_COOLDOWN_MS", 45_000);
 
