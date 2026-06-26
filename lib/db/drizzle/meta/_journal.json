@@ -134,6 +134,13 @@
       "when": 1782371989332,
       "tag": "0018_caller_preferred_language",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783000000000,
+      "tag": "0019_kyc_webhook_token",
+      "breakpoints": true
     }
   ]
 }

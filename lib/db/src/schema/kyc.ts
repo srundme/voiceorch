@@ -31,6 +31,7 @@ export const vobizKycSessionsTable = pgTable("vobiz_kyc_sessions", {
   status:               text("status").notNull().default("link_ready"),
   widgetUrl:            text("widget_url"),
   redirectUrl:          text("redirect_url"),
+  webhookToken:         text("webhook_token"), // per-session secret appended to webhook URL for auth
   webhookPayload:       jsonb("webhook_payload"), // last raw webhook body received
   completedAt:          timestamp("completed_at", { withTimezone: true }),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { eq, desc } from "drizzle-orm";
 import {
   db,
@@ -249,6 +249,38 @@ async function createVobizKycSession(
   return resp.json() as Promise<VobizKycSessionResponse>;
 }
 
+/**
+ * Fetch the authoritative status of a KYC session directly from VoBiz.
+ * Used by the redirect callback to verify completion without trusting
+ * caller-supplied query params.
+ */
+async function fetchVobizSessionStatus(sessionId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`${VOBIZ_PARTNER_BASE}/kyc-sessions/${encodeURIComponent(sessionId)}`, {
+      method:  "GET",
+      headers: partnerHeaders(),
+    });
+    if (!resp.ok) {
+      logger.warn({ sessionId, status: resp.status }, "VoBiz session status fetch returned non-OK");
+      return null;
+    }
+    const body = await resp.json() as Record<string, unknown>;
+    return typeof body["status"] === "string" ? body["status"] : null;
+  } catch (err) {
+    logger.error({ err, sessionId }, "Failed to fetch VoBiz session status");
+    return null;
+  }
+}
+
+/**
+ * Constant-time comparison for webhook token strings.
+ * Returns false if lengths differ (avoids timing leak on length).
+ */
+function safeTokenEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+}
+
 /* ── GET /kyc/status ─────────────────────────────────────────────────────── */
 
 router.get("/kyc/status", requireAuth, async (req, res): Promise<void> => {
@@ -361,9 +393,14 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
   }
 
   // 2. Create redirect-flow KYC session
+  // Generate a per-session secret token that will be appended to the webhook URL.
+  // VoBiz sends the webhook to this URL, so only legitimate VoBiz requests will
+  // carry the correct token — forged webhook calls cannot know it.
+  const webhookToken = randomBytes(32).toString("hex");
+
   const base        = publicBaseUrl();
   const redirectUrl = `${base}/api/kyc/callback`;
-  const webhookUrl  = `${base}/api/kyc/webhook`;
+  const webhookUrl  = `${base}/api/kyc/webhook?wh_token=${webhookToken}`;
 
   let kycSession: VobizKycSessionResponse;
   try {
@@ -374,7 +411,7 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // 3. Persist session
+  // 3. Persist session (including the webhook token for later verification)
   await db.insert(vobizKycSessionsTable).values({
     userId:             clerkId,
     vobizSessionId:     kycSession.session_id,
@@ -383,6 +420,7 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
     status:             kycSession.status,
     widgetUrl:          kycSession.widget_url ?? null,
     redirectUrl,
+    webhookToken,
   });
 
   await audit("session_created", {
@@ -403,13 +441,21 @@ router.post("/kyc/start", requireAuth, async (req, res): Promise<void> => {
 /* ── GET /kyc/callback ───────────────────────────────────────────────────── */
 // VoBiz redirects the user's browser here after they complete (or abandon) the
 // KYC widget. No Clerk session — the session_id ties back to our DB.
+//
+// SECURITY: The `status` query param is provided by VoBiz in the redirect URL
+// but flows through the user's browser and can be tampered with. We ignore it
+// for any privileged state transition and instead verify the real session
+// status directly with the VoBiz partner API before marking KYC completed.
 
 router.get("/kyc/callback", async (req, res): Promise<void> => {
-  // VoBiz passes session_id, status, and auth_id as query params on redirect
-  const { session_id, status, auth_id } = req.query as Record<string, string>;
+  // VoBiz passes session_id and auth_id as query params on redirect.
+  // We intentionally do NOT use the `status` param for DB state changes.
+  const { session_id, auth_id } = req.query as Record<string, string>;
   const ip = clientIp(req);
 
   if (!session_id) { res.redirect(`${dashboardBaseUrl()}/app/kyc?kyc=error`); return; }
+
+  let verifiedStatus: string | null = null;
 
   try {
     const [session] = await db
@@ -418,7 +464,12 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
       .where(eq(vobizKycSessionsTable.vobizSessionId, session_id));
 
     if (session) {
-      const newStatus = status ?? session.status;
+      // Fetch the authoritative status from VoBiz — do not trust query params
+      verifiedStatus = await fetchVobizSessionStatus(session_id);
+
+      // Fall back to the current DB status if the VoBiz API call fails,
+      // so the callback still redirects correctly without a privilege escalation.
+      const newStatus = verifiedStatus ?? session.status;
 
       await withRetry(
         () => db
@@ -436,13 +487,13 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
             .where(eq(vobizAccountsTable.userId, session.userId)),
           { label: "callback-account-update" },
         );
-        req.log.info({ sessionId: session_id, userId: session.userId }, "KYC completed via redirect callback");
+        req.log.info({ sessionId: session_id, userId: session.userId }, "KYC completed via redirect callback (provider-verified)");
       }
 
       await audit("callback_received", {
         userId:    session.userId,
         sessionId: session_id,
-        eventData: { status: newStatus, auth_id: auth_id ?? null },
+        eventData: { verifiedStatus: newStatus, auth_id: auth_id ?? null },
         ip,
       });
     }
@@ -450,17 +501,20 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
     req.log.error({ err, session_id }, "Error processing KYC callback");
   }
 
-  const outcome = status === "kyc_completed" ? "completed" : (status ?? "pending");
+  const outcome = verifiedStatus === "kyc_completed" ? "completed" : (verifiedStatus ?? "pending");
   res.redirect(`${dashboardBaseUrl()}/app/kyc?kyc=${outcome}`);
 });
 
 /* ── POST /kyc/webhook ───────────────────────────────────────────────────── */
 // VoBiz fires this for kyc.completed / kyc.failed / kyc.session_revoked.
 // Respond 200 immediately; update DB with retry + idempotency + audit.
+//
+// SECURITY: Each session is created with a unique secret token embedded in the
+// webhook URL (?wh_token=<hex>). We verify this token via constant-time
+// comparison before processing any state change. Requests lacking the correct
+// token are rejected immediately and logged, preventing forged webhook abuse.
 
 router.post("/kyc/webhook", async (req, res): Promise<void> => {
-  res.sendStatus(200); // fast ack
-
   const body = req.body as {
     event?:         string;
     session_id?:    string;
@@ -469,7 +523,13 @@ router.post("/kyc/webhook", async (req, res): Promise<void> => {
   };
 
   const { event, session_id } = body;
-  if (!event || !session_id) return;
+  const suppliedToken = typeof req.query["wh_token"] === "string" ? req.query["wh_token"] : "";
+
+  // Reject immediately if basic fields are missing — fast path before DB
+  if (!event || !session_id) {
+    res.sendStatus(400);
+    return;
+  }
 
   const ip = clientIp(req);
 
@@ -481,8 +541,27 @@ router.post("/kyc/webhook", async (req, res): Promise<void> => {
 
     if (!session) {
       req.log.warn({ session_id, event }, "KYC webhook for unknown session — ignored");
+      res.sendStatus(200); // return 200 to avoid VoBiz retry storm on stale sessions
       return;
     }
+
+    // Verify the per-session webhook token using constant-time comparison.
+    // Sessions created before this change have no stored token (webhookToken=null);
+    // reject them too to avoid the original bypass window.
+    const storedToken = session.webhookToken ?? "";
+    if (!storedToken || !suppliedToken || !safeTokenEqual(storedToken, suppliedToken)) {
+      req.log.warn({ session_id, event }, "KYC webhook rejected: invalid or missing webhook token");
+      await audit("webhook_auth_failed", {
+        userId:    session.userId,
+        sessionId: session_id,
+        eventData: { event, reason: "invalid_token" },
+        ip,
+      });
+      res.sendStatus(403);
+      return;
+    }
+
+    res.sendStatus(200); // fast ack after auth passes
 
     // Store raw webhook payload regardless of event type
     await withRetry(
