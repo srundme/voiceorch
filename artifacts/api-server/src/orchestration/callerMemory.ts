@@ -31,7 +31,14 @@ import {
   callerSentencesTable,
   callerFactSentenceLinksTable,
   callerEpisodeFactLinksTable,
+  canonicalizeCallerKey,
+  isRealPhoneNumber,
+  humanPhone,
 } from "@workspace/db";
+
+// Re-export the shared caller-identity helpers so existing importers
+// (session.ts, etc.) keep working through callerMemory's public surface.
+export { canonicalizeCallerKey, isRealPhoneNumber, humanPhone };
 import { and, eq, ne, desc, isNull, inArray, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import type { ConversationTurn } from "./types.js";
@@ -115,16 +122,6 @@ export function computePersonaHash(systemPrompt: string | null | undefined): str
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-export function isRealPhoneNumber(n: string): boolean {
-  return /^\+?\d{7,15}$/.test(n.trim());
-}
-
-export function humanPhone(fromNumber: string, toNumber: string): string | null {
-  if (isRealPhoneNumber(fromNumber)) return fromNumber.trim();
-  if (isRealPhoneNumber(toNumber))   return toNumber.trim();
-  return null;
-}
 
 function daysSinceLabel(d: Date | null): string | null {
   if (!d) return null;
@@ -242,6 +239,8 @@ export async function loadCallerProfile(
   agentId: number,
   phoneNumber: string,
 ): Promise<CallerProfile | null> {
+  // Defense-in-depth: never trust the caller to be already canonical.
+  phoneNumber = canonicalizeCallerKey(phoneNumber) ?? phoneNumber;
   const [row] = await db
     .select()
     .from(callerProfilesTable)
@@ -256,6 +255,9 @@ export async function loadCallerContext(
   phoneNumber: string,
   currentPersonaHash?: string,
 ): Promise<CallerContext> {
+  // Defense-in-depth: read with the SAME canonical key the write path uses, so a
+  // non-canonical caller string can never silently miss stored memory.
+  phoneNumber = canonicalizeCallerKey(phoneNumber) ?? phoneNumber;
   const [profile, currentFacts, recentCalls] = await Promise.all([
     // L1 profile
     loadCallerProfile(agentId, phoneNumber),
@@ -325,6 +327,21 @@ export async function loadCallerContext(
       "Caller memory: agent persona changed since last contact — suppressing stale domain memory for this call",
     );
   }
+
+  // Retrieval diagnostic: make memory hit/miss observable in the logs so a future
+  // "the agent doesn't remember me" report is immediately diagnosable. The write
+  // side already logs; this covers the read side keyed on the canonical identity.
+  logger.info(
+    {
+      agentId,
+      phoneNumber,
+      hit: !!normalizedProfile,
+      callCount: normalizedProfile?.callCount ?? 0,
+      factCount: currentFacts.filter(r => r.key !== PERSONA_HASH_FACT_KEY).length,
+      archiveCount: recentCalls.length,
+    },
+    "Caller memory retrieval",
+  );
 
   return {
     profile: normalizedProfile,
@@ -902,7 +919,9 @@ export async function updateCallerProfile(opts: {
    */
   finalLanguage?: string | null;
 }): Promise<void> {
-  const { agentId, phoneNumber, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash, finalLanguage } = opts;
+  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash, finalLanguage } = opts;
+  // Defense-in-depth: write under the SAME canonical key the read path uses.
+  const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
   if (history.length < 1) return;
 
@@ -1197,7 +1216,8 @@ export async function latchCallerName(opts: {
   existingName: string | null;
   callId: number;
 }): Promise<string | null> {
-  const { agentId, phoneNumber, transcript, existingName, callId } = opts;
+  const { agentId, transcript, existingName, callId } = opts;
+  const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
   let detected: string | null = null;
   for (const pattern of NAME_PATTERNS) {
@@ -1309,7 +1329,8 @@ export async function latchCallerFact(opts: {
   callId: number;
   existingFacts: Map<string, string>;
 }): Promise<Map<string, string>> {
-  const { agentId, phoneNumber, transcript, callId, existingFacts } = opts;
+  const { agentId, transcript, callId, existingFacts } = opts;
+  const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
   const updated = new Map(existingFacts);
 
   for (const fp of FACT_PATTERNS) {

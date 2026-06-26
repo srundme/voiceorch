@@ -22,3 +22,4 @@ export const db = drizzle(pool, { schema });
 
 export * from "./schema";
 export * from "./identity-merge";
+export * from "./caller-identity";

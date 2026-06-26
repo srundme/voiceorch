@@ -25,6 +25,7 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import {
   humanPhone,
+  canonicalizeCallerKey,
   loadCallerProfile,
   loadCallerContext,
   injectCallerMemory,
@@ -346,11 +347,14 @@ export async function createSession(params: {
   // rejects (not a real phone number). Use it as a stable synthetic identifier so
   // caller memory is captured per-user-id, matching the historical "webcall:user_<id>"
   // format already in the DB. Real-phone callers are unaffected.
-  const callerPhone =
+  // canonicalizeCallerKey is the SINGLE source of truth for the memory key — the
+  // same function the write path uses — so read and write can never drift again.
+  // humanPhone already canonicalizes real numbers; for web calls fall back to the
+  // synthetic identity, which canonicalizeCallerKey maps to "webcall:user_<id>".
+  const callerPhone = canonicalizeCallerKey(
     humanPhone(params.fromNumber, params.toNumber) ??
-    (params.fromNumber.startsWith("webcall-user-")
-      ? `webcall:user_${params.fromNumber.replace("webcall-user-", "")}`
-      : null);
+      (params.fromNumber.startsWith("webcall-user-") ? params.fromNumber : null),
+  );
   // Persona fingerprint for caller-memory whiplash detection: when the agent is
   // repurposed (e.g. real-estate → insurance), stale domain memory keyed on
   // (agentId, phone) must not bleed into the new persona. Derived from the RAW
