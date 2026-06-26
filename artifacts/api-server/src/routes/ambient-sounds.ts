@@ -7,7 +7,7 @@ import { eq, desc } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { invalidatePcmCache } from "../orchestration/ambient.js";
+import { invalidatePcmCache, AmbientNoiseStream, TRACK_PARAMS } from "../orchestration/ambient.js";
 import { resolveFfmpegPath } from "../lib/ffmpeg.js";
 
 const upload = multer({
@@ -245,6 +245,52 @@ router.delete("/admin/ambient-sounds/:id", requireAdmin, async (req, res): Promi
 });
 
 // ── User-facing routes (mounted after provisionUser — auth enforced) ─────────
+
+/** Build a minimal RIFF/WAV header for mono 16-bit PCM at 8 kHz. */
+function makePcmWav(pcm: Buffer): Buffer {
+  const header = Buffer.allocUnsafe(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);           // fmt chunk size
+  header.writeUInt16LE(1, 20);            // PCM format
+  header.writeUInt16LE(1, 22);            // mono
+  header.writeUInt32LE(8000, 24);         // sample rate
+  header.writeUInt32LE(8000 * 2, 28);     // byte rate (rate × blockAlign)
+  header.writeUInt16LE(2, 32);            // block align (1 ch × 2 bytes)
+  header.writeUInt16LE(16, 34);           // bits per sample
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+/**
+ * GET /ambient-sounds/builtin/:track/audio
+ * Returns ~5 s of the requested built-in ambient track as a WAV file.
+ * Built-in tracks are computed on the fly (no DB/ffmpeg needed).
+ */
+userRouter.get("/ambient-sounds/builtin/:track/audio", requireAuth, (req, res): void => {
+  const track = req.params["track"] as string;
+  if (!Object.prototype.hasOwnProperty.call(TRACK_PARAMS, track)) {
+    res.status(404).json({ error: "Unknown built-in track" });
+    return;
+  }
+  const PREVIEW_SECONDS = 5;
+  const SAMPLES_PER_CHUNK = 160;                           // 20 ms @ 8 kHz
+  const TOTAL_CHUNKS = Math.ceil((PREVIEW_SECONDS * 8000) / SAMPLES_PER_CHUNK);
+  const stream = new AmbientNoiseStream(track);
+  const chunks: Buffer[] = [];
+  for (let i = 0; i < TOTAL_CHUNKS; i++) {
+    chunks.push(stream.nextPcmChunk());
+  }
+  const pcm = Buffer.concat(chunks);
+  const wav = makePcmWav(pcm);
+  res.setHeader("Content-Type", "audio/wav");
+  res.setHeader("Content-Length", String(wav.length));
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.end(wav);
+});
 
 userRouter.get("/ambient-sounds", requireAuth, async (req, res): Promise<void> => {
   try {

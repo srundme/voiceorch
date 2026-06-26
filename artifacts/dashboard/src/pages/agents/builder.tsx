@@ -907,6 +907,17 @@ function VoiceTab({ form }: { form: any }) {
   useEffect(() => () => stopPreview(), [stopPreview]);
 
   // ── Ambient (background noise) track ──────────────────────────────────────
+  // Built-in tracks are always available — no DB/upload required.
+  const BUILTIN_TRACKS = [
+    { id: "office-ambience",  name: "Office Ambience" },
+    { id: "cafe",             name: "Café" },
+    { id: "coffee-shop",      name: "Coffee Shop" },
+    { id: "convention-hall",  name: "Convention Hall" },
+    { id: "home",             name: "Home" },
+    { id: "outdoor",          name: "Outdoor" },
+    { id: "restaurant",       name: "Restaurant" },
+  ] as const;
+
   const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
   const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
   const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
@@ -936,7 +947,12 @@ function VoiceTab({ form }: { form: any }) {
     stopAmbientPreview();
     setAmbientPreviewPlaying(soundId);
     try {
-      const blob = await customFetch<Blob>(`${DASH_API}/ambient-sounds/${soundId}/audio`, {
+      // Built-in tracks use the /builtin/:track/audio endpoint; uploaded sounds use their UUID path.
+      const isBuiltin = BUILTIN_TRACKS.some(t => t.id === soundId);
+      const audioPath = isBuiltin
+        ? `${DASH_API}/ambient-sounds/builtin/${soundId}/audio`
+        : `${DASH_API}/ambient-sounds/${soundId}/audio`;
+      const blob = await customFetch<Blob>(audioPath, {
         responseType: "blob",
         timeoutMs: 30_000,
       });
@@ -1182,36 +1198,41 @@ function VoiceTab({ form }: { form: any }) {
             <FormField control={form.control} name="ambientNoiseTrack" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">Track</FormLabel>
-                {ambientSoundsLoading ? (
-                  <div className="h-8 flex items-center text-xs text-muted-foreground">Loading tracks…</div>
-                ) : !ambientSounds || ambientSounds.length === 0 ? (
-                  <div className="h-8 flex items-center text-xs text-muted-foreground italic">
-                    No ambient sounds uploaded yet — ask your admin to add some.
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Select value={field.value || undefined} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select a track" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent position="popper" className="max-h-[280px]">
-                        {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      disabled={!field.value}
-                      onClick={() => { if (field.value) void previewAmbient(field.value); }}
-                      aria-label={ambientPreviewPlaying && ambientPreviewPlaying === field.value ? "Stop preview" : "Play preview"}
-                      title={field.value ? "Preview track" : "Select a track to preview"}
-                      className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {ambientPreviewPlaying && ambientPreviewPlaying === field.value
-                        ? <Pause className="h-3.5 w-3.5" />
-                        : <Play className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select a track" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent position="popper" className="max-h-[280px]">
+                      <SelectGroup>
+                        <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Built-in</SelectLabel>
+                        {BUILTIN_TRACKS.map(t => (
+                          <SelectItem key={t.id} value={t.id} className="text-xs">{t.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                      {!ambientSoundsLoading && ambientSounds && ambientSounds.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Uploaded</SelectLabel>
+                          {ambientSounds.map(s => (
+                            <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    disabled={!field.value}
+                    onClick={() => { if (field.value) void previewAmbient(field.value); }}
+                    aria-label={ambientPreviewPlaying && ambientPreviewPlaying === field.value ? "Stop preview" : "Play preview"}
+                    title={field.value ? "Preview track" : "Select a track to preview"}
+                    className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {ambientPreviewPlaying && ambientPreviewPlaying === field.value
+                      ? <Pause className="h-3.5 w-3.5" />
+                      : <Play className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </FormItem>
             )} />
           )}
