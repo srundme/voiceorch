@@ -148,6 +148,13 @@
       "when": 1783100000000,
       "tag": "0020_otp_attempt_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783200000000,
+      "tag": "0021_wallet_payment_idempotency",
+      "breakpoints": true
     }
   ]
 }

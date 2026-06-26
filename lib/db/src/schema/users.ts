@@ -36,7 +36,7 @@ export const walletTransactionsTable = pgTable("wallet_transactions", {
   description: text("description").notNull(),
   status: text("status").notNull().default("completed"),
   razorpayOrderId: text("razorpay_order_id"),
-  razorpayPaymentId: text("razorpay_payment_id"),
+  razorpayPaymentId: text("razorpay_payment_id").unique(),
   callId: integer("call_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

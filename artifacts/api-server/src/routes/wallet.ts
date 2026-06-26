@@ -3,7 +3,7 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 import { db } from "@workspace/db";
 import { usersTable, walletTransactionsTable, platformSettingsTable } from "@workspace/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 
@@ -176,32 +176,54 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     return;
   }
 
-  // Try to fetch payment details to extract recurring token_id
+  // Try to fetch payment details to extract recurring token_id (outside the tx — network call)
+  let tokenId: string | undefined;
   try {
     const razorpay = getRazorpay();
     const payment = await (razorpay.payments as any).fetch(razorpayPaymentId);
-    const tokenId = payment?.token_id as string | undefined;
-    if (tokenId) {
-      await db.update(usersTable)
-        .set({ razorpayTokenId: tokenId })
-        .where(eq(usersTable.id, user.id));
-      logger.info({ userId: user.id, tokenId }, "Razorpay mandate token saved");
-    }
+    tokenId = payment?.token_id as string | undefined;
   } catch (err) {
     logger.warn({ err, razorpayPaymentId }, "Could not fetch Razorpay payment details for token");
   }
 
-  // Credit wallet atomically (SQL increment avoids read-then-write race)
-  const [updated] = await db
-    .update(usersTable)
-    .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
-    .where(eq(usersTable.id, user.id))
-    .returning();
+  // Atomically claim the transition pending→completed.  If another concurrent
+  // request already flipped the row, the conditional UPDATE returns 0 rows and
+  // we reject immediately — the wallet is never double-credited.
+  let updated: typeof usersTable.$inferSelect | undefined;
+  await db.transaction(async (tx) => {
+    const [claimed] = await tx
+      .update(walletTransactionsTable)
+      .set({ status: "completed", razorpayPaymentId })
+      .where(and(
+        eq(walletTransactionsTable.id, txn.id),
+        eq(walletTransactionsTable.status, "pending"),
+      ))
+      .returning({ id: walletTransactionsTable.id });
 
-  await db
-    .update(walletTransactionsTable)
-    .set({ status: "completed", razorpayPaymentId })
-    .where(eq(walletTransactionsTable.id, txn.id));
+    if (!claimed) {
+      // Race lost — another request already completed this order
+      return;
+    }
+
+    // Save mandate token if present
+    if (tokenId) {
+      await tx.update(usersTable)
+        .set({ razorpayTokenId: tokenId })
+        .where(eq(usersTable.id, user.id));
+      logger.info({ userId: user.id, tokenId }, "Razorpay mandate token saved");
+    }
+
+    [updated] = await tx
+      .update(usersTable)
+      .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+  });
+
+  if (!updated) {
+    res.status(400).json({ error: "Order not found or already processed" });
+    return;
+  }
 
   res.json(walletInfoPayload(updated));
 });
@@ -332,24 +354,33 @@ router.post("/wallet/webhook", async (req, res) => {
       logger.warn({ event, payment }, "Razorpay webhook payment.captured: missing payment id");
       return;
     }
-    if (txn.status === "completed") {
-      logger.info({ orderId, paymentId }, "Razorpay webhook: order already completed — skipping (idempotent)");
-      return;
-    }
 
-    // Atomic wallet credit
-    await db
-      .update(usersTable)
-      .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
-      .where(eq(usersTable.id, txn.userId));
+    // Atomically claim the pending→completed transition.  If already completed
+    // (by the client-side verify-payment or a prior webhook delivery), the
+    // conditional UPDATE returns 0 rows and we skip the credit — idempotent.
+    await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(walletTransactionsTable)
+        .set({ status: "completed", razorpayPaymentId: paymentId })
+        .where(and(
+          eq(walletTransactionsTable.id, txn.id),
+          eq(walletTransactionsTable.status, "pending"),
+        ))
+        .returning({ id: walletTransactionsTable.id });
 
-    await db
-      .update(walletTransactionsTable)
-      .set({ status: "completed", razorpayPaymentId: paymentId })
-      .where(eq(walletTransactionsTable.id, txn.id));
+      if (!claimed) {
+        logger.info({ orderId, paymentId }, "Razorpay webhook: order already completed — skipping (idempotent)");
+        return;
+      }
 
-    logger.info({ orderId, paymentId, userId: txn.userId, amountCents: txn.amountCents },
-      "Wallet credited via Razorpay webhook payment.captured");
+      await tx
+        .update(usersTable)
+        .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
+        .where(eq(usersTable.id, txn.userId));
+
+      logger.info({ orderId, paymentId, userId: txn.userId, amountCents: txn.amountCents },
+        "Wallet credited via Razorpay webhook payment.captured");
+    });
   } catch (err) {
     logger.error({ err, orderId, paymentId, event }, "Razorpay webhook: error processing event");
   }
