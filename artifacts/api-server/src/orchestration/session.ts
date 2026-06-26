@@ -309,8 +309,6 @@ export async function createSession(params: {
     recordingEnabled:              (agentCfg["recordingEnabled"]              as boolean | undefined) ?? false,
     // P1-F: Caller gender detection
     genderDetectionEnabled:        (agentCfg["genderDetectionEnabled"]        as boolean | undefined) ?? true,
-    // Mid-call voice biometric speaker verification — opt-in, defaults OFF.
-    voiceVerificationEnabled:      (agentCfg["voiceVerificationEnabled"]      as boolean | undefined) ?? false,
     genderDetectionMaleSalutation: (agentCfg["genderDetectionMaleSalutation"] as string  | undefined) ?? "Sir",
     genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string | undefined) ?? "Ma'am",
     genderDetectionNeutralSalutation: (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "",

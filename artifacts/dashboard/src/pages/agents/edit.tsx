@@ -61,7 +61,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames,
-    timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceVerificationEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceTrai,
@@ -88,7 +88,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   if (voicemailLeadInSeconds != null && voicemailLeadInSeconds !== 2) agentConfig["voicemailLeadInSeconds"] = voicemailLeadInSeconds;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
-  agentConfig["voiceVerificationEnabled"] = !!voiceVerificationEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
@@ -320,7 +319,6 @@ export default function AgentEdit() {
       voicemailLeadInSeconds: 2,
       tools: [],
       genderDetectionEnabled: false,
-      voiceVerificationEnabled: false,
       recordingEnabled: false,
       snapserveAgentId: "",
       contextWindowTurns: undefined,
@@ -528,7 +526,6 @@ export default function AgentEdit() {
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       tools: (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
-      voiceVerificationEnabled: (agent as any).agentConfig?.voiceVerificationEnabled ?? false,
       recordingEnabled: (agent as any).agentConfig?.recordingEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       contextWindowTurns: (agent as any).contextWindowTurns ?? undefined,

@@ -98,9 +98,6 @@ export type AgentConfig = {
   // P1-F: Caller gender detection
   genderDetectionEnabled?: boolean;
   genderDetectionProvider?: string;
-  // Mid-call voice biometric speaker verification (anti-impersonation / hand-off
-  // detection). Opt-in, warning-only — never auto-fails a call.
-  voiceVerificationEnabled?: boolean;
   genderDetectionMaleSalutation?: string;
   genderDetectionFemaleSalutation?: string;
   genderDetectionNeutralSalutation?: string;

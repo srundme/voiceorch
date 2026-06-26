@@ -1228,7 +1228,6 @@ function VoiceTab({ form }: { form: any }) {
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
-  const voiceVerifyEnabled = form.watch("voiceVerificationEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? false;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
@@ -1687,33 +1686,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           </button>
         </div>
 
-        {/* Voice Verification card */}
-        <div className={cn("rounded-xl border transition-all duration-150", voiceVerifyEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-          <button
-            type="button"
-            onClick={() => form.setValue("voiceVerificationEnabled", !voiceVerifyEnabled, { shouldDirty: true })}
-            className="w-full text-left p-4 flex items-start gap-3"
-          >
-            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
-              <ShieldCheck className={cn("h-4 w-4", voiceVerifyEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-semibold text-foreground/80">Voice Verification</span>
-              </div>
-              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                Continuously checks that the caller's voice matches whoever started the call. If a different speaker takes over mid-call, the agent politely asks who it's now speaking with — and a "voice mismatch" warning is logged on the call. It never hangs up or ends the call.
-              </p>
-            </div>
-            <div className="shrink-0 mt-1">
-              <Switch
-                checked={voiceVerifyEnabled}
-                onCheckedChange={(v) => form.setValue("voiceVerificationEnabled", v, { shouldDirty: true })}
-                onClick={e => e.stopPropagation()}
-              />
-            </div>
-          </button>
-        </div>
       </div>
       </div>
 
@@ -4560,7 +4532,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
-      tools: [], genderDetectionEnabled: false, voiceVerificationEnabled: false, recordingEnabled: false, languageAutoDetect: false,
+      tools: [], genderDetectionEnabled: false, recordingEnabled: false, languageAutoDetect: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
@@ -4622,7 +4594,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailLeadInSeconds:   (agent as any).agentConfig?.voicemailLeadInSeconds ?? 2,
       tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
-      voiceVerificationEnabled: (agent as any).agentConfig?.voiceVerificationEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,

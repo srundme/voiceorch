@@ -2,7 +2,6 @@ import * as agnost from "agnostai";
 import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
-import { SpeakerVerifier } from "./speakerVerifier.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks } from "./reasoningFilter.js";
@@ -393,11 +392,6 @@ export class OrchestrationPipeline {
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
 
-  // Mid-call voice biometric speaker verification — opt-in, warning-only.
-  // null unless the agent enables voiceVerificationEnabled.
-  private speakerVerifier: SpeakerVerifier | null = null;
-  /** Set by the verifier's onMismatch; consumed on the next LLM turn so the agent asks who is speaking. */
-  private pendingSpeakerChallenge = false;
 
   // Tracks the current call language for per-turn LLM language injection.
   // Seeded from the agent's primary language at construction so turn 1 already
@@ -532,52 +526,6 @@ export class OrchestrationPipeline {
       this.genderDetector = null as unknown as GenderDetector;
     }
 
-    // Mid-call voice biometric speaker verification (opt-in). Mirrors the gender
-    // detector lifecycle so it adds ZERO latency: fed on the same audio frames,
-    // fired fire-and-forget after each turn. Warning-only — it writes a compliance
-    // execution-log row on a sustained voice mismatch and never touches call control.
-    if (config.agentConfig.voiceVerificationEnabled) {
-      this.speakerVerifier = new SpeakerVerifier(config.callId, {
-        onMismatch: (info) => {
-          logWarningEvent(this.logFn, EXEC_COMPONENTS.Compliance, "Voice Mismatch Detected", ["voice_mismatch"], {
-            turnNumber: this._activeTurnIndex,
-            detail: {
-              reason: `Possible speaker change mid-call — voice similarity ${info.similarity} stayed below the ${info.threshold} threshold (window ${info.window}). The agent will ask who is speaking on its next reply; the call was not interrupted.`,
-              similarity: info.similarity,
-              rollingAverage: info.rollingAverage,
-              threshold: info.threshold,
-              window: info.window,
-              consecutiveLow: info.consecutiveLow,
-            },
-          });
-          // Prompt the agent to ask — in the caller's current language — who it is
-          // now speaking with, on its next LLM turn. Consumed when that turn builds
-          // its system prompt. Never interrupts or ends the call.
-          this.pendingSpeakerChallenge = true;
-        },
-        onEnrolled: () => {
-          this.logFn(EXEC_COMPONENTS.Compliance, "system", {
-            status: "info",
-            metadata: { event: "Voice Verification: Enrolled", detail: "Caller voiceprint established — monitoring for speaker changes" },
-          });
-        },
-        onWindowResult: (info) => {
-          this.logFn(EXEC_COMPONENTS.Compliance, "system", {
-            status: "info",
-            metadata: {
-              event: info.baseline ? "Voice Verification: Baseline" : "Voice Verification: Window Checked",
-              window: info.window,
-              similarity: info.similarity,
-              threshold: info.threshold,
-              match: info.match,
-              detail: info.baseline
-                ? `Baseline window ${info.window} (skipped — calibrating) — similarity: ${info.similarity}`
-                : `Window ${info.window} — similarity: ${info.similarity} / threshold: ${info.threshold} — ${info.match ? "✓ same speaker" : "⚠ voice change suspected"}`,
-            },
-          });
-        },
-      });
-    }
 
     const keys = config.providerKeys;
 
@@ -1101,9 +1049,6 @@ export class OrchestrationPipeline {
     if (this.streamSTT) {
       // Feed all frames (not just speech) — librosa pyin handles silence gracefully
       this.genderDetector?.addSpeechChunk(pcm8k);
-      // Feed the verifier caller audio only — skip while the agent is speaking so
-      // its own TTS echo can't pollute the enrollment/verification voiceprint.
-      if (!this.isPlaying) this.speakerVerifier?.addSpeechChunk(pcm8k);
 
       // ── Input-level self-echo gate (Live Call / carrier path only) ─────────────
       // Root fix for the greeting-startup delay: on the carrier path there is no
@@ -1142,8 +1087,6 @@ export class OrchestrationPipeline {
 
     // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops)
     this.genderDetector?.addSpeechChunk(pcm8k);
-    // Verifier: caller audio only — skip while the agent is speaking (echo guard).
-    if (!this.isPlaying) this.speakerVerifier?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) {
@@ -2405,9 +2348,6 @@ export class OrchestrationPipeline {
     // GenderDetector (v0) auto-fires via addSpeechChunk and treats this as a no-op.
     if (this.genderDetector && !this.genderDetector.locked) this.genderDetector.runDetection();
 
-    // Mid-call speaker verification — same fire-and-forget cadence as gender.
-    // No-op until the agent opts in; never blocks the turn.
-    this.speakerVerifier?.runDetection();
 
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept
@@ -2600,21 +2540,7 @@ export class OrchestrationPipeline {
       ? `${langGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${langGuard}`
       : `${dtInjection}\n\n${systemPromptForTurn}`;
 
-    // ── Mid-call voice hand-off challenge ──
-    // If the speaker verifier flagged a sustained voice change, instruct the agent
-    // (once) to naturally ask who it is now speaking with, in the caller's current
-    // language, before continuing. Rides this normal LLM turn — no extra latency,
-    // no separate audio path; the langGuard above keeps it in the right language.
-    if (this.pendingSpeakerChallenge) {
-      this.pendingSpeakerChallenge = false;
-      systemPromptForTurn +=
-        `\n\n[VOICE CHANGE CHECK] The caller's voice appears to have changed mid-call — it may now be a different person. ` +
-        `Before anything else in this reply, politely and naturally point out that the voice sounds different and ask who you are now speaking with. ` +
-        `You MUST phrase this in the SAME language the caller is currently using — translate the intent; do NOT copy any example wording verbatim. ` +
-        `(Illustration of intent only, in English: "Sorry, your voice sounds a little different — may I ask who I'm speaking with now?" — use this wording ONLY if the caller is speaking English.) ` +
-        `Keep it brief, friendly, and non-accusatory, then continue helping as normal. Do this only once.`;
-      logger.info({ callId: this.config.callId }, "Voice verification: injecting speaker-change challenge into this turn");
-    }
+
     let kbContextPromise: Promise<string | null>;
     if (this.kbPrefetchPromise) {
       kbContextPromise = this.kbPrefetchPromise;
