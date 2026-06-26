@@ -39,9 +39,9 @@ const _num = (name: string, dflt: number): number => {
 };
 
 /** Seconds of qualified speech to collect before computing the reference voiceprint. */
-const ENROLL_SECONDS = _num("SPEAKER_VERIFY_ENROLL_SECONDS", 13);
+const ENROLL_SECONDS = _num("SPEAKER_VERIFY_ENROLL_SECONDS", 8);
 /** Seconds of qualified speech per verification window. */
-const WINDOW_SECONDS = _num("SPEAKER_VERIFY_WINDOW_SECONDS", 24);
+const WINDOW_SECONDS = _num("SPEAKER_VERIFY_WINDOW_SECONDS", 8);
 
 const ENROLL_BYTES = Math.round(ENROLL_SECONDS * SAMPLE_RATE * SAMPLE_BYTES);
 const WINDOW_BYTES = Math.round(WINDOW_SECONDS * SAMPLE_RATE * SAMPLE_BYTES);
