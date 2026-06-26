@@ -366,6 +366,8 @@ export class OrchestrationPipeline {
   // Mid-call voice biometric speaker verification — opt-in, warning-only.
   // null unless the agent enables voiceVerificationEnabled.
   private speakerVerifier: SpeakerVerifier | null = null;
+  /** Set by the verifier's onMismatch; consumed on the next LLM turn so the agent asks who is speaking. */
+  private pendingSpeakerChallenge = false;
 
   // Tracks the current call language for per-turn LLM language injection.
   // Seeded from the agent's primary language at construction so turn 1 already
@@ -450,7 +452,7 @@ export class OrchestrationPipeline {
           logWarningEvent(this.logFn, EXEC_COMPONENTS.Compliance, "Voice Mismatch Detected", ["voice_mismatch"], {
             turnNumber: this._activeTurnIndex,
             detail: {
-              reason: `Possible speaker change mid-call — voice similarity ${info.similarity} stayed below the ${info.threshold} threshold (window ${info.window}). Warning only; the call was not interrupted.`,
+              reason: `Possible speaker change mid-call — voice similarity ${info.similarity} stayed below the ${info.threshold} threshold (window ${info.window}). The agent will ask who is speaking on its next reply; the call was not interrupted.`,
               similarity: info.similarity,
               rollingAverage: info.rollingAverage,
               threshold: info.threshold,
@@ -458,6 +460,10 @@ export class OrchestrationPipeline {
               consecutiveLow: info.consecutiveLow,
             },
           });
+          // Prompt the agent to ask — in the caller's current language — who it is
+          // now speaking with, on its next LLM turn. Consumed when that turn builds
+          // its system prompt. Never interrupts or ends the call.
+          this.pendingSpeakerChallenge = true;
         },
       });
     }
@@ -2423,6 +2429,22 @@ export class OrchestrationPipeline {
     systemPromptForTurn = langGuard
       ? `${langGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${langGuard}`
       : `${dtInjection}\n\n${systemPromptForTurn}`;
+
+    // ── Mid-call voice hand-off challenge ──
+    // If the speaker verifier flagged a sustained voice change, instruct the agent
+    // (once) to naturally ask who it is now speaking with, in the caller's current
+    // language, before continuing. Rides this normal LLM turn — no extra latency,
+    // no separate audio path; the langGuard above keeps it in the right language.
+    if (this.pendingSpeakerChallenge) {
+      this.pendingSpeakerChallenge = false;
+      systemPromptForTurn +=
+        `\n\n[VOICE CHANGE CHECK] The caller's voice appears to have changed mid-call — it may now be a different person. ` +
+        `Before anything else in this reply, politely and naturally point out that the voice sounds different and ask who you are now speaking with. ` +
+        `You MUST phrase this in the SAME language the caller is currently using — translate the intent; do NOT copy any example wording verbatim. ` +
+        `(Illustration of intent only, in English: "Sorry, your voice sounds a little different — may I ask who I'm speaking with now?" — use this wording ONLY if the caller is speaking English.) ` +
+        `Keep it brief, friendly, and non-accusatory, then continue helping as normal. Do this only once.`;
+      logger.info({ callId: this.config.callId }, "Voice verification: injecting speaker-change challenge into this turn");
+    }
     let kbContextPromise: Promise<string | null>;
     if (this.kbPrefetchPromise) {
       kbContextPromise = this.kbPrefetchPromise;

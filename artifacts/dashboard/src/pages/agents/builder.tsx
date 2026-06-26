@@ -1702,7 +1702,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 <span className="text-xs font-semibold text-foreground/80">Voice Verification</span>
               </div>
               <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                Continuously checks that the caller's voice matches whoever started the call. If a different speaker takes over mid-call, a "voice mismatch" warning is logged on the call. Warning-only — it never interrupts or ends the call.
+                Continuously checks that the caller's voice matches whoever started the call. If a different speaker takes over mid-call, the agent politely asks who it's now speaking with — and a "voice mismatch" warning is logged on the call. It never hangs up or ends the call.
               </p>
             </div>
             <div className="shrink-0 mt-1">
