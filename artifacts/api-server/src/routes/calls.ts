@@ -18,6 +18,7 @@ import {
   EndCallResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { getAuth } from "../lib/auth-compat.js";
 import { dispatchWebhooks } from "./webhook-endpoints.js";
 import { disposeCall } from "../services/disposition.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
@@ -98,7 +99,8 @@ import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp
 
 /* ── POST /calls/outbound ─────────────────────────────────────────────────── */
 
-router.post("/calls/outbound", async (req, res): Promise<void> => {
+router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
   const parsed = InitiateOutboundCallBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
@@ -108,6 +110,11 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  if (agent.userId !== userId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
 
   // IRDAI compliance enforcement gate. Reads the agent's latest stored
   // irdaiComplianceStatus (no re-check at call time). Blocks the dial-out when
@@ -207,7 +214,7 @@ router.post("/calls/outbound", async (req, res): Promise<void> => {
   const [providerRow] = await db
     .select()
     .from(providersTable)
-    .where(eq(providersTable.providerName, provider))
+    .where(and(eq(providersTable.providerName, provider), eq(providersTable.userId, agent.userId!)))
     .limit(1);
 
   // Vobiz can fall back to managed platform numbers — all other providers need their own credentials
