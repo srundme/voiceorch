@@ -496,6 +496,8 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
         eventData: { verifiedStatus: newStatus, auth_id: auth_id ?? null },
         ip,
       });
+
+      req.log.info({ sessionId: session_id, userId: session.userId, verifiedStatus: newStatus }, "KYC redirect callback received (VoBiz-verified)");
     }
   } catch (err) {
     req.log.error({ err, session_id }, "Error processing KYC callback");
@@ -513,6 +515,7 @@ router.get("/kyc/callback", async (req, res): Promise<void> => {
 // webhook URL (?wh_token=<hex>). We verify this token via constant-time
 // comparison before processing any state change. Requests lacking the correct
 // token are rejected immediately and logged, preventing forged webhook abuse.
+// For kyc.completed events a secondary VoBiz API confirmation is also required.
 
 router.post("/kyc/webhook", async (req, res): Promise<void> => {
   const body = req.body as {
@@ -584,6 +587,25 @@ router.post("/kyc/webhook", async (req, res): Promise<void> => {
       // Idempotency guard
       if (session.status === "kyc_completed") {
         req.log.info({ sessionId: session_id }, "KYC webhook kyc.completed already processed — skipping");
+        return;
+      }
+
+      // Server-to-server confirmation: ask VoBiz whether the session is
+      // actually completed before writing to the DB.  This is the second line
+      // of defence — even a caller who somehow learned the webhook URL token
+      // cannot mark an incomplete session as done.
+      const confirmedStatus = await fetchVobizSessionStatus(session_id);
+      if (confirmedStatus !== "kyc_completed") {
+        req.log.warn(
+          { sessionId: session_id, confirmedStatus },
+          "KYC webhook kyc.completed rejected: VoBiz API reports session is not completed",
+        );
+        await audit("webhook_rejected", {
+          userId:    session.userId,
+          sessionId: session_id,
+          eventData: { event, confirmedStatus },
+          ip,
+        });
         return;
       }
 
