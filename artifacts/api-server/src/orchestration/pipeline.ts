@@ -2879,7 +2879,7 @@ export class OrchestrationPipeline {
       }, FILLER_THRESHOLD_MS);
     }
 
-    const _agnostTurn = agnost.begin({
+    const _agnostTurn = process.env["AGNOST_API_KEY"] ? agnost.begin({
       userId:         this.config.callerPhone ?? String(this.config.callId),
       agentName:      this.agent.name,
       input:          transcript,
@@ -2890,7 +2890,7 @@ export class OrchestrationPipeline {
         llmModel:    this.agent.llmModel ?? "",
         callId:      this.config.callId,
       },
-    });
+    }) : null;
 
     this.logExec("LLM", "request", {
       provider: this.agent.llmProvider,

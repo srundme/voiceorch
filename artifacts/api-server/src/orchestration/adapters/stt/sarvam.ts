@@ -191,7 +191,8 @@ export class SarvamSTT implements STTAdapter {
     const MAX_RECONNECT = 10;
 
     const audioQueue: Buffer[] = [];
-    let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
+    let speechEndAt       = 0;     // timestamp of last END_SPEECH event for latency tracking
+    let speechEndReceived = false; // true once speech_end fires; reset on speech_start
     // Closure variables for the onSpeechStart / onSpeechEnd callbacks. Declared here
     // (before openSocket) so the WS message handler — an async callback inside openSocket —
     // can reference them safely. Exposed on sttObj via Object.defineProperty getter/setter below.
@@ -367,7 +368,8 @@ export class SarvamSTT implements STTAdapter {
         // (legacy guessed values "events" + signal_type also handled for safety)
         lastMsgAt = Date.now();
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
-          inSpeechSegment = true;
+          inSpeechSegment    = true;
+          speechEndReceived  = false; // caller is speaking again; clear the speech_end flag
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
           // If we are holding a transcript and the user resumed speaking, cancel
@@ -392,21 +394,19 @@ export class SarvamSTT implements STTAdapter {
           return;
         }
         if (msg.type === "speech_end" || (msg.type === "events" && msg.data?.signal_type === "END_SPEECH")) {
-          inSpeechSegment = false;
-          speechEndAt = Date.now();
+          inSpeechSegment   = false;
+          speechEndReceived = true;
+          speechEndAt       = Date.now();
           logger.debug({ langCode }, "Sarvam STT: speech end");
-          // Fast-path coalesce flush: if we already have a complete-looking transcript
-          // in the buffer, shorten the hold to 30 ms instead of the adaptive window
-          // (120–500 ms). On speech_end we are confident the caller has stopped talking,
-          // so there is no risk of cutting off a mid-sentence pause — the remaining hold
-          // is just a safety margin for Sarvam's final segment to arrive. This cuts up to
-          // 470 ms of dead air on every normal single-utterance turn.
+          // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
+          // if we have a complete-looking transcript, shorten the hold to 30 ms instead
+          // of the adaptive window so it dispatches immediately.
           if (coalesceBuf && !looksIncomplete(coalesceBuf) && coalesceTimer) {
             clearTimeout(coalesceTimer);
             coalesceTimer = setTimeout(emitCoalesced, 30);
             logger.debug(
               { langCode, buf: coalesceBuf.slice(0, 60) },
-              "Sarvam STT: speech_end fast-flush — coalesce shortened to 30 ms",
+              "Sarvam STT: speech_end fast-flush (pre-buffered) — coalesce shortened to 30 ms",
             );
           }
           _onSpeechEnd?.();
@@ -431,12 +431,25 @@ export class SarvamSTT implements STTAdapter {
           coalesceMeta           = meta;         // keep latest latency measurement
           coalesceMergedSegments++;
           transcriptArrivedAt    = Date.now();   // start of the hold window
-          // (Re-)arm the emit timer. For obviously-incomplete fragments (single word,
-          // trailing Tamil possessive/case suffix, all-caps abbreviation, English
-          // connective) use COALESCE_INCOMPLETE_MS so the caller can finish their
-          // thought before we dispatch to the LLM. Otherwise use the adaptive window.
+          // (Re-)arm the emit timer.
+          // • speech_end already received + complete-looking transcript → 30 ms (fast-path).
+          //   This is the normal Sarvam flow: speech_end fires first, transcript arrives
+          //   100–300 ms later. By the time we reach here the caller has stopped talking,
+          //   so there is no risk of cutting off a mid-sentence pause.
+          // • Obviously-incomplete fragment → COALESCE_INCOMPLETE_MS (1200 ms) so the
+          //   caller can finish their thought before we dispatch to the LLM.
+          // • Otherwise → adaptive window calibrated to this caller's pause rhythm.
           if (coalesceTimer) clearTimeout(coalesceTimer);
-          const holdMs = looksIncomplete(coalesceBuf) ? COALESCE_INCOMPLETE_MS : adaptiveHoldMs();
+          const incomplete = looksIncomplete(coalesceBuf);
+          const holdMs = speechEndReceived && !incomplete
+            ? 30
+            : incomplete ? COALESCE_INCOMPLETE_MS : adaptiveHoldMs();
+          if (speechEndReceived && !incomplete) {
+            logger.debug(
+              { langCode, buf: coalesceBuf.slice(0, 60) },
+              "Sarvam STT: post-speech_end fast-flush — coalesce set to 30 ms",
+            );
+          }
           coalesceTimer = setTimeout(emitCoalesced, holdMs);
           return;
         }
