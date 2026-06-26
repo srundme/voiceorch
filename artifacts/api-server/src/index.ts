@@ -362,7 +362,9 @@ server.listen(port, () => {
     .catch((err: unknown) => {
       // Log but do NOT exit — keeps the process alive so Railway's healthcheck
       // passes and we can inspect the error in the Console tab.
+      const errMsg = err instanceof Error ? err.message : String(err);
       logger.error({ err, migrationsFolder }, "DB migration failed — server will stay up for diagnostics");
+      logger.info(`DB migration error detail: ${errMsg.slice(0, 800)}`);
     });
 });
 
