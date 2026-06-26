@@ -27,6 +27,7 @@ import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
 const OTP_RATE_LIMIT_WINDOW_MS = parseInt(process.env.OTP_RATE_LIMIT_WINDOW_MS ?? String(15 * 60 * 1000), 10);
 const OTP_RATE_LIMIT_PREFIX = "otp_rate_limit:";
+const OTP_MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_ATTEMPTS ?? "5", 10);
 
 /** Max failed verification attempts before an OTP is permanently locked out. */
 const OTP_MAX_VERIFY_ATTEMPTS = parseInt(process.env.OTP_MAX_VERIFY_ATTEMPTS ?? "5", 10);
@@ -318,46 +319,56 @@ router.post("/auth/password-reset/check-otp", async (req, res): Promise<void> =>
       return;
     }
 
+    const otpCandidate = otp.trim();
     const now = new Date();
-    const [otpRow] = await db
-      .select()
-      .from(passwordResetOtpsTable)
-      .where(
-        and(
-          eq(passwordResetOtpsTable.userId, user.id),
-          isNull(passwordResetOtpsTable.usedAt),
-          gt(passwordResetOtpsTable.expiresAt, now),
-          gt(sql`${OTP_MAX_VERIFY_ATTEMPTS}`, passwordResetOtpsTable.attempts),
-        ),
-      )
-      .orderBy(desc(passwordResetOtpsTable.createdAt))
-      .limit(1);
 
-    if (!otpRow) {
-      res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
-      return;
-    }
-
-    const valid = await verifyOtp(otp.trim(), otpRow.otpHash);
-    if (!valid) {
-      // Atomic increment: only succeeds while attempts < max; DB serialises concurrent updates.
-      const [updated] = await db
-        .update(passwordResetOtpsTable)
-        .set({ attempts: sql`${passwordResetOtpsTable.attempts} + 1` })
+    // SELECT FOR UPDATE serialises concurrent verify attempts for the same OTP
+    // row at the DB level, eliminating the TOCTOU race between the attempt-count
+    // check and the increment/lockout write.
+    const result = await db.transaction(async (tx) => {
+      const [otpRow] = await tx
+        .select()
+        .from(passwordResetOtpsTable)
         .where(
           and(
-            eq(passwordResetOtpsTable.id, otpRow.id),
-            sql`${passwordResetOtpsTable.attempts} < ${OTP_MAX_VERIFY_ATTEMPTS}`,
+            eq(passwordResetOtpsTable.userId, user.id),
+            isNull(passwordResetOtpsTable.usedAt),
+            gt(passwordResetOtpsTable.expiresAt, now),
+            gt(sql`${OTP_MAX_VERIFY_ATTEMPTS}`, passwordResetOtpsTable.attempts),
           ),
         )
-        .returning({ attempts: passwordResetOtpsTable.attempts });
+        .orderBy(desc(passwordResetOtpsTable.createdAt))
+        .limit(1)
+        .for("update");
 
-      if (!updated || updated.attempts >= OTP_MAX_VERIFY_ATTEMPTS) {
+      if (!otpRow) return { status: "not_found" } as const;
+
+      const valid = await verifyOtp(otpCandidate, otpRow.otpHash);
+      if (!valid) {
+        const [updated] = await tx
+          .update(passwordResetOtpsTable)
+          .set({ attempts: sql`${passwordResetOtpsTable.attempts} + 1` })
+          .where(
+            and(
+              eq(passwordResetOtpsTable.id, otpRow.id),
+              sql`${passwordResetOtpsTable.attempts} < ${OTP_MAX_VERIFY_ATTEMPTS}`,
+            ),
+          )
+          .returning({ attempts: passwordResetOtpsTable.attempts });
+        const exhausted = !updated || updated.attempts >= OTP_MAX_VERIFY_ATTEMPTS;
+        return { status: "invalid", exhausted } as const;
+      }
+
+      return { status: "valid" } as const;
+    });
+
+    if (result.status === "not_found" || result.status === "invalid") {
+      if (result.status === "invalid" && result.exhausted) {
         logger.warn({ userId: user.id }, "OTP locked out after too many failed attempts");
         res.status(400).json({ error: "Too many incorrect attempts. Please request a new code." });
-      } else {
-        res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
+        return;
       }
+      res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
       return;
     }
 
@@ -400,60 +411,69 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
       return;
     }
 
-    const now = new Date();
-    const [otpRow] = await db
-      .select()
-      .from(passwordResetOtpsTable)
-      .where(
-        and(
-          eq(passwordResetOtpsTable.userId, user.id),
-          isNull(passwordResetOtpsTable.usedAt),
-          gt(passwordResetOtpsTable.expiresAt, now),
-          gt(sql`${OTP_MAX_VERIFY_ATTEMPTS}`, passwordResetOtpsTable.attempts),
-        ),
-      )
-      .orderBy(desc(passwordResetOtpsTable.createdAt))
-      .limit(1);
+    // Hash the new password BEFORE entering the transaction so the expensive
+    // scrypt call does not hold a row lock while it runs.
+    const newHash = await hashPassword(newPassword);
 
-    if (!otpRow) {
+    const otpCandidate = (otp as string).trim();
+    const now = new Date();
+
+    const result = await db.transaction(async (tx) => {
+      const [otpRow] = await tx
+        .select()
+        .from(passwordResetOtpsTable)
+        .where(
+          and(
+            eq(passwordResetOtpsTable.userId, user.id),
+            isNull(passwordResetOtpsTable.usedAt),
+            gt(passwordResetOtpsTable.expiresAt, now),
+            gt(sql`${OTP_MAX_VERIFY_ATTEMPTS}`, passwordResetOtpsTable.attempts),
+          ),
+        )
+        .orderBy(desc(passwordResetOtpsTable.createdAt))
+        .limit(1)
+        .for("update");
+
+      if (!otpRow) return { status: "not_found" } as const;
+
+      const valid = await verifyOtp(otpCandidate, otpRow.otpHash);
+      if (!valid) {
+        const [updated] = await tx
+          .update(passwordResetOtpsTable)
+          .set({ attempts: sql`${passwordResetOtpsTable.attempts} + 1` })
+          .where(
+            and(
+              eq(passwordResetOtpsTable.id, otpRow.id),
+              sql`${passwordResetOtpsTable.attempts} < ${OTP_MAX_VERIFY_ATTEMPTS}`,
+            ),
+          )
+          .returning({ attempts: passwordResetOtpsTable.attempts });
+        const exhausted = !updated || updated.attempts >= OTP_MAX_VERIFY_ATTEMPTS;
+        return { status: "invalid", exhausted } as const;
+      }
+
+      await tx
+        .update(passwordResetOtpsTable)
+        .set({ usedAt: now })
+        .where(eq(passwordResetOtpsTable.id, otpRow.id));
+
+      await tx
+        .update(usersTable)
+        .set({ passwordHash: newHash })
+        .where(eq(usersTable.id, user.id));
+
+      return { status: "valid" } as const;
+    });
+
+    if (result.status === "not_found" || result.status === "invalid") {
+      if (result.status === "invalid" && result.exhausted) {
+        logger.warn({ userId: user.id }, "OTP locked out after too many failed attempts on verify");
+        res.status(400).json({ error: "Too many incorrect attempts. Please request a new code." });
+        return;
+      }
       res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
       return;
     }
-
-    const valid = await verifyOtp((otp as string).trim(), otpRow.otpHash);
-    if (!valid) {
-      // Atomic increment: only succeeds while attempts < max; DB serialises concurrent updates.
-      const [updated] = await db
-        .update(passwordResetOtpsTable)
-        .set({ attempts: sql`${passwordResetOtpsTable.attempts} + 1` })
-        .where(
-          and(
-            eq(passwordResetOtpsTable.id, otpRow.id),
-            sql`${passwordResetOtpsTable.attempts} < ${OTP_MAX_VERIFY_ATTEMPTS}`,
-          ),
-        )
-        .returning({ attempts: passwordResetOtpsTable.attempts });
-
-      if (!updated || updated.attempts >= OTP_MAX_VERIFY_ATTEMPTS) {
-        logger.warn({ userId: user.id }, "OTP locked out after too many failed attempts");
-        res.status(400).json({ error: "Too many incorrect attempts. Please request a new code." });
-      } else {
-        res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
-      }
-      return;
-    }
-
-    const newHash = await hashPassword(newPassword);
-
-    await db
-      .update(passwordResetOtpsTable)
-      .set({ usedAt: now })
-      .where(eq(passwordResetOtpsTable.id, otpRow.id));
-
-    await db
-      .update(usersTable)
-      .set({ passwordHash: newHash })
-      .where(eq(usersTable.id, user.id));
 
     const token = createSessionToken({ sub, email: user.email, name: user.name });
     logger.info({ email: normalizedEmail }, "Password reset successful");
