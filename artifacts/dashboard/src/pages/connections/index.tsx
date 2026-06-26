@@ -1152,7 +1152,9 @@ function CrmConnectorSection() {
   const [importConn, setImportConn] = useState<CrmConnection | null>(null);
 
   const handleConnect = (provider: "hubspot" | "zoho") => {
-    window.location.href = `${BASE}/api/crm/connect/${provider}?returnOrigin=${encodeURIComponent(window.location.origin)}`;
+    const token = localStorage.getItem("voiceorch:session") ?? "";
+    const url = `${BASE}/api/crm/connect/${provider}?returnOrigin=${encodeURIComponent(window.location.origin)}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+    window.location.href = url;
   };
 
   const handleDisconnect = async (conn: CrmConnection) => {
