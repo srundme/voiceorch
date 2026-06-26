@@ -1348,7 +1348,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                     eq(providersTable.providerName, ag.llmProvider)
                   )
                 );
-                let sumLlmKey: string | null = llmProvs[0]?.apiKey ?? null;
+                let sumLlmKey: string | null = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : null;
                 let sumLlmProvider = ag.llmProvider;
                 let sumLlmModel = ag.llmModel;
                 // Managed plan: no BYOP key → fall back to platform managed key (Groq)
@@ -1394,7 +1394,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, ag.llmProvider)
                 )
               );
-              const llmKey = llmProvs[0]?.apiKey;
+              const llmKey = llmProvs[0] ? decryptKey(llmProvs[0].apiKey) : undefined;
               if (llmKey) {
                 const llm = createLLMAdapter(ag.llmProvider, llmKey, ag.llmModel);
                 const fieldList = dispositionSchema
@@ -1437,7 +1437,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   eq(providersTable.providerName, ag.llmProvider)
                 )
               );
-              const evalLlmKey = evalLlmProvs[0]?.apiKey;
+              const evalLlmKey = evalLlmProvs[0] ? decryptKey(evalLlmProvs[0].apiKey) : undefined;
               if (evalLlmKey) {
                 const evalLlm = createLLMAdapter(ag.llmProvider, evalLlmKey, ag.llmModel);
                 let evalRaw = "";
