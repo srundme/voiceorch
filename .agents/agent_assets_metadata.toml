@@ -162,3 +162,9 @@ id = "Nb7Axj-3YPk6dzcuevlQq"
 uri = "file://master-costing.md"
 type = "text"
 title = "SnapServe Master Costing Reference"
+
+[[outputs]]
+id = "heBrGFof5Zzi_pqUCLgxm"
+uri = "file://snapserve-launch-checklist.pdf"
+type = "pdf"
+title = "snapserve.ai — App Launch Checklist"
