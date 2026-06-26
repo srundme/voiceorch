@@ -36,6 +36,11 @@ const NATIONAL_NUMBER_LEN = (() => {
 const WEBCALL_KEY_PREFIX = "webcall:user_";
 /** Raw web-call identity shape produced by the telephony layer (fromNumber). */
 const WEBCALL_RAW_PREFIX = "webcall-user-";
+/** Legacy prefix — old format written before the `user_` segment was added.
+ *  e.g. "webcall:101122737730832668494" or "webcall:email:foo@bar.com".
+ *  Normalised to "webcall:user_<rest>" by canonicalizeCallerKey so DB backfill
+ *  and runtime reads both resolve to the same modern key. */
+const WEBCALL_KEY_LEGACY_PREFIX = "webcall:";
 
 /**
  * True when the string looks like a dialable phone number (optionally `+`-prefixed,
@@ -98,6 +103,9 @@ function canonicalizePhone(raw: string): string | null {
  * - Synthetic web-call keys (`webcall:user_<id>`) pass through unchanged.
  * - Raw web-call identities (`webcall-user-<id>`, as supplied by the telephony
  *   layer) are normalized to the synthetic `webcall:user_<id>` form.
+ * - Legacy web-call keys (`webcall:<id>` without the `user_` segment, written by
+ *   older deployments) are also normalized to `webcall:user_<id>` so callers who
+ *   called before the format change are still recognised as returning callers.
  * - Real phone numbers are canonicalized via {@link canonicalizePhone}.
  * - Anything empty / unrecognized returns null (no memory key).
  */
@@ -105,12 +113,20 @@ export function canonicalizeCallerKey(identity: string | null | undefined): stri
   const raw = (identity ?? "").trim();
   if (!raw) return null;
 
+  // Modern canonical form — pass through unchanged.
   if (raw.startsWith(WEBCALL_KEY_PREFIX)) {
     const id = raw.slice(WEBCALL_KEY_PREFIX.length).trim();
     return id ? `${WEBCALL_KEY_PREFIX}${id}` : null;
   }
+  // Raw transport form emitted by webcall.ts — normalise to canonical.
   if (raw.startsWith(WEBCALL_RAW_PREFIX)) {
     const id = raw.slice(WEBCALL_RAW_PREFIX.length).trim();
+    return id ? `${WEBCALL_KEY_PREFIX}${id}` : null;
+  }
+  // Legacy DB form ("webcall:<id>" without "user_") written by older deployments.
+  // Normalise to the modern "webcall:user_<id>" so old history is found.
+  if (raw.startsWith(WEBCALL_KEY_LEGACY_PREFIX)) {
+    const id = raw.slice(WEBCALL_KEY_LEGACY_PREFIX.length).trim();
     return id ? `${WEBCALL_KEY_PREFIX}${id}` : null;
   }
 
