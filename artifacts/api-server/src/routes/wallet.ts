@@ -166,17 +166,28 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     return;
   }
 
-  const [txn] = await db
-    .select()
-    .from(walletTransactionsTable)
-    .where(eq(walletTransactionsTable.razorpayOrderId, razorpayOrderId));
+  // Atomically claim the transaction: the conditional WHERE status='pending' ensures
+  // only one concurrent request can win this UPDATE. Any duplicate request that
+  // arrives before or after will find 0 rows and be rejected idempotently.
+  const [claimed] = await db
+    .update(walletTransactionsTable)
+    .set({ status: "completed", razorpayPaymentId })
+    .where(
+      and(
+        eq(walletTransactionsTable.razorpayOrderId, razorpayOrderId),
+        eq(walletTransactionsTable.userId, user.id),
+        eq(walletTransactionsTable.status, "pending"),
+      ),
+    )
+    .returning();
 
-  if (!txn || txn.status === "completed") {
+  if (!claimed) {
+    // Either the order doesn't exist, belongs to a different user, or was already processed.
     res.status(400).json({ error: "Order not found or already processed" });
     return;
   }
 
-  // Try to fetch payment details to extract recurring token_id (outside the tx — network call)
+  // Try to fetch payment details to extract recurring token_id (outside any tx — network call)
   let tokenId: string | undefined;
   try {
     const razorpay = getRazorpay();
@@ -186,44 +197,24 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     logger.warn({ err, razorpayPaymentId }, "Could not fetch Razorpay payment details for token");
   }
 
-  // Atomically claim the transition pending→completed.  If another concurrent
-  // request already flipped the row, the conditional UPDATE returns 0 rows and
-  // we reject immediately — the wallet is never double-credited.
-  let updated: typeof usersTable.$inferSelect | undefined;
-  await db.transaction(async (tx) => {
-    const [claimed] = await tx
-      .update(walletTransactionsTable)
-      .set({ status: "completed", razorpayPaymentId })
-      .where(and(
-        eq(walletTransactionsTable.id, txn.id),
-        eq(walletTransactionsTable.status, "pending"),
-      ))
-      .returning({ id: walletTransactionsTable.id });
-
-    if (!claimed) {
-      // Race lost — another request already completed this order
-      return;
-    }
-
-    // Save mandate token if present
-    if (tokenId) {
-      await tx.update(usersTable)
-        .set({ razorpayTokenId: tokenId })
-        .where(eq(usersTable.id, user.id));
-      logger.info({ userId: user.id, tokenId }, "Razorpay mandate token saved");
-    }
-
-    [updated] = await tx
-      .update(usersTable)
-      .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${txn.amountCents}` })
-      .where(eq(usersTable.id, user.id))
-      .returning();
-  });
-
-  if (!updated) {
-    res.status(400).json({ error: "Order not found or already processed" });
-    return;
+  // We are the sole winner of the race — credit wallet and save mandate token if present.
+  if (tokenId) {
+    await db.update(usersTable)
+      .set({ razorpayTokenId: tokenId })
+      .where(eq(usersTable.id, user.id));
+    logger.info({ userId: user.id, tokenId }, "Razorpay mandate token saved");
   }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${claimed.amountCents}` })
+    .where(eq(usersTable.id, user.id))
+    .returning();
+
+  logger.info(
+    { userId: user.id, razorpayOrderId, razorpayPaymentId, amountCents: claimed.amountCents },
+    "Wallet credited via verify-payment",
+  );
 
   res.json(walletInfoPayload(updated));
 });

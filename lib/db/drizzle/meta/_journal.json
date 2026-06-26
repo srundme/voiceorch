@@ -155,6 +155,13 @@
       "when": 1783200000000,
       "tag": "0021_wallet_payment_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783300000000,
+      "tag": "0022_wallet_txn_unique_constraints",
+      "breakpoints": true
     }
   ]
 }
