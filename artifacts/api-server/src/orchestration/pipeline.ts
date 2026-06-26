@@ -105,6 +105,18 @@ const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after pl
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
                                          // loud frame can't cut the agent off, even when a Stop
                                          // Speaking Plan configures very low sensitivity.
+// ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
+// On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
+// AFTER the time-based echo-grace windows expire, so STT finalizes it as a
+// phantom caller turn (call 772: echoed "Hello" + greeting words tripped a false
+// barge-in that killed the greeting). These tune the content-match guard that
+// recognizes the agent's own words coming back.
+const SELF_ECHO_TAIL_MS       = 2000;  // how long after a line's estimated end its carrier
+                                        // echo can still return and be matched as self-echo
+const SELF_ECHO_MIN_OVERLAP   = 0.6;   // fraction of transcript tokens that must appear in
+                                        // recent agent speech to classify it as our own echo
+const CARRIER_ECHO_LATENCY_MS = 1500;  // margin added to the greeting echo-hold to cover the
+                                        // round-trip carrier echo latency (observed ~777 ms)
 const TELEPHONY_TAIL_DRAIN_MS = 800;    // After the final utterance fully streams, send silence
                                          // frames for this long before the next listen / teardown
                                          // so the carrier's jitter buffer plays out the last words.
@@ -260,6 +272,18 @@ export class OrchestrationPipeline {
   // back to us as "caller audio" (sidetone / echo).  Without this hold, the
   // echo triggers barge-in within 200 ms and the caller never hears anything.
   private bargeInHoldUntil = 0;
+  // Greeting-specific echo hold (Live Call / carrier path only): suppresses
+  // streaming-STT (and energy) barge-in for the FULL greeting duration + carrier
+  // echo latency so the agent's opening line cannot be interrupted or re-triggered
+  // by its own returning echo, even at a 1-word interruption threshold. Expires
+  // before the first listen, so it can never block a real caller barge-in later.
+  private greetingEchoHoldUntil = 0;
+  // Rolling record of text the agent recently synthesized (oldest first), with the
+  // time it was dispatched and its estimated playback end. The streaming-STT path
+  // uses this to recognize the agent's OWN words echoing back via the carrier
+  // (content-based self-echo rejection — additive to the time-window tail-echo
+  // guard). Entries expire so stale agent speech can't suppress later caller input.
+  private recentAgentSpeech: Array<{ tokens: Set<string>; estEndAt: number }> = [];
 
   // Voicemail-delivery mode (Vobiz AMD leave_message). When set, the conversation
   // pipeline is bypassed: inbound audio only drives greeting-end detection and
@@ -406,6 +430,49 @@ export class OrchestrationPipeline {
       this.consecutiveRepeats = 0;
     }
     this.lastAssistantSpokenRaw = spoken;
+  }
+
+  /** Record a line the agent is about to synthesize so the streaming-STT path can
+   *  recognize its own words echoing back via the carrier. Prunes entries whose
+   *  echo window has fully closed so stale agent speech can't suppress later
+   *  legitimate caller input. */
+  private recordAgentSpeech(text: string): void {
+    const norm = this.normalizeForRepeat(text);
+    if (!norm) return;
+    const tokens = new Set(norm.split(" ").filter(Boolean));
+    if (tokens.size === 0) return;
+    const now = Date.now();
+    const estEndAt = now + Math.round(text.length * 70); // ~70 ms/char (Indic + Latin)
+    this.recentAgentSpeech = this.recentAgentSpeech.filter(
+      (e) => now <= e.estEndAt + SELF_ECHO_TAIL_MS,
+    );
+    this.recentAgentSpeech.push({ tokens, estEndAt });
+    // Hard cap so a very long call can't grow this unbounded.
+    if (this.recentAgentSpeech.length > 12) {
+      this.recentAgentSpeech = this.recentAgentSpeech.slice(-12);
+    }
+  }
+
+  /** True when a streaming-STT transcript closely matches text the agent recently
+   *  spoke AND arrived within a plausible carrier-echo window of it — i.e. it is
+   *  the agent's own audio returning, not the caller. Tolerant of STT noise via
+   *  token overlap (not exact match). Conservative by design: requires high overlap
+   *  so a caller genuinely repeating a word or two is NOT suppressed, and only
+   *  matches inside the echo window so the same words later count as real input. */
+  private isSelfEcho(transcript: string): boolean {
+    if (this.recentAgentSpeech.length === 0) return false;
+    const norm = this.normalizeForRepeat(transcript);
+    if (!norm) return false;
+    const tokens = norm.split(" ").filter(Boolean);
+    if (tokens.length === 0) return false;
+    const now = Date.now();
+    for (const entry of this.recentAgentSpeech) {
+      if (now > entry.estEndAt + SELF_ECHO_TAIL_MS) continue;
+      let matched = 0;
+      for (const t of tokens) if (entry.tokens.has(t)) matched++;
+      if (matched / tokens.length >= SELF_ECHO_MIN_OVERLAP) return true;
+    }
+    return false;
   }
 
   constructor(config: SessionConfig) {
@@ -776,6 +843,24 @@ export class OrchestrationPipeline {
       return;
     }
 
+    // Content-based self-echo guard (additive to the time-window tail-echo guard
+    // above). On the Live Call path the carrier echoes our own TTS back AFTER the
+    // time windows expire, so a purely time-based guard misses it. If this
+    // transcript closely matches what the agent just spoke (token overlap, tolerant
+    // of STT noise) and arrived within a plausible echo window, it is our own audio
+    // returning — discard it so it neither starts a phantom turn nor fires a false
+    // barge-in. Semantic interrupts ("stop"/"wait") are exempt: our own audio never
+    // utters them, so they must always be allowed to interrupt.
+    if (!isSemanticInterrupt(transcript) && this.isSelfEcho(transcript)) {
+      this.streamingBargeInWordCount = 0;
+      logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding self-echo transcript (content match)");
+      // Mirror the tail-echo guard: when not playing we're in a listening turn, so
+      // re-arm the stall backstop and drop any stale best-partial. While the agent
+      // is still speaking the safety net is dormant — leave it untouched.
+      if (!this.isPlaying) this.safetyNet.beginListening();
+      return;
+    }
+
     if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
       // P0-C: Semantic barge-in — certain keywords ("stop", "wait", …) bypass
       // BOTH the word-count gate AND the echo grace: our own audio never utters
@@ -788,12 +873,17 @@ export class OrchestrationPipeline {
           metadata: { event: "Barge-in Detected", trigger: "semantic", transcriptPreview: transcript.slice(0, 80) },
         });
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
-      } else if (Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs) {
+      } else if (
+        Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
+        Date.now() < this.greetingEchoHoldUntil
+      ) {
         // Per-sentence 600 ms echo grace — suppress non-semantic barge-in while our own
         // freshly started audio may still be echoing back. This uses the *sentence start*
         // timestamp (not the extended bargeInHoldUntil which protects the batch STT
         // path) so that the streaming STT path (webcall) can interrupt mid-sentence after
-        // the initial 600 ms window expires.
+        // the initial 600 ms window expires. The greetingEchoHoldUntil clause additionally
+        // protects the FULL greeting (carrier path only) — the 600 ms grace is too short
+        // for the carrier echo of a multi-second opening line (call 772).
         logger.info({ callId: this.config.callId }, "Streaming STT: barge-in suppressed during echo grace");
       } else {
         // Accumulate word count across streaming callbacks for this user turn and
@@ -995,9 +1085,11 @@ export class OrchestrationPipeline {
 
       if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
         const now = Date.now();
-        if (now < this.bargeInHoldUntil) {
+        if (now < this.bargeInHoldUntil || now < this.greetingEchoHoldUntil) {
           // Echo grace period: suppress barge-in for the first bargeInEchoGraceMs
           // after playback starts to ignore phone sidetone / echo returning from Vobiz.
+          // greetingEchoHoldUntil additionally covers the full greeting + carrier echo
+          // latency (carrier path only) so the opening line survives its own echo.
           this.bargeInSpeechFrames = 0;
         } else if (hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)) {
           // Only count frames that exceed the much-higher barge-in energy threshold
@@ -1160,6 +1252,15 @@ export class OrchestrationPipeline {
       this.config.onConversationUpdate?.(this.conversationHistory);
       this.firstAudioSentAt = null;
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      // Live Call (carrier) path: protect the FULL greeting from streaming-STT and
+      // energy self-echo. The per-sentence 600 ms grace is far too short for the
+      // carrier echo of a multi-second opening line (call 772: echo at +777 ms
+      // tripped a 1-word barge-in and killed the greeting). Web calls have browser
+      // AEC and must keep mid-greeting interruptibility, so this is telephony-only.
+      if (this.config.telephonyProvider !== "webcall") {
+        const estGreetMs = Math.round(greeting.length * 70);
+        this.greetingEchoHoldUntil = Date.now() + estGreetMs + CARRIER_ECHO_LATENCY_MS;
+      }
       this.isPlaying = true;
       try {
         await this.playSentence(greeting);
@@ -1365,6 +1466,9 @@ export class OrchestrationPipeline {
    */
   private async playSentence(text: string): Promise<void> {
     if (this.bargeInRequested) return;
+    // Track what the agent is about to speak so the streaming-STT path can reject
+    // this same audio when the carrier echoes it back (content-based self-echo).
+    this.recordAgentSpeech(text);
     const _pbStart = Date.now();
     const _pbTurn = this._activeTurnIndex;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
