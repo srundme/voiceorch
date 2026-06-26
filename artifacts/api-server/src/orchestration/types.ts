@@ -425,6 +425,14 @@ export interface StreamSTT {
    * DURING agent speech but didn't trigger barge-in" (leftover — discard).
    */
   onSpeechStart?: (() => void) | null;
+  /**
+   * Set by the caller immediately after creation.
+   * Fired when the adapter receives a VAD speech_end event — i.e., the moment the
+   * STT engine is confident the caller has stopped speaking. Fires BEFORE the
+   * transcript arrives, so the pipeline can begin pre-turn preparation (ambient
+   * fill, backchannel TTS warm-up) earlier than waiting for the full coalesced text.
+   */
+  onSpeechEnd?: (() => void) | null;
 }
 
 export interface LLMUsage {

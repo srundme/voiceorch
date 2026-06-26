@@ -192,10 +192,11 @@ export class SarvamSTT implements STTAdapter {
 
     const audioQueue: Buffer[] = [];
     let speechEndAt = 0; // timestamp of last END_SPEECH event for latency tracking
-    // Closure variable for the onSpeechStart callback. Declared here (before openSocket)
-    // so the WS message handler — an async callback inside openSocket — can reference it
-    // safely. Exposed on sttObj via Object.defineProperty getter/setter below.
+    // Closure variables for the onSpeechStart / onSpeechEnd callbacks. Declared here
+    // (before openSocket) so the WS message handler — an async callback inside openSocket —
+    // can reference them safely. Exposed on sttObj via Object.defineProperty getter/setter below.
     let _onSpeechStart: (() => void) | null = null;
+    let _onSpeechEnd:   (() => void) | null = null;
 
     // ── Adaptive transcript coalescing ───────────────────────────────────────
     // The hold window self-calibrates to this caller's mid-sentence pause rhythm:
@@ -394,6 +395,21 @@ export class SarvamSTT implements STTAdapter {
           inSpeechSegment = false;
           speechEndAt = Date.now();
           logger.debug({ langCode }, "Sarvam STT: speech end");
+          // Fast-path coalesce flush: if we already have a complete-looking transcript
+          // in the buffer, shorten the hold to 30 ms instead of the adaptive window
+          // (120–500 ms). On speech_end we are confident the caller has stopped talking,
+          // so there is no risk of cutting off a mid-sentence pause — the remaining hold
+          // is just a safety margin for Sarvam's final segment to arrive. This cuts up to
+          // 470 ms of dead air on every normal single-utterance turn.
+          if (coalesceBuf && !looksIncomplete(coalesceBuf) && coalesceTimer) {
+            clearTimeout(coalesceTimer);
+            coalesceTimer = setTimeout(emitCoalesced, 30);
+            logger.debug(
+              { langCode, buf: coalesceBuf.slice(0, 60) },
+              "Sarvam STT: speech_end fast-flush — coalesce shortened to 30 ms",
+            );
+          }
+          _onSpeechEnd?.();
           return;
         }
 
@@ -513,11 +529,18 @@ export class SarvamSTT implements STTAdapter {
       },
     };
 
-    // Expose _onSpeechStart via getter/setter so the WS handler (which closes over
-    // _onSpeechStart, declared before openSocket) stays in sync with what the caller assigns.
+    // Expose _onSpeechStart / _onSpeechEnd via getter/setter so the WS handler (which
+    // closes over these variables, declared before openSocket) stays in sync with whatever
+    // callback the caller assigns after sttObj is returned.
     Object.defineProperty(sttObj, "onSpeechStart", {
       get(): (() => void) | null { return _onSpeechStart; },
       set(cb: (() => void) | null): void { _onSpeechStart = cb; },
+      configurable: true,
+      enumerable: true,
+    });
+    Object.defineProperty(sttObj, "onSpeechEnd", {
+      get(): (() => void) | null { return _onSpeechEnd; },
+      set(cb: (() => void) | null): void { _onSpeechEnd = cb; },
       configurable: true,
       enumerable: true,
     });
