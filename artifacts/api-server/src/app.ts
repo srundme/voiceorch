@@ -43,7 +43,14 @@ const corsOrigin: string | string[] | boolean = (() => {
 })();
 app.use(cors({ credentials: true, origin: corsOrigin }));
 app.use(cookieParser());
-app.use(express.json());
+// Capture raw body bytes so HMAC-based webhook signature verification
+// always operates on the exact bytes the sender signed, not a re-serialized
+// version that may differ in whitespace.
+app.use(express.json({
+  verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // IP-based rate limiting (outer shield) — skip exempt paths

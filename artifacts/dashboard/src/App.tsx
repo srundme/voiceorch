@@ -52,6 +52,7 @@ import UsagePage from "@/pages/usage";
 import KycPage from "@/pages/kyc";
 import ApiKeysPage from "@/pages/api-keys";
 import MetaLeadsPage from "@/pages/meta-leads";
+import ConnectionsPage from "@/pages/connections/index";
 import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
@@ -737,6 +738,7 @@ function AppRoutes() {
         <Route path="/app/memory" component={MemoryPage} />
         <Route path="/app/activity" component={() => <Redirect to="/app/calls" />} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
+        <Route path="/app/connections" component={ConnectionsPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />
         <Route path="/app/callbacks" component={CallbacksPage} />
         <Route path="/app/analytics/agents/:id" component={AgentAnalyticsPage} />

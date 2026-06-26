@@ -4252,6 +4252,83 @@ export interface RescheduleCallbackBody {
   scheduledAt: string;
 }
 
+export type ConnectionType = typeof ConnectionType[keyof typeof ConnectionType];
+
+
+export const ConnectionType = {
+  webhook: 'webhook',
+  meta_lead_ads: 'meta_lead_ads',
+} as const;
+
+export type ConnectionStatus = typeof ConnectionStatus[keyof typeof ConnectionStatus];
+
+
+export const ConnectionStatus = {
+  connected: 'connected',
+  waiting: 'waiting',
+  error: 'error',
+} as const;
+
+export type ConnectionFieldMappings = {[key: string]: string} | null;
+
+export interface Connection {
+  id: number;
+  type: ConnectionType;
+  name: string;
+  /** @nullable */
+  campaignId?: number | null;
+  webhookUrl: string;
+  webhookToken: string;
+  /** @nullable */
+  hmacSecretHint?: string | null;
+  hasHmacSecret?: boolean;
+  status: ConnectionStatus;
+  /** @nullable */
+  lastEventAt?: string | null;
+  /** @nullable */
+  lastEventStatus?: string | null;
+  fieldMappings?: ConnectionFieldMappings;
+  /** @nullable */
+  agentSystemPrompt?: string | null;
+  createdAt: string;
+}
+
+export type UpdateConnectionWebhookConfigBodyFieldMappings = {[key: string]: string} | null;
+
+export interface UpdateConnectionWebhookConfigBody {
+  /** @nullable */
+  hmacSecret?: string | null;
+  fieldMappings?: UpdateConnectionWebhookConfigBodyFieldMappings;
+}
+
+export interface ListenSession {
+  campaignId: number;
+  startedAt: string;
+  expiresAt: string;
+}
+
+export type ListenPollResultStatus = typeof ListenPollResultStatus[keyof typeof ListenPollResultStatus];
+
+
+export const ListenPollResultStatus = {
+  waiting: 'waiting',
+  captured: 'captured',
+  expired: 'expired',
+} as const;
+
+export type ListenPollResultPayload = { [key: string]: unknown } | null;
+
+export type ListenPollResultFlatFields = {[key: string]: string} | null;
+
+export interface ListenPollResult {
+  status: ListenPollResultStatus;
+  campaignId: number;
+  /** @nullable */
+  capturedAt?: string | null;
+  payload?: ListenPollResultPayload;
+  flatFields?: ListenPollResultFlatFields;
+}
+
 /**
  * Platform admin token (matches ADMIN_TOKEN env var).
  */

@@ -58,6 +58,7 @@ import authRouter from "./auth.js";
 import dispositionRouter from "./disposition.js";
 import docsRouter from "./docs.js";
 import callbacksRouter from "./callbacks.js";
+import connectionsRouter from "./connections.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -137,5 +138,6 @@ router.use(testToolRouter);
 router.use(dispositionRouter);
 router.use(agentVersionsRouter);
 router.use(callbacksRouter);
+router.use(connectionsRouter);
 
 export default router;

@@ -42,6 +42,9 @@ export const campaignsTable = pgTable("campaigns", {
   calledLeads:          integer("called_leads").notNull().default(0),
   concurrentCallLimit:  integer("concurrent_call_limit").notNull().default(20),
   isActive:             boolean("is_active").notNull().default(false),
+  hmacSecret:           text("hmac_secret"),
+  lastWebhookAt:        timestamp("last_webhook_at", { withTimezone: true }),
+  lastWebhookStatus:    text("last_webhook_status"),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

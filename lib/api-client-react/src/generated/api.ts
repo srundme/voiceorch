@@ -113,6 +113,7 @@ import type {
   CheckPasswordResetOtp200,
   CommandCenterKpis,
   CompleteCampaignCallback200,
+  Connection,
   ConsentBasisRecord,
   CreateAmbientSoundBody,
   CreateCallbackFromIncoming200,
@@ -196,6 +197,8 @@ import type {
   ListMetaCampaignLeadsParams,
   ListPendriveCallersParams,
   ListTransactionsParams,
+  ListenPollResult,
+  ListenSession,
   LiveQueueBulkActionRequest,
   LiveQueueBulkActionResult,
   LiveQueueLeadDrawer,
@@ -267,6 +270,7 @@ import type {
   UpdateCallDispositionBody,
   UpdateCampaignTransferStatus200,
   UpdateCampaignTransferStatusBody,
+  UpdateConnectionWebhookConfigBody,
   UpdateIncomingCallStatus200,
   UpdateIncomingCallStatusBody,
   UpdateLeadCallbackBody,
@@ -19016,5 +19020,371 @@ export const useRescheduleCallback = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRescheduleCallbackMutationOptions(options));
+    }
+
+export const getListConnectionsUrl = () => {
+
+
+
+
+  return `/api/connections`
+}
+
+/**
+ * @summary List all inbound lead connections (campaigns + meta integrations)
+ */
+export const listConnections = async ( options?: RequestInit): Promise<Connection[]> => {
+
+  return customFetch<Connection[]>(getListConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListConnectionsQueryKey = () => {
+    return [
+    `/api/connections`
+    ] as const;
+    }
+
+
+export const getListConnectionsQueryOptions = <TData = Awaited<ReturnType<typeof listConnections>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListConnectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listConnections>>> = ({ signal }) => listConnections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listConnections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListConnectionsQueryResult = NonNullable<Awaited<ReturnType<typeof listConnections>>>
+export type ListConnectionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all inbound lead connections (campaigns + meta integrations)
+ */
+
+export function useListConnections<TData = Awaited<ReturnType<typeof listConnections>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListConnectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateConnectionWebhookConfigUrl = (campaignId: number,) => {
+
+
+
+
+  return `/api/connections/${campaignId}/webhook-config`
+}
+
+/**
+ * @summary Update HMAC secret for a campaign webhook connection
+ */
+export const updateConnectionWebhookConfig = async (campaignId: number,
+    updateConnectionWebhookConfigBody: UpdateConnectionWebhookConfigBody, options?: RequestInit): Promise<Connection> => {
+
+  return customFetch<Connection>(getUpdateConnectionWebhookConfigUrl(campaignId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateConnectionWebhookConfigBody,)
+  }
+);}
+
+
+
+
+export const getUpdateConnectionWebhookConfigMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConnectionWebhookConfig>>, TError,{campaignId: number;data: BodyType<UpdateConnectionWebhookConfigBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateConnectionWebhookConfig>>, TError,{campaignId: number;data: BodyType<UpdateConnectionWebhookConfigBody>}, TContext> => {
+
+const mutationKey = ['updateConnectionWebhookConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateConnectionWebhookConfig>>, {campaignId: number;data: BodyType<UpdateConnectionWebhookConfigBody>}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  updateConnectionWebhookConfig(campaignId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateConnectionWebhookConfigMutationResult = NonNullable<Awaited<ReturnType<typeof updateConnectionWebhookConfig>>>
+    export type UpdateConnectionWebhookConfigMutationBody = BodyType<UpdateConnectionWebhookConfigBody>
+    export type UpdateConnectionWebhookConfigMutationError = ErrorType<void>
+
+    /**
+ * @summary Update HMAC secret for a campaign webhook connection
+ */
+export const useUpdateConnectionWebhookConfig = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateConnectionWebhookConfig>>, TError,{campaignId: number;data: BodyType<UpdateConnectionWebhookConfigBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateConnectionWebhookConfig>>,
+        TError,
+        {campaignId: number;data: BodyType<UpdateConnectionWebhookConfigBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateConnectionWebhookConfigMutationOptions(options));
+    }
+
+export const getStartConnectionListenUrl = (campaignId: number,) => {
+
+
+
+
+  return `/api/connections/${campaignId}/listen/start`
+}
+
+/**
+ * @summary Start listening for a test event on a campaign webhook
+ */
+export const startConnectionListen = async (campaignId: number, options?: RequestInit): Promise<ListenSession> => {
+
+  return customFetch<ListenSession>(getStartConnectionListenUrl(campaignId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStartConnectionListenMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startConnectionListen>>, TError,{campaignId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startConnectionListen>>, TError,{campaignId: number}, TContext> => {
+
+const mutationKey = ['startConnectionListen'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startConnectionListen>>, {campaignId: number}> = (props) => {
+          const {campaignId} = props ?? {};
+
+          return  startConnectionListen(campaignId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartConnectionListenMutationResult = NonNullable<Awaited<ReturnType<typeof startConnectionListen>>>
+
+    export type StartConnectionListenMutationError = ErrorType<void>
+
+    /**
+ * @summary Start listening for a test event on a campaign webhook
+ */
+export const useStartConnectionListen = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startConnectionListen>>, TError,{campaignId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startConnectionListen>>,
+        TError,
+        {campaignId: number},
+        TContext
+      > => {
+      return useMutation(getStartConnectionListenMutationOptions(options));
+    }
+
+export const getPollConnectionListenUrl = (campaignId: number,) => {
+
+
+
+
+  return `/api/connections/${campaignId}/listen/poll`
+}
+
+/**
+ * @summary Poll for a captured test payload
+ */
+export const pollConnectionListen = async (campaignId: number, options?: RequestInit): Promise<ListenPollResult> => {
+
+  return customFetch<ListenPollResult>(getPollConnectionListenUrl(campaignId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getPollConnectionListenQueryKey = (campaignId: number,) => {
+    return [
+    `/api/connections/${campaignId}/listen/poll`
+    ] as const;
+    }
+
+
+export const getPollConnectionListenQueryOptions = <TData = Awaited<ReturnType<typeof pollConnectionListen>>, TError = ErrorType<void>>(campaignId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof pollConnectionListen>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPollConnectionListenQueryKey(campaignId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof pollConnectionListen>>> = ({ signal }) => pollConnectionListen(campaignId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(campaignId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof pollConnectionListen>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type PollConnectionListenQueryResult = NonNullable<Awaited<ReturnType<typeof pollConnectionListen>>>
+export type PollConnectionListenQueryError = ErrorType<void>
+
+
+/**
+ * @summary Poll for a captured test payload
+ */
+
+export function usePollConnectionListen<TData = Awaited<ReturnType<typeof pollConnectionListen>>, TError = ErrorType<void>>(
+ campaignId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof pollConnectionListen>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getPollConnectionListenQueryOptions(campaignId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getStopConnectionListenUrl = (campaignId: number,) => {
+
+
+
+
+  return `/api/connections/${campaignId}/listen/stop`
+}
+
+/**
+ * @summary Stop listening for test events
+ */
+export const stopConnectionListen = async (campaignId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getStopConnectionListenUrl(campaignId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getStopConnectionListenMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopConnectionListen>>, TError,{campaignId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof stopConnectionListen>>, TError,{campaignId: number}, TContext> => {
+
+const mutationKey = ['stopConnectionListen'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof stopConnectionListen>>, {campaignId: number}> = (props) => {
+          const {campaignId} = props ?? {};
+
+          return  stopConnectionListen(campaignId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StopConnectionListenMutationResult = NonNullable<Awaited<ReturnType<typeof stopConnectionListen>>>
+
+    export type StopConnectionListenMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Stop listening for test events
+ */
+export const useStopConnectionListen = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopConnectionListen>>, TError,{campaignId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof stopConnectionListen>>,
+        TError,
+        {campaignId: number},
+        TContext
+      > => {
+      return useMutation(getStopConnectionListenMutationOptions(options));
     }
 

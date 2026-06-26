@@ -169,6 +169,13 @@
       "when": 1783400000000,
       "tag": "0023_callback_secret_and_briefing_token",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783500000000,
+      "tag": "0024_connections_hub",
+      "breakpoints": true
     }
   ]
 }

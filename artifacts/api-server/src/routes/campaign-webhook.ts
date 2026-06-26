@@ -10,15 +10,21 @@
  *
  * Field mapping is configured per-campaign. The campaign's `fieldMappings`
  * object maps source field names → roles (phone, name, email, custom vars).
+ *
+ * Security: if a campaign has `hmacSecret` set, inbound POST requests must
+ * carry X-Hub-Signature-256: sha256=<hmac> (computed over the raw body).
+ * Token-only sources (no hmacSecret) continue to work unchanged.
  */
 
 import { Router, type IRouter } from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { db, campaignsTable, campaignLeadsTable, leadTimelineTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
+import { captureListenSample } from "./connections.js";
 
 const router: IRouter = Router();
 
@@ -60,6 +66,24 @@ function extractLeadFields(
     email:    flatData[emailKey] ?? flatData["email"] ?? null,
     leadData: flatData,
   };
+}
+
+/**
+ * Verify X-Hub-Signature-256 HMAC signature.
+ * Returns true if valid (or if secret is not configured — backward compat).
+ */
+function verifyHmacSignature(
+  rawBody: Buffer | string,
+  signatureHeader: string | undefined,
+  secret: string,
+): boolean {
+  if (!signatureHeader) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  try {
+    return timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 async function insertLeadAndSchedule(opts: {
@@ -126,6 +150,14 @@ async function insertLeadAndSchedule(opts: {
   scheduleCampaignCall(lead!, campaign);
 }
 
+/** Mark last webhook event on the campaign row (fire-and-forget, best-effort). */
+function touchWebhookStatus(campaignId: number, status: "ok" | "error"): void {
+  db.update(campaignsTable)
+    .set({ lastWebhookAt: new Date(), lastWebhookStatus: status })
+    .where(eq(campaignsTable.id, campaignId))
+    .catch((err: unknown) => logger.warn({ err, campaignId }, "Failed to update webhook status"));
+}
+
 // ── GET /api/webhooks/lead/:token — Instagram Meta verification ────────────
 router.get("/webhooks/lead/:token", (req, res): void => {
   const mode      = req.query["hub.mode"]         as string | undefined;
@@ -158,6 +190,32 @@ router.post("/webhooks/lead/:token", async (req, res): Promise<void> => {
 
   const body = req.body as Record<string, unknown>;
 
+  // ── HMAC Signature verification ──────────────────────────────────────────
+  if (campaign.hmacSecret) {
+    const rawBody: Buffer | string = (req as any).rawBody ?? JSON.stringify(body);
+    const sig = req.headers["x-hub-signature-256"] as string | undefined
+             ?? req.headers["x-signature-256"]     as string | undefined
+             ?? req.headers["x-signature"]          as string | undefined;
+    if (!verifyHmacSignature(rawBody, sig, campaign.hmacSecret)) {
+      logger.warn({ campaignId: campaign.id }, "Webhook HMAC verification failed");
+      touchWebhookStatus(campaign.id, "error");
+      res.status(401).json({ error: "Invalid signature" });
+      return;
+    }
+  }
+
+  // ── Capture for listen mode (sample capture — not a real lead) ───────────
+  // If an active listen session is waiting, capture this payload and return
+  // early WITHOUT creating a lead or scheduling a call. This ensures test
+  // events sent during onboarding never create real leads.
+  const flat = flattenObject(body);
+  if (captureListenSample(campaign.id, body, flat)) {
+    logger.info({ campaignId: campaign.id }, "Webhook payload captured for listen mode — not ingested as lead");
+    touchWebhookStatus(campaign.id, "ok");
+    res.json({ received: true, mode: "listen_sample" });
+    return;
+  }
+
   // ── Detect Instagram Lead Ads format ─────────────────────────────────────
   if (body["object"] === "page" && Array.isArray(body["entry"])) {
     // Meta leadgen webhook — iterate entries/changes
@@ -173,12 +231,12 @@ router.post("/webhooks/lead/:token", async (req, res): Promise<void> => {
         const fieldData = Array.isArray(value["field_data"]) ? value["field_data"] : [];
 
         // Convert Meta field_data array → flat map
-        const flat: Record<string, string> = {};
+        const metaFlat: Record<string, string> = {};
         for (const fd of fieldData as Array<{ name: string; values: string[] }>) {
-          flat[fd.name] = fd.values?.[0] ?? "";
+          metaFlat[fd.name] = fd.values?.[0] ?? "";
         }
 
-        const { phone, name, email, leadData } = extractLeadFields(flat, campaign.fieldMappings as Record<string, string>);
+        const { phone, name, email, leadData } = extractLeadFields(metaFlat, campaign.fieldMappings as Record<string, string>);
 
         if (!phone) {
           logger.warn({ campaignId: campaign.id, leadgenId }, "Instagram lead missing phone — skipping");
@@ -197,15 +255,16 @@ router.post("/webhooks/lead/:token", async (req, res): Promise<void> => {
       }
     }
 
+    touchWebhookStatus(campaign.id, "ok");
     res.json({ received: true });
     return;
   }
 
   // ── Generic website / form webhook ──────────────────────────────────────
-  const flat = flattenObject(body);
   const { phone, name, email, leadData } = extractLeadFields(flat, campaign.fieldMappings as Record<string, string>);
 
   if (!phone) {
+    touchWebhookStatus(campaign.id, "error");
     res.status(422).json({ error: "Could not extract phone number. Check your fieldMappings configuration." });
     return;
   }
@@ -219,6 +278,7 @@ router.post("/webhooks/lead/:token", async (req, res): Promise<void> => {
     source:     "webhook",
   });
 
+  touchWebhookStatus(campaign.id, "ok");
   res.json({ received: true, phone });
 });
 

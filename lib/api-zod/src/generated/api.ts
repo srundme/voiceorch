@@ -5995,3 +5995,93 @@ export const RescheduleCallbackResponse = zod.object({
 })
 
 
+/**
+ * @summary List all inbound lead connections (campaigns + meta integrations)
+ */
+export const ListConnectionsResponseItem = zod.object({
+  "id": zod.number(),
+  "type": zod.enum(['webhook', 'meta_lead_ads']),
+  "name": zod.string(),
+  "campaignId": zod.number().nullish(),
+  "webhookUrl": zod.string(),
+  "webhookToken": zod.string(),
+  "hmacSecretHint": zod.string().nullish(),
+  "hasHmacSecret": zod.boolean().optional(),
+  "status": zod.enum(['connected', 'waiting', 'error']),
+  "lastEventAt": zod.coerce.date().nullish(),
+  "lastEventStatus": zod.string().nullish(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish(),
+  "agentSystemPrompt": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListConnectionsResponse = zod.array(ListConnectionsResponseItem)
+
+
+/**
+ * @summary Update HMAC secret for a campaign webhook connection
+ */
+export const UpdateConnectionWebhookConfigParams = zod.object({
+  "campaignId": zod.coerce.number()
+})
+
+export const UpdateConnectionWebhookConfigBody = zod.object({
+  "hmacSecret": zod.string().nullish(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish()
+})
+
+export const UpdateConnectionWebhookConfigResponse = zod.object({
+  "id": zod.number(),
+  "type": zod.enum(['webhook', 'meta_lead_ads']),
+  "name": zod.string(),
+  "campaignId": zod.number().nullish(),
+  "webhookUrl": zod.string(),
+  "webhookToken": zod.string(),
+  "hmacSecretHint": zod.string().nullish(),
+  "hasHmacSecret": zod.boolean().optional(),
+  "status": zod.enum(['connected', 'waiting', 'error']),
+  "lastEventAt": zod.coerce.date().nullish(),
+  "lastEventStatus": zod.string().nullish(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish(),
+  "agentSystemPrompt": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Start listening for a test event on a campaign webhook
+ */
+export const StartConnectionListenParams = zod.object({
+  "campaignId": zod.coerce.number()
+})
+
+export const StartConnectionListenResponse = zod.object({
+  "campaignId": zod.number(),
+  "startedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Poll for a captured test payload
+ */
+export const PollConnectionListenParams = zod.object({
+  "campaignId": zod.coerce.number()
+})
+
+export const PollConnectionListenResponse = zod.object({
+  "status": zod.enum(['waiting', 'captured', 'expired']),
+  "campaignId": zod.number(),
+  "capturedAt": zod.coerce.date().nullish(),
+  "payload": zod.record(zod.string(), zod.unknown()).nullish(),
+  "flatFields": zod.record(zod.string(), zod.string()).nullish()
+})
+
+
+/**
+ * @summary Stop listening for test events
+ */
+export const StopConnectionListenParams = zod.object({
+  "campaignId": zod.coerce.number()
+})
+
+

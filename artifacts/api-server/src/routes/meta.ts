@@ -4,7 +4,7 @@
  */
 import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import {
   db,
   metaIntegrationsTable,
@@ -14,8 +14,7 @@ import {
   providersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { encryptKey } from "../lib/crypto.js";
-import { decryptKey } from "../lib/crypto.js";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { dialTwilio, dialPlivo, dialVobiz } from "../orchestration/telephony/dial.js";
 import { logger } from "../lib/logger.js";
 
@@ -254,9 +253,17 @@ router.get("/meta/webhook/:token", async (req, res): Promise<void> => {
 
 /* ── POST /meta/webhook/:token  (Lead event from Meta) ──────────────────── */
 
-router.post("/meta/webhook/:token", async (req, res): Promise<void> => {
-  res.sendStatus(200); // always ack fast
+function verifyMetaHmac(rawBody: Buffer | string, signatureHeader: string | undefined, appSecret: string): boolean {
+  if (!signatureHeader) return false;
+  const expected = `sha256=${createHmac("sha256", appSecret).update(rawBody).digest("hex")}`;
+  try {
+    return timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
+router.post("/meta/webhook/:token", async (req, res): Promise<void> => {
   const { token } = req.params as { token: string };
   const body = req.body as {
     object?: string;
@@ -272,7 +279,10 @@ router.post("/meta/webhook/:token", async (req, res): Promise<void> => {
     }>;
   };
 
-  if (body.object !== "page") return;
+  if (body.object !== "page") {
+    res.sendStatus(200);
+    return;
+  }
 
   try {
     const [integration] = await db
@@ -280,7 +290,25 @@ router.post("/meta/webhook/:token", async (req, res): Promise<void> => {
       .from(metaIntegrationsTable)
       .where(and(eq(metaIntegrationsTable.webhookToken, token), eq(metaIntegrationsTable.active, true)));
 
-    if (!integration) { logger.warn({ token }, "Meta webhook for unknown/inactive integration"); return; }
+    if (!integration) {
+      logger.warn({ token }, "Meta webhook for unknown/inactive integration");
+      res.sendStatus(200); // ack anyway — don't expose token validity
+      return;
+    }
+
+    // ── HMAC signature verification (when app secret is configured) ────────
+    if (integration.appSecretEncrypted) {
+      const appSecret = decryptKey(integration.appSecretEncrypted);
+      const rawBody   = (req as any).rawBody as Buffer | undefined;
+      const sig       = req.headers["x-hub-signature-256"] as string | undefined;
+      if (!verifyMetaHmac(rawBody ?? Buffer.from(JSON.stringify(body)), sig, appSecret)) {
+        logger.warn({ token, integrationId: integration.id }, "Meta webhook HMAC verification failed");
+        res.status(401).json({ error: "Invalid X-Hub-Signature-256" });
+        return;
+      }
+    }
+
+    res.sendStatus(200); // ack fast after signature check
 
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {

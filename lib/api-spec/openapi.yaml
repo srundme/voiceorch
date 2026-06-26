@@ -56,6 +56,8 @@ tags:
     description: Pendrive — caller memory API keys, archive, and context retrieval
   - name: auth
     description: Email+password authentication and password reset
+  - name: connections
+    description: Connections hub — inbound lead source management, listen mode, and HMAC config
 
 paths:
   /healthz:
@@ -5734,6 +5736,106 @@ paths:
         "404":
           description: Not found
 
+  # ── Connections Hub ──────────────────────────────────────────────────────────
+  /connections:
+    get:
+      operationId: listConnections
+      tags: [connections]
+      summary: List all inbound lead connections (campaigns + meta integrations)
+      responses:
+        "200":
+          description: List of connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Connection"
+
+  /connections/{campaignId}/webhook-config:
+    patch:
+      operationId: updateConnectionWebhookConfig
+      tags: [connections]
+      summary: Update HMAC secret for a campaign webhook connection
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConnectionWebhookConfigBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+        "404":
+          description: Not found
+
+  /connections/{campaignId}/listen/start:
+    post:
+      operationId: startConnectionListen
+      tags: [connections]
+      summary: Start listening for a test event on a campaign webhook
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Listening started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenSession"
+        "404":
+          description: Not found
+
+  /connections/{campaignId}/listen/poll:
+    get:
+      operationId: pollConnectionListen
+      tags: [connections]
+      summary: Poll for a captured test payload
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Poll result (payload present or still waiting)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenPollResult"
+        "404":
+          description: No active listen session
+
+  /connections/{campaignId}/listen/stop:
+    delete:
+      operationId: stopConnectionListen
+      tags: [connections]
+      summary: Stop listening for test events
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Stopped
+
 components:
   parameters:
     AdminToken:
@@ -10382,3 +10484,64 @@ components:
           type: string
           format: date-time
           description: New scheduled time for the callback (ISO 8601)
+
+    Connection:
+      type: object
+      required: [id, type, name, webhookUrl, webhookToken, status, createdAt]
+      properties:
+        id:               { type: integer }
+        type:
+          type: string
+          enum: [webhook, meta_lead_ads]
+        name:             { type: string }
+        campaignId:       { type: ["integer", "null"] }
+        webhookUrl:       { type: string }
+        webhookToken:     { type: string }
+        hmacSecretHint:   { type: ["string", "null"] }
+        hasHmacSecret:    { type: boolean }
+        status:
+          type: string
+          enum: [connected, waiting, error]
+        lastEventAt:      { type: ["string", "null"], format: date-time }
+        lastEventStatus:  { type: ["string", "null"] }
+        fieldMappings:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+        agentSystemPrompt: { type: ["string", "null"] }
+        createdAt:        { type: string, format: date-time }
+
+    UpdateConnectionWebhookConfigBody:
+      type: object
+      properties:
+        hmacSecret:       { type: ["string", "null"] }
+        fieldMappings:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+
+    ListenSession:
+      type: object
+      required: [campaignId, startedAt, expiresAt]
+      properties:
+        campaignId: { type: integer }
+        startedAt:  { type: string, format: date-time }
+        expiresAt:  { type: string, format: date-time }
+
+    ListenPollResult:
+      type: object
+      required: [status, campaignId]
+      properties:
+        status:
+          type: string
+          enum: [waiting, captured, expired]
+        campaignId:   { type: integer }
+        capturedAt:   { type: ["string", "null"], format: date-time }
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+        flatFields:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }

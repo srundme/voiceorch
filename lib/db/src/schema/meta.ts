@@ -15,6 +15,7 @@ export const metaIntegrationsTable = pgTable(
     agentId:              integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
     phoneNumberId:        integer("phone_number_id").references(() => phoneNumbersTable.id, { onDelete: "set null" }),
     accessTokenEncrypted: text("access_token_encrypted").notNull(),
+    appSecretEncrypted:   text("app_secret_encrypted"),
     webhookToken:         text("webhook_token").notNull().unique(),
     active:               boolean("active").notNull().default(true),
     createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
