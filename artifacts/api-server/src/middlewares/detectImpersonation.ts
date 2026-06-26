@@ -95,6 +95,55 @@ export async function isImpersonationSessionActive(sessionToken: string): Promis
   }
 }
 
+// ─── Session-token-keyed revocation cache ─────────────────────────────────────
+// Used by attachSession to gate requests that carry an `imp` JWT claim.
+// Keyed by the opaque session token so we can reject stale bearer tokens
+// immediately after the impersonation session is ended, even within the
+// 2-hour JWT TTL window.
+const sessionTokenCache = new Map<string, { active: boolean; expiresAt: number }>();
+
+/**
+ * Returns true if the given impersonation session token is still active
+ * (row exists, endedAt IS NULL, expiresAt > now). Result is cached for
+ * CACHE_TTL_MS to avoid a DB round-trip on every request.
+ */
+export async function isImpersonationJwtActive(sessionToken: string): Promise<boolean> {
+  const now = Date.now();
+  const cached = sessionTokenCache.get(sessionToken);
+  if (cached && cached.expiresAt > now) return cached.active;
+
+  try {
+    const [row] = await db
+      .select({ sessionToken: adminImpersonationSessionsTable.sessionToken })
+      .from(adminImpersonationSessionsTable)
+      .where(
+        and(
+          eq(adminImpersonationSessionsTable.sessionToken, sessionToken),
+          isNull(adminImpersonationSessionsTable.endedAt),
+          gt(adminImpersonationSessionsTable.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+
+    const active = !!row;
+    sessionTokenCache.set(sessionToken, { active, expiresAt: now + CACHE_TTL_MS });
+    return active;
+  } catch (err) {
+    logger.error({ err }, "isImpersonationJwtActive: DB lookup failed");
+    // Fail closed: treat the session as inactive so a DB error doesn't
+    // allow a revoked impersonation token to keep working.
+    return false;
+  }
+}
+
+/**
+ * Immediately evict the session-token cache entry so the next request
+ * hits the DB and sees endedAt set.
+ */
+export function invalidateImpersonationSessionTokenCache(sessionToken: string): void {
+  sessionTokenCache.delete(sessionToken);
+}
+
 // Known route segment → stable resource type mapping.
 // Listed segments that look like resource collections/controllers.
 const RESOURCE_SEGMENT_MAP: Record<string, string> = {

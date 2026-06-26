@@ -10,7 +10,7 @@ import {
   adminImpersonationSessionsTable,
 } from "@workspace/db";
 import { eq, desc, and, sql, gt, isNull } from "drizzle-orm";
-import { invalidateImpersonationCache } from "../middlewares/detectImpersonation.js";
+import { invalidateImpersonationCache, invalidateImpersonationSessionTokenCache } from "../middlewares/detectImpersonation.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
@@ -610,11 +610,18 @@ router.delete("/admin/impersonate/sessions/:sessionToken", async (req, res): Pro
       beforeValue: { sessionToken: sessionToken!.slice(0, 8) + "..." },
     });
 
+<<<<<<< HEAD
     // Invalidate both the by-userId cache (detectImpersonation audit tags) and
     // the by-sessionToken cache (attachSession revocation check) immediately so
     // any retained impersonation JWT is denied within this process on the next
     // request — no need to wait for the 5 s TTL.
     invalidateImpersonationCache(session.targetUserId, sessionToken);
+=======
+    // Invalidate both in-process caches so subsequent requests are rejected
+    // immediately without waiting for the 5-second TTL to expire.
+    invalidateImpersonationCache(session.targetUserId);
+    invalidateImpersonationSessionTokenCache(sessionToken!);
+>>>>>>> 79ff35c (fix(security): revoke impersonation JWTs immediately when session is ended)
 
     res.json({ ok: true });
   } catch (err) {
