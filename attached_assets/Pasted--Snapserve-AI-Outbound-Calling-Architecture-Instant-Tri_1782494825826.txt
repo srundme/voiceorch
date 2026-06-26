@@ -1,0 +1,292 @@
+# Snapserve AI - Outbound Calling Architecture
+
+## Instant Triggers + Campaign Engine
+
+---
+
+# Overall Platform Architecture
+
+```text
+                                   SNAPSERVE AI
+
+                        ┌───────────────────────────────┐
+                        │   OUTBOUND CALLING PLATFORM   │
+                        └───────────────────────────────┘
+
+
+                    ┌─────────────────┐      ┌─────────────────┐
+                    │ Instant Trigger │      │ Campaign Engine │
+                    └────────┬────────┘      └────────┬────────┘
+                             │                        │
+                             ▼                        ▼
+                   Event Driven Calls          Bulk Outbound Calls
+                             │                        │
+                             └──────────┬─────────────┘
+                                        ▼
+                              Automation Engine
+                                        │
+                                        ▼
+                              Compliance Engine
+                                        │
+                  ┌──────────────────────────────────────┐
+                  │ Business Hours                       │
+                  │ TRAI Calling Window                  │
+                  │ Timezone (Optional)                            │
+                  │ Working Days (Optional)              │
+                  └──────────────────────────────────────┘
+                                        │
+                           ┌────────────┴─────────────┐
+                           │                          │
+                     Allowed                     Not Allowed ( lead came outside the calling window) 
+                           │                          │
+                           ▼                          ▼
+                    Create Call Job           Pending Queue
+                           │                          │
+                           ▼                          ▼
+                     AI Voice Agent          Scheduler Service
+                           │                          │
+                           └──────────────┬───────────┘
+                                          ▼
+                                 Call Execution Engine
+                                          │
+                                          ▼
+                      Recording • Transcript • CRM • Analytics
+```
+
+---
+
+# Flow 1 - Instant Trigger Engine
+
+## Supported Trigger Sources
+
+```text
+Meta Ads
+Website Forms
+CRM
+API Trigger
+Google Sheets
+Webhooks
+Manual Trigger
+```
+
+```text
+Trigger Event
+      │
+      ▼
+Receive Lead
+      │
+      ▼
+Lead Validation
+      │
+      ▼
+Automation Workflow
+      │
+      ▼
+Compliance Engine
+      │
+      ├── Business Hours
+      ├── TRAI Calling Window
+      ├── Timezone
+      └── Working Days
+      │
+      ├── Allowed
+      │      │
+      │      ▼
+      │ Create Call Job
+      │
+      └── Not Allowed (Out side the calling window)
+             │
+             ▼
+      Pending Queue
+             │
+             ▼
+ Scheduler Executes Later (In the next working or calling hours)
+```
+
+---
+
+# Flow 2 - Campaign Engine (Bulk Calling)
+
+Campaigns are initiated manually by users and execute outbound calls in bulk.
+
+## Campaign Data Sources
+
+```text
+CSV Upload
+Excel Upload
+CRM Import
+Google Sheets Import
+API Import
+```
+
+---
+
+## Campaign Creation Flow
+
+```text
+Create Campaign
+       │
+       ▼
+Select AI Voice Agent
+       │
+       ▼
+Choose Data Source
+       │
+       ├──────────────┬───────────────┬──────────────┐
+       │              │               │              │
+       ▼              ▼               ▼              ▼
+ CSV Upload     Excel Upload     CRM Import   Google Sheets
+                                      │
+                                      ▼
+                              Select Contacts
+                                      │
+                                      ▼
+                              Import Leads
+                                      │
+                                      ▼
+                          Lead Validation
+                                      │
+                                      ▼
+                          Campaign Settings
+                                      │
+              ┌────────────────────────────────────┐
+              │ Execute Now                        │
+              │ Schedule for Later                 │
+              │ Select Date & Time                 │
+              │ Concurrency                        │
+              │ Retry Policy                       │
+              └────────────────────────────────────┘
+                                      │
+                                      ▼
+                             Campaign Queue
+                                      │
+                                      ▼
+                           Compliance Engine
+                                      │
+                      ┌───────────────┴───────────────┐
+                      │                               │
+                   Allowed                     Not Allowed
+                      │                               │
+                      ▼                               ▼
+              Call Execution                  Pending Queue
+                      │                               │
+                      └──────────────┬────────────────┘
+                                     ▼
+                               AI Voice Agent
+```
+
+---
+
+# Campaign Execution Flow
+
+```text
+Campaign Started
+        │
+        ▼
+Load Contacts
+        │
+        ▼
+Maintain Configured Concurrency
+        │
+        ▼
+500 Active Calls Running
+        │
+        ▼
+Call Ends
+        │
+        ▼
+Pick Next Contact
+        │
+        ▼
+Start New Call
+        │
+        ▼
+Maintain 500 Active Calls Until Campaign Completes
+```
+
+---
+
+# CRM Campaign Flow
+
+```text
+Connect CRM
+      │
+      ▼
+Authenticate
+      │
+      ▼
+Fetch Contacts
+      │
+      ▼
+Select Records
+      │
+      ▼
+Import into Campaign
+      │
+      ▼
+Configure Campaign
+      │
+      ▼
+Execute Now
+      │
+      │
+      └─────────────── OR ────────────────
+                      │
+                      ▼
+             Schedule Campaign
+```
+
+---
+
+# Common Call Processing Engine
+
+Both Instant Triggers and Campaigns eventually use the same execution engine.
+
+```text
+Instant Trigger
+        │
+        │
+Campaign Queue
+        │
+        ▼
+Create Call Job
+        │
+        ▼
+Compliance Engine
+        │
+        ▼
+Call Queue
+        │
+        ▼
+AI Voice Agent
+        │
+        ▼
+Telephony (Vobiz)
+        │
+        ▼
+Customer
+        │
+        ▼
+Recording
+Transcript
+Call Summary
+CRM Update
+Analytics
+```
+
+---
+
+# UI Modules
+
+1. Trigger Management
+2. Automation Workflow Builder
+3. Campaign Management
+4. Campaign Scheduler
+5. Compliance Rules
+6. Pending Queue
+7. Campaign Dashboard
+8. Live Call Monitor
+9. Call Analytics
+10. CRM Integrations
+11. Import Center (CSV / Excel / CRM / Google Sheets)
+12. AI Voice Agent Assignment
