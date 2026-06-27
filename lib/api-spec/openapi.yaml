@@ -6132,6 +6132,62 @@ paths:
         "400":
           description: Validation error
 
+  # ── The SnapServe Book — final exam (server-graded, no auth) ──────────────────
+  /book/exam:
+    get:
+      operationId: getBookExam
+      tags: [book]
+      summary: Get the sanitized final-exam question bank (no answer key)
+      responses:
+        "200":
+          description: Exam questions and config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookExam"
+
+  /book/exam/submit:
+    post:
+      operationId: submitBookExam
+      tags: [book]
+      summary: Submit exam answers; the server grades and records the attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookExamSubmission"
+      responses:
+        "200":
+          description: Aggregate graded result (score, pass/fail) — no per-question breakdown by design
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookExamResult"
+        "400":
+          description: Validation error
+
+  /book/exam/attempts:
+    get:
+      operationId: getBookExamAttempts
+      tags: [book]
+      summary: Get a device's exam attempt history and best score
+      parameters:
+        - name: deviceId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attempt history and best score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookExamAttempts"
+        "400":
+          description: Invalid deviceId
+
 components:
   parameters:
     AdminToken:
@@ -6167,6 +6223,78 @@ components:
         chapterSlug: { type: string }
         questionIndex: { type: integer }
         answerIndex: { type: integer }
+    BookExamAnswer:
+      description: A chosen answer — an index (single-choice) or indices (multi-select).
+      oneOf:
+        - type: integer
+        - type: array
+          items: { type: integer }
+    BookExamQuestion:
+      type: object
+      required: [id, prompt, choices, marks, topic, multi]
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        code: { type: string }
+        choices:
+          type: array
+          items: { type: string }
+        marks: { type: integer }
+        topic: { type: string }
+        multi: { type: boolean }
+    BookExam:
+      type: object
+      required: [questions, totalMarks, passMarks, durationMinutes, questionCount]
+      properties:
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/BookExamQuestion" }
+        totalMarks: { type: integer }
+        passMarks: { type: integer }
+        durationMinutes: { type: integer }
+        questionCount: { type: integer }
+    BookExamSubmission:
+      type: object
+      required: [deviceId, answers]
+      properties:
+        deviceId: { type: string }
+        answers:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/BookExamAnswer" }
+        durationSeconds: { type: integer }
+    BookExamResult:
+      type: object
+      required: [attemptId, score, total, passMarks, passed]
+      properties:
+        attemptId: { type: string }
+        score: { type: integer }
+        total: { type: integer }
+        passMarks: { type: integer }
+        passed: { type: boolean }
+        durationSeconds: { type: ["integer", "null"] }
+        createdAt: { type: string, format: date-time }
+    BookExamAttempt:
+      type: object
+      required: [id, score, total, passed, createdAt]
+      properties:
+        id: { type: string }
+        score: { type: integer }
+        total: { type: integer }
+        passed: { type: boolean }
+        durationSeconds: { type: ["integer", "null"] }
+        createdAt: { type: string, format: date-time }
+    BookExamAttempts:
+      type: object
+      required: [attempts, bestScore, total, passMarks, passed, attemptCount]
+      properties:
+        attempts:
+          type: array
+          items: { $ref: "#/components/schemas/BookExamAttempt" }
+        bestScore: { type: integer }
+        total: { type: integer }
+        passMarks: { type: integer }
+        passed: { type: boolean }
+        attemptCount: { type: integer }
     PromptTemplate:
       type: object
       required: [id, version, isActive, filename, mimeType, sizeBytes, createdAt]

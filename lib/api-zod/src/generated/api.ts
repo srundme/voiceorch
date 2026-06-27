@@ -6299,3 +6299,67 @@ export const SaveBookQuizAnswerResponse = zod.object({
 })
 
 
+/**
+ * @summary Get the sanitized final-exam question bank (no answer key)
+ */
+export const GetBookExamResponse = zod.object({
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "code": zod.string().optional(),
+  "choices": zod.array(zod.string()),
+  "marks": zod.number(),
+  "topic": zod.string(),
+  "multi": zod.boolean()
+})),
+  "totalMarks": zod.number(),
+  "passMarks": zod.number(),
+  "durationMinutes": zod.number(),
+  "questionCount": zod.number()
+})
+
+
+/**
+ * @summary Submit exam answers; the server grades and records the attempt
+ */
+export const SubmitBookExamBody = zod.object({
+  "deviceId": zod.string(),
+  "answers": zod.record(zod.string(), zod.union([zod.number(),zod.array(zod.number())]).describe('A chosen answer — an index (single-choice) or indices (multi-select).')),
+  "durationSeconds": zod.number().optional()
+})
+
+export const SubmitBookExamResponse = zod.object({
+  "attemptId": zod.string(),
+  "score": zod.number(),
+  "total": zod.number(),
+  "passMarks": zod.number(),
+  "passed": zod.boolean(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Get a device's exam attempt history and best score
+ */
+export const GetBookExamAttemptsQueryParams = zod.object({
+  "deviceId": zod.coerce.string()
+})
+
+export const GetBookExamAttemptsResponse = zod.object({
+  "attempts": zod.array(zod.object({
+  "id": zod.string(),
+  "score": zod.number(),
+  "total": zod.number(),
+  "passed": zod.boolean(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "bestScore": zod.number(),
+  "total": zod.number(),
+  "passMarks": zod.number(),
+  "passed": zod.boolean(),
+  "attemptCount": zod.number()
+})
+
+

@@ -80,6 +80,10 @@ import type {
   BatchWorkspaceLeadsPage,
   BatchWorkspaceSources,
   BookChapterRef,
+  BookExam,
+  BookExamAttempts,
+  BookExamResult,
+  BookExamSubmission,
   BookProgress,
   BookQuizAnswerInput,
   Booking,
@@ -144,6 +148,7 @@ import type {
   GetAgentSnapserveExecutionsParams,
   GetAvailableSlotsParams,
   GetBatchWorkspaceActivityParams,
+  GetBookExamAttemptsParams,
   GetBookProgressParams,
   GetCommandCenterActivityStream200,
   GetCommandCenterActivityStreamParams,
@@ -20332,4 +20337,236 @@ export const useSaveBookQuizAnswer = <TError = ErrorType<void>,
       > => {
       return useMutation(getSaveBookQuizAnswerMutationOptions(options));
     }
+
+export const getGetBookExamUrl = () => {
+
+
+
+
+  return `/api/book/exam`
+}
+
+/**
+ * @summary Get the sanitized final-exam question bank (no answer key)
+ */
+export const getBookExam = async ( options?: RequestInit): Promise<BookExam> => {
+
+  return customFetch<BookExam>(getGetBookExamUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBookExamQueryKey = () => {
+    return [
+    `/api/book/exam`
+    ] as const;
+    }
+
+
+export const getGetBookExamQueryOptions = <TData = Awaited<ReturnType<typeof getBookExam>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookExam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBookExamQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBookExam>>> = ({ signal }) => getBookExam({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBookExam>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBookExamQueryResult = NonNullable<Awaited<ReturnType<typeof getBookExam>>>
+export type GetBookExamQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the sanitized final-exam question bank (no answer key)
+ */
+
+export function useGetBookExam<TData = Awaited<ReturnType<typeof getBookExam>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookExam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBookExamQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSubmitBookExamUrl = () => {
+
+
+
+
+  return `/api/book/exam/submit`
+}
+
+/**
+ * @summary Submit exam answers; the server grades and records the attempt
+ */
+export const submitBookExam = async (bookExamSubmission: BookExamSubmission, options?: RequestInit): Promise<BookExamResult> => {
+
+  return customFetch<BookExamResult>(getSubmitBookExamUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookExamSubmission,)
+  }
+);}
+
+
+
+
+export const getSubmitBookExamMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitBookExam>>, TError,{data: BodyType<BookExamSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitBookExam>>, TError,{data: BodyType<BookExamSubmission>}, TContext> => {
+
+const mutationKey = ['submitBookExam'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitBookExam>>, {data: BodyType<BookExamSubmission>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitBookExam(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitBookExamMutationResult = NonNullable<Awaited<ReturnType<typeof submitBookExam>>>
+    export type SubmitBookExamMutationBody = BodyType<BookExamSubmission>
+    export type SubmitBookExamMutationError = ErrorType<void>
+
+    /**
+ * @summary Submit exam answers; the server grades and records the attempt
+ */
+export const useSubmitBookExam = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitBookExam>>, TError,{data: BodyType<BookExamSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitBookExam>>,
+        TError,
+        {data: BodyType<BookExamSubmission>},
+        TContext
+      > => {
+      return useMutation(getSubmitBookExamMutationOptions(options));
+    }
+
+export const getGetBookExamAttemptsUrl = (params: GetBookExamAttemptsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/book/exam/attempts?${stringifiedParams}` : `/api/book/exam/attempts`
+}
+
+/**
+ * @summary Get a device's exam attempt history and best score
+ */
+export const getBookExamAttempts = async (params: GetBookExamAttemptsParams, options?: RequestInit): Promise<BookExamAttempts> => {
+
+  return customFetch<BookExamAttempts>(getGetBookExamAttemptsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBookExamAttemptsQueryKey = (params?: GetBookExamAttemptsParams,) => {
+    return [
+    `/api/book/exam/attempts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBookExamAttemptsQueryOptions = <TData = Awaited<ReturnType<typeof getBookExamAttempts>>, TError = ErrorType<void>>(params: GetBookExamAttemptsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookExamAttempts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBookExamAttemptsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBookExamAttempts>>> = ({ signal }) => getBookExamAttempts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBookExamAttempts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBookExamAttemptsQueryResult = NonNullable<Awaited<ReturnType<typeof getBookExamAttempts>>>
+export type GetBookExamAttemptsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a device's exam attempt history and best score
+ */
+
+export function useGetBookExamAttempts<TData = Awaited<ReturnType<typeof getBookExamAttempts>>, TError = ErrorType<void>>(
+ params: GetBookExamAttemptsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookExamAttempts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBookExamAttemptsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 

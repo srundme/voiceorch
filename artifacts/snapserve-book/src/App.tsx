@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import ModuleOverview from "@/pages/ModuleOverview";
 import ChapterReader from "@/pages/ChapterReader";
+import Exam from "@/pages/Exam";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/module/:slug" component={ModuleOverview} />
       <Route path="/chapter/:slug" component={ChapterReader} />
+      <Route path="/exam" component={Exam} />
       <Route component={NotFound} />
     </Switch>
   );

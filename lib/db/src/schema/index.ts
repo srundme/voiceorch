@@ -46,3 +46,4 @@ export * from "./password-reset-otps";
 export * from "./utterances";
 export * from "./crm-connections";
 export * from "./book-progress";
+export * from "./book-exam";

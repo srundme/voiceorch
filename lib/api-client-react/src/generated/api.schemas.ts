@@ -29,6 +29,67 @@ export interface BookQuizAnswerInput {
   answerIndex: number;
 }
 
+/**
+ * A chosen answer — an index (single-choice) or indices (multi-select).
+ */
+export type BookExamAnswer = number | number[];
+
+export interface BookExamQuestion {
+  id: string;
+  prompt: string;
+  code?: string;
+  choices: string[];
+  marks: number;
+  topic: string;
+  multi: boolean;
+}
+
+export interface BookExam {
+  questions: BookExamQuestion[];
+  totalMarks: number;
+  passMarks: number;
+  durationMinutes: number;
+  questionCount: number;
+}
+
+export type BookExamSubmissionAnswers = {[key: string]: BookExamAnswer};
+
+export interface BookExamSubmission {
+  deviceId: string;
+  answers: BookExamSubmissionAnswers;
+  durationSeconds?: number;
+}
+
+export interface BookExamResult {
+  attemptId: string;
+  score: number;
+  total: number;
+  passMarks: number;
+  passed: boolean;
+  /** @nullable */
+  durationSeconds?: number | null;
+  createdAt?: string;
+}
+
+export interface BookExamAttempt {
+  id: string;
+  score: number;
+  total: number;
+  passed: boolean;
+  /** @nullable */
+  durationSeconds?: number | null;
+  createdAt: string;
+}
+
+export interface BookExamAttempts {
+  attempts: BookExamAttempt[];
+  bestScore: number;
+  total: number;
+  passMarks: number;
+  passed: boolean;
+  attemptCount: number;
+}
+
 export interface PromptTemplate {
   id: number;
   version: number;
@@ -5115,6 +5176,10 @@ listId?: string;
 };
 
 export type GetBookProgressParams = {
+deviceId: string;
+};
+
+export type GetBookExamAttemptsParams = {
 deviceId: string;
 };
 

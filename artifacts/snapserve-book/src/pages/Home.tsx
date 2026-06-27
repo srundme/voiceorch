@@ -1,11 +1,29 @@
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { course, courseStats, modules, getPublishedChaptersForModule } from "@/content";
 import { useProgressStore } from "@/hooks/use-progress";
+import { getBookExamAttempts, type BookExamAttempts } from "@workspace/api-client-react";
+import { getDeviceId } from "@/lib/device-id";
 import * as Icons from "lucide-react";
 
 export default function Home() {
   const { getModuleProgress } = useProgressStore();
+  const [examAttempts, setExamAttempts] = useState<BookExamAttempts | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getBookExamAttempts({ deviceId: getDeviceId() })
+      .then((a) => {
+        if (alive) setExamAttempts(a);
+      })
+      .catch(() => {
+        /* exam history is best-effort on the home page */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -101,6 +119,53 @@ export default function Home() {
             );
           })}
         </div>
+      </section>
+
+      {/* Final exam CTA */}
+      <section className="px-6 max-w-5xl mx-auto mt-16">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          <Link href="/exam" className="block">
+            <div className="group relative overflow-hidden rounded-3xl bg-foreground text-background p-8 md:p-10 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer">
+              <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-primary/20 blur-2xl" />
+              <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="flex-grow">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 text-primary-foreground font-medium text-xs mb-4">
+                    <Icons.GraduationCap size={14} />
+                    Final Certification Exam
+                  </div>
+                  <h2 className="text-3xl md:text-4xl font-bold font-serif mb-2">
+                    Think you know SnapServe?
+                  </h2>
+                  <p className="text-background/70 max-w-xl leading-relaxed">
+                    30 marks, 30 minutes, server-graded. Calibrated so only about one in five make
+                    the cut. Prove it.
+                  </p>
+                </div>
+                <div className="flex items-center gap-5 flex-shrink-0">
+                  {examAttempts && examAttempts.attemptCount > 0 && (
+                    <div className="text-right">
+                      <div className="text-3xl font-bold">
+                        {examAttempts.bestScore}
+                        <span className="text-lg text-background/60">/{examAttempts.total}</span>
+                      </div>
+                      <div className="text-xs uppercase tracking-wider text-background/60 font-medium">
+                        {examAttempts.passed ? "Certified ✓" : "Best score"}
+                      </div>
+                    </div>
+                  )}
+                  <div className="w-14 h-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300">
+                    <Icons.ArrowRight size={26} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </motion.div>
       </section>
     </div>
   );
