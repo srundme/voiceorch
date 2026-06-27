@@ -6,6 +6,7 @@ import { whatIsAnLlm } from "./chapters/mb-what-is-an-llm";
 import { whatIsStt } from "./chapters/mb-what-is-stt";
 import { whatIsTts } from "./chapters/mb-what-is-tts";
 import { whatIsTelephony } from "./chapters/mb-what-is-telephony";
+import { whyNodejs } from "./chapters/mb-why-nodejs";
 
 // ── Module 1 — Orientation ────────────────────────────────────────────────────
 import { callJourney } from "./chapters/m0-call-journey";
@@ -76,6 +77,7 @@ const mbChapters: Chapter[] = [
   whatIsStt,
   whatIsTts,
   whatIsTelephony,
+  whyNodejs,
 ];
 
 const m0Chapters: Chapter[] = [callJourney, repoMap, howToUseThisBook];
