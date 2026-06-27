@@ -84,7 +84,10 @@ type BatchHeader = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string): Promise<T> {
-  const r = await fetch(url);
+  const token = localStorage.getItem("voiceorch:session");
+  const r = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (!r.ok) throw new Error(await r.text());
   return r.json() as Promise<T>;
 }

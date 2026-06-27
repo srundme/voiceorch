@@ -25,7 +25,7 @@ export const turnSafetyNet: Chapter = {
       title: "Two independent timers, two different failures",
       body: [
         "The genius of the design is recognising there are **two distinct failure modes**, each needing its own timer.",
-        "**Force-finalize (tight, ~1.8 s):** STT **is** giving us partials but won't commit a final. We have usable text — we just need to stop waiting. This timer is armed on the first partial and reset on each new one. If it expires, we treat the best partial we've seen as if it were the final, and the turn proceeds.",
+        "**Force-finalize (tight, ~1.8 s):** STT *is* giving us partials but won't commit a final. We have usable text — we just need to stop waiting. This timer is armed on the first partial and reset on each new one. If it expires, we treat the best partial we've seen as if it were the final, and the turn proceeds.",
         "**Stall backstop (loose, ~10 s):** nothing usable is arriving at all — total silence from STT. Here we have no text to work with, so instead of finalizing we speak a gentle recovery reprompt (\"Sorry, are you still there?\") and listen again. After a couple of failed reprompts, we give up and end the call gracefully.",
       ],
     },

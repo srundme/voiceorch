@@ -16,7 +16,7 @@ export const httpKeepalivePool: Chapter = {
       kind: "prose",
       heading: "A tax you can't see in the diagram",
       paragraphs: [
-        "On the architecture diagram, an LLM call is just an arrow from our server to OpenAI. In reality, that arrow is an HTTPS request — and before a single byte of your prompt is sent, the two computers must perform a **handshake**: open a TCP connection, then negotiate TLS encryption. That handshake costs roughly 100–300 milliseconds. Pay it once and it's nothing. Pay it on **every turn of every call**, for the LLM **and** the TTS **and** the STT REST call, and you've quietly added a third of a second of dead air to each exchange.",
+        "On the architecture diagram, an LLM call is just an arrow from our server to OpenAI. In reality, that arrow is an HTTPS request — and before a single byte of your prompt is sent, the two computers must perform a **handshake**: open a TCP connection, then negotiate TLS encryption. That handshake costs roughly 100–300 milliseconds. Pay it once and it's nothing. Pay it on **every turn of every call**, for the LLM *and* the TTS *and* the STT REST call, and you've quietly added a third of a second of dead air to each exchange.",
         "This chapter is about a single small file — `orchestration/http/pool.ts` — that eliminates that tax everywhere at once. It's a perfect example of a high-leverage, low-visibility optimization. Read it on GitHub at `srundme/voiceorch` → `artifacts/api-server/src/orchestration/http/pool.ts`.",
       ],
     },

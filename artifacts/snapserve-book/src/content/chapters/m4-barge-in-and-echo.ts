@@ -27,7 +27,7 @@ export const bargeInAndEcho: Chapter = {
       body: [
         "The pipeline uses two separate echo guards, because one alone isn't enough.",
         "**Time-window guard:** for a short grace period right after the agent starts (or finishes) speaking, treat any inbound speech as suspect echo. Cheap and catches the common case.",
-        "**Content guard:** the carrier sometimes echoes our words back **after** the time window has expired. So there's a second check — does this transcript closely **match the words the agent just spoke**? If so, it's our own audio returning, no matter when it arrived. Token overlap, tolerant of STT noise.",
+        "**Content guard:** the carrier sometimes echoes our words back *after* the time window has expired. So there's a second check — does this transcript closely *match the words the agent just spoke*? If so, it's our own audio returning, no matter when it arrived. Token overlap, tolerant of STT noise.",
       ],
     },
     {
@@ -105,8 +105,8 @@ const SELF_ECHO_MIN_OVERLAP   = 0.6;    // fraction of spoken tokens that must a
       variant: "insight",
       title: "Where the echo grace is re-armed matters enormously",
       body: [
-        "A subtle bug magnet: the 600 ms echo grace must be re-armed at the **start of each sentence** and at the **tail end of playback** — but never per audio chunk or per frame, and never for the full duration of a long sentence. Get this wrong and you create a window where the caller simply **cannot** interrupt a long reply, because the grace keeps resetting.",
-        "The fix the codebase settled on uses the **sentence-start** timestamp for the streaming path, so once the initial 600 ms passes the caller can cut in mid-sentence — while a separate, longer hold protects the multi-second opening greeting (whose carrier echo outlasts 600 ms).",
+        "A subtle bug magnet: the 600 ms echo grace must be re-armed at the **start of each sentence** and at the **tail end of playback** — but never per audio chunk or per frame, and never for the full duration of a long sentence. Get this wrong and you create a window where the caller simply *cannot* interrupt a long reply, because the grace keeps resetting.",
+        "The fix the codebase settled on uses the *sentence-start* timestamp for the streaming path, so once the initial 600 ms passes the caller can cut in mid-sentence — while a separate, longer hold protects the multi-second opening greeting (whose carrier echo outlasts 600 ms).",
       ],
     },
     {

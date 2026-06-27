@@ -17,7 +17,7 @@ export const complianceInjection: Chapter = {
       heading: "Two regulators, two problems",
       paragraphs: [
         "Operating voice agents in India means obeying two regimes. **TRAI** (the Telecom Regulatory Authority of India) governs commercial calls: a promotional call must announce that it's a commercial communication and must let the recipient opt out — say \"STOP\" — and be removed. **DPDP** (the Digital Personal Data Protection Act) governs personal data: callers must be told their data is being processed, that data must be retained only as long as needed, and a person can demand erasure (\"right to be forgotten\").",
-        "What makes this interesting from an engineering view is **how** the agent is made to comply. You can't hardcode 'say the disclosure' into a model that generates its own words. So SnapServe takes a two-pronged approach: **steer the LLM by injecting rules into its system prompt**, then **back that up with deterministic code** that doesn't trust the LLM to have obeyed. Read the services on GitHub at `srundme/voiceorch` → `artifacts/api-server/src/services/trai/index.ts` and `.../services/dpdp/index.ts`.",
+        "What makes this interesting from an engineering view is *how* the agent is made to comply. You can't hardcode 'say the disclosure' into a model that generates its own words. So SnapServe takes a two-pronged approach: **steer the LLM by injecting rules into its system prompt**, then **back that up with deterministic code** that doesn't trust the LLM to have obeyed. Read the services on GitHub at `srundme/voiceorch` → `artifacts/api-server/src/services/trai/index.ts` and `.../services/dpdp/index.ts`.",
       ],
     },
     {
@@ -60,8 +60,8 @@ apologize sincerely and end the call immediately without any sales pitch.\`;
       kind: "concept",
       title: "Don't trust the model — verify with code",
       body: [
-        "Prompt injection is **soft**: a weak model might forget the disclosure, or might not gracefully honour a caller who asks to be removed. Compliance can't rest on hope. So there's a deterministic layer underneath.",
-        "Every finalized transcript is scanned in code for explicit opt-out phrases — things like 'stop calling' or 'stop contacting'. On a match, the number is written to a **suppression list** marked `opted_out`, and a compliance log row is recorded. The next time a campaign tries to dial that number, a pre-dial check sees the suppression entry and refuses — regardless of what any LLM did or didn't say. (A bare \"STOP\" is honoured live by the prompt instruction — the LLM apologises and ends the call — while this phrase scan is what blocks **future** campaign calls.) Soft steering for tone, hard code for the guarantee.",
+        "Prompt injection is *soft*: a weak model might forget the disclosure, or a caller might say \"STOP\" in a way the model glosses over. Compliance can't rest on hope. So there's a deterministic layer underneath.",
+        "Every finalized transcript is scanned in code for opt-out phrases. On a match, the number is written to a **suppression list** marked `opted_out`, and a compliance log row is recorded. The next time a campaign tries to dial that number, a pre-dial check sees the suppression entry and refuses — regardless of what any LLM did or didn't say. Soft steering for tone, hard code for the guarantee.",
       ],
     },
     {
@@ -113,7 +113,7 @@ apologize sincerely and end the call immediately without any sales pitch.\`;
       variant: "insight",
       title: "Compliance is a non-blocking wrapper, never in the hot path",
       body: [
-        "A crucial architectural rule: compliance logic is **pre-call and post-call only**. The pre-dial check (is this number suppressed? is it within calling hours?) runs before dialling and can block a call outright; disclosure injection happens when the prompt is assembled; the opt-out scan, PII redaction, retention sweep, and erasure all happen after or outside the live turn loop. None of it sits inside the live STT→LLM→TTS turn loop.",
+        "A crucial architectural rule: compliance logic is **pre-call and post-call only**. The pre-dial check (is this number suppressed?) runs before dialling; disclosure injection happens when the prompt is assembled; the opt-out scan, PII redaction, retention sweep, and erasure all happen after or outside the live turn loop. None of it sits inside the dial path or the STT→LLM→TTS pipeline.",
         "Why? Because the conversational loop is latency-critical and must never be gated on a compliance database write. Compliance wraps the call; it doesn't intrude on it.",
       ],
     },
@@ -175,7 +175,7 @@ apologize sincerely and end the call immediately without any sales pitch.\`;
           prompt: "Why is all compliance logic kept out of the live STT→LLM→TTS loop?",
           choices: [
             "It's not — it runs inside the loop.",
-            "Because the conversational loop is latency-critical; compliance is a pre/post-call wrapper, so it never adds latency inside a live turn.",
+            "Because the conversational loop is latency-critical; compliance is a pre/post-call wrapper so it never delays a turn or gates dialling.",
             "Because the LLM handles it.",
             "To save database space.",
           ],

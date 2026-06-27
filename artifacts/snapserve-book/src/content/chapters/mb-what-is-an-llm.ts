@@ -64,8 +64,8 @@ export const whatIsAnLlm: Chapter = {
       variant: "gotcha",
       title: "Hallucination — the price of a confident guesser",
       body: [
-        "Because an LLM is always producing the most **plausible** continuation, it will sometimes produce something plausible-sounding that is simply **false** — an invented policy detail, a made-up date, a confident wrong answer. This is called **hallucination**, and it's not a bug you can fully patch; it's the flip side of how the technology works.",
-        "This is why agents are given tight system prompts, real tools to fetch real data, and guardrails. Never assume an LLM's answer is true just because it sounds sure. Much of building a **trustworthy** agent is about constraining the brain so its confident guesses stay inside the lines.",
+        "Because an LLM is always producing the most *plausible* continuation, it will sometimes produce something plausible-sounding that is simply **false** — an invented policy detail, a made-up date, a confident wrong answer. This is called **hallucination**, and it's not a bug you can fully patch; it's the flip side of how the technology works.",
+        "This is why agents are given tight system prompts, real tools to fetch real data, and guardrails. Never assume an LLM's answer is true just because it sounds sure. Much of building a *trustworthy* agent is about constraining the brain so its confident guesses stay inside the lines.",
       ],
     },
     {

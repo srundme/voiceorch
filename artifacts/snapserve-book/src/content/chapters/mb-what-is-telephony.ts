@@ -47,7 +47,7 @@ export const whatIsTelephony: Chapter = {
       kind: "concept",
       title: "Webhooks, and inbound vs outbound",
       body: [
-        "Telephony providers talk to our server using **webhooks** — when something happens (a call comes in, a call is answered, a call ends), the provider sends an HTTP request to a URL we gave them, in real time. Our server has routes waiting to handle each event. Webhooks are how the outside world **pushes** events to us instead of us constantly asking 'anything new?'.",
+        "Telephony providers talk to our server using **webhooks** — when something happens (a call comes in, a call is answered, a call ends), the provider sends an HTTP request to a URL we gave them, in real time. Our server has routes waiting to handle each event. Webhooks are how the outside world *pushes* events to us instead of us constantly asking 'anything new?'.",
         "Calls come in two directions. **Inbound**: someone dials the agent's number and the provider rings our server. **Outbound**: our code tells the provider 'please call this number', used for things like appointment reminders and campaigns. The audio plumbing is the same once connected; only who-started-it differs.",
       ],
     },
