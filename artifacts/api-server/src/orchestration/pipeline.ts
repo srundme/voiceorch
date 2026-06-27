@@ -250,6 +250,14 @@ export class OrchestrationPipeline {
 
   // Barge-in state
   private isPlaying = false;
+  /**
+   * True only while playSentence() is actively sending TTS bytes to the carrier.
+   * Distinct from isPlaying (which stays true for the entire turn, including the
+   * inter-sentence wait for the next LLM token).  The ambientInterval uses THIS
+   * flag so ambient audio plays during the silence gap between sentences instead
+   * of leaving the line completely dead while the LLM produces its next chunk.
+   */
+  private isSendingTtsAudio = false;
   private bargeInRequested = false;
   private bargeInCallback: (() => void) | null;
   // Require N consecutive speech frames before triggering barge-in to avoid
@@ -615,10 +623,13 @@ export class OrchestrationPipeline {
           });
       }
       // Send one 20 ms ambient chunk every 20 ms while the agent is silent.
-      // When isPlaying=true playSentence owns the timing, so we skip here to
-      // avoid interleaving two concurrent senders on the same WebSocket.
+      // isSendingTtsAudio=true means playSentence() is actively streaming bytes
+      // to the carrier — skip here to avoid two concurrent senders on the same
+      // WebSocket.  NOTE: we intentionally do NOT gate on isPlaying so that
+      // ambient continues during the inter-sentence gap in playTask (while
+      // waiting for the next LLM token) rather than leaving the line dead.
       this.ambientInterval = setInterval(() => {
-        if (!this.closed && !this.isPlaying && this.ambientStream) {
+        if (!this.closed && !this.isSendingTtsAudio && this.ambientStream) {
           // Emit the encoding the call actually consumes: raw 8 kHz PCM for
           // web calls (rawPcmOutput), mulaw for telephony. Sending mulaw bytes
           // into a raw-PCM stream makes the browser reinterpret them as PCM16
@@ -1490,9 +1501,11 @@ export class OrchestrationPipeline {
     const _pbTurn = this._activeTurnIndex;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
     let _audioDurationMs: number | undefined;
+    this.isSendingTtsAudio = true;
     try {
       _audioDurationMs = await this._playSentenceImpl(text);
     } finally {
+      this.isSendingTtsAudio = false;
       const _pbEvent: PlaybackEvent = this.closed
         ? "Playback Cancelled"
         : this.bargeInRequested
