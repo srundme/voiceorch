@@ -45,3 +45,4 @@ export * from "./admin-impersonation-sessions";
 export * from "./password-reset-otps";
 export * from "./utterances";
 export * from "./crm-connections";
+export * from "./book-progress";

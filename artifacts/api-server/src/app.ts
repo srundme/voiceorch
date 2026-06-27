@@ -97,6 +97,26 @@ if (adminDistPath) {
   }
 }
 
+// Serve "The SnapServe Book" at /snapserve-book/ when BOOK_DIST_PATH is set.
+// Mounted BEFORE the dashboard catch-all so the SPA fallback can't swallow it.
+// NB: served at /snapserve-book/ (NOT /book/, which is the dashboard's public
+// scheduling booking route).
+const bookDistPath = process.env["BOOK_DIST_PATH"];
+if (bookDistPath) {
+  const bookAbs = path.isAbsolute(bookDistPath)
+    ? bookDistPath
+    : path.join(process.cwd(), bookDistPath);
+  if (existsSync(bookAbs)) {
+    logger.info({ bookAbs }, "Serving SnapServe Book at /snapserve-book/");
+    app.use("/snapserve-book", express.static(bookAbs));
+    app.get(/^\/snapserve-book(\/.*)?$/, (_req, res) => {
+      res.sendFile(path.join(bookAbs, "index.html"));
+    });
+  } else {
+    logger.warn({ bookAbs }, "BOOK_DIST_PATH set but directory not found — skipping book static serving");
+  }
+}
+
 // Serve the built React SPA when FRONTEND_DIST_PATH is set (production / Railway)
 const frontendDistPath = process.env["FRONTEND_DIST_PATH"];
 if (frontendDistPath) {
@@ -107,8 +127,9 @@ if (frontendDistPath) {
   if (existsSync(distAbs)) {
     logger.info({ distAbs }, "Serving frontend static files");
     app.use(express.static(distAbs));
-    // SPA fallback — send index.html for any non-/api and non-/admin-ui route
-    app.get(/^\/(?!api|admin-ui).*/, (_req, res) => {
+    // SPA fallback — send index.html for any non-/api, non-/admin-ui and
+    // non-/snapserve-book route.
+    app.get(/^\/(?!api|admin-ui|snapserve-book).*/, (_req, res) => {
       res.sendFile(path.join(distAbs, "index.html"));
     });
   } else {

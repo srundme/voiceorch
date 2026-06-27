@@ -79,6 +79,9 @@ import type {
   BatchWorkspaceKpis,
   BatchWorkspaceLeadsPage,
   BatchWorkspaceSources,
+  BookChapterRef,
+  BookProgress,
+  BookQuizAnswerInput,
   Booking,
   BookingInput,
   BookingMetrics,
@@ -141,6 +144,7 @@ import type {
   GetAgentSnapserveExecutionsParams,
   GetAvailableSlotsParams,
   GetBatchWorkspaceActivityParams,
+  GetBookProgressParams,
   GetCommandCenterActivityStream200,
   GetCommandCenterActivityStreamParams,
   GetCommandCenterLiveOps200,
@@ -20030,5 +20034,302 @@ export const useImportCrmContacts = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getImportCrmContactsMutationOptions(options));
+    }
+
+export const getGetBookProgressUrl = (params: GetBookProgressParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/book/progress?${stringifiedParams}` : `/api/book/progress`
+}
+
+/**
+ * @summary Get reading progress for a device
+ */
+export const getBookProgress = async (params: GetBookProgressParams, options?: RequestInit): Promise<BookProgress> => {
+
+  return customFetch<BookProgress>(getGetBookProgressUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBookProgressQueryKey = (params?: GetBookProgressParams,) => {
+    return [
+    `/api/book/progress`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBookProgressQueryOptions = <TData = Awaited<ReturnType<typeof getBookProgress>>, TError = ErrorType<void>>(params: GetBookProgressParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookProgress>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBookProgressQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBookProgress>>> = ({ signal }) => getBookProgress(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBookProgress>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBookProgressQueryResult = NonNullable<Awaited<ReturnType<typeof getBookProgress>>>
+export type GetBookProgressQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get reading progress for a device
+ */
+
+export function useGetBookProgress<TData = Awaited<ReturnType<typeof getBookProgress>>, TError = ErrorType<void>>(
+ params: GetBookProgressParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookProgress>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBookProgressQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCompleteBookChapterUrl = () => {
+
+
+
+
+  return `/api/book/progress/complete`
+}
+
+/**
+ * @summary Mark a chapter complete for a device
+ */
+export const completeBookChapter = async (bookChapterRef: BookChapterRef, options?: RequestInit): Promise<BookProgress> => {
+
+  return customFetch<BookProgress>(getCompleteBookChapterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookChapterRef,)
+  }
+);}
+
+
+
+
+export const getCompleteBookChapterMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeBookChapter>>, TError,{data: BodyType<BookChapterRef>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeBookChapter>>, TError,{data: BodyType<BookChapterRef>}, TContext> => {
+
+const mutationKey = ['completeBookChapter'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeBookChapter>>, {data: BodyType<BookChapterRef>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  completeBookChapter(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteBookChapterMutationResult = NonNullable<Awaited<ReturnType<typeof completeBookChapter>>>
+    export type CompleteBookChapterMutationBody = BodyType<BookChapterRef>
+    export type CompleteBookChapterMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark a chapter complete for a device
+ */
+export const useCompleteBookChapter = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeBookChapter>>, TError,{data: BodyType<BookChapterRef>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeBookChapter>>,
+        TError,
+        {data: BodyType<BookChapterRef>},
+        TContext
+      > => {
+      return useMutation(getCompleteBookChapterMutationOptions(options));
+    }
+
+export const getUncompleteBookChapterUrl = () => {
+
+
+
+
+  return `/api/book/progress/uncomplete`
+}
+
+/**
+ * @summary Unmark a chapter complete for a device
+ */
+export const uncompleteBookChapter = async (bookChapterRef: BookChapterRef, options?: RequestInit): Promise<BookProgress> => {
+
+  return customFetch<BookProgress>(getUncompleteBookChapterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookChapterRef,)
+  }
+);}
+
+
+
+
+export const getUncompleteBookChapterMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uncompleteBookChapter>>, TError,{data: BodyType<BookChapterRef>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uncompleteBookChapter>>, TError,{data: BodyType<BookChapterRef>}, TContext> => {
+
+const mutationKey = ['uncompleteBookChapter'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uncompleteBookChapter>>, {data: BodyType<BookChapterRef>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  uncompleteBookChapter(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UncompleteBookChapterMutationResult = NonNullable<Awaited<ReturnType<typeof uncompleteBookChapter>>>
+    export type UncompleteBookChapterMutationBody = BodyType<BookChapterRef>
+    export type UncompleteBookChapterMutationError = ErrorType<void>
+
+    /**
+ * @summary Unmark a chapter complete for a device
+ */
+export const useUncompleteBookChapter = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uncompleteBookChapter>>, TError,{data: BodyType<BookChapterRef>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uncompleteBookChapter>>,
+        TError,
+        {data: BodyType<BookChapterRef>},
+        TContext
+      > => {
+      return useMutation(getUncompleteBookChapterMutationOptions(options));
+    }
+
+export const getSaveBookQuizAnswerUrl = () => {
+
+
+
+
+  return `/api/book/progress/quiz`
+}
+
+/**
+ * @summary Save a quiz answer for a device
+ */
+export const saveBookQuizAnswer = async (bookQuizAnswerInput: BookQuizAnswerInput, options?: RequestInit): Promise<BookProgress> => {
+
+  return customFetch<BookProgress>(getSaveBookQuizAnswerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookQuizAnswerInput,)
+  }
+);}
+
+
+
+
+export const getSaveBookQuizAnswerMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveBookQuizAnswer>>, TError,{data: BodyType<BookQuizAnswerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveBookQuizAnswer>>, TError,{data: BodyType<BookQuizAnswerInput>}, TContext> => {
+
+const mutationKey = ['saveBookQuizAnswer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveBookQuizAnswer>>, {data: BodyType<BookQuizAnswerInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveBookQuizAnswer(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveBookQuizAnswerMutationResult = NonNullable<Awaited<ReturnType<typeof saveBookQuizAnswer>>>
+    export type SaveBookQuizAnswerMutationBody = BodyType<BookQuizAnswerInput>
+    export type SaveBookQuizAnswerMutationError = ErrorType<void>
+
+    /**
+ * @summary Save a quiz answer for a device
+ */
+export const useSaveBookQuizAnswer = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveBookQuizAnswer>>, TError,{data: BodyType<BookQuizAnswerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveBookQuizAnswer>>,
+        TError,
+        {data: BodyType<BookQuizAnswerInput>},
+        TContext
+      > => {
+      return useMutation(getSaveBookQuizAnswerMutationOptions(options));
     }
 

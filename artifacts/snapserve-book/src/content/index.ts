@@ -1,161 +1,104 @@
 import type { Chapter, Module, Course } from "./types";
-import { callJourney } from "./chapters/m0-call-journey";
-import { repoMap } from "./chapters/m0-repo-map";
-import { buffersAndBinary } from "./chapters/m1-buffers";
-import { audioTs } from "./chapters/m4-audio";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper to declare a not-yet-written chapter. These still appear in the course
-// outline (so learners see the full roadmap) but render a "coming soon" state.
-// As chapters are authored, replace the stub with a real imported Chapter.
-// ─────────────────────────────────────────────────────────────────────────────
-function soon(
-  moduleId: string,
-  number: string,
-  slug: string,
-  title: string,
-  summary: string,
-  estMinutes = 12,
-  fileRef?: string,
-): Chapter {
-  return { moduleId, number, slug, title, summary, estMinutes, fileRef, status: "coming-soon", blocks: [] };
-}
 
 // ── Module 0 — Orientation ────────────────────────────────────────────────────
-const m0Chapters: Chapter[] = [
-  callJourney,
-  repoMap,
-  soon("m0", "0.3", "how-to-use-this-book", "How to Use This Book",
-    "The 5-part lesson rhythm, how the code panels work, and how to track your progress."),
-];
+import { callJourney } from "./chapters/m0-call-journey";
+import { repoMap } from "./chapters/m0-repo-map";
+import { howToUseThisBook } from "./chapters/m0-how-to-use-this-book";
 
 // ── Module 1 — Node.js & TypeScript Foundations ──────────────────────────────
-const m1Chapters: Chapter[] = [
-  soon("m1", "1.1", "modules-and-imports", "Modules, Imports & the Event Loop",
-    "How Node loads files, what import/export really do, and why JavaScript can do many things 'at once' on one thread."),
-  soon("m1", "1.2", "async-await-promises", "Async, Await & Promises",
-    "The single most important pattern in the codebase: doing slow things (network, DB) without freezing everything else."),
-  buffersAndBinary,
-  soon("m1", "1.4", "typescript-types", "TypeScript: Types Without Tears",
-    "Just enough TypeScript to read SnapServe confidently — interfaces, unions, generics, and the `!` and `?` operators."),
-  soon("m1", "1.5", "classes-and-state", "Classes & Holding State",
-    "When to reach for a class instead of a function, using a real stateful component from the audio engine."),
-];
+import { modulesAndImports } from "./chapters/m1-modules-and-imports";
+import { asyncAwaitPromises } from "./chapters/m1-async-await-promises";
+import { buffersAndBinary } from "./chapters/m1-buffers";
+import { typescriptTypes } from "./chapters/m1-typescript-types";
+import { classesAndState } from "./chapters/m1-classes-and-state";
 
 // ── Module 2 — The Database Layer ────────────────────────────────────────────
-const m2Chapters: Chapter[] = [
-  soon("m2", "2.1", "drizzle-intro", "Meet Drizzle: Tables as TypeScript",
-    "How SnapServe defines ~50 database tables in code, and why the schema is the single source of truth.",
-    12, "lib/db/src/schema/"),
-  soon("m2", "2.2", "users-and-agents", "The Core Tables: Users & Agents",
-    "The two tables everything hangs off of, including the repurposed `clerk_id` Google-sub trick.",
-    14, "lib/db/src/schema/users.ts"),
-  soon("m2", "2.3", "calls-and-providers", "Calls, Providers & Encrypted Keys",
-    "How a call is recorded and how user-supplied API keys are stored encrypted at rest.",
-    14, "lib/db/src/schema/calls.ts"),
-  soon("m2", "2.4", "caller-memory-tables", "Caller Memory: Remembering Who Called",
-    "The phone-keyed tables that let an agent greet a returning caller by name.",
-    16, "lib/db/src/schema/callerProfiles.ts"),
-  soon("m2", "2.5", "migrations", "Migrations: Changing the Schema Safely",
-    "How schema changes reach the database in dev and in production without losing data."),
-];
+import { drizzleIntro } from "./chapters/m2-drizzle-intro";
+import { usersAndAgents } from "./chapters/m2-users-and-agents";
+import { callsAndProviders } from "./chapters/m2-calls-and-providers";
+import { callerMemoryTables } from "./chapters/m2-caller-memory-tables";
+import { migrations } from "./chapters/m2-migrations";
 
 // ── Module 3 — The API Server ────────────────────────────────────────────────
-const m3Chapters: Chapter[] = [
-  soon("m3", "3.1", "express-app", "Express in 20 Minutes",
-    "Requests, responses, routers, and middleware — the four ideas the entire backend is built on.",
-    14, "artifacts/api-server/src/app.ts"),
-  soon("m3", "3.2", "server-bootstrap", "Server Bootstrap: index.ts Line by Line",
-    "How the server starts: binding the port, the WebSocket upgrade handler, migrations, and background workers.",
-    18, "artifacts/api-server/src/index.ts"),
-  soon("m3", "3.3", "contract-first-openapi", "Contract-First: One Spec, Two Codegens",
-    "How the OpenAPI file generates both server validation schemas and frontend data hooks.",
-    16, "lib/api-spec/openapi.yaml"),
-  soon("m3", "3.4", "middleware-and-auth", "Middleware & Authentication",
-    "How a request proves who it is — session JWTs, the `attachSession` middleware, and the admin-token boundary.",
-    16, "artifacts/api-server/src/middlewares/session.ts"),
-  soon("m3", "3.5", "routes-anatomy", "Anatomy of a Route Handler",
-    "Reading one real CRUD route end to end: validate input, check ownership, hit the DB, shape the response.",
-    14, "artifacts/api-server/src/routes/agents.ts"),
-];
+import { expressApp } from "./chapters/m3-express-app";
+import { serverBootstrap } from "./chapters/m3-server-bootstrap";
+import { contractFirstOpenapi } from "./chapters/m3-contract-first-openapi";
+import { middlewareAndAuth } from "./chapters/m3-middleware-and-auth";
+import { routesAnatomy } from "./chapters/m3-routes-anatomy";
 
 // ── Module 4 — The Orchestration Engine ──────────────────────────────────────
-const m4Chapters: Chapter[] = [
-  audioTs,
-  soon("m4", "4.2", "session-and-pipeline", "The Session & the Pipeline",
-    "The object that holds one call's entire state, and the loop that drives every conversational turn.",
-    20, "artifacts/api-server/src/orchestration/pipeline.ts"),
-  soon("m4", "4.3", "endpointing", "Endpointing: Knowing When They're Done",
-    "How the system detects the end of a caller's turn without interrupting them or leaving dead air.",
-    18, "artifacts/api-server/src/orchestration/endpointing.ts"),
-  soon("m4", "4.4", "silero-vad", "Voice Activity Detection with Silero",
-    "The neural net that decides 'is this speech or silence?' in real time.",
-    14, "artifacts/api-server/src/orchestration/silero-vad.ts"),
-];
+import { audioTs } from "./chapters/m4-audio";
+import { sessionAndPipeline } from "./chapters/m4-session-and-pipeline";
+import { endpointing } from "./chapters/m4-endpointing";
+import { sileroVad } from "./chapters/m4-silero-vad";
 
 // ── Module 5 — The Adapters ──────────────────────────────────────────────────
-const m5Chapters: Chapter[] = [
-  soon("m5", "5.1", "adapter-pattern", "The Adapter Pattern: One Interface, Many Vendors",
-    "The design trick that lets SnapServe swap OpenAI for DeepSeek, or Deepgram for Azure, without changing the pipeline.",
-    16),
-  soon("m5", "5.2", "stt-adapters", "Speech-to-Text Adapters",
-    "Streaming transcription over WebSockets — Deepgram, Azure, and the Sarvam Indic-language models.",
-    18),
-  soon("m5", "5.3", "llm-adapters", "LLM Adapters & Tool Calls",
-    "Streaming replies token-by-token, and how the AI triggers actions (booking, transfers) mid-conversation.",
-    18),
-  soon("m5", "5.4", "tts-adapters", "Text-to-Speech Adapters",
-    "Turning the reply into a voice — ElevenLabs, Cartesia, and streaming audio back with minimal latency.",
-    16),
-  soon("m5", "5.5", "fallback-chains", "Fallback Chains: When a Provider Fails",
-    "How the pipeline survives a provider outage mid-call by failing over to a backup.",
-    12),
-];
+import { adapterPattern } from "./chapters/m5-adapter-pattern";
+import { sttAdapters } from "./chapters/m5-stt-adapters";
+import { llmAdapters } from "./chapters/m5-llm-adapters";
+import { ttsAdapters } from "./chapters/m5-tts-adapters";
+import { fallbackChains } from "./chapters/m5-fallback-chains";
 
 // ── Module 6 — Telephony & Web Calls ─────────────────────────────────────────
-const m6Chapters: Chapter[] = [
-  soon("m6", "6.1", "telephony-overview", "Telephony: The Phone-Network Bridge",
-    "How a real phone call becomes a WebSocket of audio frames, and what every provider has in common.",
-    14, "artifacts/api-server/src/orchestration/telephony/"),
-  soon("m6", "6.2", "twilio-deep-dive", "Twilio, Frame by Frame",
-    "Reading the Twilio media-stream protocol and wiring it into the shared pipeline.",
-    16, "artifacts/api-server/src/orchestration/telephony/twilio.ts"),
-  soon("m6", "6.3", "vobiz-and-plivo", "VoBiz & Plivo",
-    "The other two providers, their quirks (byte order, session races), and why audio details matter.",
-    14, "artifacts/api-server/src/orchestration/telephony/vobiz.ts"),
-  soon("m6", "6.4", "webcall", "Web Calls: Testing in the Browser",
-    "The thin WebSocket transport that runs the exact same pipeline from a browser mic — no phone needed.",
-    16, "artifacts/api-server/src/orchestration/telephony/webcall.ts"),
-];
+import { telephonyOverview } from "./chapters/m6-telephony-overview";
+import { twilioDeepDive } from "./chapters/m6-twilio-deep-dive";
+import { vobizAndPlivo } from "./chapters/m6-vobiz-and-plivo";
+import { webcall } from "./chapters/m6-webcall";
 
 // ── Module 7 — The Frontend Dashboard ────────────────────────────────────────
-const m7Chapters: Chapter[] = [
-  soon("m7", "7.1", "react-vite-app", "How the Dashboard Is Built",
-    "React + Vite + Wouter routing, and how the frontend talks to the backend through generated hooks.",
-    14, "artifacts/dashboard/src/App.tsx"),
-  soon("m7", "7.2", "data-hooks", "Data Fetching with Generated Hooks",
-    "Using the auto-generated TanStack Query hooks instead of hand-writing fetch calls.",
-    12, "lib/api-client-react/src/generated/api.ts"),
-  soon("m7", "7.3", "agent-builder", "The Agent Builder",
-    "The multi-step form where users wire up an agent's STT + LLM + TTS + telephony pipeline.",
-    16, "artifacts/dashboard/src/pages/"),
-];
+import { reactViteApp } from "./chapters/m7-react-vite-app";
+import { dataHooks } from "./chapters/m7-data-hooks";
+import { agentBuilder } from "./chapters/m7-agent-builder";
 
 // ── Module 8 — Supporting Systems ────────────────────────────────────────────
-const m8Chapters: Chapter[] = [
-  soon("m8", "8.1", "minute-rates", "Billing: Managed vs BYOP per Call",
-    "How each call's cost and billing mode is resolved at call-end, and where wallet balances live.",
-    16, "artifacts/api-server/src/services/minute-rates.ts"),
-  soon("m8", "8.2", "scheduling", "The Scheduling Engine",
-    "A multi-tenant booking system: calendars, availability, advisory-locked slots, and Google Calendar sync.",
-    18, "artifacts/api-server/src/services/scheduling/"),
-  soon("m8", "8.3", "campaigns", "Outbound Campaigns",
-    "Dialing a list of leads automatically, with retries, scheduling, and answering-machine detection.",
-    16),
-  soon("m8", "8.4", "caller-memory", "Caller Memory End to End",
-    "How facts about a caller are extracted, stored under a canonical phone identity, and recalled next time.",
-    18),
+import { minuteRates } from "./chapters/m8-minute-rates";
+import { scheduling } from "./chapters/m8-scheduling";
+import { campaigns } from "./chapters/m8-campaigns";
+import { callerMemory } from "./chapters/m8-caller-memory";
+
+// Every chapter is authored. Order within each array defines reading order and
+// the module's chapterSlugs (derived below via `.map((c) => c.slug)`).
+const m0Chapters: Chapter[] = [callJourney, repoMap, howToUseThisBook];
+
+const m1Chapters: Chapter[] = [
+  modulesAndImports,
+  asyncAwaitPromises,
+  buffersAndBinary,
+  typescriptTypes,
+  classesAndState,
 ];
+
+const m2Chapters: Chapter[] = [
+  drizzleIntro,
+  usersAndAgents,
+  callsAndProviders,
+  callerMemoryTables,
+  migrations,
+];
+
+const m3Chapters: Chapter[] = [
+  expressApp,
+  serverBootstrap,
+  contractFirstOpenapi,
+  middlewareAndAuth,
+  routesAnatomy,
+];
+
+const m4Chapters: Chapter[] = [audioTs, sessionAndPipeline, endpointing, sileroVad];
+
+const m5Chapters: Chapter[] = [
+  adapterPattern,
+  sttAdapters,
+  llmAdapters,
+  ttsAdapters,
+  fallbackChains,
+];
+
+const m6Chapters: Chapter[] = [telephonyOverview, twilioDeepDive, vobizAndPlivo, webcall];
+
+const m7Chapters: Chapter[] = [reactViteApp, dataHooks, agentBuilder];
+
+const m8Chapters: Chapter[] = [minuteRates, scheduling, campaigns, callerMemory];
 
 export const modules: Module[] = [
   {

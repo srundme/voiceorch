@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useProgressStore } from "@/hooks/use-progress";
 import NotFound from "@/pages/not-found";
 
 // Pages
@@ -23,6 +25,12 @@ function Router() {
 }
 
 function App() {
+  const initializeProgress = useProgressStore((s) => s.initializeProgress);
+
+  useEffect(() => {
+    void initializeProgress();
+  }, [initializeProgress]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

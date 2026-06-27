@@ -60,6 +60,7 @@ import docsRouter from "./docs.js";
 import callbacksRouter from "./callbacks.js";
 import connectionsRouter from "./connections.js";
 import crmRouter from "./crm.js";
+import bookRouter from "./book.js";
 import { provisionUser } from "../middlewares/userProvisioning.js";
 
 const router: IRouter = Router();
@@ -90,6 +91,9 @@ router.use(authRouter);
 // Public utility routes — no auth required
 router.use(voicesRouter);
 router.use(utilsRouter);
+
+// Public book progress routes — anonymous per-device, no session required
+router.use(bookRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);

@@ -60,6 +60,8 @@ tags:
     description: Connections hub — inbound lead source management, listen mode, and HMAC config
   - name: crm
     description: CRM connectors — HubSpot and Zoho OAuth connect, contact import, and call-outcome writeback
+  - name: book
+    description: The SnapServe Book — anonymous per-device reading progress
 
 paths:
   /healthz:
@@ -6045,6 +6047,91 @@ paths:
         "404":
           description: Connection or campaign not found
 
+  # ── The SnapServe Book (anonymous per-device progress, no auth) ───────────────
+  /book/progress:
+    get:
+      operationId: getBookProgress
+      tags: [book]
+      summary: Get reading progress for a device
+      parameters:
+        - name: deviceId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Progress for the device (empty defaults on first visit)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookProgress"
+        "400":
+          description: Invalid deviceId
+
+  /book/progress/complete:
+    post:
+      operationId: completeBookChapter
+      tags: [book]
+      summary: Mark a chapter complete for a device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookChapterRef"
+      responses:
+        "200":
+          description: Updated progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookProgress"
+        "400":
+          description: Validation error
+
+  /book/progress/uncomplete:
+    post:
+      operationId: uncompleteBookChapter
+      tags: [book]
+      summary: Unmark a chapter complete for a device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookChapterRef"
+      responses:
+        "200":
+          description: Updated progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookProgress"
+        "400":
+          description: Validation error
+
+  /book/progress/quiz:
+    post:
+      operationId: saveBookQuizAnswer
+      tags: [book]
+      summary: Save a quiz answer for a device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookQuizAnswerInput"
+      responses:
+        "200":
+          description: Updated progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookProgress"
+        "400":
+          description: Validation error
+
 components:
   parameters:
     AdminToken:
@@ -6054,6 +6141,32 @@ components:
       schema: { type: string }
       description: Platform admin token (matches ADMIN_TOKEN env var).
   schemas:
+    BookProgress:
+      type: object
+      required: [deviceId, completedChapters, quizAnswers]
+      properties:
+        deviceId: { type: string }
+        completedChapters:
+          type: array
+          items: { type: string }
+        quizAnswers:
+          type: object
+          additionalProperties: { type: integer }
+          description: Map of "<chapterSlug>_<questionIndex>" to the chosen answer index.
+    BookChapterRef:
+      type: object
+      required: [deviceId, slug]
+      properties:
+        deviceId: { type: string }
+        slug: { type: string }
+    BookQuizAnswerInput:
+      type: object
+      required: [deviceId, chapterSlug, questionIndex, answerIndex]
+      properties:
+        deviceId: { type: string }
+        chapterSlug: { type: string }
+        questionIndex: { type: integer }
+        answerIndex: { type: integer }
     PromptTemplate:
       type: object
       required: [id, version, isActive, filename, mimeType, sizeBytes, createdAt]

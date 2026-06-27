@@ -6238,3 +6238,64 @@ export const ImportCrmContactsResponse = zod.object({
 })
 
 
+/**
+ * @summary Get reading progress for a device
+ */
+export const GetBookProgressQueryParams = zod.object({
+  "deviceId": zod.coerce.string()
+})
+
+export const GetBookProgressResponse = zod.object({
+  "deviceId": zod.string(),
+  "completedChapters": zod.array(zod.string()),
+  "quizAnswers": zod.record(zod.string(), zod.number()).describe('Map of \"<chapterSlug>_<questionIndex>\" to the chosen answer index.')
+})
+
+
+/**
+ * @summary Mark a chapter complete for a device
+ */
+export const CompleteBookChapterBody = zod.object({
+  "deviceId": zod.string(),
+  "slug": zod.string()
+})
+
+export const CompleteBookChapterResponse = zod.object({
+  "deviceId": zod.string(),
+  "completedChapters": zod.array(zod.string()),
+  "quizAnswers": zod.record(zod.string(), zod.number()).describe('Map of \"<chapterSlug>_<questionIndex>\" to the chosen answer index.')
+})
+
+
+/**
+ * @summary Unmark a chapter complete for a device
+ */
+export const UncompleteBookChapterBody = zod.object({
+  "deviceId": zod.string(),
+  "slug": zod.string()
+})
+
+export const UncompleteBookChapterResponse = zod.object({
+  "deviceId": zod.string(),
+  "completedChapters": zod.array(zod.string()),
+  "quizAnswers": zod.record(zod.string(), zod.number()).describe('Map of \"<chapterSlug>_<questionIndex>\" to the chosen answer index.')
+})
+
+
+/**
+ * @summary Save a quiz answer for a device
+ */
+export const SaveBookQuizAnswerBody = zod.object({
+  "deviceId": zod.string(),
+  "chapterSlug": zod.string(),
+  "questionIndex": zod.number(),
+  "answerIndex": zod.number()
+})
+
+export const SaveBookQuizAnswerResponse = zod.object({
+  "deviceId": zod.string(),
+  "completedChapters": zod.array(zod.string()),
+  "quizAnswers": zod.record(zod.string(), zod.number()).describe('Map of \"<chapterSlug>_<questionIndex>\" to the chosen answer index.')
+})
+
+

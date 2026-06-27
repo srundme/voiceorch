@@ -5,6 +5,30 @@
  * VoiceOrch - AI Voice Agent Orchestration Platform API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Map of "<chapterSlug>_<questionIndex>" to the chosen answer index.
+ */
+export type BookProgressQuizAnswers = {[key: string]: number};
+
+export interface BookProgress {
+  deviceId: string;
+  completedChapters: string[];
+  /** Map of "<chapterSlug>_<questionIndex>" to the chosen answer index. */
+  quizAnswers: BookProgressQuizAnswers;
+}
+
+export interface BookChapterRef {
+  deviceId: string;
+  slug: string;
+}
+
+export interface BookQuizAnswerInput {
+  deviceId: string;
+  chapterSlug: string;
+  questionIndex: number;
+  answerIndex: number;
+}
+
 export interface PromptTemplate {
   id: number;
   version: number;
@@ -5088,5 +5112,9 @@ limit?: number;
  * Filter contacts to a specific list (HubSpot) or view (Zoho)
  */
 listId?: string;
+};
+
+export type GetBookProgressParams = {
+deviceId: string;
 };
 

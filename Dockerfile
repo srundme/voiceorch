@@ -12,6 +12,7 @@ COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
 COPY artifacts/dashboard/package.json ./artifacts/dashboard/
 COPY artifacts/admin/package.json ./artifacts/admin/
+COPY artifacts/snapserve-book/package.json ./artifacts/snapserve-book/
 
 RUN pnpm install --frozen-lockfile
 
@@ -19,10 +20,15 @@ COPY lib/ ./lib/
 COPY artifacts/api-server/ ./artifacts/api-server/
 COPY artifacts/dashboard/ ./artifacts/dashboard/
 COPY artifacts/admin/ ./artifacts/admin/
+COPY artifacts/snapserve-book/ ./artifacts/snapserve-book/
 
 RUN PORT=3000 BASE_PATH=/ pnpm --filter @workspace/dashboard run build
 
 RUN PORT=3000 BASE_PATH=/admin-ui/ pnpm --filter @workspace/admin run build
+
+# The SnapServe Book — served at /snapserve-book/ (NOT /book/, the dashboard
+# public booking route). Static SPA; built here, served by the api-server.
+RUN PORT=3000 BASE_PATH=/snapserve-book/ pnpm --filter @workspace/snapserve-book run build
 
 RUN pnpm --filter @workspace/api-server run build
 
@@ -48,11 +54,13 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /workspace/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /workspace/artifacts/dashboard/dist ./artifacts/dashboard/dist
 COPY --from=builder /workspace/artifacts/admin/dist ./artifacts/admin/dist
+COPY --from=builder /workspace/artifacts/snapserve-book/dist ./artifacts/snapserve-book/dist
 COPY --from=builder /workspace/lib/db/drizzle ./lib/db/drizzle
 
 ENV NODE_ENV=production
 ENV FRONTEND_DIST_PATH=artifacts/dashboard/dist/public
 ENV ADMIN_DIST_PATH=artifacts/admin/dist/public
+ENV BOOK_DIST_PATH=artifacts/snapserve-book/dist/public
 
 EXPOSE 8080
 
