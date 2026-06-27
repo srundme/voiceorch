@@ -41,6 +41,10 @@ import { endpointing } from "./chapters/m4-endpointing";
 import { sileroVad } from "./chapters/m4-silero-vad";
 import { bargeInAndEcho } from "./chapters/m4-barge-in-and-echo";
 import { turnSafetyNet } from "./chapters/m4-turn-safety-net";
+import { toolExecution } from "./chapters/m4-tool-execution";
+import { amdVoicemail } from "./chapters/m4-amd-voicemail";
+import { callRecording } from "./chapters/m4-recording";
+import { postCallAi } from "./chapters/m4-post-call-ai";
 
 // ── Module 6 — The Adapters ──────────────────────────────────────────────────
 import { adapterPattern } from "./chapters/m5-adapter-pattern";
@@ -55,6 +59,8 @@ import { telephonyOverview } from "./chapters/m6-telephony-overview";
 import { twilioDeepDive } from "./chapters/m6-twilio-deep-dive";
 import { vobizAndPlivo } from "./chapters/m6-vobiz-and-plivo";
 import { webcall } from "./chapters/m6-webcall";
+import { outboundCalls } from "./chapters/m6-outbound-calls";
+import { autoRedial } from "./chapters/m6-auto-redial";
 
 // ── Module 8 — The Frontend Dashboard ────────────────────────────────────────
 import { reactViteApp } from "./chapters/m7-react-vite-app";
@@ -68,6 +74,25 @@ import { campaigns } from "./chapters/m8-campaigns";
 import { callerMemory } from "./chapters/m8-caller-memory";
 import { complianceInjection } from "./chapters/m8-compliance-injection";
 import { memoryGuards } from "./chapters/m8-memory-guards";
+
+// ── Module 10 — AI Tools & Agentic Behaviour ─────────────────────────────────
+import { toolsDispatch } from "./chapters/m9-tools-dispatch";
+import { knowledgeBase } from "./chapters/m9-knowledge-base";
+import { stagedPrompts } from "./chapters/m9-staged-prompts";
+
+// ── Module 11 — Billing & Wallets ────────────────────────────────────────────
+import { walletSystem } from "./chapters/m10-wallet";
+import { billingModes } from "./chapters/m10-billing-modes";
+
+// ── Module 12 — Deployment & Operations ──────────────────────────────────────
+import { railwayDeployment } from "./chapters/m11-railway";
+import { secretsAndEnv } from "./chapters/m11-secrets";
+import { productionOps } from "./chapters/m11-ops";
+
+// ── Module 13 — Speaker Intelligence ─────────────────────────────────────────
+import { genderDetection } from "./chapters/m12-gender-detection";
+import { speakerRecognition } from "./chapters/m12-speaker-recognition";
+import { inCallSpeakerVerify } from "./chapters/m12-speaker-verify";
 
 // Every chapter is authored. Order within each array defines reading order and
 // the module's chapterSlugs (derived below via `.map((c) => c.slug)`).
@@ -113,6 +138,10 @@ const m4Chapters: Chapter[] = [
   sileroVad,
   bargeInAndEcho,
   turnSafetyNet,
+  toolExecution,
+  amdVoicemail,
+  callRecording,
+  postCallAi,
 ];
 
 const m5Chapters: Chapter[] = [
@@ -124,7 +153,14 @@ const m5Chapters: Chapter[] = [
   httpKeepalivePool,
 ];
 
-const m6Chapters: Chapter[] = [telephonyOverview, twilioDeepDive, vobizAndPlivo, webcall];
+const m6Chapters: Chapter[] = [
+  telephonyOverview,
+  twilioDeepDive,
+  vobizAndPlivo,
+  webcall,
+  outboundCalls,
+  autoRedial,
+];
 
 const m7Chapters: Chapter[] = [reactViteApp, dataHooks, agentBuilder];
 
@@ -135,6 +171,29 @@ const m8Chapters: Chapter[] = [
   callerMemory,
   complianceInjection,
   memoryGuards,
+];
+
+const m9Chapters: Chapter[] = [
+  toolsDispatch,
+  knowledgeBase,
+  stagedPrompts,
+];
+
+const m10Chapters: Chapter[] = [
+  walletSystem,
+  billingModes,
+];
+
+const m11Chapters: Chapter[] = [
+  railwayDeployment,
+  secretsAndEnv,
+  productionOps,
+];
+
+const m12Chapters: Chapter[] = [
+  genderDetection,
+  speakerRecognition,
+  inCallSpeakerVerify,
 ];
 
 export const modules: Module[] = [
@@ -188,7 +247,7 @@ export const modules: Module[] = [
     title: "The Orchestration Engine",
     tagline: "The real-time heart of a live call.",
     description:
-      "The hardest and most rewarding module. How audio is decoded, how a session drives the turn loop, and how the system knows when a caller has finished speaking.",
+      "The hardest and most rewarding module. How audio is decoded, how a session drives the turn loop, when the system knows the caller has finished speaking, how tools fire, how calls are recorded, and what happens after the line drops.",
     icon: "Waves",
     chapterSlugs: m4Chapters.map((c) => c.slug),
   },
@@ -206,7 +265,7 @@ export const modules: Module[] = [
     title: "Telephony & Web Calls",
     tagline: "Where the phone line meets the code.",
     description:
-      "How real phone calls from Twilio, Plivo, and VoBiz — plus browser-based web calls — all become the same stream of audio frames the pipeline consumes.",
+      "How real phone calls from Twilio, Plivo, and VoBiz — plus browser-based web calls — all become the same stream of audio frames. Plus: how SnapServe makes outbound calls, handles no-answers, and auto-redials dropped conversations.",
     icon: "Phone",
     chapterSlugs: m6Chapters.map((c) => c.slug),
   },
@@ -224,9 +283,45 @@ export const modules: Module[] = [
     title: "Supporting Systems",
     tagline: "Billing, scheduling, campaigns & memory.",
     description:
-      "The systems built around the call loop that turn a demo into a product: per-call billing, the scheduling engine, outbound campaigns, and long-term caller memory.",
+      "The systems built around the call loop that turn a demo into a product: per-call billing, the scheduling engine, outbound campaigns, long-term caller memory, and compliance.",
     icon: "Layers",
     chapterSlugs: m8Chapters.map((c) => c.slug),
+  },
+  {
+    id: "m9", slug: "ai-tools-agentic", number: "10",
+    title: "AI Tools & Agentic Behaviour",
+    tagline: "When the agent does more than talk.",
+    description:
+      "How SnapServe agents take real-world actions mid-call: the tool dispatch system, how knowledge bases are built and searched with PostgreSQL FTS, and how the system prompt is staged and managed to stay within the LLM's context budget.",
+    icon: "Zap",
+    chapterSlugs: m9Chapters.map((c) => c.slug),
+  },
+  {
+    id: "m10", slug: "billing-wallets", number: "11",
+    title: "Billing & Wallets",
+    tagline: "How every call gets priced and paid for.",
+    description:
+      "The prepaid wallet model, the append-only transaction ledger, and the dynamic billing mode resolver that determines whether each call is billed at the managed rate or the BYOP orchestration-only rate.",
+    icon: "CreditCard",
+    chapterSlugs: m10Chapters.map((c) => c.slug),
+  },
+  {
+    id: "m11", slug: "deployment-ops", number: "12",
+    title: "Deployment & Operations",
+    tagline: "From code edit to production call in minutes.",
+    description:
+      "How SnapServe ships to production via Docker multi-stage builds and Railway's GitHub-triggered deploys, how secrets are managed, and how to debug production issues, apply schema changes, and run admin scripts safely.",
+    icon: "Rocket",
+    chapterSlugs: m11Chapters.map((c) => c.slug),
+  },
+  {
+    id: "m12", slug: "speaker-intelligence", number: "13",
+    title: "Speaker Intelligence",
+    tagline: "The platform that knows who's on the line.",
+    description:
+      "The Python sidecar that analyses caller voices in real time: MFCC-based gender detection, ECAPA-TDNN speaker recognition for voiceprint enrollment and verification, and in-call mid-conversation speaker change detection for compliance.",
+    icon: "Mic",
+    chapterSlugs: m12Chapters.map((c) => c.slug),
   },
 ];
 
@@ -241,6 +336,10 @@ const allChapters: Chapter[] = [
   ...m6Chapters,
   ...m7Chapters,
   ...m8Chapters,
+  ...m9Chapters,
+  ...m10Chapters,
+  ...m11Chapters,
+  ...m12Chapters,
 ];
 
 export const course: Course = {
