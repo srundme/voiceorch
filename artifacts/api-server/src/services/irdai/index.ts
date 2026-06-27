@@ -20,7 +20,9 @@ export type IrdaiRequirement =
   | "no_guaranteed_outcomes"
   | "indicative_quotes"
   | "grievance_redressal"
-  | "human_handoff_claims";
+  | "human_handoff_claims"
+  /** TRAI 1600-series outbound caller-ID mandate for BFSI/insurance service calls. */
+  | "caller_number_1600";
 
 export interface IrdaiComplianceItem {
   requirement: IrdaiRequirement;
@@ -98,12 +100,67 @@ const CHECKS: Array<{
 /**
  * Run the IRDAI disclosure checklist against a saved system prompt. Returns one
  * `IrdaiComplianceItem` per checklist item. Pure; never throws.
+ *
+ * @param systemPromptText The agent's saved system prompt.
+ * @param fromNumber       Optional: the agent's configured outbound number.
+ *   When provided, an additional `caller_number_1600` item is included that
+ *   checks whether the number is a TRAI-mandated 1600-series service number.
  */
-export function checkIrdaiCompliance(systemPromptText: string | null | undefined): IrdaiComplianceItem[] {
+export function checkIrdaiCompliance(
+  systemPromptText: string | null | undefined,
+  fromNumber?: string | null,
+): IrdaiComplianceItem[] {
   const p = (systemPromptText ?? "").toLowerCase();
-  return CHECKS.map(({ requirement, detail, present }) => ({
+  const results: IrdaiComplianceItem[] = CHECKS.map(({ requirement, detail, present }) => ({
     requirement,
     status: present(p) ? ("present" as const) : ("missing" as const),
     detail,
   }));
+
+  // 1600-series number check — only included when a fromNumber is supplied.
+  // TRAI mandates that BFSI/insurance service calls use a 1600-series caller ID
+  // (not the 140-series promotional series). This is an operational requirement
+  // that cannot be verified from the prompt alone — it depends on which number is
+  // registered and assigned to the agent.
+  if (fromNumber !== undefined && fromNumber !== null) {
+    const digits = fromNumber.replace(/\D/g, "");
+    const is1600 = digits.startsWith("1600");
+    results.push({
+      requirement: "caller_number_1600" as IrdaiRequirement,
+      status: is1600 ? "present" : "missing",
+      detail: is1600
+        ? ""
+        : `Outbound number (${fromNumber}) is not a 1600-series service number. TRAI requires BFSI/insurance service calls to originate from a 1600-prefix caller ID registered with your TRAI entity. Procurement must be completed with your telecom operator and registered on the TRAI DLT portal before going live.`,
+    });
+  }
+
+  return results;
+}
+
+// ── Mandatory AI-identity disclosure injection ────────────────────────────────
+
+/**
+ * Inject the IRDAI/RBI-mandated AI-identity disclosure into a system prompt.
+ *
+ * IRDAI's 2024-25 guidelines and RBI's guidelines on automated customer
+ * interactions both require that the AI disclose its nature at the very start
+ * of every interaction. This function appends a mandatory, speech-optimised
+ * instruction block so the LLM always opens with the required statement —
+ * regardless of how the human-written prompt is worded.
+ *
+ * Must be applied AFTER any TRAI/DPDP disclosures so it sits last (nearest to
+ * the conversation context), where modern LLMs weight it most strongly.
+ *
+ * Pure function. Never throws.
+ *
+ * @param basePrompt   The fully assembled system prompt (including any prior
+ *                     DPDP/TRAI injections).
+ * @param insurerName  Optional insurer or company name to include in the
+ *                     disclosure. Defaults to "the company" when omitted.
+ */
+export function appendIrdaiAiDisclosure(basePrompt: string, insurerName?: string | null): string {
+  const entity = (insurerName ?? "").trim() || "the company";
+  return `${basePrompt}
+
+[IRDAI/RBI COMPLIANCE — MANDATORY AI IDENTITY DISCLOSURE] At the VERY FIRST turn of this call — before any greeting, question, or sales pitch — you MUST say the following statement verbatim (adapt only the language/script if the caller speaks a different language, but preserve all required elements): "Hello. I am an AI-powered voice assistant calling on behalf of ${entity}. This call is being recorded for quality assurance, regulatory compliance, and grievance purposes as required by IRDAI guidelines. You may ask to speak with a human representative at any time." Do NOT proceed to any other topic until this disclosure has been delivered. If the caller immediately asks a question before you have spoken, deliver the disclosure first, then address their question.`;
 }

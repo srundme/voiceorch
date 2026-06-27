@@ -22,6 +22,7 @@ import {
   callRecordingsTable,
   dpdpCallComplianceLogTable,
   dpdpErasureRequestsTable,
+  agentsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { normalizePhone } from "../../lib/phone-normalize.js";
@@ -149,23 +150,59 @@ export async function processErasureRequest(
 }
 
 /**
+ * IRDAI/RBI mandatory minimum recording retention: 6 months (180 days).
+ *
+ * DPDP wants to anonymize PII after `retentionDays`; IRDAI/RBI require
+ * recordings to EXIST for at least 180 days. These are in direct conflict when
+ * `retentionDays < 180`. Resolution: for any call whose agent had IRDAI enabled,
+ * the effective retention is max(retentionDays, IRDAI_MIN_RETENTION_DAYS). The
+ * DPDP sweep respects this floor — it will not anonymize IRDAI-covered calls
+ * until both windows have passed.
+ */
+const IRDAI_MIN_RETENTION_DAYS = 180;
+
+/**
  * Daily retention sweep: anonymize PII on DPDP-enabled calls older than
  * `retentionDays`. A call counts as DPDP-enabled if it has a
  * `dpdp_call_compliance_log` row. Best-effort; never throws.
+ *
+ * Retention-conflict resolution: calls belonging to agents with
+ * `agentConfig.compliance.irdai = true` are subject to an IRDAI minimum
+ * retention window of 180 days — they will not be anonymized until
+ * max(retentionDays, 180) days have elapsed, even if `retentionDays` is
+ * shorter. After the IRDAI window expires, DPDP anonymization proceeds
+ * normally.
  */
 export async function anonymizeExpiredDpdpCalls(retentionDays: number): Promise<number> {
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  // Separate cutoff for IRDAI-covered calls (max of the two retention windows).
+  const irdaiCutoff = new Date(
+    Date.now() - Math.max(retentionDays, IRDAI_MIN_RETENTION_DAYS) * 24 * 60 * 60 * 1000,
+  );
   try {
-    // A call is DPDP-enabled iff it has a dpdp_call_compliance_log row. Filter
-    // age + not-yet-redacted predicates in JS to keep the query portable and
-    // avoid re-processing already-anonymized rows.
+    // A call is DPDP-enabled iff it has a dpdp_call_compliance_log row. Also
+    // join agents so we can apply the IRDAI retention floor per-call.
     const rows = await db
-      .select({ id: callsTable.id, createdAt: callsTable.createdAt, toNumber: callsTable.toNumber })
+      .select({
+        id: callsTable.id,
+        createdAt: callsTable.createdAt,
+        toNumber: callsTable.toNumber,
+        agentConfig: agentsTable.agentConfig,
+      })
       .from(callsTable)
-      .innerJoin(dpdpCallComplianceLogTable, eq(dpdpCallComplianceLogTable.callId, callsTable.id));
+      .innerJoin(dpdpCallComplianceLogTable, eq(dpdpCallComplianceLogTable.callId, callsTable.id))
+      .leftJoin(agentsTable, eq(agentsTable.id, callsTable.agentId));
 
     const toAnonymize = rows
-      .filter((r) => r.createdAt < cutoff && r.toNumber !== REDACTED)
+      .filter((r) => {
+        if (r.toNumber === REDACTED) return false; // already anonymized
+        // Check if the call's agent currently has IRDAI enabled.
+        const cfg = r.agentConfig as { compliance?: { irdai?: boolean } } | null;
+        const irdaiEnabled = !!cfg?.compliance?.irdai;
+        // Apply the stricter cutoff for IRDAI-covered calls.
+        const effectiveCutoff = irdaiEnabled ? irdaiCutoff : cutoff;
+        return r.createdAt < effectiveCutoff;
+      })
       .map((r) => r.id);
 
     if (toAnonymize.length === 0) return 0;

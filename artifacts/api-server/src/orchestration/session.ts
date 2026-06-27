@@ -23,6 +23,7 @@ import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
+import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import {
   humanPhone,
   canonicalizeCallerKey,
@@ -215,6 +216,14 @@ export async function createSession(params: {
   }
   if (complianceCfg?.trai) {
     effectiveSystemPrompt = appendTraiDisclosure(effectiveSystemPrompt);
+  }
+  // IRDAI/RBI mandatory AI-identity disclosure. Applied last so it sits closest
+  // to the conversation context (where modern LLMs weight it most strongly).
+  // The insurer name is taken from the agent's IRDAI-specific config field;
+  // falls back to the agent name, then a generic "the company" sentinel.
+  if (complianceCfg?.irdai) {
+    const irdaiInsurer = (agentCfg["irdaiInsurerName"] as string | undefined) ?? agent.name ?? null;
+    effectiveSystemPrompt = appendIrdaiAiDisclosure(effectiveSystemPrompt, irdaiInsurer);
   }
 
   const agentConfig: AgentConfig = {
