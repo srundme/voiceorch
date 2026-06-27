@@ -100,6 +100,11 @@ export const agentFormSchema = z.object({
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
   linearDelayMs: z.number().min(0).max(2000).optional(),
 
+  // Auto-redial on drop
+  autoRedialEnabled:      z.boolean().optional(),
+  autoRedialDelayMinutes: z.number().min(1).max(60).optional(),
+  autoRedialMaxAttempts:  z.number().min(1).max(10).optional(),
+
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });

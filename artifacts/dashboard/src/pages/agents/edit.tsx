@@ -71,6 +71,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     ambientNoiseEnabled, ambientNoiseTrack,
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
+    autoRedialEnabled, autoRedialDelayMinutes, autoRedialMaxAttempts,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -97,6 +98,11 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
+  agentConfig["autoRedial"] = {
+    enabled:      !!autoRedialEnabled,
+    delayMinutes: autoRedialDelayMinutes ?? 2,
+    maxAttempts:  autoRedialMaxAttempts  ?? 3,
+  };
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
     onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0,
@@ -330,6 +336,9 @@ export default function AgentEdit() {
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
+      autoRedialEnabled: false,
+      autoRedialDelayMinutes: 2,
+      autoRedialMaxAttempts: 3,
     },
   });
 
@@ -537,6 +546,9 @@ export default function AgentEdit() {
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
+      autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
+      autoRedialDelayMinutes: ((agent as any).agentConfig?.autoRedial?.delayMinutes as number | undefined) ?? 2,
+      autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
     });
   }, [agent]);
 

@@ -24,6 +24,7 @@ import { disposeCall } from "../services/disposition.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
+import { scheduleNoAnswerRedial } from "../services/autoRedial.js";
 import {
   humanPhone,
   canonicalizeCallerKey,
@@ -1186,6 +1187,25 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           .catch((scanErr) => {
             logger.warn({ sessionId, scanErr }, "DPDP post-call PII scan failed");
           });
+      }
+
+      // ── Auto-redial on unexpected drop ───────────────────────────────────────
+      // If the agent has autoRedial enabled and the call ended without a natural
+      // goodbye (user hangup / network drop), schedule a callback.  Fires even
+      // for very short calls so testing any feature works end-to-end.
+      const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
+      const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred;
+      if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && session.callerPhone) {
+        void scheduleNoAnswerRedial({
+          agentId:               ag.id,
+          toNumber:              session.callerPhone,
+          userId:                ag.userId ?? null,
+          callId:                session.callId,
+          maxAttempts:           autoRedialCfg.maxAttempts ?? 3,
+          redialIntervalMinutes: autoRedialCfg.delayMinutes ?? 2,
+        }).catch((rdErr) => {
+          logger.warn({ sessionId, rdErr }, "Auto-redial scheduling failed");
+        });
       }
 
       // ── Record per-service usage events (STT / LLM / TTS) ────────────────────
