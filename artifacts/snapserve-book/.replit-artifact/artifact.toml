@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/snapserve-book/"
+title = "The SnapServe Book"
+version = "1.0.0"
+id = "artifacts/snapserve-book"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/snapserve-book/" ]
+localPort = 19304
+
+[services.development]
+run = "pnpm --filter @workspace/snapserve-book run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/snapserve-book", "run", "build" ]
+publicDir = "artifacts/snapserve-book/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19304"
+BASE_PATH = "/snapserve-book/"

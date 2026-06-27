@@ -221,7 +221,6 @@ const MODULE_MAP: Array<{ name: string; patterns: string[] }> = [
   { name: "Campaigns",               patterns: ["routes/campaign", "services/batch"] },
   { name: "Dashboard",               patterns: ["dashboard/src/", "routes/analytics", "routes/agents"] },
   { name: "Voice Analysis (ML)",     patterns: ["gender-service/", "voice-intel"] },
-  { name: "Family App",              patterns: ["family-app/", "family-mobile/"] },
   { name: "Database / Migrations",   patterns: ["lib/db/", "drizzle/", "schema/"] },
   { name: "Knowledge Base",          patterns: ["routes/knowledge-base", "orchestration/kb"] },
   { name: "Providers / BYOP",        patterns: ["routes/providers", "services/minute-rates"] },

@@ -13,8 +13,6 @@ COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
 COPY artifacts/dashboard/package.json ./artifacts/dashboard/
 COPY artifacts/admin/package.json ./artifacts/admin/
-COPY artifacts/family-app/package.json ./artifacts/family-app/
-COPY artifacts/family-mobile/package.json ./artifacts/family-mobile/
 COPY artifacts/gender-service/package.json ./artifacts/gender-service/
 COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
 COPY artifacts/pitch-deck/package.json ./artifacts/pitch-deck/
