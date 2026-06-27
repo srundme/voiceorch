@@ -100,6 +100,8 @@ import type {
   CallbackMetrics,
   CallbackRescheduleRequest,
   CallbacksPage,
+  CallerContact,
+  CallerDetail,
   Campaign,
   CampaignAnalytics,
   CampaignBatch,
@@ -1597,6 +1599,165 @@ export const useDeleteCallerFact = <TError = ErrorType<void>,
       > => {
       return useMutation(getDeleteCallerFactMutationOptions(options));
     }
+
+export const getListAgentCallersUrl = (id: number,) => {
+
+
+
+
+  return `/api/agents/${id}/caller-memory`
+}
+
+/**
+ * @summary List all callers tracked for this agent, newest-called first
+ */
+export const listAgentCallers = async (id: number, options?: RequestInit): Promise<CallerContact[]> => {
+
+  return customFetch<CallerContact[]>(getListAgentCallersUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentCallersQueryKey = (id: number,) => {
+    return [
+    `/api/agents/${id}/caller-memory`
+    ] as const;
+    }
+
+
+export const getListAgentCallersQueryOptions = <TData = Awaited<ReturnType<typeof listAgentCallers>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentCallers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentCallersQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentCallers>>> = ({ signal }) => listAgentCallers(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentCallers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentCallersQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentCallers>>>
+export type ListAgentCallersQueryError = ErrorType<void>
+
+
+/**
+ * @summary List all callers tracked for this agent, newest-called first
+ */
+
+export function useListAgentCallers<TData = Awaited<ReturnType<typeof listAgentCallers>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentCallers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentCallersQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCallerDetailUrl = (id: number,
+    phone: string,) => {
+
+
+
+
+  return `/api/agents/${id}/caller-memory/${phone}`
+}
+
+/**
+ * @summary Full memory detail for one caller — current facts with history chains, episodes with sentences
+ */
+export const getCallerDetail = async (id: number,
+    phone: string, options?: RequestInit): Promise<CallerDetail> => {
+
+  return customFetch<CallerDetail>(getGetCallerDetailUrl(id,phone),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCallerDetailQueryKey = (id: number,
+    phone: string,) => {
+    return [
+    `/api/agents/${id}/caller-memory/${phone}`
+    ] as const;
+    }
+
+
+export const getGetCallerDetailQueryOptions = <TData = Awaited<ReturnType<typeof getCallerDetail>>, TError = ErrorType<void>>(id: number,
+    phone: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallerDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCallerDetailQueryKey(id,phone);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCallerDetail>>> = ({ signal }) => getCallerDetail(id,phone, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && phone), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCallerDetail>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCallerDetailQueryResult = NonNullable<Awaited<ReturnType<typeof getCallerDetail>>>
+export type GetCallerDetailQueryError = ErrorType<void>
+
+
+/**
+ * @summary Full memory detail for one caller — current facts with history chains, episodes with sentences
+ */
+
+export function useGetCallerDetail<TData = Awaited<ReturnType<typeof getCallerDetail>>, TError = ErrorType<void>>(
+ id: number,
+    phone: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallerDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCallerDetailQueryOptions(id,phone,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListAgentMemoryEpisodesUrl = (id: number,) => {
 

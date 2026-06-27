@@ -27,9 +27,12 @@ import {
   useListAgents, getListAgentsQueryKey,
   useUpdateAgent,
   useDeleteCallerFact,
+  useListAgentCallers, getListAgentCallersQueryKey,
+  useGetCallerDetail, getGetCallerDetailQueryKey,
 } from "@workspace/api-client-react";
 import type {
   AgentMemorySummary, AgentMemoryFact, AgentMemoryEpisode, Agent, Call,
+  CallerContact, CallerDetailFact, CallerDetailEpisode,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -235,7 +238,13 @@ function ViewAllLink({ label, onClick }: { label: string; onClick: () => void })
 }
 
 /* ─── Facts ──────────────────────────────────────────────────────────────── */
-function FactCard({ fact, agentId }: { fact: AgentMemoryFact; agentId: number }) {
+function FactCard({
+  fact, agentId, onDeleted,
+}: {
+  fact: { id: number; key: string; value: string; phoneNumber?: string };
+  agentId: number;
+  onDeleted?: () => void;
+}) {
   const { Icon, cls } = factStyle(fact.key);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -244,11 +253,13 @@ function FactCard({ fact, agentId }: { fact: AgentMemoryFact; agentId: number })
 
   function handleDelete() {
     if (!confirming) { setConfirming(true); return; }
+    const phone = fact.phoneNumber ?? "";
     deleteFact.mutate(
-      { id: agentId, phone: encodeURIComponent(fact.phoneNumber), factId: fact.id },
+      { id: agentId, phone: encodeURIComponent(phone), factId: fact.id },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAgentMemoryFactsQueryKey(agentId) });
+          if (onDeleted) onDeleted();
           toast({ title: "Fact deleted" });
           setConfirming(false);
         },
@@ -287,10 +298,16 @@ function FactCard({ fact, agentId }: { fact: AgentMemoryFact; agentId: number })
   );
 }
 
-function FactsGrid({ facts, agentId }: { facts: AgentMemoryFact[]; agentId: number }) {
+function FactsGrid({
+  facts, agentId, onDeleted,
+}: {
+  facts: Array<{ id: number; key: string; value: string; phoneNumber?: string }>;
+  agentId: number;
+  onDeleted?: () => void;
+}) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-      {facts.map(f => <FactCard key={f.id} fact={f} agentId={agentId} />)}
+      {facts.map(f => <FactCard key={f.id} fact={f} agentId={agentId} onDeleted={onDeleted} />)}
     </div>
   );
 }
@@ -627,6 +644,270 @@ function OverviewTab({
   );
 }
 
+/* ─── Callers tab ─────────────────────────────────────────────────────────── */
+
+function isWebCaller(phone: string): boolean {
+  return phone.startsWith("webcall:");
+}
+
+function callerDisplayName(contact: CallerContact): string {
+  if (contact.name) return contact.name;
+  if (isWebCaller(contact.phoneNumber)) return "Web visitor";
+  return contact.phoneNumber;
+}
+
+function callerSubLabel(contact: CallerContact): string {
+  if (isWebCaller(contact.phoneNumber)) return contact.phoneNumber;
+  if (contact.name) return contact.phoneNumber;
+  return "";
+}
+
+function CallerAvatar({ contact }: { contact: CallerContact }) {
+  if (isWebCaller(contact.phoneNumber)) {
+    return (
+      <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
+        <Globe className="w-4 h-4 text-violet-400" />
+      </div>
+    );
+  }
+  const label = contact.name
+    ? initials(contact.name)
+    : contact.phoneNumber.slice(-2).toUpperCase();
+  return (
+    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+      <span className="text-[11px] font-semibold text-emerald-400">{label}</span>
+    </div>
+  );
+}
+
+function CallerListRow({
+  contact, selected, onClick,
+}: {
+  contact: CallerContact;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const web = isWebCaller(contact.phoneNumber);
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left rounded-xl border px-3 py-2.5 flex items-center gap-3 transition-colors ${
+        selected
+          ? "border-blue-500/50 bg-blue-500/10"
+          : "border-border bg-card hover:bg-accent/30"
+      }`}
+    >
+      <CallerAvatar contact={contact} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[12.5px] font-semibold text-foreground truncate">
+            {callerDisplayName(contact)}
+          </span>
+          {web && (
+            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-violet-400 border-violet-500/30 bg-violet-500/10 shrink-0">
+              Web
+            </span>
+          )}
+          {contact.lastCallDropped && (
+            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-amber-400 border-amber-500/30 bg-amber-500/10 shrink-0">
+              Dropped
+            </span>
+          )}
+        </div>
+        {callerSubLabel(contact) && (
+          <p className="text-[11px] text-muted-foreground truncate mt-0.5">{callerSubLabel(contact)}</p>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+            <Phone className="w-2.5 h-2.5" />{contact.callCount}
+          </span>
+          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+            <BarChart3 className="w-2.5 h-2.5" />{contact.factCount}
+          </span>
+        </div>
+        <p className="text-[10px] text-muted-foreground">{timeAgo(contact.lastCalledAt)}</p>
+      </div>
+    </button>
+  );
+}
+
+function CallerDetailView({
+  agentId, contact, onBack,
+}: {
+  agentId: number;
+  contact: CallerContact;
+  onBack: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetCallerDetail(agentId, encodeURIComponent(contact.phoneNumber));
+  const callerData = data as { facts: CallerDetailFact[]; episodes: CallerDetailEpisode[] } | undefined;
+  const facts    = callerData?.facts    ?? [];
+  const episodes = callerData?.episodes ?? [];
+
+  function invalidateCallerDetail() {
+    queryClient.invalidateQueries({
+      queryKey: getGetCallerDetailQueryKey(agentId, encodeURIComponent(contact.phoneNumber)),
+    });
+  }
+
+  const displayEpisodes: AgentMemoryEpisode[] = episodes.map(ep => ({
+    id:              ep.id,
+    callId:          ep.callId ?? null,
+    summary:         ep.summary ?? null,
+    durationSeconds: ep.durationSeconds ?? null,
+    createdAt:       ep.createdAt,
+  }));
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* back bar */}
+      <div className="flex items-center gap-2 mb-4 shrink-0">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+          All callers
+        </button>
+      </div>
+
+      {/* caller header */}
+      <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card mb-4 shrink-0">
+        <CallerAvatar contact={contact} />
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-semibold text-foreground truncate">{callerDisplayName(contact)}</p>
+          {callerSubLabel(contact) && (
+            <p className="text-[11px] text-muted-foreground truncate">{callerSubLabel(contact)}</p>
+          )}
+        </div>
+        <div className="flex gap-3 shrink-0">
+          {[
+            { label: "Calls", value: contact.callCount },
+            { label: "Facts", value: contact.factCount },
+            { label: "Episodes", value: contact.archiveCount },
+          ].map(s => (
+            <div key={s.label} className="text-center">
+              <p className="text-[15px] font-semibold text-foreground tabular-nums">{s.value}</p>
+              <p className="text-[9.5px] text-muted-foreground uppercase tracking-wide">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* scrollable content */}
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-6">
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+          </div>
+        ) : (
+          <>
+            {/* facts */}
+            <div>
+              <PanelHeader title="What the agent knows" count={facts.length} />
+              {facts.length === 0 ? (
+                <p className="text-[12.5px] text-muted-foreground py-4 text-center">No facts extracted yet.</p>
+              ) : (
+                <FactsGrid
+                  facts={facts.map(f => ({ ...f, phoneNumber: contact.phoneNumber }))}
+                  agentId={agentId}
+                  onDeleted={invalidateCallerDetail}
+                />
+              )}
+            </div>
+
+            {/* episodes */}
+            <div>
+              <PanelHeader title="Conversation history" count={episodes.length} />
+              {episodes.length === 0 ? (
+                <p className="text-[12.5px] text-muted-foreground py-4 text-center">No episodes recorded yet.</p>
+              ) : (
+                <EpisodeTimeline episodes={displayEpisodes} />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CallersTab({ agentId }: { agentId: number }) {
+  const [search, setSearch] = useState("");
+  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+
+  const { data, isLoading } = useListAgentCallers(agentId);
+  const allCallers = (data ?? []) as CallerContact[];
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allCallers;
+    return allCallers.filter(c =>
+      c.phoneNumber.toLowerCase().includes(q) ||
+      (c.name ?? "").toLowerCase().includes(q)
+    );
+  }, [allCallers, search]);
+
+  const selectedContact = useMemo(
+    () => allCallers.find(c => c.phoneNumber === selectedPhone) ?? null,
+    [allCallers, selectedPhone],
+  );
+
+  if (selectedContact) {
+    return (
+      <CallerDetailView
+        agentId={agentId}
+        contact={selectedContact}
+        onBack={() => setSelectedPhone(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* search */}
+      <div className="relative mb-3 shrink-0">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
+        <Input
+          type="search"
+          placeholder="Search by phone or name…"
+          className="pl-9 h-8 text-xs"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-3 shrink-0 tabular-nums">
+        {isLoading ? "Loading…" : `${filtered.length} caller${filtered.length !== 1 ? "s" : ""}`}
+      </p>
+
+      {/* list */}
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center">
+            <User className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-[12.5px] text-muted-foreground">
+              {search ? "No callers match your search." : "No callers yet — start taking calls to build memory."}
+            </p>
+          </div>
+        ) : (
+          filtered.map(c => (
+            <CallerListRow
+              key={c.phoneNumber}
+              contact={c}
+              selected={c.phoneNumber === selectedPhone}
+              onClick={() => setSelectedPhone(c.phoneNumber)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Right panel ────────────────────────────────────────────────────────── */
 function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; agent: Agent | undefined }) {
   const [noteOpen, setNoteOpen] = useState(false);
@@ -699,7 +980,8 @@ function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; age
           <TabsList className="shrink-0 h-auto w-full justify-start gap-6 rounded-none border-b border-border bg-transparent p-0">
             {[
               { value: "overview", label: "Overview" },
-              { value: "facts",    label: "Facts" },
+              { value: "callers",  label: "Callers" },
+              { value: "facts",    label: "All Facts" },
               { value: "episodes", label: "Episodes" },
               { value: "calls",    label: "Call History" },
             ].map(t => (
@@ -715,6 +997,9 @@ function AgentDetailPanel({ summary, agent }: { summary: AgentMemorySummary; age
           <div className="flex-1 min-h-0 overflow-y-auto mt-5">
             <TabsContent value="overview" className="mt-0">
               <OverviewTab agent={agent} summary={summary} onNavigate={setTab} />
+            </TabsContent>
+            <TabsContent value="callers" className="mt-0 h-full">
+              <CallersTab agentId={summary.agentId} />
             </TabsContent>
             <TabsContent value="facts" className="mt-0"><FactsTab agentId={summary.agentId} /></TabsContent>
             <TabsContent value="episodes" className="mt-0"><EpisodesTab agentId={summary.agentId} /></TabsContent>

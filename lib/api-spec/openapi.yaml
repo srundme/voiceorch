@@ -459,6 +459,55 @@ paths:
         "404":
           description: Agent or fact not found
 
+  /agents/{id}/caller-memory:
+    get:
+      operationId: listAgentCallers
+      tags: [agents]
+      summary: List all callers tracked for this agent, newest-called first
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of callers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CallerContact"
+        "404":
+          description: Agent not found
+
+  /agents/{id}/caller-memory/{phone}:
+    get:
+      operationId: getCallerDetail
+      tags: [agents]
+      summary: Full memory detail for one caller — current facts with history chains, episodes with sentences
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: phone
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Caller memory detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallerDetail"
+        "404":
+          description: Agent not found
+
   /agents/{id}/memory/episodes:
     get:
       operationId: listAgentMemoryEpisodes
@@ -7217,6 +7266,118 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    CallerContact:
+      type: object
+      required: [phoneNumber, callCount, factCount, archiveCount]
+      properties:
+        phoneNumber:
+          type: string
+        name:
+          type: ["string", "null"]
+        summary:
+          type: ["string", "null"]
+        callCount:
+          type: integer
+        factCount:
+          type: integer
+        archiveCount:
+          type: integer
+        lastCalledAt:
+          type: ["string", "null"]
+          format: date-time
+        lastCallDropped:
+          type: ["boolean", "null"]
+
+    CallerFactHistory:
+      type: object
+      required: [id, value, confidence, createdAt]
+      properties:
+        id:
+          type: integer
+        value:
+          type: string
+        confidence:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    CallerDetailFact:
+      type: object
+      required: [id, key, value, confidence, sourceSentenceIds, createdAt, history]
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        value:
+          type: string
+        confidence:
+          type: number
+        sourceCallId:
+          type: ["integer", "null"]
+        sourceSentenceIds:
+          type: array
+          items:
+            type: integer
+        createdAt:
+          type: string
+          format: date-time
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallerFactHistory"
+
+    CallerDetailSentence:
+      type: object
+      required: [id, sequenceNum, speaker, text]
+      properties:
+        id:
+          type: integer
+        sequenceNum:
+          type: integer
+        speaker:
+          type: string
+        text:
+          type: string
+
+    CallerDetailEpisode:
+      type: object
+      required: [id, createdAt, insightFactIds, sentences]
+      properties:
+        id:
+          type: integer
+        callId:
+          type: ["integer", "null"]
+        summary:
+          type: ["string", "null"]
+        durationSeconds:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        insightFactIds:
+          type: array
+          items:
+            type: integer
+        sentences:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallerDetailSentence"
+
+    CallerDetail:
+      type: object
+      required: [facts, episodes]
+      properties:
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallerDetailFact"
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallerDetailEpisode"
 
     # ── Call ───────────────────────────────────────────────────────────────────
     Call:

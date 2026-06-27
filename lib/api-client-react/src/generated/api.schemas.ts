@@ -1058,6 +1058,65 @@ export interface AgentMemoryEpisode {
   createdAt: string;
 }
 
+export interface CallerContact {
+  phoneNumber: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  summary?: string | null;
+  callCount: number;
+  factCount: number;
+  archiveCount: number;
+  /** @nullable */
+  lastCalledAt?: string | null;
+  /** @nullable */
+  lastCallDropped?: boolean | null;
+}
+
+export interface CallerFactHistory {
+  id: number;
+  value: string;
+  confidence: number;
+  createdAt: string;
+}
+
+export interface CallerDetailFact {
+  id: number;
+  key: string;
+  value: string;
+  confidence: number;
+  /** @nullable */
+  sourceCallId?: number | null;
+  sourceSentenceIds: number[];
+  createdAt: string;
+  history: CallerFactHistory[];
+}
+
+export interface CallerDetailSentence {
+  id: number;
+  sequenceNum: number;
+  speaker: string;
+  text: string;
+}
+
+export interface CallerDetailEpisode {
+  id: number;
+  /** @nullable */
+  callId?: number | null;
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  durationSeconds?: number | null;
+  createdAt: string;
+  insightFactIds: number[];
+  sentences: CallerDetailSentence[];
+}
+
+export interface CallerDetail {
+  facts: CallerDetailFact[];
+  episodes: CallerDetailEpisode[];
+}
+
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
 
 

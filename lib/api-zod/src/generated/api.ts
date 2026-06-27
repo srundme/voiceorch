@@ -870,6 +870,67 @@ export const DeleteCallerFactParams = zod.object({
 
 
 /**
+ * @summary List all callers tracked for this agent, newest-called first
+ */
+export const ListAgentCallersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentCallersResponseItem = zod.object({
+  "phoneNumber": zod.string(),
+  "name": zod.string().nullish(),
+  "summary": zod.string().nullish(),
+  "callCount": zod.number(),
+  "factCount": zod.number(),
+  "archiveCount": zod.number(),
+  "lastCalledAt": zod.coerce.date().nullish(),
+  "lastCallDropped": zod.boolean().nullish()
+})
+export const ListAgentCallersResponse = zod.array(ListAgentCallersResponseItem)
+
+
+/**
+ * @summary Full memory detail for one caller — current facts with history chains, episodes with sentences
+ */
+export const GetCallerDetailParams = zod.object({
+  "id": zod.coerce.number(),
+  "phone": zod.coerce.string()
+})
+
+export const GetCallerDetailResponse = zod.object({
+  "facts": zod.array(zod.object({
+  "id": zod.number(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "sourceCallId": zod.number().nullish(),
+  "sourceSentenceIds": zod.array(zod.number()),
+  "createdAt": zod.coerce.date(),
+  "history": zod.array(zod.object({
+  "id": zod.number(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "createdAt": zod.coerce.date()
+}))
+})),
+  "episodes": zod.array(zod.object({
+  "id": zod.number(),
+  "callId": zod.number().nullish(),
+  "summary": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "insightFactIds": zod.array(zod.number()),
+  "sentences": zod.array(zod.object({
+  "id": zod.number(),
+  "sequenceNum": zod.number(),
+  "speaker": zod.string(),
+  "text": zod.string()
+}))
+}))
+})
+
+
+/**
  * @summary All conversation episodes for an agent, newest first
  */
 export const ListAgentMemoryEpisodesParams = zod.object({
