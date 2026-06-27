@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const ttsAdapters: Chapter = {
   slug: "tts-adapters",
   moduleId: "m5",
-  number: "5.4",
+  number: "6.4",
   title: "Text-to-Speech Adapters",
   summary:
     "Turning the reply into a voice — ElevenLabs, Cartesia, and streaming audio back with minimal latency.",

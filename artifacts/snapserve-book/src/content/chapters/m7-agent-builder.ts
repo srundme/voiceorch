@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const agentBuilder: Chapter = {
   slug: "agent-builder",
   moduleId: "m7",
-  number: "7.3",
+  number: "8.3",
   title: "The Agent Builder",
   summary:
     "The multi-step form where users wire up an agent's STT + LLM + TTS + telephony pipeline.",

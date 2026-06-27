@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const minuteRates: Chapter = {
   slug: "minute-rates",
   moduleId: "m8",
-  number: "8.1",
+  number: "9.1",
   title: "Billing: Managed vs BYOP per Call",
   summary:
     "How each call's cost and billing mode is resolved at call-end, and where wallet balances live.",

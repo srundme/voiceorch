@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const sttAdapters: Chapter = {
   slug: "stt-adapters",
   moduleId: "m5",
-  number: "5.2",
+  number: "6.2",
   title: "Speech-to-Text Adapters",
   summary:
     "Streaming transcription over WebSockets — Deepgram, Azure, and the Sarvam Indic-language models.",

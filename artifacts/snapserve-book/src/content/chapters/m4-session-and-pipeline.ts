@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const sessionAndPipeline: Chapter = {
   slug: "session-and-pipeline",
   moduleId: "m4",
-  number: "4.2",
+  number: "5.2",
   title: "The Session & the Pipeline",
   summary:
     "The object that holds one call's entire state, and the loop that drives every conversational turn.",

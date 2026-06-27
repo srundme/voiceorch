@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const classesAndState: Chapter = {
   slug: "classes-and-state",
   moduleId: "m1",
-  number: "1.5",
+  number: "2.5",
   title: "Classes & Holding State",
   summary:
     "When to reach for a class instead of a function, using a real stateful component from the audio engine.",

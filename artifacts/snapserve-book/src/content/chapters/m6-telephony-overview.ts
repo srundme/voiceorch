@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const telephonyOverview: Chapter = {
   slug: "telephony-overview",
   moduleId: "m6",
-  number: "6.1",
+  number: "7.1",
   title: "Telephony: The Phone-Network Bridge",
   summary:
     "How a real phone call becomes a WebSocket of audio frames, and what every provider has in common.",

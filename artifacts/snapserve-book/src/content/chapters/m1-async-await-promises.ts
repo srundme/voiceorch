@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const asyncAwaitPromises: Chapter = {
   slug: "async-await-promises",
   moduleId: "m1",
-  number: "1.2",
+  number: "2.2",
   title: "Async, Await & Promises",
   summary:
     "The single most important pattern in the codebase: doing slow things (network, DB) without freezing everything else.",

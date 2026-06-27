@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const audioTs: Chapter = {
   slug: "audio-ts",
   moduleId: "m4",
-  number: "4.1",
+  number: "5.1",
   title: "audio.ts — How a Phone Call Becomes Numbers",
   summary:
     "The lowest layer of the entire voice engine. Every phone call passes through these functions in its first milliseconds. Master this file and you understand how raw sound enters the system.",

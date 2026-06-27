@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const vobizAndPlivo: Chapter = {
   slug: "vobiz-and-plivo",
   moduleId: "m6",
-  number: "6.3",
+  number: "7.3",
   title: "VoBiz & Plivo",
   summary:
     "The other two providers, their quirks (byte order, session races), and why audio details matter.",

@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const scheduling: Chapter = {
   slug: "scheduling",
   moduleId: "m8",
-  number: "8.2",
+  number: "9.2",
   title: "The Scheduling Engine",
   summary:
     "A multi-tenant booking system: calendars, availability, advisory-locked slots, and Google Calendar sync.",

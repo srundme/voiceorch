@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const fallbackChains: Chapter = {
   slug: "fallback-chains",
   moduleId: "m5",
-  number: "5.5",
+  number: "6.5",
   title: "Fallback Chains: When a Provider Fails",
   summary:
     "How the pipeline survives a provider outage mid-call by failing over to a backup.",

@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const modulesAndImports: Chapter = {
   slug: "modules-and-imports",
   moduleId: "m1",
-  number: "1.1",
+  number: "2.1",
   title: "Modules, Imports & the Event Loop",
   summary:
     "How Node loads files, what import/export really do, and why JavaScript can do many things 'at once' on one thread.",

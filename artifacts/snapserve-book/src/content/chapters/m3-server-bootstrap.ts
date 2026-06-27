@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const serverBootstrap: Chapter = {
   slug: "server-bootstrap",
   moduleId: "m3",
-  number: "3.2",
+  number: "4.2",
   title: "Server Bootstrap: index.ts Line by Line",
   summary:
     "How the server starts: binding the port, the WebSocket upgrade handler, migrations, and background workers.",

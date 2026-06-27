@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const reactViteApp: Chapter = {
   slug: "react-vite-app",
   moduleId: "m7",
-  number: "7.1",
+  number: "8.1",
   title: "How the Dashboard Is Built",
   summary:
     "React + Vite + Wouter routing, and how the frontend talks to the backend through generated hooks.",

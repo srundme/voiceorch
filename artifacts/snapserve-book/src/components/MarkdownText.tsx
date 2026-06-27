@@ -9,17 +9,23 @@ interface MarkdownTextProps {
  * Parses a string for simple inline formatting:
  * `backticks` -> inline code
  * **double asterisks** -> bold
+ * *single asterisks* -> italic
  */
 export function MarkdownText({ content, className = '' }: MarkdownTextProps) {
-  // Regex to match **bold** or `code`
-  // We use a simple tokenizer approach
-  const parts = content.split(/(\*\*.*?\*\*|`[^`]+`)/g);
+  // Tokenize on **bold**, *italic*, or `code`.
+  // Bold is matched before italic so `**x**` never matches the italic branch.
+  // The italic branch requires a non-space char right after the opening `*`
+  // so stray asterisks (e.g. "2 * 3") are not treated as emphasis.
+  const parts = content.split(/(\*\*.*?\*\*|\*[^*\s][^*\n]*?\*|`[^`]+`)/g);
 
   return (
     <span className={className}>
       {parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
           return <strong key={i} className="font-bold text-foreground">{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+          return <em key={i} className="italic">{part.slice(1, -1)}</em>;
         }
         if (part.startsWith('`') && part.endsWith('`')) {
           return (

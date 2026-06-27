@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const routesAnatomy: Chapter = {
   slug: "routes-anatomy",
   moduleId: "m3",
-  number: "3.5",
+  number: "4.5",
   title: "Anatomy of a Route Handler",
   summary:
     "Reading one real CRUD route end to end: validate input, check ownership, hit the DB, shape the response.",

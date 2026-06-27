@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const dataHooks: Chapter = {
   slug: "data-hooks",
   moduleId: "m7",
-  number: "7.2",
+  number: "8.2",
   title: "Data Fetching with Generated Hooks",
   summary:
     "Using the auto-generated TanStack Query hooks instead of hand-writing fetch calls.",

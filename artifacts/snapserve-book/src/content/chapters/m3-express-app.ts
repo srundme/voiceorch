@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const expressApp: Chapter = {
   slug: "express-app",
   moduleId: "m3",
-  number: "3.1",
+  number: "4.1",
   title: "Express in 20 Minutes",
   summary:
     "Requests, responses, routers, and middleware — the four ideas the entire backend is built on.",

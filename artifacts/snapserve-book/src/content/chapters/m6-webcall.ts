@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const webcall: Chapter = {
   slug: "webcall",
   moduleId: "m6",
-  number: "6.4",
+  number: "7.4",
   title: "Web Calls: Testing in the Browser",
   summary:
     "The thin WebSocket transport that runs the exact same pipeline from a browser mic — no phone needed.",

@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const drizzleIntro: Chapter = {
   slug: "drizzle-intro",
   moduleId: "m2",
-  number: "2.1",
+  number: "3.1",
   title: "Meet Drizzle: Tables as TypeScript",
   summary:
     "How SnapServe defines ~50 database tables in code, and why the schema is the single source of truth.",

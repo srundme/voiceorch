@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const callJourney: Chapter = {
   slug: "the-call-journey",
   moduleId: "m0",
-  number: "0.1",
+  number: "1.1",
   title: "The Journey of a Single Phone Call",
   summary:
     "Before we read a single line of code, let's follow one phone call from the moment it rings to the moment the AI talks back. This is the map for everything else.",

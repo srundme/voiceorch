@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const howToUseThisBook: Chapter = {
   slug: "how-to-use-this-book",
   moduleId: "m0",
-  number: "0.3",
+  number: "1.3",
   title: "How to Use This Book",
   summary:
     "The 5-part lesson rhythm, how the code panels work, and how to track your progress.",

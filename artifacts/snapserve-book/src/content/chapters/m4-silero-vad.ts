@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const sileroVad: Chapter = {
   slug: "silero-vad",
   moduleId: "m4",
-  number: "4.4",
+  number: "5.4",
   title: "Voice Activity Detection with Silero",
   summary:
     "The neural net that decides 'is this speech or silence?' in real time.",

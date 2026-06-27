@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const campaigns: Chapter = {
   slug: "campaigns",
   moduleId: "m8",
-  number: "8.3",
+  number: "9.3",
   title: "Outbound Campaigns",
   summary:
     "Dialing a list of leads automatically, with retries, scheduling, and answering-machine detection.",

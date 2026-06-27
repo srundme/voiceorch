@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const llmAdapters: Chapter = {
   slug: "llm-adapters",
   moduleId: "m5",
-  number: "5.3",
+  number: "6.3",
   title: "LLM Adapters & Tool Calls",
   summary:
     "Streaming replies token-by-token, and how the AI triggers actions (booking, transfers) mid-conversation.",

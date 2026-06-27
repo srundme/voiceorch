@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const repoMap: Chapter = {
   slug: "the-repo-map",
   moduleId: "m0",
-  number: "0.2",
+  number: "1.2",
   title: "The Repo Map: Where Everything Lives",
   summary:
     "SnapServe is a single repository holding many apps that share code. Learn the folder layout once and you'll always know where to look.",

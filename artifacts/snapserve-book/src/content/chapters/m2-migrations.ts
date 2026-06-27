@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const migrations: Chapter = {
   slug: "migrations",
   moduleId: "m2",
-  number: "2.5",
+  number: "3.5",
   title: "Migrations: Changing the Schema Safely",
   summary:
     "How schema changes reach the database in dev and in production without losing data.",

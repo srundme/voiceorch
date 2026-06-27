@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const twilioDeepDive: Chapter = {
   slug: "twilio-deep-dive",
   moduleId: "m6",
-  number: "6.2",
+  number: "7.2",
   title: "Twilio, Frame by Frame",
   summary:
     "Reading the Twilio media-stream protocol and wiring it into the shared pipeline.",

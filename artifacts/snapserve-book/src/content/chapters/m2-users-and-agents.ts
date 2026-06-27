@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const usersAndAgents: Chapter = {
   slug: "users-and-agents",
   moduleId: "m2",
-  number: "2.2",
+  number: "3.2",
   title: "The Core Tables: Users & Agents",
   summary:
     "The two tables everything hangs off of, including the repurposed `clerk_id` Google-sub trick.",

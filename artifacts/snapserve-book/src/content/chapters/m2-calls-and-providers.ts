@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const callsAndProviders: Chapter = {
   slug: "calls-and-providers",
   moduleId: "m2",
-  number: "2.3",
+  number: "3.3",
   title: "Calls, Providers & Encrypted Keys",
   summary:
     "How a call is recorded and how user-supplied API keys are stored encrypted at rest.",

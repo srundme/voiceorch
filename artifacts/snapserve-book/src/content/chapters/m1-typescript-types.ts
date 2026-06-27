@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const typescriptTypes: Chapter = {
   slug: "typescript-types",
   moduleId: "m1",
-  number: "1.4",
+  number: "2.4",
   title: "TypeScript: Types Without Tears",
   summary:
     "Just enough TypeScript to read SnapServe confidently — interfaces, unions, generics, and the `!` and `?` operators.",

@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const contractFirstOpenapi: Chapter = {
   slug: "contract-first-openapi",
   moduleId: "m3",
-  number: "3.3",
+  number: "4.3",
   title: "Contract-First: One Spec, Two Codegens",
   summary:
     "How the OpenAPI file generates both server validation schemas and frontend data hooks.",

@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const callerMemoryTables: Chapter = {
   slug: "caller-memory-tables",
   moduleId: "m2",
-  number: "2.4",
+  number: "3.4",
   title: "Caller Memory: Remembering Who Called",
   summary:
     "The phone-keyed tables that let an agent greet a returning caller by name.",

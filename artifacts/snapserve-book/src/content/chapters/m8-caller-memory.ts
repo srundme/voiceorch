@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const callerMemory: Chapter = {
   slug: "caller-memory",
   moduleId: "m8",
-  number: "8.4",
+  number: "9.4",
   title: "Caller Memory End to End",
   summary:
     "How facts about a caller are extracted, stored under a canonical phone identity, and recalled next time.",

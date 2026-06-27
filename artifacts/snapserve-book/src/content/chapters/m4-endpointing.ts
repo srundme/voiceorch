@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const endpointing: Chapter = {
   slug: "endpointing",
   moduleId: "m4",
-  number: "4.3",
+  number: "5.3",
   title: "Endpointing: Knowing When They're Done",
   summary:
     "How the system detects the end of a caller's turn without interrupting them or leaving dead air.",

@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const buffersAndBinary: Chapter = {
   slug: "buffers-and-binary",
   moduleId: "m1",
-  number: "1.3",
+  number: "2.3",
   title: "Buffers & Binary Data in Node.js",
   summary:
     "Audio, files, network packets — they all arrive as raw bytes. Node's Buffer is how you hold and manipulate those bytes. This is the prerequisite for the entire audio engine.",

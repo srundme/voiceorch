@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const adapterPattern: Chapter = {
   slug: "adapter-pattern",
   moduleId: "m5",
-  number: "5.1",
+  number: "6.1",
   title: "The Adapter Pattern: One Interface, Many Vendors",
   summary:
     "The design trick that lets SnapServe swap OpenAI for DeepSeek, or Deepgram for Azure, without changing the pipeline.",

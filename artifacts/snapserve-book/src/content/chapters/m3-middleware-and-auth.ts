@@ -3,7 +3,7 @@ import type { Chapter } from "../types";
 export const middlewareAndAuth: Chapter = {
   slug: "middleware-and-auth",
   moduleId: "m3",
-  number: "3.4",
+  number: "4.4",
   title: "Middleware & Authentication",
   summary:
     "How a request proves who it is — session JWTs, the `attachSession` middleware, and the admin-token boundary.",
