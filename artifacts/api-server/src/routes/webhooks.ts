@@ -4,12 +4,13 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
-import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable } from "@workspace/db";
+import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable } from "@workspace/db";
 import { eq, sql, and, gte } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
+import { scheduleRetry } from "../services/retryEngine.js";
 import { APP_SECRET } from "../lib/app-secret.js";
 
 const router: IRouter = Router();
@@ -70,6 +71,74 @@ async function handleNoAnswerStatus(opts: {
   } catch (err) {
     logger.error({ err, ...opts }, "handleNoAnswerStatus error");
   }
+}
+
+/**
+ * Map a raw telephony call status to the campaign lead callStatus value.
+ * Returns null if the status is not a terminal non-connected state.
+ */
+function mapRawStatusToLeadStatus(raw: string): "no_pickup" | "busy" | "failed" | null {
+  const s = raw.toLowerCase();
+  if (s === "busy") return "busy";
+  if (s === "no-answer" || s === "no_answer" || s === "noanswer" || s === "not-reachable") return "no_pickup";
+  if (s === "failed" || s === "canceled") return "failed";
+  return null;
+}
+
+/**
+ * Update a campaign lead that resulted in a non-connected terminal call status
+ * (busy, no-answer, failed, etc.) and schedule a retry if attempts remain.
+ * Does NOT require a `calls` table record to exist.
+ */
+async function handleCampaignLeadTerminalStatus(opts: {
+  campaignLeadId: number;
+  rawCallStatus: string;
+}): Promise<void> {
+  const { campaignLeadId, rawCallStatus } = opts;
+
+  const leadStatus = mapRawStatusToLeadStatus(rawCallStatus);
+  if (!leadStatus) {
+    logger.info({ campaignLeadId, rawCallStatus }, "Campaign lead terminal status: not a non-connected terminal status — skipping");
+    return;
+  }
+
+  const [lead] = await db.select().from(campaignLeadsTable).where(eq(campaignLeadsTable.id, campaignLeadId));
+  if (!lead) {
+    logger.warn({ campaignLeadId }, "Campaign lead terminal status: lead not found — ignoring");
+    return;
+  }
+
+  // Only update if still 'calling' — avoid clobbering completed/skipped/already-updated leads
+  if (lead.callStatus !== "calling") {
+    logger.info({ campaignLeadId, callStatus: lead.callStatus }, "Campaign lead terminal status: lead not in calling state — skipping");
+    return;
+  }
+
+  await db.update(campaignLeadsTable)
+    .set({ callStatus: leadStatus })
+    .where(eq(campaignLeadsTable.id, campaignLeadId));
+
+  await db.insert(leadTimelineTable).values({
+    leadId:     campaignLeadId,
+    campaignId: lead.campaignId,
+    eventType:  "call_ended",
+    data:       { callStatus: rawCallStatus, leadStatus },
+  });
+
+  // Schedule a retry if the campaign allows more attempts
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId));
+  if (campaign) {
+    await scheduleRetry({
+      leadId:            campaignLeadId,
+      campaignId:        lead.campaignId,
+      currentAttempts:   lead.callAttempts ?? 0,
+      maxAttempts:       campaign.maxAttempts ?? 1,
+      retryDelayMinutes: campaign.retryDelayMinutes ?? 60,
+      reason:            leadStatus,
+    });
+  }
+
+  logger.info({ campaignLeadId, rawCallStatus, leadStatus }, "Campaign lead updated to terminal status");
 }
 
 /**
@@ -579,9 +648,11 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
   // non-cbId   — verify a real call record exists in DB before scheduling any redial;
   //              toNumber always from DB, never from attacker-controlled request body.
   (async () => {
-    const cbId     = parseInt(String(req.query["cbId"] ?? "0"), 10) || null;
-    const cbSig    = String(req.query["cbSig"] ?? "");
-    const callStatus = String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? "");
+    const cbId            = parseInt(String(req.query["cbId"]            ?? "0"), 10) || null;
+    const cbSig           = String(req.query["cbSig"]           ?? "");
+    const campaignLeadId  = parseInt(String(req.query["campaignLeadId"]  ?? "0"), 10) || 0;
+    const campaignLeadSig = String(req.query["campaignLeadSig"] ?? "");
+    const callStatus      = String(req.body?.CallStatus ?? req.body?.callstatus ?? req.body?.call_status ?? "");
     // callUuid is attacker-controlled — used only as a lookup key and length-validated.
     // toNumber is NEVER taken from the request body; always derived from the DB record.
     const callUuid   = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "");
@@ -626,7 +697,21 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
         ))
         .limit(1);
       if (!call) {
-        logger.warn({ callUuid }, "VoBiz status: no matching call in DB — ignoring");
+        // No DB call record — this is an unanswered campaign call (busy/no-answer/failed).
+        // Validate the HMAC embedded at call-creation time before mutating any state.
+        if (campaignLeadId > 0) {
+          const expectedSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${campaignLeadId}`).digest("hex");
+          const sigValid =
+            campaignLeadSig.length === expectedSig.length &&
+            timingSafeEqual(Buffer.from(campaignLeadSig), Buffer.from(expectedSig));
+          if (!sigValid) {
+            logger.warn({ campaignLeadId }, "VoBiz status: campaignLeadSig invalid — ignoring");
+            return;
+          }
+          await handleCampaignLeadTerminalStatus({ campaignLeadId, rawCallStatus: callStatus });
+        } else {
+          logger.warn({ callUuid }, "VoBiz status: no matching call in DB — ignoring");
+        }
         return;
       }
       agentId    = call.agentId;
@@ -652,9 +737,11 @@ router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
   // Validate before scheduling any outbound calls. Fire-and-forget so 204 is immediate.
   // agentId and toNumber are always resolved from DB — never trusted from query params / body.
   (async () => {
-    const cbId       = parseInt(String(req.query["cbId"]   ?? "0"), 10) || null;
-    const cbSig      = String(req.query["cbSig"] ?? "");
-    const callStatus = String(req.body?.CallStatus ?? "");
+    const cbId            = parseInt(String(req.query["cbId"]            ?? "0"), 10) || null;
+    const cbSig           = String(req.query["cbSig"]           ?? "");
+    const campaignLeadId  = parseInt(String(req.query["campaignLeadId"]  ?? "0"), 10) || 0;
+    const campaignLeadSig = String(req.query["campaignLeadSig"] ?? "");
+    const callStatus      = String(req.body?.CallStatus ?? "");
     // CallSid is attacker-controlled in the body — used only as a lookup key and length-validated.
     // toNumber is NEVER taken from the request body; it is always derived from the DB record.
     const callSid    = String(req.body?.CallSid ?? "");
@@ -701,7 +788,21 @@ router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
         ))
         .limit(1);
       if (!call) {
-        logger.warn({ callSid }, "Twilio status: no matching call in DB — ignoring");
+        // No DB call record — this is an unanswered campaign call (busy/no-answer/failed).
+        // Validate the HMAC embedded at call-creation time before mutating any state.
+        if (campaignLeadId > 0) {
+          const expectedSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${campaignLeadId}`).digest("hex");
+          const sigValid =
+            campaignLeadSig.length === expectedSig.length &&
+            timingSafeEqual(Buffer.from(campaignLeadSig), Buffer.from(expectedSig));
+          if (!sigValid) {
+            logger.warn({ campaignLeadId }, "Twilio status: campaignLeadSig invalid — ignoring");
+            return;
+          }
+          await handleCampaignLeadTerminalStatus({ campaignLeadId, rawCallStatus: callStatus });
+        } else {
+          logger.warn({ callSid }, "Twilio status: no matching call in DB — ignoring");
+        }
         return;
       }
       agentId    = call.agentId;

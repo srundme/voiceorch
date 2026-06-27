@@ -18,6 +18,8 @@ import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
 import { scheduleRetry } from "../services/retryEngine.js";
+import { createHmac } from "node:crypto";
+import { APP_SECRET } from "../lib/app-secret.js";
 
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 
@@ -212,13 +214,14 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       const fromNumber = campaign.fromNumber ?? creds.fromNumber;
       if (!accountSid || !fromNumber) throw new Error("Twilio config missing accountSid or fromNumber");
       const recordingEnabled = agentCfg["recordingEnabled"] === true;
+      const twilioLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
       await dialTwilio({
         accountSid,
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
         webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
-        statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
+        statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status?campaignLeadId=${lead.id}&campaignLeadSig=${twilioLeadSig}`,
         ...(amd.enabled ? { machineDetection: amd.twilioMode } : {}),
         ...(recordingEnabled ? {
           recordingEnabled: true,
@@ -241,13 +244,14 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       const authId = creds.authId;
       const fromNumber = campaign.fromNumber ?? creds.fromNumber;
       if (!authId || !fromNumber) throw new Error("Vobiz config missing authId or fromNumber");
+      const vobizLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
       await dialVobiz({
         authId,
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
-        hangupUrl: `${baseUrl}/api/webhooks/vobiz/status`,
+        hangupUrl: `${baseUrl}/api/webhooks/vobiz/status?campaignLeadId=${lead.id}&campaignLeadSig=${vobizLeadSig}`,
         ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
       });
     } else {
