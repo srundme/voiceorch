@@ -168,3 +168,9 @@ id = "heBrGFof5Zzi_pqUCLgxm"
 uri = "file://snapserve-launch-checklist.pdf"
 type = "pdf"
 title = "snapserve.ai — App Launch Checklist (fixed)"
+
+[[outputs]]
+id = "ZuPZgKtka5gy9QTqpeZ1L"
+uri = "file://docs/snapserve-book/SAMPLE-chapter.md"
+type = "text"
+title = "SnapServe Book — Sample Chapter (audio.ts)"
