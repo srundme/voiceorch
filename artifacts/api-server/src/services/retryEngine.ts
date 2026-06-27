@@ -7,17 +7,20 @@
 
 import { db, callRetriesTable, campaignLeadsTable, campaignsTable, leadTimelineTable } from "@workspace/db";
 import { and, eq, lte } from "drizzle-orm";
+import { withDbRetry } from "../orchestration/db-retry.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { logger } from "../lib/logger.js";
 
 export async function processRetries(): Promise<void> {
   try {
-    const dueRetries = await db.select().from(callRetriesTable)
-      .where(and(
-        eq(callRetriesTable.status, "pending"),
-        lte(callRetriesTable.scheduledAt, new Date()),
-      ))
-      .limit(100);
+    const dueRetries = await withDbRetry("retry-engine-poll", () =>
+      db.select().from(callRetriesTable)
+        .where(and(
+          eq(callRetriesTable.status, "pending"),
+          lte(callRetriesTable.scheduledAt, new Date()),
+        ))
+        .limit(100),
+    );
 
     if (dueRetries.length === 0) return;
 

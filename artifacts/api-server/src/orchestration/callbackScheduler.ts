@@ -15,6 +15,7 @@
 
 import { db, scheduledCallbacksTable, agentsTable, providersTable } from "@workspace/db";
 import { and, eq, lte } from "drizzle-orm";
+import { withDbRetry } from "./db-retry.js";
 import { dialTwilio, dialPlivo, dialVobiz } from "./telephony/dial.js";
 import { logger } from "../lib/logger.js";
 import { decryptKey } from "../lib/crypto.js";
@@ -45,15 +46,14 @@ export function startCallbackPoller(): void {
 
 async function pollAndFire(baseUrl: string): Promise<void> {
   try {
-    const due = await db
-      .select()
-      .from(scheduledCallbacksTable)
-      .where(
-        and(
+    const due = await withDbRetry("callback-poll", () =>
+      db.select()
+        .from(scheduledCallbacksTable)
+        .where(and(
           eq(scheduledCallbacksTable.status, "pending"),
           lte(scheduledCallbacksTable.scheduledAt, new Date()),
-        ),
-      );
+        )),
+    );
     for (const cb of due) void fireCallback(cb, baseUrl);
   } catch (err) {
     logger.error({ err }, "Callback poller error");

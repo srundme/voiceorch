@@ -552,7 +552,13 @@ router.get("/agents/:id/caller-memory", requireAuth, async (req, res): Promise<v
     .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
-  const [profiles, factCounts, archiveCounts] = await Promise.all([
+  /** Fact keys that the memory system commonly stores caller names under. */
+  const NAME_FACT_KEYS = [
+    "name", "full_name", "customer_name", "caller_name",
+    "contact_name", "first_name", "client_name", "user_name",
+  ];
+
+  const [profiles, factCounts, archiveCounts, nameFacts] = await Promise.all([
     db.select().from(callerProfilesTable)
       .where(eq(callerProfilesTable.agentId, agentId))
       .orderBy(desc(callerProfilesTable.lastCalledAt)),
@@ -564,14 +570,31 @@ router.get("/agents/:id/caller-memory", requireAuth, async (req, res): Promise<v
       .from(callerCallArchiveTable)
       .where(eq(callerCallArchiveTable.agentId, agentId))
       .groupBy(callerCallArchiveTable.phoneNumber),
+    // Bulk-fetch name-type facts so we can show caller names even when the
+    // caller profile's name field is null (e.g. the call dropped before name
+    // extraction ran). Only unsuperseded (current) facts are included.
+    db.select({ phoneNumber: callerFactsTable.phoneNumber, value: callerFactsTable.value })
+      .from(callerFactsTable)
+      .where(and(
+        eq(callerFactsTable.agentId, agentId),
+        isNull(callerFactsTable.supersededById),
+        inArray(callerFactsTable.key, NAME_FACT_KEYS),
+      ))
+      .orderBy(desc(callerFactsTable.createdAt)),
   ]);
 
   const factMap    = new Map(factCounts.map(r => [r.phoneNumber, r.cnt]));
   const archiveMap = new Map(archiveCounts.map(r => [r.phoneNumber, r.cnt]));
+  // First name fact per caller wins (already ordered newest-first).
+  const nameFactMap = new Map<string, string>();
+  for (const f of nameFacts) {
+    if (!nameFactMap.has(f.phoneNumber) && f.value) nameFactMap.set(f.phoneNumber, f.value);
+  }
 
   res.json(profiles.map(p => ({
     phoneNumber:     p.phoneNumber,
-    name:            p.name,
+    // Profile name takes precedence; fall back to any extracted name fact.
+    name:            p.name ?? nameFactMap.get(p.phoneNumber) ?? null,
     summary:         p.summary,
     callCount:       p.callCount,
     factCount:       factMap.get(p.phoneNumber) ?? 0,
