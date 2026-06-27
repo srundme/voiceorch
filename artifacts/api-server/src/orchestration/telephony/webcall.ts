@@ -77,7 +77,11 @@ export async function handleWebcallWebSocket(
       if (!session) return;
       const pcm16k = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBufferLike);
       if (pcm16k.length < 2) return;
-      session.pipeline.onRawPcm8kIn(downsample16to8(pcm16k));
+      // Pass noiseCancel=false: browser WebRTC already applies echo cancellation
+      // and noise suppression before sending audio.  Server-side gating on top
+      // zeroes out quiet-but-valid speech (the gate threshold is calibrated for
+      // telephony, not clean mic audio), causing the "only loud speech works" bug.
+      session.pipeline.onRawPcm8kIn(downsample16to8(pcm16k), false);
       return;
     }
     // Text = control message.

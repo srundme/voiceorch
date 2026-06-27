@@ -999,8 +999,14 @@ export class OrchestrationPipeline {
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
   }
 
-  /** Incoming raw LINEAR16 PCM @ 8 kHz from Vobiz — offloads noise-cancel + VAD to worker thread */
-  onRawPcm8kIn(pcm8k: Buffer): void {
+  /**
+   * Incoming raw LINEAR16 PCM @ 8 kHz — offloads noise-cancel + VAD to worker thread.
+   *
+   * Used by VoBiz telephony and webcall.  Pass `noiseCancel = false` for sources
+   * that have already had noise suppression applied (e.g. browser WebRTC), so
+   * the server-side gate does not zero out quiet-but-valid speech.
+   */
+  onRawPcm8kIn(pcm8k: Buffer, noiseCancel?: boolean): void {
     if (this.closed) return;
     const callId = String(this.config.callId);
     // Record raw caller audio (before noise cancellation)
@@ -1017,7 +1023,9 @@ export class OrchestrationPipeline {
       }
       return;
     }
-    processRawPcm8kIn(callId, pcm8k, this.agent.noiseCancellationEnabled)
+    // Caller-supplied `noiseCancel` wins when present; fall back to agent setting.
+    const nc = noiseCancel !== undefined ? noiseCancel : this.agent.noiseCancellationEnabled;
+    processRawPcm8kIn(callId, pcm8k, nc)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
   }
