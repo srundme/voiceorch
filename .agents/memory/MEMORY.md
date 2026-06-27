@@ -24,6 +24,7 @@
 - [Turn safety-net invariant](turn-safety-net-invariant.md) — safety net is Listening-state-only; defer onFinal out of STT callback past discard checks; gate onPartial on !playing; mirror in both paths
 - [Drizzle Docker migration folder](drizzle-docker-migration-folder.md) — lib/db/drizzle/ must be COPY'd into the production stage; missing it → "Can't find meta/_journal.json" → all DB queries 500
 - [Drizzle bootstrap migration gap](drizzle-bootstrap-migration-gap.md) — bootstrapMigrationJournal seeds old migrations without running SQL; new tables/columns MUST have a new migration file with a fresh `when` timestamp
+- [Drizzle migration when-timestamp ordering](drizzle-migration-when-ordering.md) — migrate() skips any migration whose `when` ≤ the last applied migration's `created_at`; out-of-order `when` permanently skips the migration silently
 - [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)
 - [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound

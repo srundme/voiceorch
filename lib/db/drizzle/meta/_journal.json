@@ -96,7 +96,7 @@
     {
       "idx": 13,
       "version": "7",
-      "when": 1750512000000,
+      "when": 1782550000000,
       "tag": "0013_fix_calendar_timezone_default",
       "breakpoints": true
     },
@@ -131,7 +131,7 @@
     {
       "idx": 18,
       "version": "7",
-      "when": 1782371989332,
+      "when": 1782950000000,
       "tag": "0018_caller_preferred_language",
       "breakpoints": true
     },
@@ -182,6 +182,13 @@
       "version": "7",
       "when": 1783600000000,
       "tag": "0025_crm_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783700000000,
+      "tag": "0026_fix_preferred_language",
       "breakpoints": true
     }
   ]
