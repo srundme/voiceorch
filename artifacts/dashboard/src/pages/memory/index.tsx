@@ -108,46 +108,34 @@ function callDirection(call: Call): Direction {
   return "Inbound";
 }
 
-/* ─── Deterministic fact icon mapping ────────────────────────────────────── */
-type FactStyle = { Icon: typeof FileText; cls: string };
-const FACT_PALETTE: FactStyle[] = [
-  { Icon: FileText,        cls: "text-rose-400 bg-rose-500/10 border-rose-500/20" },
-  { Icon: MapPin,          cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
-  { Icon: HelpCircle,      cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
-  { Icon: DollarSign,      cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-  { Icon: Bell,            cls: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
-  { Icon: Clock,           cls: "text-teal-400 bg-teal-500/10 border-teal-500/20" },
-  { Icon: User,            cls: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
-  { Icon: Tag,             cls: "text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/20" },
+/* ─── Deterministic fact icon mapping (icons stay, colors are neutral) ────── */
+type FactIcon = typeof FileText;
+
+const FACT_KEYWORDS: Array<{ test: RegExp; Icon: FactIcon }> = [
+  { test: /(location|address|city|area|region|place)/i, Icon: MapPin },
+  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, Icon: DollarSign },
+  { test: /(follow|reminder|next step|action)/i, Icon: Bell },
+  { test: /(time|schedule|when|date|appointment|preference)/i, Icon: Clock },
+  { test: /(concern|question|issue|problem|objection)/i, Icon: HelpCircle },
+  { test: /(interest|policy|product|plan|service|offer)/i, Icon: FileText },
+  { test: /(name|contact|person|customer|client|caller)/i, Icon: User },
+  { test: /(email|phone|number|mobile)/i, Icon: Hash },
+  { test: /(note|comment|message|detail|summary)/i, Icon: MessageSquare },
 ];
 
-const FACT_KEYWORDS: Array<{ test: RegExp; style: FactStyle }> = [
-  { test: /(location|address|city|area|region|place)/i, style: { Icon: MapPin,      cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" } },
-  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, style: { Icon: DollarSign, cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" } },
-  { test: /(follow|reminder|next step|action)/i, style: { Icon: Bell,        cls: "text-violet-400 bg-violet-500/10 border-violet-500/20" } },
-  { test: /(time|schedule|when|date|appointment|preference)/i, style: { Icon: Clock,       cls: "text-teal-400 bg-teal-500/10 border-teal-500/20" } },
-  { test: /(concern|question|issue|problem|objection)/i, style: { Icon: HelpCircle,  cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" } },
-  { test: /(interest|policy|product|plan|service|offer)/i, style: { Icon: FileText,    cls: "text-rose-400 bg-rose-500/10 border-rose-500/20" } },
-  { test: /(name|contact|person|customer|client|caller)/i, style: { Icon: User,        cls: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" } },
-  { test: /(email|phone|number|mobile)/i, style: { Icon: Hash,        cls: "text-sky-400 bg-sky-500/10 border-sky-500/20" } },
-  { test: /(note|comment|message|detail|summary)/i, style: { Icon: MessageSquare, cls: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20" } },
-];
-
-function factStyle(key: string): FactStyle {
-  for (const { test, style } of FACT_KEYWORDS) {
-    if (test.test(key)) return style;
+function factIcon(key: string): FactIcon {
+  for (const { test, Icon } of FACT_KEYWORDS) {
+    if (test.test(key)) return Icon;
   }
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-  return FACT_PALETTE[hash % FACT_PALETTE.length]!;
+  return Tag;
 }
 
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
 function AgentAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
   const dims = size === "lg" ? "w-12 h-12 text-[15px]" : size === "sm" ? "w-8 h-8 text-[11px]" : "w-10 h-10 text-[13px]";
   return (
-    <div className={`${dims} rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0`}>
-      <span className="font-semibold text-blue-400 tracking-tight">{initials(name)}</span>
+    <div className={`${dims} rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0`}>
+      <span className="font-semibold text-muted-foreground tracking-tight">{initials(name)}</span>
     </div>
   );
 }
@@ -165,14 +153,14 @@ function AgentRow({
     <div
       className={`group relative rounded-lg border transition-colors ${
         selected
-          ? "border-blue-500/50 bg-blue-500/10"
-          : "border-border bg-card hover:bg-accent/30"
+          ? "border-primary/30 bg-primary/[0.06]"
+          : "border-transparent hover:bg-accent/40"
       }`}
     >
       <button onClick={onClick} className="w-full text-left px-2.5 py-2 flex items-center gap-2.5">
         <AgentAvatar name={agent.agentName} size="sm" />
         <div className="flex-1 min-w-0 pr-5">
-          <p className={`text-[12.5px] font-semibold truncate ${selected ? "text-foreground" : "text-foreground"}`}>
+          <p className="text-[12.5px] font-semibold truncate text-foreground">
             {agent.agentName}
           </p>
           <p className="text-[10px] text-muted-foreground truncate mt-0.5 tabular-nums">
@@ -206,21 +194,18 @@ function AgentRow({
 
 /* ─── Compact stat strip item ────────────────────────────────────────────── */
 function StatItem({
-  icon, iconCls, label, value,
+  icon, label, value,
 }: {
   icon: React.ReactNode;
-  iconCls: string;
   label: string;
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-2.5">
-      <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${iconCls}`}>
-        {icon}
-      </div>
+    <div className="flex items-center gap-2.5 px-4 py-2 first:pl-0">
+      <span className="text-muted-foreground shrink-0">{icon}</span>
       <div className="min-w-0">
-        <p className="text-[17px] font-semibold text-foreground tabular-nums leading-none truncate">{value}</p>
-        <p className="text-[10.5px] text-muted-foreground mt-1 uppercase tracking-wide">{label}</p>
+        <p className="text-[15px] font-semibold text-foreground tabular-nums leading-none truncate">{value}</p>
+        <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">{label}</p>
       </div>
     </div>
   );
@@ -228,26 +213,22 @@ function StatItem({
 
 function StatStrip({ summary }: { summary: AgentMemorySummary }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="flex items-stretch divide-x divide-border">
       <StatItem
         icon={<Phone className="w-4 h-4" />}
-        iconCls="text-blue-400 bg-blue-500/10 border-blue-500/20"
         label="Total Calls" value={summary.totalCalls}
       />
       <StatItem
         icon={<BarChart3 className="w-4 h-4" />}
-        iconCls="text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
         label="Facts Captured" value={summary.totalFacts}
       />
       <StatItem
         icon={<Layers className="w-4 h-4" />}
-        iconCls="text-violet-400 bg-violet-500/10 border-violet-500/20"
         label="Episodes" value={summary.totalEpisodes}
       />
       <StatItem
         icon={<Clock className="w-4 h-4" />}
-        iconCls="text-amber-400 bg-amber-500/10 border-amber-500/20"
-        label="Last Active" value={<span className="text-[14px]">{timeAgo(summary.lastActiveAt)}</span>}
+        label="Last Active" value={<span className="text-[13px]">{timeAgo(summary.lastActiveAt)}</span>}
       />
     </div>
   );
@@ -269,7 +250,7 @@ function ViewAllLink({ label, onClick }: { label: string; onClick: () => void })
   return (
     <button
       onClick={onClick}
-      className="mt-4 inline-flex items-center gap-1 text-[12px] font-medium text-blue-400 hover:text-blue-300 transition-colors"
+      className="mt-4 inline-flex items-center gap-1 text-[12px] font-medium text-foreground/80 hover:text-foreground transition-colors"
     >
       {label}
       <ArrowRight className="w-3.5 h-3.5" />
@@ -285,7 +266,7 @@ function FactCard({
   agentId: number;
   onDeleted?: () => void;
 }) {
-  const { Icon, cls } = factStyle(fact.key);
+  const Icon = factIcon(fact.key);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const deleteFact = useDeleteCallerFact();
@@ -312,8 +293,8 @@ function FactCard({
   }
 
   return (
-    <div className="group rounded-xl border border-border bg-elevated/40 p-3 flex items-start gap-3 relative">
-      <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${cls}`}>
+    <div className="group rounded-xl border border-border bg-card p-3 flex items-start gap-3 relative">
+      <div className="w-8 h-8 rounded-lg border border-border bg-elevated flex items-center justify-center shrink-0 text-muted-foreground">
         <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0 flex-1 pr-6">
@@ -326,8 +307,8 @@ function FactCard({
         title={confirming ? "Click again to confirm deletion" : "Delete this fact"}
         className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1 ${
           confirming
-            ? "text-red-400 bg-red-500/10 opacity-100"
-            : "text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+            ? "text-destructive bg-destructive/10 opacity-100"
+            : "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         }`}
       >
         {deleteFact.isPending
@@ -365,7 +346,7 @@ function EpisodeTimeline({ episodes }: { episodes: AgentMemoryEpisode[] }) {
           {i < episodes.length - 1 && (
             <span className="absolute left-[3.5px] top-3 bottom-0 w-px bg-border" />
           )}
-          <span className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-blue-400 ring-4 ring-blue-500/10" />
+          <span className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-muted-foreground ring-4 ring-muted-foreground/10" />
           <p className="text-[12px] font-semibold text-foreground">{episodeTime(ep.createdAt)}</p>
           {ep.summary ? (
             <p className="text-[12px] text-muted-foreground leading-relaxed mt-1">{ep.summary}</p>
@@ -375,7 +356,7 @@ function EpisodeTimeline({ episodes }: { episodes: AgentMemoryEpisode[] }) {
           {ep.callId != null && (
             <Link
               href={`/app/calls/${ep.callId}`}
-              className="text-[11px] text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1.5"
+              className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1 mt-1.5"
             >
               View call <ChevronRight className="w-3 h-3" />
             </Link>
@@ -411,7 +392,7 @@ function TimelineFeed({
     <ol className="relative">
       {items.map((it, i) => {
         const isFact = it.kind === "fact";
-        const dotCls = isFact ? "bg-emerald-400 ring-emerald-500/10" : "bg-blue-400 ring-blue-500/10";
+        const dotCls = isFact ? "bg-muted-foreground ring-muted-foreground/10" : "bg-foreground ring-foreground/10";
         return (
           <li key={it.id} className="relative pl-6 pb-5 last:pb-0">
             {i < items.length - 1 && (
@@ -420,11 +401,7 @@ function TimelineFeed({
             <span className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ring-4 ${dotCls}`} />
             <div className="flex items-center gap-2">
               <p className="text-[12px] font-semibold text-foreground">{episodeTime(it.createdAt)}</p>
-              <span className={`text-[9px] font-medium rounded-md border px-1.5 py-0.5 ${
-                isFact
-                  ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
-                  : "text-blue-400 border-blue-500/20 bg-blue-500/10"
-              }`}>
+              <span className="text-[9px] font-medium rounded-md border px-1.5 py-0.5 text-muted-foreground border-border bg-elevated">
                 {isFact ? "Fact" : "Episode"}
               </span>
             </div>
@@ -442,7 +419,7 @@ function TimelineFeed({
                 {it.episode.callId != null && (
                   <Link
                     href={`/app/calls/${it.episode.callId}`}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 mt-1.5"
+                    className="text-[11px] text-foreground/80 hover:text-foreground inline-flex items-center gap-1 mt-1.5"
                   >
                     View call <ChevronRight className="w-3 h-3" />
                   </Link>
@@ -458,46 +435,73 @@ function TimelineFeed({
 
 /* ─── Call History ───────────────────────────────────────────────────────── */
 function DirectionBadge({ direction }: { direction: Direction }) {
-  const cfg: Record<Direction, { label: string; icon: React.ReactNode; cls: string }> = {
-    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" />, cls: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
-    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" />,  cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
-    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" />,         cls: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
+  const cfg: Record<Direction, { label: string; icon: React.ReactNode }> = {
+    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" /> },
+    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" /> },
+    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" /> },
   };
   const c = cfg[direction];
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-medium rounded-md border px-1.5 py-0.5 ${c.cls}`}>
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-md border border-border bg-elevated px-1.5 py-0.5 text-muted-foreground">
       {c.icon}{c.label}
     </span>
   );
 }
 
-function CallRow({ call }: { call: Call }) {
+/* Outcome carries real meaning → use semantic status colors only here */
+function OutcomeBadge({ status }: { status: Call["status"] }) {
+  const cfg: Record<string, { label: string; cls: string }> = {
+    completed:   { label: "Completed",   cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+    in_progress: { label: "In progress", cls: "text-foreground bg-elevated border-border" },
+    pending:     { label: "Pending",     cls: "text-muted-foreground bg-elevated border-border" },
+    transferred: { label: "Transferred", cls: "text-foreground bg-elevated border-border" },
+    failed:      { label: "Failed",      cls: "text-red-400 bg-red-500/10 border-red-500/20" },
+    cancelled:   { label: "Cancelled",   cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  };
+  const c = cfg[status] ?? { label: humanize(status), cls: "text-muted-foreground bg-elevated border-border" };
   return (
-    <div className="flex items-center gap-3 py-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] text-muted-foreground">{formatDateTime(call.createdAt)}</p>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-[12.5px] font-semibold text-foreground">Call #{call.id}</span>
-          <DirectionBadge direction={callDirection(call)} />
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-1 truncate">
-          Duration: {formatDuration(call.durationSeconds)} · Agent: {call.agentName}
-        </p>
-      </div>
-      <Button variant="outline" size="sm" asChild className="shrink-0">
-        <Link href={`/app/calls/${call.id}`}>
-          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-          View details
-        </Link>
-      </Button>
-    </div>
+    <span className={`inline-flex items-center text-[10px] font-medium rounded-md border px-1.5 py-0.5 ${c.cls}`}>
+      {c.label}
+    </span>
   );
 }
 
+/* Full-width, scannable call-history table (matches the reference). */
 function CallList({ calls }: { calls: Call[] }) {
   return (
-    <div className="divide-y divide-border">
-      {calls.map(call => <CallRow key={call.id} call={call} />)}
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <th className="font-semibold px-2 pb-2">Date &amp; time</th>
+            <th className="font-semibold px-2 pb-2">Duration</th>
+            <th className="font-semibold px-2 pb-2">Type</th>
+            <th className="font-semibold px-2 pb-2">Outcome</th>
+            <th className="font-semibold px-2 pb-2">Agent</th>
+            <th className="font-semibold px-2 pb-2 text-right">Details</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {calls.map(call => (
+            <tr key={call.id} className="text-[12px] hover:bg-accent/30 transition-colors">
+              <td className="px-2 py-2.5 text-foreground whitespace-nowrap">{formatDateTime(call.createdAt)}</td>
+              <td className="px-2 py-2.5 text-muted-foreground tabular-nums whitespace-nowrap">{formatDuration(call.durationSeconds)}</td>
+              <td className="px-2 py-2.5"><DirectionBadge direction={callDirection(call)} /></td>
+              <td className="px-2 py-2.5"><OutcomeBadge status={call.status} /></td>
+              <td className="px-2 py-2.5 text-muted-foreground truncate max-w-[140px]">{call.agentName}</td>
+              <td className="px-2 py-2.5 text-right">
+                <Link
+                  href={`/app/calls/${call.id}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground/80 hover:text-foreground"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  View
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -588,8 +592,8 @@ function CallerAvatar({ contact, size = "md" }: { contact: CallerContact; size?:
   const txt = size === "lg" ? "text-[13px]" : "text-[11px]";
   if (isWebCaller(contact.phoneNumber)) {
     return (
-      <div className={`${dims} bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0`}>
-        <Globe className={`${iconDim} text-violet-400`} />
+      <div className={`${dims} bg-elevated border border-border flex items-center justify-center shrink-0`}>
+        <Globe className={`${iconDim} text-muted-foreground`} />
       </div>
     );
   }
@@ -597,8 +601,8 @@ function CallerAvatar({ contact, size = "md" }: { contact: CallerContact; size?:
     ? initials(contact.name)
     : contact.phoneNumber.slice(-2).toUpperCase();
   return (
-    <div className={`${dims} bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0`}>
-      <span className={`${txt} font-semibold text-emerald-400`}>{label}</span>
+    <div className={`${dims} bg-elevated border border-border flex items-center justify-center shrink-0`}>
+      <span className={`${txt} font-semibold text-muted-foreground`}>{label}</span>
     </div>
   );
 }
@@ -616,8 +620,8 @@ function CallerListRow({
       onClick={onClick}
       className={`w-full text-left rounded-xl border px-2.5 py-2.5 flex items-center gap-2.5 transition-colors ${
         selected
-          ? "border-blue-500/50 bg-blue-500/10"
-          : "border-border bg-card hover:bg-accent/30"
+          ? "border-primary/30 bg-primary/[0.06]"
+          : "border-transparent hover:bg-accent/40"
       }`}
     >
       <CallerAvatar contact={contact} />
@@ -627,7 +631,7 @@ function CallerListRow({
             {callerDisplayName(contact)}
           </span>
           {web && (
-            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-violet-400 border-violet-500/30 bg-violet-500/10 shrink-0">
+            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-muted-foreground border-border bg-elevated shrink-0">
               Web
             </span>
           )}
@@ -791,7 +795,7 @@ function CallerDetailView({
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-[18px] font-semibold text-foreground truncate">{callerDisplayName(contact)}</h2>
               {web && (
-                <span className="text-[10px] font-medium border rounded-md px-1.5 py-0.5 text-violet-400 border-violet-500/30 bg-violet-500/10">
+                <span className="text-[10px] font-medium border rounded-md px-1.5 py-0.5 text-muted-foreground border-border bg-elevated">
                   Web
                 </span>
               )}
@@ -843,7 +847,7 @@ function CallerDetailView({
             <TabsTrigger
               key={t.value}
               value={t.value}
-              className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-2.5 pt-0 text-[13px] font-medium text-muted-foreground shadow-none data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400 data-[state=active]:shadow-none"
+              className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-2.5 pt-0 text-[13px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
             >
               {t.label}
             </TabsTrigger>
@@ -861,8 +865,8 @@ function CallerDetailView({
               <TabsContent value="overview" className="mt-0 space-y-6">
                 <div className="rounded-xl border border-border bg-card p-4">
                   <div className="flex items-center gap-2 mb-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                      <Brain className="w-3.5 h-3.5 text-blue-400" />
+                    <div className="w-7 h-7 rounded-lg bg-elevated border border-border flex items-center justify-center">
+                      <Brain className="w-3.5 h-3.5 text-muted-foreground" />
                     </div>
                     <h3 className="text-[13px] font-semibold text-foreground">Memory Summary</h3>
                   </div>
@@ -885,7 +889,7 @@ function CallerDetailView({
                         facts={previewFacts.map(f => ({ ...f, phoneNumber: contact.phoneNumber }))}
                         agentId={agentId}
                         onDeleted={invalidateCallerDetail}
-                        columns={3}
+                        columns={2}
                       />
                       {facts.length > previewFacts.length && (
                         <ViewAllLink label="View all facts" onClick={() => setTab("facts")} />
@@ -1073,8 +1077,8 @@ export default function MemoryPage() {
       {/* Header */}
       <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
-            <Brain className="h-3.5 w-3.5 text-primary/70" />
+          <div className="h-6 w-6 rounded-md bg-elevated border border-border flex items-center justify-center">
+            <Brain className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50">
             Customer Intelligence
