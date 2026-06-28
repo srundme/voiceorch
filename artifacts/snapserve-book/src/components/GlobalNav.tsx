@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Search, BookMarked, FileCode2, Map, Moon, Sun, Home, Award } from "lucide-react";
+import { Search, BookMarked, FileCode2, Map, Moon, Sun, Home, Award, FolderOpen } from "lucide-react";
 import { useDarkMode } from "@/hooks/use-dark-mode";
 
 const NAV_ITEMS = [
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/glossary", icon: BookMarked, label: "Glossary" },
   { href: "/cheatsheet", icon: FileCode2, label: "Cheat Sheet" },
   { href: "/architecture", icon: Map, label: "Architecture" },
+  { href: "/files", icon: FolderOpen, label: "Files" },
   { href: "/certificate", icon: Award, label: "Certificate" },
 ];
 
@@ -16,20 +17,17 @@ export function GlobalNav() {
   const { isDark, toggle } = useDarkMode();
 
   const isHome = location === "/";
-  const isChapter = location.startsWith("/chapter/");
 
   if (isHome) return null;
 
   return (
     <nav className="sticky top-0 z-50 bg-background/90 backdrop-blur-sm border-b border-border">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-12">
-        {/* Left: Logo / Home */}
         <Link href="/" className="flex items-center gap-2 font-bold text-primary text-sm hover:opacity-80 transition-opacity">
           <span className="text-lg">📖</span>
           <span className="hidden sm:inline">The SnapServe Book</span>
         </Link>
 
-        {/* Center: Nav links */}
         <div className="flex items-center gap-1">
           {NAV_ITEMS.filter(item => item.href !== "/").map(({ href, icon: Icon, label }) => {
             const active = location === href;
@@ -50,7 +48,6 @@ export function GlobalNav() {
           })}
         </div>
 
-        {/* Right: Dark mode toggle */}
         <button
           onClick={toggle}
           className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all"

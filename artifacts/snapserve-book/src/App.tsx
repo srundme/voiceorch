@@ -18,6 +18,7 @@ import CheatSheet from "@/pages/CheatSheet";
 import ArchitectureMap from "@/pages/ArchitectureMap";
 import Certificate from "@/pages/Certificate";
 import Bookmarks from "@/pages/Bookmarks";
+import FileExplorer from "@/pages/FileExplorer";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/architecture" component={ArchitectureMap} />
       <Route path="/certificate" component={Certificate} />
       <Route path="/bookmarks" component={Bookmarks} />
+      <Route path="/files" component={FileExplorer} />
       <Route component={NotFound} />
     </Switch>
   );
