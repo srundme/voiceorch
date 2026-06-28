@@ -4,7 +4,7 @@ import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Download, FileText, AlertTriangle, Info, Bot, User,
   Receipt, Sparkles, ClipboardList, Pencil, Check, X, Zap,
-  ChevronDown, ChevronUp, Phone, Calendar, Clock, TrendingUp,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
   XCircle, PlayCircle, PauseCircle, MicOff, ScrollText,
@@ -842,9 +842,28 @@ function CallRecordingPlayer({ src, callId }: { src: string; callId: number | st
   );
 }
 
-export default function CallDetail() {
-  const params = useParams();
-  const id = parseInt(params.id || "0", 10);
+export function CallDetailContent({
+  callId,
+  drawerMode = false,
+  onClose,
+  onPrev,
+  onNext,
+  prevLabel,
+  nextLabel,
+  currentIndex,
+  totalCount,
+}: {
+  callId: number;
+  drawerMode?: boolean;
+  onClose?: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  prevLabel?: string;
+  nextLabel?: string;
+  currentIndex?: number;
+  totalCount?: number;
+}) {
+  const id = callId;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { getToken } = useAuth();
@@ -993,11 +1012,41 @@ export default function CallDetail() {
         {/* Header */}
         <div className="flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3">
-            <Link href="/app/calls">
-              <Button variant="outline" size="icon" className="h-8 w-8">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
+            {!drawerMode ? (
+              <Link href="/app/calls">
+                <Button variant="outline" size="icon" className="h-8 w-8">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={onPrev}
+                  disabled={!onPrev}
+                  title={prevLabel ? `Previous: ${prevLabel}` : "Previous"}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={onNext}
+                  disabled={!onNext}
+                  title={nextLabel ? `Next: ${nextLabel}` : "Next"}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+                {currentIndex != null && totalCount != null && (
+                  <span className="text-[10px] text-muted-foreground/50 font-mono ml-1 tabular-nums">
+                    {currentIndex + 1} / {totalCount}
+                  </span>
+                )}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-semibold tracking-tight">Call #{call.id}</h2>
@@ -1011,6 +1060,16 @@ export default function CallDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {drawerMode && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
             {call.recordingUrl ? (
               <button
                 type="button"
@@ -1677,4 +1736,10 @@ export default function CallDetail() {
       </div>
     </TooltipProvider>
   );
+}
+
+export default function CallDetail() {
+  const params = useParams();
+  const callId = parseInt(params.id || "0", 10);
+  return <CallDetailContent callId={callId} />;
 }

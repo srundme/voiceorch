@@ -28,6 +28,7 @@ import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { formatDistanceToNow, format } from "date-fns";
+import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -302,9 +303,10 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
   const { toast } = useToast();
   const retry = useRetryCampaignLead();
 
-  const [page,    setPage]    = useState(0);
-  const [status,  setStatus]  = useState("all");
-  const [outcome, setOutcome] = useState("all");
+  const [page,        setPage]        = useState(0);
+  const [status,      setStatus]      = useState("all");
+  const [outcome,     setOutcome]     = useState("all");
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const LIMIT = 50;
 
   const queryKey = ["batch-ws-leads", campaignId, batchId, status, outcome, page];
@@ -500,7 +502,11 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
                       <div className="flex items-center justify-end gap-1">
                         {lead.callId && (
                           <Button size="icon" variant="ghost" className="h-6 w-6"
-                            title="View Call" onClick={() => navigate(`/app/calls/${lead.callId}`)}>
+                            title="View Call"
+                            onClick={() => {
+                              const idx = items.findIndex(l => l.id === lead.id);
+                              setSelectedIdx(idx >= 0 ? idx : null);
+                            }}>
                             <Eye className="h-3 w-3 text-muted-foreground/50" />
                           </Button>
                         )}
@@ -535,6 +541,28 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
           </div>
         </div>
       )}
+
+      {/* Call Detail Drawer */}
+      <CallDetailDrawer
+        open={selectedIdx !== null && items[selectedIdx ?? -1]?.callId != null}
+        onClose={() => setSelectedIdx(null)}
+        callId={selectedIdx !== null ? (items[selectedIdx]?.callId ?? null) : null}
+        leadName={selectedIdx !== null ? (items[selectedIdx]?.name ?? items[selectedIdx]?.phone ?? null) : null}
+        currentIndex={selectedIdx ?? undefined}
+        totalCount={items.length}
+        onPrev={selectedIdx !== null && selectedIdx > 0
+          ? () => setSelectedIdx(i => Math.max(0, (i ?? 1) - 1))
+          : undefined}
+        onNext={selectedIdx !== null && selectedIdx < items.length - 1
+          ? () => setSelectedIdx(i => Math.min(items.length - 1, (i ?? 0) + 1))
+          : undefined}
+        prevLabel={selectedIdx !== null && selectedIdx > 0
+          ? (items[selectedIdx - 1]?.name ?? items[selectedIdx - 1]?.phone ?? null)
+          : null}
+        nextLabel={selectedIdx !== null && selectedIdx < items.length - 1
+          ? (items[selectedIdx + 1]?.name ?? items[selectedIdx + 1]?.phone ?? null)
+          : null}
+      />
     </div>
   );
 }

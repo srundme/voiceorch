@@ -1,0 +1,241 @@
+# Batch Call Details UX Improvement
+
+The current navigation flow breaks the user's context and significantly slows down campaign operations.
+
+## Current Flow
+
+Campaign
+→ Batch
+→ Leads
+→ Click 👁 View
+→ Redirect to Global Call Logs Page
+→ User clicks Back
+→ Returns to Call Logs or loses their previous position
+
+This creates several UX problems.
+
+### Problems
+
+1. The user leaves the Batch page entirely.
+
+2. The user loses the context of the batch they were reviewing.
+
+3. If the batch contains 100–1000 calls, reviewing each call requires constantly navigating back and forth.
+
+4. Filters, pagination, scroll position, and selected lead can be lost.
+
+5. Users are taken into the global Call Logs module, which is outside the Campaign workflow.
+
+6. Campaign managers typically review many calls in sequence. The current flow forces unnecessary page navigation after every call.
+
+This is not a scalable UX.
+
+---
+
+# Best Approach
+
+Do NOT navigate away from the Batch page.
+
+Instead, open the complete Call Details inside a **Right Side Drawer (Slide-over Panel)**.
+
+This is the same UX pattern used by:
+
+- Stripe
+- HubSpot
+- Salesforce
+- Linear
+- GitHub
+- Intercom
+- Retool
+
+The Leads table should remain visible in the background.
+
+---
+
+# Desired Flow
+
+Campaign
+
+↓
+
+Batch
+
+↓
+
+Leads Table
+
+↓
+
+👁 View
+
+↓
+
+Open Right Side Drawer
+
+↓
+
+Complete Call Details
+
+↓
+
+Close Drawer
+
+↓
+
+User is exactly where they left off
+
+No page refresh.
+
+No route change.
+
+No context loss.
+
+---
+
+# Drawer Content
+
+The drawer should reuse the existing Call Details component.
+
+Do NOT build another Call Details page.
+
+Simply render the existing component inside a slide-over drawer.
+
+The drawer should contain everything available on the current Call Details page:
+
+- Call Summary
+- Transcript
+- AI Summary
+- Tool Calls
+- Timeline / Logs
+- Recording
+- Metadata
+- Latency Metrics
+- Cost
+- Provider Details
+- Variables
+- Execution Details
+- Call Status
+- Disposition
+- Booking Information
+- Transfer Information
+- Callback Information
+
+The goal is feature parity with the existing Call Details page.
+
+---
+
+# Drawer Header
+
+Display:
+
+- Call ID
+- Lead Name
+- Phone Number
+- Status Badge
+- Duration
+- Start Time
+- End Time
+
+Actions:
+
+- Open Full Call Page ↗
+- Close Drawer
+
+The "Open Full Call Page" action should be optional and only used for deep linking or sharing.
+
+---
+
+# Previous / Next Navigation
+
+Inside the drawer, add navigation controls.
+
+Example:
+
+← Previous Call
+
+1 of 127
+
+Next Call →
+
+This allows users to review an entire batch without repeatedly opening and closing drawers.
+
+---
+
+# Preserve Context
+
+When the drawer closes, preserve:
+
+- Current Batch
+- Current Leads tab
+- Search query
+- Filters
+- Pagination
+- Scroll position
+- Selected lead
+
+Nothing should reset.
+
+---
+
+# Technical Architecture
+
+Refactor the existing Call Details page into a reusable component.
+
+Current:
+
+CallDetailsPage
+
+New:
+
+CallDetailsComponent
+
+Use this component in:
+
+- Global Call Logs Page
+- Campaign Batch Drawer
+- Future Lead Detail Drawer
+- Search Results
+- Anywhere else call details are required
+
+This avoids duplicate UI and duplicate business logic.
+
+---
+
+# Data Loading
+
+Do NOT preload every call.
+
+When the user clicks "View":
+
+1. Fetch the selected call details.
+2. Open the drawer immediately with a loading state.
+3. Render the existing Call Details component.
+4. Cache recently viewed calls for faster navigation between Previous/Next.
+
+---
+
+# Performance
+
+Only load:
+
+- Transcript when Transcript tab is opened.
+- Recording when Recording tab is opened.
+- Tool Logs when Tool Calls tab is opened.
+
+Lazy load heavy sections.
+
+---
+
+# Benefits
+
+This approach:
+
+- Keeps users inside the Campaign workflow.
+- Eliminates unnecessary page navigation.
+- Preserves user context.
+- Makes reviewing hundreds of calls significantly faster.
+- Reuses the existing Call Details UI instead of maintaining two separate implementations.
+- Improves scalability for high-volume outbound campaigns.
+- Aligns SnapServe AI with modern SaaS UX patterns.
+
+This should become the default behavior for viewing call details from Campaigns and Batches. The existing standalone Call Details page should remain available for direct URLs, deep links, and sharing, but users navigating from a Batch should stay within the Batch experience by default.
