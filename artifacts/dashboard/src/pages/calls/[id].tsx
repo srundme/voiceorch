@@ -1285,24 +1285,6 @@ export default function CallDetail() {
                     </div>
                   )}
 
-                  {/* Table header */}
-                  {callLogs && callLogs.length > 0 && (
-                    <div
-                      className="grid items-center gap-2 px-3 py-1.5 border-b border-white/8 bg-[#0f0f0f] shrink-0 text-[9px] uppercase tracking-widest text-white/20 font-semibold"
-                      style={{ gridTemplateColumns: LOG_GRID_COLUMNS }}
-                    >
-                      <span>Timestamp</span>
-                      <span className="text-center">Turn</span>
-                      <span>Log data</span>
-                      <span>Direction</span>
-                      <span>Component</span>
-                      <span>Provider</span>
-                      <span className="text-right">Duration</span>
-                      <span>Status</span>
-                      <span />
-                    </div>
-                  )}
-
                   <div className="flex-1 overflow-auto min-h-0">
                     {logsLoading ? (
                       <div className="flex items-center justify-center h-full text-white/20 gap-2">
@@ -1341,10 +1323,25 @@ export default function CallDetail() {
                         );
                       }
                       return (
-                        <>
+                        <div className="min-w-[780px]">
+                          {/* Table header — sticky inside the scroll container so it scrolls horizontally with the rows */}
+                          <div
+                            className="grid items-center gap-2 px-3 py-1.5 border-b border-white/8 bg-[#0f0f0f] text-[9px] uppercase tracking-widest text-white/20 font-semibold sticky top-0 z-10"
+                            style={{ gridTemplateColumns: LOG_GRID_COLUMNS }}
+                          >
+                            <span>Timestamp</span>
+                            <span className="text-center">Turn</span>
+                            <span>Log data</span>
+                            <span>Direction</span>
+                            <span>Component</span>
+                            <span>Provider</span>
+                            <span className="text-right">Duration</span>
+                            <span>Status</span>
+                            <span />
+                          </div>
                           {callEndedSummary && noFilters && <CallEndedCard summary={callEndedSummary} />}
                           {filtered.map(entry => <ExecLogRow key={entry.id} entry={entry} />)}
-                        </>
+                        </div>
                       );
                     })()}
                   </div>
