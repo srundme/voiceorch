@@ -21,6 +21,7 @@ import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
 import { handleWebcallWebSocket } from "./orchestration/telephony/webcall.js";
 import { verifySessionToken } from "./lib/session.js";
 import { warmSileroVAD } from "./orchestration/silero-vad.js";
+import { probeGenderService } from "./orchestration/genderService.js";
 
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "@workspace/db";
@@ -337,6 +338,7 @@ server.listen(port, () => {
   logger.info({ port }, "Server listening");
   initAudioPool(new URL(`file://${workerFile}`));
   void warmSileroVAD(); // preload Silero VAD ONNX session so first call doesn't pay load cost
+  void probeGenderService(); // loudly log the resolved gender-service URL + reachability so misconfig isn't silent
 
   // Run DB migrations after the port is open so Railway's health-check passes
   // while the schema is being applied. Services that need tables will become

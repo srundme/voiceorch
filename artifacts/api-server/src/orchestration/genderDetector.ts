@@ -17,6 +17,7 @@
  */
 
 import { logger as rootLogger } from "../lib/logger.js";
+import { genderServiceBaseUrl } from "./genderService.js";
 
 const SAMPLE_RATE  = 8_000;
 const BITS         = 16;
@@ -34,8 +35,7 @@ const TARGET_BYTES = 2 * SAMPLE_RATE * SAMPLE_BYTES;
 // Resolve the gender-service base URL from the environment so the same binary
 // works in dev (same-VM localhost) and on Railway (separate container with a
 // GENDER_SERVICE_URL env var set to the internal service hostname).
-const _GENDER_BASE = (process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000").replace(/\/$/, "");
-const GENDER_SERVICE_URL = `${_GENDER_BASE}/voice-analysis/gender`;
+const GENDER_SERVICE_URL = `${genderServiceBaseUrl()}/voice-analysis/gender`;
 
 // ── WAV builder ──────────────────────────────────────────────────────────────
 

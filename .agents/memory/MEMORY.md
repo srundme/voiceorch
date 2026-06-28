@@ -53,3 +53,4 @@
 - [Docs API Reference explorer](docs-api-explorer.md) — dashboard docs auto-generate from openapi.yaml (Vite virtual module, lazy chunk); "Try it" is copy-only by design; resolve $refs not filter; cycle-track on full refId not short name
 - [Server-graded quiz answer-key oracle](server-graded-quiz-oracle.md) — public retakeable exam endpoints must return aggregate-only (score/passed), never per-question correctness, or attackers reconstruct the key; throttle the residual score-delta oracle
 - [code_execution sandbox has no process.env](code-execution-no-process-env.md) — secrets aren't injected into the JS sandbox; run env/token-dependent scripts (e.g. GitHub push) via bash/node where process.env is populated
+- [Caller gender salutation detection](gender-salutation-detection.md) — Sir/Ma'am silently null in prod = GENDER_SERVICE_URL unset (separate Railway container); arm detector AFTER greeting; gate on {caller_salutation}+toggle; verbatim directive

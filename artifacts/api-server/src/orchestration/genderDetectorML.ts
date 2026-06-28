@@ -18,6 +18,7 @@
  */
 
 import { logger as rootLogger } from "../lib/logger.js";
+import { genderServiceBaseUrl } from "./genderService.js";
 
 const SAMPLE_RATE  = 8_000;
 const BITS         = 16;
@@ -36,8 +37,7 @@ const FALLBACK_BYTES = 4 * SAMPLE_RATE * SAMPLE_BYTES;
 /** Confidence threshold for an immediate lock (0–1 scale from the ML service). */
 const CONFIDENCE_THRESHOLD = 0.75;
 
-const _GENDER_SERVICE_BASE = (process.env["GENDER_SERVICE_URL"] ?? "http://localhost:5000").replace(/\/+$/, "");
-const GENDER_ML_SERVICE_URL = `${_GENDER_SERVICE_BASE}/voice-analysis/gender-ml`;
+const GENDER_ML_SERVICE_URL = `${genderServiceBaseUrl()}/voice-analysis/gender-ml`;
 
 // Startup warning so misconfigured deployments are caught in logs immediately.
 if (process.env["GENDER_SERVICE_URL"] && (

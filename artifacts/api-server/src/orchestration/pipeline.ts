@@ -399,6 +399,13 @@ export class OrchestrationPipeline {
 
   // Gender detection — fires once per call using early caller speech
   private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
+  /** True only when the agent's system prompt actually contains {caller_salutation}.
+   *  When false we never instantiate a detector or call the gender service. */
+  private readonly genderSalutationInPrompt: boolean = false;
+  /** Detection is "armed" only after the agent greeting has been delivered, so the
+   *  detector samples the caller's INTRODUCTION turn — not the greeting echo or any
+   *  stray pre-greeting audio. Until armed, caller audio is not fed to the detector. */
+  private genderDetectionArmed = false;
 
 
   // Tracks the current call language for per-turn LLM language injection.
@@ -523,15 +530,29 @@ export class OrchestrationPipeline {
       if (combinedFrames > 0) this.bargeInMinFrames = combinedFrames;
       if (sp.backOffSeconds >= 0) this.bargeInEchoGraceMs = Math.round(sp.backOffSeconds * 1000);
     }
-    if (config.agentConfig.genderDetectionEnabled) {
+    // Detection only makes sense when {caller_salutation} is actually in the prompt —
+    // otherwise there is nothing to fill in and we must NOT call the gender service.
+    this.genderSalutationInPrompt =
+      /\{\{caller_salutation\}\}|\{caller_salutation\}/.test(this.agent.systemPrompt ?? "");
+    if (config.agentConfig.genderDetectionEnabled && this.genderSalutationInPrompt) {
       const gp = config.agentConfig.genderDetectionProvider;
       this.genderDetector = gp === "ml_model_v2"
         ? new GenderDetectorMLv2(config.callId)
         : gp === "ml_model"
           ? new GenderDetectorML(config.callId)
           : new GenderDetector(config.callId);
+      logger.info(
+        { callId: config.callId, provider: gp ?? "librosa" },
+        "Gender detection enabled (toggle on + {caller_salutation} present) — will arm after greeting to sample caller intro",
+      );
     } else {
       this.genderDetector = null as unknown as GenderDetector;
+      if (config.agentConfig.genderDetectionEnabled && !this.genderSalutationInPrompt) {
+        logger.info(
+          { callId: config.callId },
+          "Gender detection toggle ON but {caller_salutation} is absent from the system prompt — skipping all gender-service calls for this call",
+        );
+      }
     }
 
 
@@ -1066,8 +1087,10 @@ export class OrchestrationPipeline {
 
     // Streaming STT path: feed all audio directly to Deepgram — no local VAD needed
     if (this.streamSTT) {
-      // Feed all frames (not just speech) — librosa pyin handles silence gracefully
-      this.genderDetector?.addSpeechChunk(pcm8k);
+      // Feed all frames (not just speech) — librosa pyin handles silence gracefully.
+      // Only after the greeting is delivered (armed) so we sample the caller's intro,
+      // not the greeting echo or stray pre-greeting audio.
+      if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
 
       // ── Input-level self-echo gate (Live Call / carrier path only) ─────────────
       // Root fix for the greeting-startup delay: on the carrier path there is no
@@ -1104,8 +1127,9 @@ export class OrchestrationPipeline {
       return;
     }
 
-    // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops)
-    this.genderDetector?.addSpeechChunk(pcm8k);
+    // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops).
+    // Gated on armed so detection samples the caller's intro turn, not the greeting.
+    if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) {
@@ -1187,12 +1211,30 @@ export class OrchestrationPipeline {
 
   // ── Greeting ────────────────────────────────────────────────────────────────
 
+  /**
+   * Arm gender detection so the detector begins sampling caller audio. Called once
+   * the agent greeting has been delivered (or immediately when the caller speaks
+   * first), so the sampled audio is the caller's INTRODUCTION turn rather than the
+   * greeting echo or stray pre-greeting audio. Idempotent and a no-op when no
+   * detector is active (toggle off or {caller_salutation} absent).
+   */
+  private armGenderDetection(): void {
+    if (this.genderDetectionArmed || !this.genderDetector) return;
+    this.genderDetectionArmed = true;
+    logger.info(
+      { callId: this.config.callId, provider: this.agent.genderDetectionProvider ?? "librosa" },
+      "Gender detection ARMED — now sampling the caller's intro turn",
+    );
+  }
+
   async greet(): Promise<void> {
     if (this.closed) return;
     // "User speaks first" — stay silent on connect; the session listens for
     // caller audio and only responds after the user speaks.
     if (this.agent.firstSpeaker === "user") {
       logger.info({ callId: this.config.callId }, "First speaker = user — skipping opening greeting");
+      // No greeting to wait for — the caller's first turn IS their intro, so arm now.
+      this.armGenderDetection();
       return;
     }
     this.isProcessing = true;
@@ -1313,6 +1355,9 @@ export class OrchestrationPipeline {
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
+      // Greeting has been delivered (or failed) — the next caller audio is their
+      // intro turn. Arm detection now so we sample THAT, not the greeting echo.
+      this.armGenderDetection();
     }
   }
 
@@ -2647,17 +2692,20 @@ export class OrchestrationPipeline {
       systemPromptForTurn = `${systemPromptForTurn}\n\n## Relevant Knowledge Base Context\n\n${kbContext}`;
     }
 
-    // Inject gender-based salutation directive once detection has resolved
+    // Inject gender-based salutation directive once detection has resolved.
+    // Appended AFTER the language guard so it wins on recency, and the salutation is
+    // marked verbatim so the strict single-language rule above cannot translate it
+    // (see memory: language-rule-proper-nouns — "Sir"/"Ma'am" get transliterated otherwise).
     const detectedGender = this.genderDetector?.gender ?? null;
     if (detectedGender === "male") {
       const sal = this.agent.genderDetectionMaleSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as male. Always address them respectfully as "${sal}" when appropriate (e.g. "Yes, ${sal}", "Of course, ${sal}"). Never use "${this.agent.genderDetectionFemaleSalutation}".`;
+      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is male. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionFemaleSalutation}".`;
     } else if (detectedGender === "female") {
       const sal = this.agent.genderDetectionFemaleSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER] The caller has been identified as female. Always address them respectfully as "${sal}" when appropriate (e.g. "Yes, ${sal}", "Of course, ${sal}"). Never use "${this.agent.genderDetectionMaleSalutation}".`;
+      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is female. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionMaleSalutation}".`;
     } else if (detectedGender === null && this.agent.genderDetectionNeutralSalutation) {
       const sal = this.agent.genderDetectionNeutralSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER] Gender could not be determined. Use "${sal}" as a neutral salutation when appropriate.`;
+      systemPromptForTurn += `\n\n[CALLER GENDER] Gender not yet determined. Use "${sal}" as a neutral salutation when addressing the caller, kept exactly as written.`;
     }
 
     // ── Substitute {caller_salutation} placeholder ────────────────────────
