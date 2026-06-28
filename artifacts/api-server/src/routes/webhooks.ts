@@ -571,6 +571,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     preloadedCfg: cfg,
     buildVoicemailStreamXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
       campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true,
+      callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
     }),
   });
   if (amdHandled) return;
@@ -613,7 +614,10 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   // Cancel pending auto-redials when the caller rings us first (they're reachable)
   if (inboundFrom) void cancelPendingRedials(agentId, inboundFrom);
   res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, { campaignLeadId, from: inboundFrom, to: inboundTo })
+    getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
+      campaignLeadId, from: inboundFrom, to: inboundTo,
+      callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
+    })
   );
 });
 

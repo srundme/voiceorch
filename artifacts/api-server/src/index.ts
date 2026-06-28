@@ -114,8 +114,9 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const platformTelephony = url.includes("pt=1");
   const qs                = new URLSearchParams(url.split("?")[1] ?? "");
   const campaignLeadId    = qs.has("campaignLeadId") ? parseInt(qs.get("campaignLeadId")!, 10) : undefined;
-  const vobizFrom         = qs.get("from") ?? undefined;
-  const vobizTo           = qs.get("to")   ?? undefined;
+  const vobizFrom         = qs.get("from")     ?? undefined;
+  const vobizTo           = qs.get("to")       ?? undefined;
+  const vobizCallUuid     = qs.get("callUuid") ?? undefined;
   const voicemailDelivery = qs.get("vm") === "1";
 
   // ── Webcall auth (browser "Live Test") ──────────────────────────────────────
@@ -159,7 +160,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                                      break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                                       break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery); break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

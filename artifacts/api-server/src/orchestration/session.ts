@@ -959,6 +959,7 @@ export async function createSession(params: {
             event:    "Transfer Failed",
             reason:   "provider_api_error",
             provider: params.telephonyProvider ?? "unknown",
+            callUuid: params.externalCallId ?? null,
             message:  errMsg,
           },
         });

@@ -57,6 +57,15 @@ export async function handleVobizWebSocket(
   urlFrom?: string,
   urlTo?: string,
   voicemailDelivery = false,
+  /**
+   * The VoBiz call_uuid from the HTTP answer-webhook body (req.body.CallUUID).
+   * Passed here via the WebSocket URL query string (?callUuid=...) by the
+   * answer webhook handler.  This is the canonical REST API identifier — used
+   * as externalCallId in preference to msg.start.callId, which may be a
+   * stream-scoped session ID rather than the REST call_uuid that the
+   * /Call/{uuid}/Transfer/ endpoint expects.
+   */
+  urlCallUuid?: string,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -110,12 +119,18 @@ export async function handleVobizWebSocket(
         streamId = msg.start?.streamId ?? msg.streamId ?? null;
         const callId = msg.start?.callId ?? null;
 
+        // Prefer the call_uuid from the HTTP answer webhook (passed via the
+        // WebSocket URL query string) over the start-event callId.  VoBiz's
+        // REST Transfer API keyed on call_uuid, while start.callId may be a
+        // stream/session-scoped identifier rather than the REST call_uuid.
+        const resolvedCallId = urlCallUuid ?? callId ?? null;
+
         const params = msg.start?.customParameters ?? {};
         // Priority: URL query params (most reliable) → start.from/to → customParameters → fallback
         const fromNumber = urlFrom ?? msg.start?.from ?? params["From"] ?? "+10000000000";
         const toNumber   = urlTo   ?? msg.start?.to   ?? params["To"]   ?? "+10000000001";
 
-        logger.info({ agentId, streamId, callId, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
+        logger.info({ agentId, streamId, callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
         // ── Silence keepalive during session init ───────────────────────────
         // VoBiz drops the call if the audio bridge receives no data for ~2 s
@@ -139,7 +154,7 @@ export async function handleVobizWebSocket(
             telephonyProvider: "vobiz",
             toNumber,
             fromNumber,
-            externalCallId: callId ?? undefined,
+            externalCallId: resolvedCallId ?? undefined,
             platformTelephony,
             customParameters: params,
             campaignLeadId,
@@ -228,7 +243,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -242,6 +257,10 @@ export function getVobizAnswerXML(
   // arrives (VoBiz's start.from/to and customParameters support is inconsistent).
   if (opts.from) qsParts.push(`from=${encodeURIComponent(opts.from)}`);
   if (opts.to)   qsParts.push(`to=${encodeURIComponent(opts.to)}`);
+  // Embed the VoBiz call_uuid from the HTTP answer-webhook body so the WS handler
+  // can use it as externalCallId — the canonical REST API identifier needed for
+  // the /Call/{uuid}/Transfer/ endpoint (msg.start.callId may differ).
+  if (opts.callUuid) qsParts.push(`callUuid=${encodeURIComponent(opts.callUuid)}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
   // XML-escape the URL before embedding in the <Stream> text node.  Bare "&" in
