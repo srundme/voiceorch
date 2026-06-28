@@ -221,7 +221,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
-        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
+        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agent.id}&campaignLeadId=${lead.id}&dir=out`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status?campaignLeadId=${lead.id}&campaignLeadSig=${twilioLeadSig}`,
         ...(amd.enabled ? { machineDetection: amd.twilioMode } : {}),
         ...(recordingEnabled ? {
@@ -239,7 +239,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
-        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
+        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&campaignLeadId=${lead.id}&dir=out`,
         hangupUrl: `${baseUrl}/api/webhooks/plivo/campaign-status?campaignLeadId=${lead.id}&campaignLeadSig=${plivoLeadSig}`,
         ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
       });
@@ -253,7 +253,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
-        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
+        answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}&dir=out`,
         hangupUrl: `${baseUrl}/api/webhooks/vobiz/status?campaignLeadId=${lead.id}&campaignLeadSig=${vobizLeadSig}`,
         ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
       });

@@ -86,7 +86,7 @@ async function fireMetaLeadCall(opts: {
       authToken:         decryptKey(provRow.apiKey),
       fromNumber:        phone.number ?? cfg["fromNumber"]!,
       toNumber:          opts.toNumber,
-      webhookUrl:        `${baseUrl}/api/webhooks/twilio/voice?agentId=${opts.agentId}&metaLeadId=${opts.metaLeadId}`,
+      webhookUrl:        `${baseUrl}/api/webhooks/twilio/voice?agentId=${opts.agentId}&metaLeadId=${opts.metaLeadId}&dir=out`,
       statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
     });
   } else if (provider === "plivo") {
@@ -96,7 +96,7 @@ async function fireMetaLeadCall(opts: {
       authToken: decryptKey(provRow.apiKey),
       fromNumber:phone.number ?? cfg["fromNumber"]!,
       toNumber:  opts.toNumber,
-      answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${opts.agentId}&metaLeadId=${opts.metaLeadId}`,
+      answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${opts.agentId}&metaLeadId=${opts.metaLeadId}&dir=out`,
     });
   } else if (provider === "vobiz") {
     if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
@@ -105,7 +105,7 @@ async function fireMetaLeadCall(opts: {
       authToken: decryptKey(provRow.apiKey),
       fromNumber:phone.number ?? cfg["fromNumber"]!,
       toNumber:  opts.toNumber,
-      answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${opts.agentId}&metaLeadId=${opts.metaLeadId}`,
+      answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${opts.agentId}&metaLeadId=${opts.metaLeadId}&dir=out`,
       hangupUrl: `${baseUrl}/api/webhooks/vobiz/status`,
     });
   } else {

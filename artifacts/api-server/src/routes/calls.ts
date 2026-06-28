@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, isNull, inArray } from "drizzle-orm";
-import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, canonicalizeCallerKey, humanPhone } from "@workspace/db";
+import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -240,7 +240,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
       providerCallId = await dialTwilio({
         accountSid: cfg["accountSid"]!, authToken: providerRow!.apiKey,
         fromNumber: cfg["fromNumber"]!, toNumber,
-        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}`,
+        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${agentId}&dir=out`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status`,
         maxDurationSeconds,
         ...(amd.enabled && { machineDetection: amd.twilioMode }),
@@ -253,7 +253,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
       providerCallId = await dialPlivo({
         authId: cfg["authId"]!, authToken: providerRow!.apiKey,
         fromNumber: cfg["fromNumber"]!, toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}`,
+        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agentId}&dir=out`,
         maxDurationSeconds,
         ...(amd.enabled && { machineDetectionEnabled: true }),
       });
@@ -281,7 +281,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
         providerCallId = await dialVobiz({
           authId: cfg["authId"]!, authToken: providerRow!.apiKey,
           fromNumber: cfg["fromNumber"]!, toNumber,
-          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}`,
+          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&dir=out`,
           hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
           maxDurationSeconds,
           ...(amd.enabled && { machineDetectionEnabled: true }),
@@ -353,7 +353,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
         providerCallId = await dialVobiz({
           authId: managedAuthId, authToken: managedAuthToken,
           fromNumber, toNumber,
-          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1`,
+          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1&dir=out`,
           hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
           maxDurationSeconds,
           ...(amd.enabled && { machineDetectionEnabled: true }),
@@ -611,13 +611,33 @@ router.get("/calls/:id/caller-memory", requireAuth, async (req, res): Promise<vo
     }
   }
 
-  // SINGLE source of truth for the memory key — same as session.ts.
+  // Resolve the SAME memory key the call session used. Sessions persist the
+  // resolved key (and direction) into the call metadata, so prefer that — it can
+  // never drift from what was actually written. For legacy rows written before
+  // keys were persisted, fall back to a direction-aware (or, last resort,
+  // direction-blind) derivation from the stored from/to numbers.
   const fromNumber = call.fromNumber ?? "";
   const toNumber = call.toNumber ?? "";
-  const callerKey = canonicalizeCallerKey(
-    humanPhone(fromNumber, toNumber) ??
-      (fromNumber.startsWith("webcall-user-") ? fromNumber : null),
-  );
+  let callerKey: string | null = null;
+  let metaDirection: "inbound" | "outbound" | null = null;
+  try {
+    const md = JSON.parse(call.metadata ?? "{}") as Record<string, unknown>;
+    if (typeof md["callerKey"] === "string" && md["callerKey"]) {
+      callerKey = canonicalizeCallerKey(md["callerKey"] as string);
+    }
+    if (md["direction"] === "inbound" || md["direction"] === "outbound") {
+      metaDirection = md["direction"];
+    }
+  } catch { /* ignore malformed metadata */ }
+  if (!callerKey) {
+    if (fromNumber.startsWith("webcall-user-")) {
+      callerKey = canonicalizeCallerKey(fromNumber);
+    } else if (metaDirection) {
+      callerKey = resolveCallerKey(metaDirection, fromNumber, toNumber);
+    } else {
+      callerKey = canonicalizeCallerKey(humanPhone(fromNumber, toNumber));
+    }
+  }
 
   if (!callerKey) {
     res.json(GetCallCallerMemoryResponse.parse({

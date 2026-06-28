@@ -28,7 +28,8 @@ import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { scheduleNoAnswerRedial } from "../services/autoRedial.js";
 import { recordCallExecution } from "./campaignCaller.js";
 import {
-  humanPhone,
+  resolveCallerKey,
+  type CallDirection,
   canonicalizeCallerKey,
   loadCallerProfile,
   loadCallerContext,
@@ -86,6 +87,11 @@ export async function createSession(params: {
   fromNumber: string;
   externalCallId?: string;
   platformTelephony?: boolean;
+  /** Call direction — picks the human side for the caller-memory key. Inbound keys
+   *  off `fromNumber` (the caller); outbound keys off `toNumber` (the dialed party,
+   *  since `fromNumber` is our shared platform number). Defaults to "inbound" when
+   *  omitted. Ignored for webcall, which uses a synthetic per-user key. */
+  callDirection?: CallDirection;
   /** Inbound call parameters (e.g. Vobiz customParameters) merged into prompt variable resolution */
   customParameters?: Record<string, string>;
   /** Campaign lead ID — if set, lead data is merged into prompt variable resolution */
@@ -353,18 +359,19 @@ export async function createSession(params: {
   // ── Parallel pre-fetch: caller memory + campaign lead + knowledge base ───────
   // All three are independent DB reads — fire simultaneously to avoid sequential
   // round-trips that add 20-60 ms to call setup latency.
-  // For webcall sessions fromNumber is "webcall-user-<userId>" which humanPhone()
-  // rejects (not a real phone number). Use it as a stable synthetic identifier so
-  // caller memory is captured per-user-id, matching the historical "webcall:user_<id>"
-  // format already in the DB. Real-phone callers are unaffected.
-  // canonicalizeCallerKey is the SINGLE source of truth for the memory key — the
-  // same function the write path uses — so read and write can never drift again.
-  // humanPhone already canonicalizes real numbers; for web calls fall back to the
-  // synthetic identity, which canonicalizeCallerKey maps to "webcall:user_<id>".
-  const callerPhone = canonicalizeCallerKey(
-    humanPhone(params.fromNumber, params.toNumber) ??
-      (params.fromNumber.startsWith("webcall-user-") ? params.fromNumber : null),
-  );
+  // Resolve the caller-memory key. canonicalizeCallerKey / resolveCallerKey are the
+  // SINGLE source of truth for the memory key — the same functions the write path
+  // uses — so read and write can never drift again.
+  // - Webcall: fromNumber is "webcall-user-<userId>"; canonicalizeCallerKey maps it
+  //   to the synthetic "webcall:user_<id>" so memory is captured per-user-id.
+  // - Telephony: pick the HUMAN side by direction. Inbound keys off the caller
+  //   (fromNumber); outbound keys off the dialed party (toNumber) — never the
+  //   shared platform fromNumber, which would collapse every outbound caller onto
+  //   one key. Placeholder/sentinel + missing numbers resolve to null (cold start).
+  const callDirection: CallDirection = params.callDirection ?? "inbound";
+  const callerPhone = isWebcall
+    ? canonicalizeCallerKey(params.fromNumber)
+    : resolveCallerKey(callDirection, params.fromNumber, params.toNumber);
   // Persona fingerprint for caller-memory whiplash detection: when the agent is
   // repurposed (e.g. real-estate → insurance), stale domain memory keyed on
   // (agentId, phone) must not bleed into the new persona. Derived from the RAW
@@ -642,6 +649,8 @@ export async function createSession(params: {
               providerCallId: params.externalCallId,
               externalCallId: params.externalCallId,
               ...(params.platformTelephony ? { platformTelephony: true } : {}),
+              direction: callDirection,
+              ...(callerPhone ? { callerKey: callerPhone } : {}),
             }),
           }).where(eq(callsTable.id, existing.id)),
         );
@@ -660,6 +669,8 @@ export async function createSession(params: {
           ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
           ...(params.platformTelephony ? { platformTelephony: true } : {}),
           ...(isWebcall ? { transport: "webcall", isTestCall: true } : {}),
+          direction: callDirection,
+          ...(callerPhone ? { callerKey: callerPhone } : {}),
         }) || null,
       }).returning(),
     );
@@ -696,7 +707,7 @@ export async function createSession(params: {
   // ── Call Started lifecycle row (enables Logs tab for telephony calls) ─────────
   writeCallStartedLog(callRecord.id, params.agentId, {
     callType: isWebcall ? "Webcall" : "Live Call",
-    direction: isWebcall ? "Inbound" : (params.externalCallId ? "Outbound" : "Inbound"),
+    direction: isWebcall ? "Inbound" : (callDirection === "outbound" ? "Outbound" : "Inbound"),
     recordingEnabled: (agentCfg["recordingEnabled"] as boolean | undefined) ?? false,
     sessionId: (() => {
       try {

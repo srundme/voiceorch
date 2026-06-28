@@ -34,11 +34,14 @@ import {
   canonicalizeCallerKey,
   isRealPhoneNumber,
   humanPhone,
+  resolveCallerKey,
+  type CallDirection,
 } from "@workspace/db";
 
 // Re-export the shared caller-identity helpers so existing importers
 // (session.ts, etc.) keep working through callerMemory's public surface.
-export { canonicalizeCallerKey, isRealPhoneNumber, humanPhone };
+export { canonicalizeCallerKey, isRealPhoneNumber, humanPhone, resolveCallerKey };
+export type { CallDirection };
 import { and, eq, ne, desc, isNull, inArray, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import type { ConversationTurn } from "./types.js";

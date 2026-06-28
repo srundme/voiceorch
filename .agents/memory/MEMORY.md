@@ -55,3 +55,4 @@
 - [code_execution sandbox has no process.env](code-execution-no-process-env.md) — secrets aren't injected into the JS sandbox; run env/token-dependent scripts (e.g. GitHub push) via bash/node where process.env is populated
 - [Caller gender salutation detection](gender-salutation-detection.md) — Sir/Ma'am silently null in prod = GENDER_SERVICE_URL unset (separate Railway container); arm detector AFTER greeting; gate on {caller_salutation}+toggle; verbatim directive
 - [VoBiz transfer UUID mismatch](vobiz-transfer-uuid.md) — dial API returns REST call_uuid; answer-webhook CallUUID + start.callId are stream-session UUIDs; Transfer API needs the dial UUID
+- [Caller-memory key is direction-aware](caller-memory-direction-key.md) — use resolveCallerKey(dir,from,to) not humanPhone; outbound keys off `to`; plumb dir=out through ALL entry points incl VoBiz queue/IVR redirects

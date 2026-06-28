@@ -198,7 +198,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialTwilio({
         accountSid: cfg["accountSid"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}${leadQs}`,
+        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}${leadQs}&dir=out`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status${statusQs}`,
       });
     } else if (provider === "plivo") {
@@ -219,7 +219,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialPlivo({
         authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}${leadQs}`,
+        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}${leadQs}&dir=out`,
       });
     } else if (provider === "vobiz") {
       // VoBiz: try user BYOP row first, fall back to platform managed credentials
@@ -228,7 +228,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialVobiz({
         authId: creds.authId, authToken: creds.authToken,
         fromNumber: creds.fromNumber, toNumber: cb.toNumber,
-        answerUrl:  `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}`,
+        answerUrl:  `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}&dir=out`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status${statusQs}`,
       });
     } else {

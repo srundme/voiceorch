@@ -35,7 +35,8 @@ interface TwilioEvent {
 export async function handleTwilioWebSocket(
   ws: WebSocket,
   agentId: number,
-  campaignLeadId?: number
+  campaignLeadId?: number,
+  callDirection: "inbound" | "outbound" = "inbound",
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamSid: string | null = null;
@@ -78,6 +79,7 @@ export async function handleTwilioWebSocket(
             toNumber,
             fromNumber,
             externalCallId: callSid ?? undefined,
+            callDirection,
             campaignLeadId,
             onAudioOut: sendAudioToTwilio,
             onCallEnd: () => ws.close(),
@@ -139,8 +141,16 @@ export async function handleTwilioWebSocket(
 }
 
 /** Generate TwiML to connect call to Media Streams WebSocket */
-export function getTwilioVoiceTwiML(wsBaseUrl: string, agentId: number, campaignLeadId?: number): string {
-  const qs = campaignLeadId ? `?campaignLeadId=${campaignLeadId}` : "";
+export function getTwilioVoiceTwiML(
+  wsBaseUrl: string,
+  agentId: number,
+  campaignLeadId?: number,
+  callDirection: "inbound" | "outbound" = "inbound",
+): string {
+  const parts: string[] = [];
+  if (campaignLeadId) parts.push(`campaignLeadId=${campaignLeadId}`);
+  if (callDirection === "outbound") parts.push("dir=out");
+  const qs = parts.length ? `?${parts.join("&")}` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>

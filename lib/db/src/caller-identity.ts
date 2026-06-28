@@ -34,6 +34,16 @@ const NATIONAL_NUMBER_LEN = (() => {
 
 /** Synthetic identity prefix used for browser web-call sessions (stable per user id). */
 const WEBCALL_KEY_PREFIX = "webcall:user_";
+
+/**
+ * Placeholder / sentinel numbers the telephony adapters substitute when a webhook
+ * omits the real From/To. They are valid-looking E.164 numbers, so without an
+ * explicit guard every call that lacks a real number would collapse onto ONE
+ * shared caller-memory key (cross-caller bleed). Stored as canonical digit strings
+ * (the form {@link canonicalizePhone} produces) so a sentinel can never become a
+ * usable memory key — it resolves to null (memory cold start) instead.
+ */
+const PLACEHOLDER_NUMBERS = new Set(["10000000000", "10000000001"]);
 /** Raw web-call identity shape produced by the telephony layer (fromNumber). */
 const WEBCALL_RAW_PREFIX = "webcall-user-";
 /** Legacy prefix — old format written before the `user_` segment was added.
@@ -130,10 +140,42 @@ export function canonicalizeCallerKey(identity: string | null | undefined): stri
     return id ? `${WEBCALL_KEY_PREFIX}${id}` : null;
   }
 
-  if (isRealPhoneNumber(raw)) return canonicalizePhone(raw);
+  if (isRealPhoneNumber(raw)) {
+    const canon = canonicalizePhone(raw);
+    // Reject the placeholder/sentinel numbers the adapters substitute for a
+    // missing From/To — they must never become a shared caller-memory key.
+    if (!canon || PLACEHOLDER_NUMBERS.has(canon)) return null;
+    return canon;
+  }
 
   // Not a phone number and not a known synthetic shape — nothing to key on.
   return null;
+}
+
+/** Direction of a telephony call, used to pick the human side for caller memory. */
+export type CallDirection = "inbound" | "outbound";
+
+/**
+ * Resolve the caller-memory key for a telephony call using its DIRECTION.
+ *
+ * The human's number is on a different side depending on direction:
+ * - inbound  → the caller dialed us, so the human is `fromNumber`.
+ * - outbound → we dialed the caller, so the human is `toNumber` (`fromNumber` is
+ *   our own platform/provider number, shared across every outbound call).
+ *
+ * Only the human side is consulted — we deliberately do NOT fall back to the
+ * other side, because that side is our own number and would collapse distinct
+ * callers onto one key. Placeholder/sentinel and non-phone values resolve to
+ * null (memory cold start). Use this instead of {@link humanPhone}, whose
+ * "first real number wins" heuristic picks the platform number on outbound calls.
+ */
+export function resolveCallerKey(
+  direction: CallDirection,
+  fromNumber: string,
+  toNumber: string,
+): string | null {
+  const human = direction === "outbound" ? toNumber : fromNumber;
+  return canonicalizeCallerKey(human);
 }
 
 /**
@@ -141,6 +183,11 @@ export function canonicalizeCallerKey(identity: string | null | undefined): stri
  * direction. Inbound calls key off the caller's number (fromNumber); outbound /
  * campaign calls key off the dialed number (toNumber). Both are canonicalized so
  * the same human resolves to the same key in either direction.
+ *
+ * @deprecated Direction-blind — on outbound calls `fromNumber` is the shared
+ * platform number, so this returns it and collapses every outbound caller onto
+ * one key. Prefer {@link resolveCallerKey} when the call direction is known.
+ * Retained only for legacy call records that have no persisted caller key.
  */
 export function humanPhone(fromNumber: string, toNumber: string): string | null {
   const fromKey = canonicalizeCallerKey(fromNumber);

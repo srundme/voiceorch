@@ -118,6 +118,10 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const vobizTo           = qs.get("to")       ?? undefined;
   const vobizCallUuid     = qs.get("callUuid") ?? undefined;
   const voicemailDelivery = qs.get("vm") === "1";
+  // dir=out is appended by every outbound dial site (calls/campaign/callback/meta)
+  // so the WS handler keys caller memory off the dialed party, not the shared
+  // platform number. Absent → inbound (the provider dialed us).
+  const callDirection: "inbound" | "outbound" = qs.get("dir") === "out" ? "outbound" : "inbound";
 
   // ── Webcall auth (browser "Live Test") ──────────────────────────────────────
   // Unlike telephony providers (which are inbound from the provider and cannot
@@ -158,9 +162,9 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url: safeUrl }, "WebSocket upgraded");
     switch (provider) {
-      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId);                                                      break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId);                                                       break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid); break;
+      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection);                                        break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection);                                         break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

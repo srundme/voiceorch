@@ -37,7 +37,8 @@ interface PlivoEvent {
 export async function handlePlivoWebSocket(
   ws: WebSocket,
   agentId: number,
-  campaignLeadId?: number
+  campaignLeadId?: number,
+  callDirection: "inbound" | "outbound" = "inbound",
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -92,6 +93,7 @@ export async function handlePlivoWebSocket(
             toNumber,
             fromNumber,
             externalCallId: callId,
+            callDirection,
             campaignLeadId,
             onAudioOut: sendAudioToPlivo,
             onCallEnd: () => ws.close(),
@@ -143,8 +145,16 @@ export async function handlePlivoWebSocket(
 }
 
 /** Generate Plivo Answer XML to connect call to WebSocket stream */
-export function getPlivoAnswerXML(wsBaseUrl: string, agentId: number, campaignLeadId?: number): string {
-  const qs = campaignLeadId ? `?campaignLeadId=${campaignLeadId}` : "";
+export function getPlivoAnswerXML(
+  wsBaseUrl: string,
+  agentId: number,
+  campaignLeadId?: number,
+  callDirection: "inbound" | "outbound" = "inbound",
+): string {
+  const parts: string[] = [];
+  if (campaignLeadId) parts.push(`campaignLeadId=${campaignLeadId}`);
+  if (callDirection === "outbound") parts.push("dir=out");
+  const qs = parts.length ? `?${parts.join("&")}` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Stream keepCallAlive="true" streamTimeout="600" contentType="audio/x-mulaw;rate=8000" bidirectional="true">
