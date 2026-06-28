@@ -860,6 +860,14 @@ export async function createSession(params: {
       try {
         if (!params.externalCallId) {
           logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
+          logExec(EXEC_COMPONENTS.Tool, "system", {
+            status: "error",
+            metadata: {
+              event:   "Transfer Failed",
+              reason:  "no_call_uuid",
+              message: "Transfer unavailable: provider call UUID not yet assigned (call not fully connected)",
+            },
+          });
           return false;
         }
         const baseUrl = (
@@ -943,7 +951,17 @@ export async function createSession(params: {
         void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
         return true;
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
         logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "error",
+          metadata: {
+            event:    "Transfer Failed",
+            reason:   "provider_api_error",
+            provider: params.telephonyProvider ?? "unknown",
+            message:  errMsg,
+          },
+        });
         return false;
       }
     },
