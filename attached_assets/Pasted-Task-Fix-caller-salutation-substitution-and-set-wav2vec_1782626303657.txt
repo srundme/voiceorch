@@ -1,0 +1,29 @@
+Task: Fix {{caller_salutation}} substitution and set wav2vec2 as primary gender detection model with fallback
+Problem:
+
+The gender detection service exists and works, but the detected salutation is never written back into the prompt variable map during the call. As a result, {{caller_salutation}} appears literally in the agent's output instead of being replaced with "sir" or "ma'am".
+Fix 1 — Prompt variable substitution (pipeline, both webcall and telephony paths):
+
+At call start, set caller_salutation to "" (empty string) or "there" as default so the opening greeting doesn't break if gender isn't detected yet.
+After the first or second STT transcript is received from the caller, send that caller audio to the gender detection service.
+When a result comes back with confidence ≥ 0.75, write the detected value ("sir" or "ma'am") into the live prompt variable map as caller_salutation.
+All subsequent LLM calls must use the updated variable map so {{caller_salutation}} resolves correctly from that turn onwards for the rest of the call.
+This must work on both the webcall path and the telephony path.
+
+Fix 2 — Model priority and fallback:
+Set wav2vec2 (gender_service_ml.py) as the primary model. Autocorrelation (gender_service.py) and pitch-based (gender_detector.py) are fallbacks in that order.
+Orchestration logic:
+
+Send caller audio to wav2vec2 first.
+Set a timeout of 1.5 seconds. If wav2vec2 returns confidence ≥ 0.75 within that time, use its result. Done.
+If wav2vec2 times out or returns confidence below 0.75, immediately run autocorrelation. If it returns confidence ≥ 0.75, use its result.
+If autocorrelation also fails, run pitch-based. If it returns confidence ≥ 0.75, use its result.
+If none of the three models meet the threshold, keep caller_salutation as the neutral default and retry on the next caller audio turn.
+
+Fix 3 — Lock detected gender for the duration of the call:
+
+Once caller_salutation is successfully detected and set, lock it for the rest of the call. Do not re-run gender detection on subsequent turns or allow it to switch automatically.
+The only exception is if the caller explicitly corrects the agent mid-call — for example, saying "I'm a man, not a woman" or "please call me sir, not ma'am." In that case, the LLM should recognize the correction, update caller_salutation to the corrected value, and use it for all remaining turns.
+Outside of an explicit correction from the caller, the salutation must never change once locked.
+
+Do not change the models themselves. Only fix the pipeline substitution logic, the orchestration order, and the lock mechanism.
