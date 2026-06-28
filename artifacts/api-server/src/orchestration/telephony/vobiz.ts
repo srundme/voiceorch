@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
+import { getRedis } from "../../lib/redis.js";
 
 /**
  * Vobiz WebSocket handler
@@ -119,18 +120,38 @@ export async function handleVobizWebSocket(
         streamId = msg.start?.streamId ?? msg.streamId ?? null;
         const callId = msg.start?.callId ?? null;
 
-        // Prefer the call_uuid from the HTTP answer webhook (passed via the
-        // WebSocket URL query string) over the start-event callId.  VoBiz's
-        // REST Transfer API keyed on call_uuid, while start.callId may be a
-        // stream/session-scoped identifier rather than the REST call_uuid.
-        const resolvedCallId = urlCallUuid ?? callId ?? null;
+        // For outbound campaign calls, the VoBiz dial API returns the REST
+        // call_uuid that /Call/{uuid}/Transfer/ and other REST actions expect.
+        // campaignCaller.ts stores it in Redis before the WebSocket is opened.
+        // Retrieve it now and use it as the highest-priority externalCallId so
+        // Transfer does not fall back to the stream-scoped callId or the
+        // answer-webhook CallUUID (both may be different from the REST call_uuid
+        // and cause a 404 on the Transfer endpoint).
+        let dialCallUuid: string | null = null;
+        if (campaignLeadId) {
+          try {
+            const redis = getRedis();
+            if (redis) {
+              const stored = await redis.get<string>(`vobiz:dial:campaignlead:${campaignLeadId}`);
+              if (stored) {
+                dialCallUuid = stored;
+                logger.info({ campaignLeadId, dialCallUuid }, "Retrieved VoBiz dial call_uuid from Redis for Transfer");
+              }
+            }
+          } catch (err) {
+            logger.warn({ campaignLeadId, err }, "Failed to retrieve VoBiz dial call_uuid from Redis — falling back to webhook/start callId");
+          }
+        }
+
+        // Priority: dial call_uuid (REST-authoritative) → answer-webhook callUuid → start.callId
+        const resolvedCallId = dialCallUuid ?? urlCallUuid ?? callId ?? null;
 
         const params = msg.start?.customParameters ?? {};
         // Priority: URL query params (most reliable) → start.from/to → customParameters → fallback
         const fromNumber = urlFrom ?? msg.start?.from ?? params["From"] ?? "+10000000000";
         const toNumber   = urlTo   ?? msg.start?.to   ?? params["To"]   ?? "+10000000001";
 
-        logger.info({ agentId, streamId, callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
+        logger.info({ agentId, streamId, callId, resolvedCallId, dialCallUuid, urlCallUuid: urlCallUuid ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
         // ── Silence keepalive during session init ───────────────────────────
         // VoBiz drops the call if the audio bridge receives no data for ~2 s
