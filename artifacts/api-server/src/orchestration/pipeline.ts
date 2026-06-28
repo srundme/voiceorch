@@ -1253,12 +1253,20 @@ export class OrchestrationPipeline {
   /**
    * Detect an EXPLICIT mid-call caller correction of how they wish to be
    * addressed (e.g. "call me sir, not ma'am", "I'm a woman", "address me as
-   * madam"). Returns "male" | "female" when a clear correction is found, else
-   * null. This is intentionally conservative — only unambiguous self-described
-   * gender / salutation statements match, so normal mentions of "sir"/"ma'am"
-   * do not trip it. Covers common English + romanized-Hindi phrasings; the
+   * madam", Tamil "ma'am illa", Hindi "ma'am nahi"). Returns "male" | "female"
+   * when a clear correction is found, else null. This is intentionally
+   * conservative — only unambiguous self-described gender / salutation
+   * statements match, so normal mentions of "sir"/"ma'am" do not trip it.
+   *
+   * Covers English + romanized-Hindi PREFIX-negation phrasings ("not ma'am")
+   * AND Indic POSTFIX-negation word order (Tamil/Hindi negate AFTER the word:
+   * "ma'am illa", "sir nahi", "ma'am mat", "sir vendaam"), since the latter is
+   * how the Tamil/Hinglish callers these agents serve actually object. The
    * per-turn LLM directive also carries an explicit-correction exception so a
    * phrasing missed here is still honored by the model.
+   *
+   * An objection to a salutation maps to the OPPOSITE gender ("not ma'am" →
+   * male, "not sir" → female).
    */
   private detectSalutationCorrection(transcript: string): "male" | "female" | null {
     const t = transcript.toLowerCase();
@@ -1266,6 +1274,25 @@ export class OrchestrationPipeline {
     const maleRe = /\b(call me sir|address me as sir|i am a man|i'?m a man|i am male|i'?m male|i'?m not a woman|i am not a woman|not ma'?am|main (?:ek )?aadmi|mujhe sir)\b/;
     // Phrasings that assert the caller is female / wants "ma'am" / "madam".
     const femaleRe = /\b(call me ma'?am|call me madam|address me as ma'?am|address me as madam|i am a woman|i'?m a woman|i am female|i'?m female|i'?m not a man|i am not a man|not sir|main (?:ek )?aurat|mujhe ma'?am|mujhe madam)\b/;
+
+    // ── Indic postfix-negation corrections (negation AFTER the word) ─────────
+    // Tamil "ma'am illa"/"sir illa" (illa/illai = "not"), Hindi "ma'am nahi"/
+    // "ma'am mat" (nahi/nahin = "not", mat = "don't"), Tamil "ma'am vendaam"
+    // ("don't want"). The negator can arrive romanized OR in native script
+    // (இல்ல/இல்லை, நில்ல, வேண்டாம், नहीं/नही, मत). A single short filler word
+    // between the salutation and the negator is tolerated (e.g. Tamil
+    // "naan vandhu ma'am illa"). The romanized negators carry a trailing
+    // (?![a-z]) so partial-word collisions like "illadhu" don't match.
+    const NEG = "(?:illai?|nahin?|mat|vend?aam|இல்ல(?:ை)?|நில்ல|வேண்டா(?:ம்)?|नहीं|नही|मत)(?![a-z])";
+    const GAP = "(?:\\s+\\S{1,10})?\\s+";
+    const maamPostfix = new RegExp(`(?:ma'?am|mam|madam|मैम|मैडम)${GAP}${NEG}`);
+    const sirPostfix = new RegExp(`(?:sir|saar|சார்|सर|सर्)${GAP}${NEG}`);
+
+    // Explicit postfix-negation wins first — it is the stronger signal and
+    // disambiguates phrasings like Hindi "mujhe ma'am mat bolo" ("don't call me
+    // ma'am" → male), which would otherwise match the "call me ma'am" prefix.
+    if (maamPostfix.test(t)) return "male";
+    if (sirPostfix.test(t)) return "female";
     if (femaleRe.test(t)) return "female";
     if (maleRe.test(t)) return "male";
     return null;
@@ -2803,16 +2830,27 @@ export class OrchestrationPipeline {
     // effectiveGender() lets an explicit mid-call caller correction override the
     // model-detected (and locked) gender.
     const detectedGender = this.effectiveGender();
+    const correctionActive = this.salutationCorrection !== null;
     // Explicit-correction exception: even when a phrasing slips past
     // detectSalutationCorrection(), the LLM must still honor a clear verbal
-    // correction from the caller for the rest of the call.
-    const CORRECTION_EXCEPTION = ` EXCEPTION: if the caller EXPLICITLY corrects how they wish to be addressed (e.g. "call me sir, not ma'am", "I'm a woman"), immediately switch to their stated preference and use it for every remaining reply.`;
+    // correction from the caller for the rest of the call — and must do so
+    // WITHOUT producing a self-contradictory apology that references a gender it
+    // never actually used (the backwards "Sorry, I thought you were male, I'll
+    // call you that" bug).
+    const CORRECTION_EXCEPTION = ` EXCEPTION — caller corrections override everything: if the caller objects to or corrects how they are being addressed (in ANY language, including postfix-negation forms like "ma'am illa" / "sir nahi" and self-descriptions like "I'm a man" / "I'm a woman"), immediately switch to the salutation they ask for and use ONLY that for every remaining reply. Apologize briefly and naturally for the mix-up (e.g. a short "sorry about that") WITHOUT stating or guessing which gender you previously assumed — never say things like "I thought you were …", and do not argue about or explain your earlier assumption.`;
+    // When a correction has actually been captured this call, the directive
+    // below already names the corrected salutation; tell the model to
+    // acknowledge the switch once, cleanly, with no reference to the prior wrong
+    // assumption.
+    const CORRECTION_ACK = correctionActive
+      ? ` The caller has just corrected how they want to be addressed — acknowledge the switch briefly and naturally, and do NOT reference or apologize for any specific previous (incorrect) assumption about their gender.`
+      : "";
     if (detectedGender === "male") {
       const sal = this.agent.genderDetectionMaleSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is male. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionFemaleSalutation}".${CORRECTION_EXCEPTION}`;
+      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is male. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionFemaleSalutation}".${CORRECTION_ACK}${CORRECTION_EXCEPTION}`;
     } else if (detectedGender === "female") {
       const sal = this.agent.genderDetectionFemaleSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is female. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionMaleSalutation}".${CORRECTION_EXCEPTION}`;
+      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is female. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionMaleSalutation}".${CORRECTION_ACK}${CORRECTION_EXCEPTION}`;
     } else if (detectedGender === null && this.agent.genderDetectionNeutralSalutation) {
       const sal = this.agent.genderDetectionNeutralSalutation;
       systemPromptForTurn += `\n\n[CALLER GENDER] Gender not yet determined. Use "${sal}" as a neutral salutation when addressing the caller, kept exactly as written.`;
