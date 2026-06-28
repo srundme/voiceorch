@@ -2,6 +2,7 @@ import * as agnost from "agnostai";
 import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
+import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks } from "./reasoningFilter.js";
@@ -398,7 +399,11 @@ export class OrchestrationPipeline {
   private dtmfTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Gender detection — fires once per call using early caller speech
-  private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2;
+  private genderDetector: GenderDetector | GenderDetectorML | GenderDetectorMLv2 | GenderDetectorChained;
+  /** Explicit mid-call caller correction ("call me sir, not ma'am"). When set it
+   *  overrides the detected gender for the rest of the call and is itself sticky —
+   *  only another explicit correction can change it. */
+  private salutationCorrection: "male" | "female" | null = null;
   /** True only when the agent's system prompt actually contains {caller_salutation}.
    *  When false we never instantiate a detector or call the gender service. */
   private readonly genderSalutationInPrompt: boolean = false;
@@ -535,15 +540,14 @@ export class OrchestrationPipeline {
     this.genderSalutationInPrompt =
       /\{\{caller_salutation\}\}|\{caller_salutation\}/.test(this.agent.systemPrompt ?? "");
     if (config.agentConfig.genderDetectionEnabled && this.genderSalutationInPrompt) {
-      const gp = config.agentConfig.genderDetectionProvider;
-      this.genderDetector = gp === "ml_model_v2"
-        ? new GenderDetectorMLv2(config.callId)
-        : gp === "ml_model"
-          ? new GenderDetectorML(config.callId)
-          : new GenderDetector(config.callId);
+      // wav2vec2-primary ordered fallback chain (wav2vec2 → autocorrelation →
+      // pitch). The per-agent genderDetectionProvider config is retained for
+      // backward compatibility but no longer selects a single model — the chain
+      // always tries wav2vec2 first and falls through on timeout / low confidence.
+      this.genderDetector = new GenderDetectorChained(config.callId);
       logger.info(
-        { callId: config.callId, provider: gp ?? "librosa" },
-        "Gender detection enabled (toggle on + {caller_salutation} present) — will arm after greeting to sample caller intro",
+        { callId: config.callId, provider: "chained", configuredProvider: config.agentConfig.genderDetectionProvider ?? "(default)" },
+        "Gender detection enabled (toggle on + {caller_salutation} present) — wav2vec2-primary fallback chain; will arm after greeting to sample caller intro",
       );
     } else {
       this.genderDetector = null as unknown as GenderDetector;
@@ -1212,6 +1216,62 @@ export class OrchestrationPipeline {
   // ── Greeting ────────────────────────────────────────────────────────────────
 
   /**
+   * The effective caller gender used for salutation rendering: an explicit
+   * mid-call caller correction wins over the model-detected gender, otherwise
+   * the locked/last detection result is used (null until detection resolves).
+   */
+  private effectiveGender(): "male" | "female" | null {
+    return this.salutationCorrection ?? this.genderDetector?.gender ?? null;
+  }
+
+  /** Map an effective gender to the agent's configured salutation, or "" (neutral/skip). */
+  private salutationFor(gender: "male" | "female" | null): string {
+    const raw = gender === "male"
+      ? this.agent.genderDetectionMaleSalutation
+      : gender === "female"
+        ? this.agent.genderDetectionFemaleSalutation
+        : (this.agent.genderDetectionNeutralSalutation ?? "");
+    return (raw === "(skip)" || !raw) ? "" : raw;
+  }
+
+  /**
+   * Replace every `{{caller_salutation}}` / `{caller_salutation}` placeholder in
+   * `text` with `sal`. When `sal` is empty the placeholder (and its surrounding
+   * whitespace) is collapsed to a single space so a raw token can never surface.
+   */
+  private substituteSalutation(text: string, sal: string): string {
+    if (sal) {
+      return text
+        .replace(/\{\{caller_salutation\}\}/g, sal)
+        .replace(/\{caller_salutation\}/g, sal);
+    }
+    return text
+      .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
+      .replace(/\s*\{caller_salutation\}\s*/g, " ");
+  }
+
+  /**
+   * Detect an EXPLICIT mid-call caller correction of how they wish to be
+   * addressed (e.g. "call me sir, not ma'am", "I'm a woman", "address me as
+   * madam"). Returns "male" | "female" when a clear correction is found, else
+   * null. This is intentionally conservative — only unambiguous self-described
+   * gender / salutation statements match, so normal mentions of "sir"/"ma'am"
+   * do not trip it. Covers common English + romanized-Hindi phrasings; the
+   * per-turn LLM directive also carries an explicit-correction exception so a
+   * phrasing missed here is still honored by the model.
+   */
+  private detectSalutationCorrection(transcript: string): "male" | "female" | null {
+    const t = transcript.toLowerCase();
+    // Phrasings that assert the caller is male / wants "sir".
+    const maleRe = /\b(call me sir|address me as sir|i am a man|i'?m a man|i am male|i'?m male|i'?m not a woman|i am not a woman|not ma'?am|main (?:ek )?aadmi|mujhe sir)\b/;
+    // Phrasings that assert the caller is female / wants "ma'am" / "madam".
+    const femaleRe = /\b(call me ma'?am|call me madam|address me as ma'?am|address me as madam|i am a woman|i'?m a woman|i am female|i'?m female|i'?m not a man|i am not a man|not sir|main (?:ek )?aurat|mujhe ma'?am|mujhe madam)\b/;
+    if (femaleRe.test(t)) return "female";
+    if (maleRe.test(t)) return "male";
+    return null;
+  }
+
+  /**
    * Arm gender detection so the detector begins sampling caller audio. Called once
    * the agent greeting has been delivered (or immediately when the caller speaks
    * first), so the sampled audio is the caller's INTRODUCTION turn rather than the
@@ -1254,17 +1314,8 @@ export class OrchestrationPipeline {
       // Substitute {caller_salutation} in the greeting with the neutral salutation —
       // gender detection has not fired yet at greeting time.
       if (greeting) {
-        const rawSal = this.agent.genderDetectionNeutralSalutation ?? "";
-        const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
-        if (resolvedSal) {
-          greeting = greeting
-            .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
-            .replace(/\{caller_salutation\}/g, resolvedSal);
-        } else {
-          greeting = greeting
-            .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
-            .replace(/\s*\{caller_salutation\}\s*/g, " ");
-        }
+        const resolvedSal = this.salutationFor(null);
+        greeting = this.substituteSalutation(greeting, resolvedSal);
         logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)" }, "Pipeline: caller_salutation in greeting resolved to neutral (pre-detection)");
       }
 
@@ -1279,7 +1330,11 @@ export class OrchestrationPipeline {
           // Cap the opener length — the greeting LLM path otherwise produces a long
           // multi-sentence monologue (call 548: ~20 s greeting). Constrain to one
           // short sentence without hard-truncating mid-word.
-          const greetingSystemPrompt = `${this.agent.systemPrompt}\n\n[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.`;
+          // The base system prompt still carries an unresolved {caller_salutation}
+          // placeholder (session.ts deliberately skips it). Detection has not fired
+          // at greeting time, so resolve it to the neutral salutation here — never
+          // send the raw token to the greeting LLM (it would echo it literally).
+          const greetingSystemPrompt = `${this.substituteSalutation(this.agent.systemPrompt, this.salutationFor(null))}\n\n[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.`;
           await this.llm.chat(
             greetingTrigger, greetingSystemPrompt,
             (token) => { greeting += token; },
@@ -2414,6 +2469,22 @@ export class OrchestrationPipeline {
     // GenderDetector (v0) auto-fires via addSpeechChunk and treats this as a no-op.
     if (this.genderDetector && !this.genderDetector.locked) this.genderDetector.runDetection();
 
+    // ── Explicit caller salutation correction ──────────────────────────────
+    // Only an explicit caller correction ("call me sir, not ma'am") can override
+    // the locked/detected gender. Once set it is sticky for the rest of the call
+    // (re-evaluated each turn so the caller can correct again), and takes
+    // precedence over the detector via effectiveGender().
+    if (this.genderSalutationInPrompt) {
+      const correction = this.detectSalutationCorrection(transcript);
+      if (correction && correction !== this.salutationCorrection) {
+        this.salutationCorrection = correction;
+        logger.info(
+          { callId: this.config.callId, correction, transcript: transcript.slice(0, 80) },
+          "Pipeline: explicit caller salutation correction — overriding detected gender for the rest of the call",
+        );
+      }
+    }
+
 
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept
@@ -2696,13 +2767,19 @@ export class OrchestrationPipeline {
     // Appended AFTER the language guard so it wins on recency, and the salutation is
     // marked verbatim so the strict single-language rule above cannot translate it
     // (see memory: language-rule-proper-nouns — "Sir"/"Ma'am" get transliterated otherwise).
-    const detectedGender = this.genderDetector?.gender ?? null;
+    // effectiveGender() lets an explicit mid-call caller correction override the
+    // model-detected (and locked) gender.
+    const detectedGender = this.effectiveGender();
+    // Explicit-correction exception: even when a phrasing slips past
+    // detectSalutationCorrection(), the LLM must still honor a clear verbal
+    // correction from the caller for the rest of the call.
+    const CORRECTION_EXCEPTION = ` EXCEPTION: if the caller EXPLICITLY corrects how they wish to be addressed (e.g. "call me sir, not ma'am", "I'm a woman"), immediately switch to their stated preference and use it for every remaining reply.`;
     if (detectedGender === "male") {
       const sal = this.agent.genderDetectionMaleSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is male. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionFemaleSalutation}".`;
+      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is male. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionFemaleSalutation}".${CORRECTION_EXCEPTION}`;
     } else if (detectedGender === "female") {
       const sal = this.agent.genderDetectionFemaleSalutation;
-      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is female. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionMaleSalutation}".`;
+      systemPromptForTurn += `\n\n[CALLER GENDER — MANDATORY] The caller is female. You MUST address them as "${sal}" in essentially every reply (e.g. "Yes, ${sal}", "Of course, ${sal}", "Certainly, ${sal}"). Keep the word "${sal}" EXACTLY as written — never translate, localize, or transliterate it, even when you are replying in another language; treat it as a proper noun that OVERRIDES the language rule above. Never use "${this.agent.genderDetectionMaleSalutation}".${CORRECTION_EXCEPTION}`;
     } else if (detectedGender === null && this.agent.genderDetectionNeutralSalutation) {
       const sal = this.agent.genderDetectionNeutralSalutation;
       systemPromptForTurn += `\n\n[CALLER GENDER] Gender not yet determined. Use "${sal}" as a neutral salutation when addressing the caller, kept exactly as written.`;
@@ -2712,20 +2789,12 @@ export class OrchestrationPipeline {
     // The initial variable-resolution pass (session.ts) deliberately skips
     // this placeholder so it can be filled in here, after gender detection.
     {
-      const rawSal = detectedGender === "male" ? this.agent.genderDetectionMaleSalutation
-        : detectedGender === "female" ? this.agent.genderDetectionFemaleSalutation
-        : (this.agent.genderDetectionNeutralSalutation ?? "");
-      const resolvedSal = (rawSal === "(skip)" || !rawSal) ? "" : rawSal;
-      if (resolvedSal) {
-        systemPromptForTurn = systemPromptForTurn
-          .replace(/\{\{caller_salutation\}\}/g, resolvedSal)
-          .replace(/\{caller_salutation\}/g, resolvedSal);
-      } else {
-        systemPromptForTurn = systemPromptForTurn
-          .replace(/\s*\{\{caller_salutation\}\}\s*/g, " ")
-          .replace(/\s*\{caller_salutation\}\s*/g, " ");
-      }
-      logger.info({ callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)", detectedGender }, "Pipeline: caller_salutation resolved");
+      const resolvedSal = this.salutationFor(detectedGender);
+      systemPromptForTurn = this.substituteSalutation(systemPromptForTurn, resolvedSal);
+      logger.info(
+        { callId: this.config.callId, resolvedSalutation: resolvedSal || "(empty)", detectedGender, correction: this.salutationCorrection },
+        "Pipeline: caller_salutation resolved",
+      );
     }
 
     // Inject scheduling tool usage guide when the agent has cancel/reschedule/list-bookings tools
