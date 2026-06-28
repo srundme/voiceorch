@@ -1996,11 +1996,11 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId, toolName, toolType: tool.type, args }, "Tool invoked by LLM");
 
     if (tool.type === "call_transfer") {
-      await this.executeCallTransfer(tool, args);
+      return await this.executeCallTransfer(tool, args);
     } else if (tool.type === "transfer_cold") {
-      await this.executeTransferCold(tool, args);
+      return await this.executeTransferCold(tool, args);
     } else if (tool.type === "transfer_warm") {
-      await this.executeTransferWarm(tool, args);
+      return await this.executeTransferWarm(tool, args);
     } else if (tool.type === "transfer_agent") {
       await this.executeTransferAgent(tool, args);
     } else if (tool.type === "webhook") {
@@ -2236,7 +2236,13 @@ export class OrchestrationPipeline {
     }
   }
 
-  private async executeCallTransfer(tool: AgentTool & { type: "call_transfer" }, _args: Record<string, unknown>): Promise<void> {
+  private async executeCallTransfer(tool: AgentTool & { type: "call_transfer" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    // Guard: no transfer number configured — return error to LLM so it can respond gracefully
+    if (!tool.transferTo?.trim()) {
+      logger.warn({ callId: this.config.callId }, "call_transfer: no transfer number configured — returning error to LLM");
+      return "transfer_unavailable: no transfer number has been configured for this agent";
+    }
+
     logger.info({ callId: this.config.callId, transferTo: tool.transferTo, mode: tool.transferMode ?? "cold" }, "Executing call transfer");
 
     // Speak the warm handoff message to the CALLER (if configured) before transferring
@@ -2286,14 +2292,25 @@ export class OrchestrationPipeline {
       }
     }
 
-    // Notify session layer (triggers telephony transfer + marks call as transferred)
-    this.config.onCallTransfer?.(tool.transferTo, operatorSummary);
+    // Notify session layer (triggers telephony transfer); only end the call if it succeeded
+    const ok = (await this.config.onCallTransfer?.(tool.transferTo, operatorSummary)) ?? true;
+    if (!ok) {
+      logger.warn({ callId: this.config.callId }, "call_transfer: provider transfer failed — returning error to LLM");
+      return "transfer_failed: unable to connect to a human agent at this time";
+    }
     this.config.onCallEnd();
+    return undefined;
   }
 
   // ── New transfer tool executors (T3+) ─────────────────────────────────────────
 
-  private async executeTransferCold(tool: AgentTool & { type: "transfer_cold" }, _args: Record<string, unknown>): Promise<void> {
+  private async executeTransferCold(tool: AgentTool & { type: "transfer_cold" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    // Guard: no transfer number configured — return error to LLM so it can respond gracefully
+    if (!tool.targetNumber?.trim()) {
+      logger.warn({ callId: this.config.callId }, "transfer_cold: no target number configured — returning error to LLM");
+      return "transfer_unavailable: no transfer number has been configured for this agent";
+    }
+
     logger.info({ callId: this.config.callId, transferTo: tool.targetNumber, type: "cold" }, "Executing transfer_cold");
 
     // Optional hold message
@@ -2312,8 +2329,12 @@ export class OrchestrationPipeline {
       await this.drainPlaybackTail();
     }
 
-    // Notify session layer (triggers telephony redirect)
-    this.config.onCallTransfer?.(tool.targetNumber);
+    // Notify session layer (triggers telephony redirect); only end the call if it succeeded
+    const ok = (await this.config.onCallTransfer?.(tool.targetNumber)) ?? true;
+    if (!ok) {
+      logger.warn({ callId: this.config.callId }, "transfer_cold: provider transfer failed — returning error to LLM");
+      return "transfer_failed: unable to connect to a human agent at this time";
+    }
     this.config.onCallEnd();
 
     // Write lead transfer DB
@@ -2323,9 +2344,16 @@ export class OrchestrationPipeline {
       transferTo: tool.targetNumber,
       type: "cold",
     });
+    return undefined;
   }
 
-  private async executeTransferWarm(tool: AgentTool & { type: "transfer_warm" }, _args: Record<string, unknown>): Promise<void> {
+  private async executeTransferWarm(tool: AgentTool & { type: "transfer_warm" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    // Guard: no transfer number configured — return error to LLM so it can respond gracefully
+    if (!tool.targetNumber?.trim()) {
+      logger.warn({ callId: this.config.callId }, "transfer_warm: no target number configured — returning error to LLM");
+      return "transfer_unavailable: no transfer number has been configured for this agent";
+    }
+
     logger.info({ callId: this.config.callId, transferTo: tool.targetNumber, type: "warm" }, "Executing transfer_warm");
 
     // Optional hold message
@@ -2371,8 +2399,12 @@ export class OrchestrationPipeline {
       logger.error({ callId: this.config.callId, err }, "transfer_warm: summary generation failed — proceeding without summary");
     }
 
-    // Notify session layer (triggers telephony redirect + warm briefing)
-    this.config.onCallTransfer?.(tool.targetNumber, operatorSummary);
+    // Notify session layer (triggers telephony redirect + warm briefing); only end the call if it succeeded
+    const ok = (await this.config.onCallTransfer?.(tool.targetNumber, operatorSummary)) ?? true;
+    if (!ok) {
+      logger.warn({ callId: this.config.callId }, "transfer_warm: provider transfer failed — returning error to LLM");
+      return "transfer_failed: unable to connect to a human agent at this time";
+    }
     this.config.onCallEnd();
 
     // Write lead transfer DB
@@ -2383,6 +2415,7 @@ export class OrchestrationPipeline {
       type: "warm",
       summary: operatorSummary,
     });
+    return undefined;
   }
 
   private async executeTransferAgent(tool: AgentTool & { type: "transfer_agent" }, _args: Record<string, unknown>): Promise<void> {

@@ -503,8 +503,10 @@ export interface SessionConfig {
    * Called when the pipeline triggers a call transfer.
    * @param transferTo  E.164 number or SIP URI to transfer to.
    * @param summary     Operator briefing text (warm_summary mode only).
+   * @returns           `true` when the telephony redirect was dispatched successfully,
+   *                    `false` when it failed (pipeline will NOT end the call).
    */
-  onCallTransfer?: (transferTo: string, summary?: string) => void;
+  onCallTransfer?: (transferTo: string, summary?: string) => Promise<boolean>;
   onBargeIn?: () => void;
   onMetrics?: (metrics: PipelineMetrics) => void;
   /** Called with every raw 8 kHz LINEAR16 PCM chunk arriving from the caller.

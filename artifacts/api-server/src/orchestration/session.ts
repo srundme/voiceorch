@@ -839,12 +839,9 @@ export async function createSession(params: {
       naturalEndTriggered = true;
       params.onCallEnd();
     },
-    onCallTransfer: (to, operatorSummary?) => {
-      wasTransferred = true;
-      transferredTo = to;
+    onCallTransfer: async (to, operatorSummary?) => {
       const isWarm = !!operatorSummary;
       logger.info({ callId: callRecord.id, transferTo: to, warm: isWarm }, "Call transfer initiated");
-      void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
 
       // AI-to-AI transfer: agent: prefix means transfer to another agent
       if (to.startsWith("agent:")) {
@@ -852,95 +849,103 @@ export async function createSession(params: {
         logger.info({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer detected — skipping telephony redirect");
         // Future: swap pipeline to new agent; for now telephony redirect is skipped
         // so the caller stays on the line while the same agent continues.
+        wasTransferred = true;
+        transferredTo = to;
+        void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
         void patchSessionMeta(sessionId, { transferType: "agent", targetAgentId }, redisTtl);
-        return;
+        return true;
       }
 
       // Execute the actual provider-level call redirect
-      void (async () => {
-        try {
-          if (!params.externalCallId) {
-            logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
-            return;
-          }
-          const baseUrl = (
-            process.env["WEBHOOK_BASE_URL"] ??
-            getSelfBaseUrl()
-          ).replace(/\/$/, "");
-
-          // ── For warm_summary mode: persist summary + get transferId/token for whisper URL ──
-          let transferId: number | undefined;
-          let briefingToken: string | undefined;
-          if (isWarm && agent.userId) {
-            try {
-              // Generate an unguessable per-transfer token used to authenticate the
-              // warm-briefing-xml request (prevents sequential-ID enumeration).
-              briefingToken = randomBytes(32).toString("hex");
-              const [row] = await db.insert(callTransfersTable).values({
-                callId:       callRecord.id,
-                userId:       agent.userId,
-                transferTo:   to,
-                summary:      operatorSummary,
-                status:       "initiated",
-                briefingToken,
-              }).returning({ id: callTransfersTable.id });
-              transferId = row?.id;
-              logger.info({ callId: callRecord.id, transferId }, "Warm transfer: DB record created");
-            } catch (err) {
-              logger.error({ callId: callRecord.id, err }, "Warm transfer: failed to persist summary — falling back to cold");
-            }
-          }
-
-          const {
-            transferTwilioCall, buildTwilioWarmTransferTwiML,
-            transferPlivoCall,  buildPlivoWarmTransferXml,
-            transferVobizCall,  buildVobizWarmTransferXml,
-          } = await import("./telephony/transfer.js");
-          const tprov = params.telephonyProvider;
-
-          if (tprov === "twilio") {
-            const authToken = providerKeys.get("twilio") ?? "";
-            const extra = providerKeys.get("twilio:extraConfig");
-            const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-            const accountSid = cfg["accountSid"] ?? "";
-            let xmlUrl: string;
-            if (isWarm && transferId && briefingToken) {
-              xmlUrl = `${baseUrl}/api/webhooks/twilio/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
-            } else {
-              xmlUrl = `${baseUrl}/api/webhooks/twilio/transfer-xml?target=${encodeURIComponent(to)}`;
-            }
-            await transferTwilioCall({ accountSid, authToken, callSid: params.externalCallId, xmlUrl });
-          } else if (tprov === "plivo") {
-            const authToken = providerKeys.get("plivo") ?? "";
-            const extra = providerKeys.get("plivo:extraConfig");
-            const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-            const authId = cfg["authId"] ?? "";
-            let xmlUrl: string;
-            if (isWarm && transferId && briefingToken) {
-              xmlUrl = `${baseUrl}/api/webhooks/plivo/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
-            } else {
-              xmlUrl = `${baseUrl}/api/webhooks/plivo/transfer-xml?target=${encodeURIComponent(to)}`;
-            }
-            await transferPlivoCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
-          } else if (tprov === "vobiz") {
-            const authToken = providerKeys.get("vobiz") ?? "";
-            const extra = providerKeys.get("vobiz:extraConfig");
-            const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
-            const authId = cfg["authId"] ?? "";
-            let xmlUrl: string;
-            if (isWarm && transferId && briefingToken) {
-              xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
-            } else {
-              xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}`;
-            }
-            await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
-          }
-          // suppress unused-import warnings for builders not used via direct call
-          void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;
-        } catch (err) {
-          logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
+      try {
+        if (!params.externalCallId) {
+          logger.warn({ callId: callRecord.id }, "Transfer: no externalCallId — cannot redirect call");
+          return false;
         }
-      })();
+        const baseUrl = (
+          process.env["WEBHOOK_BASE_URL"] ??
+          getSelfBaseUrl()
+        ).replace(/\/$/, "");
+
+        // ── For warm_summary mode: persist summary + get transferId/token for whisper URL ──
+        let transferId: number | undefined;
+        let briefingToken: string | undefined;
+        if (isWarm && agent.userId) {
+          try {
+            // Generate an unguessable per-transfer token used to authenticate the
+            // warm-briefing-xml request (prevents sequential-ID enumeration).
+            briefingToken = randomBytes(32).toString("hex");
+            const [row] = await db.insert(callTransfersTable).values({
+              callId:       callRecord.id,
+              userId:       agent.userId,
+              transferTo:   to,
+              summary:      operatorSummary,
+              status:       "initiated",
+              briefingToken,
+            }).returning({ id: callTransfersTable.id });
+            transferId = row?.id;
+            logger.info({ callId: callRecord.id, transferId }, "Warm transfer: DB record created");
+          } catch (err) {
+            logger.error({ callId: callRecord.id, err }, "Warm transfer: failed to persist summary — falling back to cold");
+          }
+        }
+
+        const {
+          transferTwilioCall, buildTwilioWarmTransferTwiML,
+          transferPlivoCall,  buildPlivoWarmTransferXml,
+          transferVobizCall,  buildVobizWarmTransferXml,
+        } = await import("./telephony/transfer.js");
+        const tprov = params.telephonyProvider;
+
+        if (tprov === "twilio") {
+          const authToken = providerKeys.get("twilio") ?? "";
+          const extra = providerKeys.get("twilio:extraConfig");
+          const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+          const accountSid = cfg["accountSid"] ?? "";
+          let xmlUrl: string;
+          if (isWarm && transferId && briefingToken) {
+            xmlUrl = `${baseUrl}/api/webhooks/twilio/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
+          } else {
+            xmlUrl = `${baseUrl}/api/webhooks/twilio/transfer-xml?target=${encodeURIComponent(to)}`;
+          }
+          await transferTwilioCall({ accountSid, authToken, callSid: params.externalCallId, xmlUrl });
+        } else if (tprov === "plivo") {
+          const authToken = providerKeys.get("plivo") ?? "";
+          const extra = providerKeys.get("plivo:extraConfig");
+          const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+          const authId = cfg["authId"] ?? "";
+          let xmlUrl: string;
+          if (isWarm && transferId && briefingToken) {
+            xmlUrl = `${baseUrl}/api/webhooks/plivo/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
+          } else {
+            xmlUrl = `${baseUrl}/api/webhooks/plivo/transfer-xml?target=${encodeURIComponent(to)}`;
+          }
+          await transferPlivoCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
+        } else if (tprov === "vobiz") {
+          const authToken = providerKeys.get("vobiz") ?? "";
+          const extra = providerKeys.get("vobiz:extraConfig");
+          const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
+          const authId = cfg["authId"] ?? "";
+          let xmlUrl: string;
+          if (isWarm && transferId && briefingToken) {
+            xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
+          } else {
+            xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}`;
+          }
+          await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
+        }
+        // suppress unused-import warnings for builders not used via direct call
+        void buildTwilioWarmTransferTwiML; void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;
+
+        // Mark as successfully transferred only after the provider call succeeds
+        wasTransferred = true;
+        transferredTo = to;
+        void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+        return true;
+      } catch (err) {
+        logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
+        return false;
+      }
     },
     onBargeIn: params.onBargeIn,
     onMetrics: (m: PipelineMetrics) => {
