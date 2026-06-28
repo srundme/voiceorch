@@ -190,7 +190,10 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
           ...(agent.userId ? [eq(providersTable.userId, agent.userId)] : []),
         ))
         .limit(1);
-      if (!provRow) throw new Error(`No "twilio" provider configured for this user`);
+      if (!provRow) {
+        logger.warn({ callbackId: cb.id, agentId: cb.agentId, userId: agent.userId }, "fireCallback: no Twilio provider row found for agent's userId — callback cannot fire");
+        throw new Error(`No "twilio" provider configured for user ${agent.userId ?? "(null)"}`);
+      }
       const cfg = provRow.extraConfig
         ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
         : {} as Record<string, string>;
@@ -211,7 +214,10 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
           ...(agent.userId ? [eq(providersTable.userId, agent.userId)] : []),
         ))
         .limit(1);
-      if (!provRow) throw new Error(`No "plivo" provider configured for this user`);
+      if (!provRow) {
+        logger.warn({ callbackId: cb.id, agentId: cb.agentId, userId: agent.userId }, "fireCallback: no Plivo provider row found for agent's userId — callback cannot fire");
+        throw new Error(`No "plivo" provider configured for user ${agent.userId ?? "(null)"}`);
+      }
       const cfg = provRow.extraConfig
         ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
         : {} as Record<string, string>;

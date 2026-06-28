@@ -13,7 +13,7 @@ import {
   callExecutionsTable, callCallbacksTable, callBookingsTable,
   incomingCallsTable, callTransfersTable, leadTimelineTable,
   batchImportRunsTable, leadSourcesTable,
-  agentsTable, callRetriesTable, callsTable,
+  agentsTable, callRetriesTable, callsTable, scheduledCallbacksTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, isNotNull, inArray, asc } from "drizzle-orm";
 
@@ -216,7 +216,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
   const statusFilter =
     status === "pending"   ? eq(campaignLeadsTable.callStatus, "pending")   :
     status === "completed" ? eq(campaignLeadsTable.callStatus, "completed") :
-    status === "failed"    ? eq(campaignLeadsTable.callStatus, "failed")    :
+    status === "failed"    ? inArray(campaignLeadsTable.callStatus, ["failed", "busy", "no_pickup"]) :
     status === "calling"   ? eq(campaignLeadsTable.callStatus, "calling")   :
     undefined;
 
@@ -246,10 +246,13 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     callId:             campaignLeadsTable.callId,
     createdAt:          campaignLeadsTable.createdAt,
     nextRetryAt:        sql<string | null>`(
-      select scheduled_at from call_retries
-      where lead_id = ${campaignLeadsTable.id} and status = 'pending'
-      order by scheduled_at asc
-      limit 1
+      select min(t.scheduled_at) from (
+        select scheduled_at from call_retries
+        where lead_id = ${campaignLeadsTable.id} and status = 'pending'
+        union all
+        select scheduled_at from scheduled_callbacks
+        where campaign_lead_id = ${campaignLeadsTable.id} and status = 'pending'
+      ) t
     )`,
   }).from(campaignLeadsTable)
     .where(where)
