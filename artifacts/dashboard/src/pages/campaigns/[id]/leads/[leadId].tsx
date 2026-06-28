@@ -138,11 +138,15 @@ function fmtRelative(iso: string) { return formatDistanceToNow(new Date(iso), { 
 // ── Status maps ───────────────────────────────────────────────────────────────
 
 const CALL_STATUS_MAP: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-  pending:   { label: "Pending",   icon: <PauseCircle className="h-3 w-3" />,   cls: "bg-muted/60 text-muted-foreground border-border"         },
-  calling:   { label: "Calling",   icon: <PhoneCall className="h-3 w-3" />,     cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"            },
-  completed: { label: "Completed", icon: <CheckCircle2 className="h-3 w-3" />,  cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"},
-  failed:    { label: "Failed",    icon: <XCircle className="h-3 w-3" />,       cls: "bg-red-500/10 text-red-600 border-red-500/20"            },
-  skipped:   { label: "Skipped",   icon: <AlertCircle className="h-3 w-3" />,   cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"      },
+  pending:     { label: "Pending",     icon: <PauseCircle className="h-3 w-3" />,    cls: "bg-muted/60 text-muted-foreground border-border"          },
+  calling:     { label: "Calling",     icon: <PhoneCall className="h-3 w-3" />,      cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"             },
+  connected:   { label: "Connected",   icon: <PhoneCall className="h-3 w-3" />,      cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+  completed:   { label: "Completed",   icon: <CheckCircle2 className="h-3 w-3" />,   cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+  transferred: { label: "Transferred", icon: <ArrowRightLeft className="h-3 w-3" />, cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"             },
+  failed:      { label: "Failed",      icon: <XCircle className="h-3 w-3" />,        cls: "bg-red-500/10 text-red-600 border-red-500/20"             },
+  busy:        { label: "Busy",        icon: <XCircle className="h-3 w-3" />,        cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"       },
+  no_pickup:   { label: "No Answer",   icon: <XCircle className="h-3 w-3" />,        cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"       },
+  skipped:     { label: "Skipped",     icon: <AlertCircle className="h-3 w-3" />,    cls: "bg-amber-500/10 text-amber-600 border-amber-500/20"       },
 };
 
 const SENTIMENT_MAP: Record<string, { label: string; color: string; bg: string }> = {

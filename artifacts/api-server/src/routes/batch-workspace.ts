@@ -46,8 +46,8 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
   // Lead-level counters (one pass)
   const [leadKpis] = await db.select({
     total:      sql<number>`count(*)::int`,
-    connected:  sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'completed')::int`,
-    failed:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'failed')::int`,
+    connected:  sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected', 'completed', 'transferred'))::int`,
+    failed:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed', 'busy', 'no_pickup'))::int`,
     success:    sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
     pending:    sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
   }).from(campaignLeadsTable)
@@ -117,7 +117,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/funnel", async (req, res):
   const [r] = await db.select({
     imported:    sql<number>`count(*)::int`,
     called:      sql<number>`count(*) filter (where ${campaignLeadsTable.callAttempts} > 0)::int`,
-    connected:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'completed')::int`,
+    connected:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected', 'completed', 'transferred'))::int`,
     interested:  sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
     booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
     transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,

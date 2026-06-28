@@ -29,8 +29,25 @@ async function requireCampaign(campaignId: number, userId: string) {
 
 async function requireLead(leadId: number, campaignId: number) {
   const [row] = await db.select().from(campaignLeadsTable)
-    .where(and(eq(campaignLeadsTable.id, leadId), eq(campaignLeadsTable.campaignId, campaignId)));
-  return row ?? null;
+    .where(eq(campaignLeadsTable.id, leadId));
+  if (!row) return null;
+
+  // Fast path: campaignId is set — verify it matches the requested campaign.
+  if (row.campaignId !== null) {
+    return row.campaignId === campaignId ? row : null;
+  }
+
+  // Fallback for leads where campaignId was not written at import time:
+  // verify ownership via the batchId → campaign_batches chain.
+  if (row.batchId !== null) {
+    const [batch] = await db.select({ campaignId: campaignBatchesTable.campaignId })
+      .from(campaignBatchesTable)
+      .where(eq(campaignBatchesTable.id, row.batchId));
+    return (batch?.campaignId === campaignId) ? row : null;
+  }
+
+  // Neither campaignId nor batchId — cannot verify ownership.
+  return null;
 }
 
 // ── GET /campaigns/:id/leads/:leadId/workspace ────────────────────────────────

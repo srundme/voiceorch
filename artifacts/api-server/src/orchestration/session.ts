@@ -25,6 +25,7 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { scheduleNoAnswerRedial } from "../services/autoRedial.js";
+import { recordCallExecution } from "./campaignCaller.js";
 import {
   humanPhone,
   canonicalizeCallerKey,
@@ -665,8 +666,24 @@ export async function createSession(params: {
     return inserted;
   })();
 
-  // ── Mark campaign lead as connected (media stream established) ────────────────
-  if (params.campaignLeadId) {
+  // ── Mark campaign lead as connected + record call execution row ───────────────
+  if (params.campaignLeadId && campaignLeadResult) {
+    void db.update(campaignLeadsTable)
+      .set({ callStatus: "connected" })
+      .where(eq(campaignLeadsTable.id, params.campaignLeadId))
+      .catch((err) => {
+        logger.warn({ campaignLeadId: params.campaignLeadId, err }, "Failed to mark campaign lead connected");
+      });
+    void recordCallExecution({
+      leadId:        params.campaignLeadId,
+      campaignId:    campaignLeadResult.campaignId,
+      batchId:       campaignLeadResult.batchId ?? null,
+      callId:        callRecord.id,
+      attemptNumber: campaignLeadResult.callAttempts ?? 1,
+    }).catch((err) => {
+      logger.warn({ campaignLeadId: params.campaignLeadId, callId: callRecord.id, err }, "Failed to record call execution");
+    });
+  } else if (params.campaignLeadId) {
     void db.update(campaignLeadsTable)
       .set({ callStatus: "connected" })
       .where(eq(campaignLeadsTable.id, params.campaignLeadId))
