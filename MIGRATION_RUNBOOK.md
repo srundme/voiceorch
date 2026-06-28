@@ -213,7 +213,7 @@ Deploy four Railway services inside a single Railway project. They share a priva
 | Service | Source | Build command | Start command | Port | Health path |
 |---------|--------|---------------|---------------|------|-------------|
 | **api-server** | `srundme/voiceorch` main | `pnpm --filter @workspace/api-server run build` | `node --enable-source-maps artifacts/api-server/dist/index.mjs` | `$PORT` (Railway injects) | `/api/healthz` |
-| **gender-service** | `srundme/voiceorch` main | Docker build from `artifacts/gender-service/` | uvicorn inside container | 5000 | `/voice-analysis/healthz` |
+| **gender-service** | `srundme/voiceorch` main | Docker build from `artifacts/gender-service/` | uvicorn inside container | 5000 | `/voice-analysis/health` |
 | **PostgreSQL** | Railway managed add-on | — | — | 5432 (private) | — |
 | **Upstash Redis** | [upstash.com](https://upstash.com) (external) | — | — | REST HTTPS | — |
 

@@ -61,6 +61,14 @@ Set your Google OAuth callback URL to:
 |----------|-------|
 | `ADMIN_TOKEN` | Secret token for `/admin` access |
 
+### Voice analysis (caller gender → Sir/Ma'am salutation)
+
+| Variable | Value / Notes |
+|----------|---------------|
+| `GENDER_SERVICE_URL` | Internal hostname of the gender service. **Bare host only — no trailing slash, no path.** The API server appends `/voice-analysis/gender*` itself. Set to `http://gender-service.railway.internal:5000` (the service name must match the gender service's Railway name exactly). |
+
+> If this is unset, the API server falls back to `http://localhost:5000`, which does NOT work across Railway containers — every detection silently fails and the `{caller_salutation}` placeholder resolves to a neutral greeting. The api-server logs the resolved URL + reachability at startup; verify it after deploy. You can also check `GET /api/admin/gender-service/diagnostics` (with `x-admin-token`) without placing a call.
+
 ### Optional — AI / Telephony
 
 | Variable | Notes |
@@ -92,8 +100,12 @@ Add one variable:
 |----------|-------|
 | `PORT` | `5000` |
 
+Set the service **health check path** to `/voice-analysis/health` (liveness). Readiness of the wav2vec2 ML stack is a separate `/voice-analysis/ready` route.
+
+After this service is up, set `GENDER_SERVICE_URL=http://gender-service.railway.internal:5000` on the **snapserve-api** service (see the Voice analysis section in Step 3).
+
 > **Note:** This service installs PyTorch (~2 GB). The first build takes 10–15 minutes.
-> If you don't need voice analysis, you can skip deploying this service.
+> Skipping this service (or leaving `GENDER_SERVICE_URL` unset on the API) disables caller gender detection — the `{caller_salutation}` placeholder will always resolve to a neutral greeting (no "Sir"/"Ma'am"). All other features keep working.
 
 ---
 

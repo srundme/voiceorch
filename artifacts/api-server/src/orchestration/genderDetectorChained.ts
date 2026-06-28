@@ -54,6 +54,14 @@ const MODEL_CHAIN: ReadonlyArray<{ name: string; url: string }> = [
   { name: "pitch",           url: `${BASE}/voice-analysis/gender` },
 ];
 
+/**
+ * Rate-limit for the "whole service unreachable" warn so a fully-down gender
+ * service can't flood the logs on every caller turn. Process-wide (the failure
+ * is about the shared service, not any one call). One loud line per window.
+ */
+const SERVICE_DOWN_WARN_WINDOW_MS = 60_000;
+let lastServiceDownWarnAt = 0;
+
 // ── WAV builder ───────────────────────────────────────────────────────────────
 
 function buildWav(pcmData: Buffer): Buffer {
@@ -141,9 +149,20 @@ export class GenderDetectorChained {
   private async _detectChain(pcm: Buffer): Promise<void> {
     const wavBuf = buildWav(pcm);
 
+    // Track whether ANY model in the chain actually answered this turn. If every
+    // model failed (timeout / network / non-200) the service is effectively down,
+    // which is a production misconfig (GENDER_SERVICE_URL) — log it loudly with
+    // the resolved URL, rate-limited so it can't flood the logs.
+    let anyResponded = false;
+    let lastFailure = "";
+
     for (const model of MODEL_CHAIN) {
       const res = await this._detectOne(model.url, model.name, wavBuf);
-      if (!res) continue; // timeout / error / unreachable — fall through
+      if (!res) {
+        lastFailure = `${model.name} did not respond`;
+        continue; // timeout / error / unreachable — fall through
+      }
+      anyResponded = true;
 
       const { gender, confidence } = res;
       if ((gender === "male" || gender === "female") && confidence >= CONFIDENCE_THRESHOLD) {
@@ -161,6 +180,20 @@ export class GenderDetectorChained {
         { callId: this.callId, result: gender, confidence, model: model.name, provider: "chained" },
         "Gender model below threshold — falling through to next model",
       );
+    }
+
+    if (!anyResponded) {
+      // Whole service unreachable — make this LOUD (not a silent neutral fall-through)
+      // so the GENDER_SERVICE_URL / deployment misconfig is diagnosable from logs.
+      const now = Date.now();
+      if (now - lastServiceDownWarnAt >= SERVICE_DOWN_WARN_WINDOW_MS) {
+        lastServiceDownWarnAt = now;
+        this.log.warn(
+          { callId: this.callId, resolvedUrl: BASE, reason: lastFailure || "all detection endpoints failed", provider: "chained" },
+          "Gender service UNREACHABLE — every detection endpoint failed; caller salutation (Sir/Ma'am) will be neutral. Check GENDER_SERVICE_URL points at the running Voice Analysis service (this warning is rate-limited).",
+        );
+      }
+      return;
     }
 
     this.log.info(
@@ -188,7 +221,7 @@ export class GenderDetectorChained {
       });
 
       if (!res.ok) {
-        this.log.warn({ callId: this.callId, model: name, status: res.status }, "Gender model returned non-200 — falling through");
+        this.log.warn({ callId: this.callId, model: name, url, status: res.status }, "Gender model returned non-200 — falling through");
         return null;
       }
 
@@ -196,7 +229,7 @@ export class GenderDetectorChained {
       return { gender: json.estimated_gender ?? "unknown", confidence: json.confidence ?? 0 };
     } catch (err) {
       // Timeout (AbortError) or network failure — fall through to the next model.
-      this.log.warn({ callId: this.callId, model: name, err: (err as Error)?.name ?? String(err) }, "Gender model timed out / failed — falling through");
+      this.log.warn({ callId: this.callId, model: name, url, err: (err as Error)?.name ?? String(err) }, "Gender model timed out / failed — falling through");
       return null;
     }
   }
