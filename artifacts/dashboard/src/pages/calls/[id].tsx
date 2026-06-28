@@ -38,8 +38,12 @@ import {
 
 interface ToolEvent {
   toolName: string;
-  result: string;
-  status: "success" | "error";
+  args: Record<string, unknown> | null;
+  result: string | null;
+  status: "success" | "error" | "pending";
+  durationMs: number | null;
+  turnNumber: number | null;
+  errorMessage: string | null;
 }
 
 const TOOL_CALL_RE = /\[calling tool:\s*([^\]]+)\]/i;
@@ -53,7 +57,7 @@ function parseToolEventsFromLines(lines: string[]): ToolEvent[] {
       const toolName = resultMatch[1].trim();
       const result = resultMatch[2].trim();
       const status = result.toLowerCase().startsWith("error:") ? "error" : "success";
-      events.push({ toolName, result, status });
+      events.push({ toolName, args: null, result, status, durationMs: null, turnNumber: null, errorMessage: null });
     }
   }
   return events;
@@ -86,42 +90,71 @@ function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
 
 function ToolEventRow({ event }: { event: ToolEvent }) {
   const [expanded, setExpanded] = useState(false);
-  const isLong = event.result.length > 120;
-  const displayResult = !isLong || expanded ? event.result : event.result.slice(0, 120) + "…";
+  const hasArgs = !!event.args && Object.keys(event.args).length > 0;
+  const isExpandable = hasArgs || !!event.result || !!event.errorMessage;
 
   return (
-    <div className="p-3 border-b border-border last:border-0 hover:bg-elevated/20 transition-colors">
-      <div className="flex items-center gap-2 flex-wrap">
-        <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-        <Badge variant="outline" className="font-mono text-xs px-2 py-0 h-5 border-amber-500/20">
-          {event.toolName}
-        </Badge>
-        {event.status === "success" ? (
-          <Badge variant="default" className="text-xs h-5 px-2 py-0 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-transparent hover:bg-emerald-500/20">
-            Success
-          </Badge>
-        ) : (
-          <Badge variant="destructive" className="text-xs h-5 px-2 py-0 bg-red-500/15 text-red-600 dark:text-red-400 border-transparent hover:bg-red-500/20">
-            Error
-          </Badge>
+    <div className="border-b border-border last:border-0">
+      <div
+        className={`flex items-start gap-2.5 p-3 transition-colors ${isExpandable ? "cursor-pointer hover:bg-elevated/20" : ""}`}
+        onClick={() => isExpandable && setExpanded(v => !v)}
+      >
+        <Zap className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="font-mono text-xs px-2 py-0 h-5 border-amber-500/20">
+              {event.toolName}
+            </Badge>
+            {event.turnNumber != null && (
+              <span className="text-[10px] font-mono text-muted-foreground/40">turn #{event.turnNumber}</span>
+            )}
+            {event.durationMs != null && (
+              <span className="text-[10px] font-mono text-muted-foreground/40">{event.durationMs}ms</span>
+            )}
+            <span className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+              event.status === "success" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+              event.status === "error"   ? "bg-red-500/10 text-red-400 border-red-500/20" :
+                                          "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+            }`}>
+              {event.status}
+            </span>
+          </div>
+          {!expanded && event.result && (
+            <p className="text-xs text-muted-foreground/60 truncate font-mono">{event.result}</p>
+          )}
+          {!expanded && event.errorMessage && (
+            <p className="text-xs text-red-400/70 truncate font-mono">{event.errorMessage}</p>
+          )}
+        </div>
+        {isExpandable && (
+          <ChevronDown className={`h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground/30 transition-transform ${expanded ? "rotate-180" : ""}`} />
         )}
       </div>
-      {event.result && (
-        <div className="mt-2">
-          <p className="font-mono text-xs text-muted-foreground leading-relaxed break-all">
-            {displayResult}
-          </p>
-          {isLong && (
-            <button
-              onClick={() => setExpanded(v => !v)}
-              className="mt-1 flex items-center gap-0.5 text-xs text-primary hover:underline"
-            >
-              {expanded ? (
-                <><ChevronUp className="h-3 w-3" /> Show less</>
-              ) : (
-                <><ChevronDown className="h-3 w-3" /> Show more</>
-              )}
-            </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-2 ml-[26px]">
+          {hasArgs && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/40 mb-1">Args</p>
+              <pre className="text-[11px] font-mono text-muted-foreground/70 bg-elevated/50 border border-border rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                {JSON.stringify(event.args, null, 2)}
+              </pre>
+            </div>
+          )}
+          {event.result && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/40 mb-1">Result</p>
+              <pre className="text-[11px] font-mono text-muted-foreground/70 bg-elevated/50 border border-border rounded p-2 whitespace-pre-wrap break-all">
+                {event.result}
+              </pre>
+            </div>
+          )}
+          {event.errorMessage && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-red-400/60 mb-1">Error</p>
+              <pre className="text-[11px] font-mono text-red-400/70 bg-red-500/5 border border-red-500/15 rounded p-2 whitespace-pre-wrap">
+                {event.errorMessage}
+              </pre>
+            </div>
           )}
         </div>
       )}
@@ -990,11 +1023,39 @@ export function CallDetailContent({
     ? call.transcript.split(/\r?\n/)
     : [];
 
-  const toolEvents: ToolEvent[] = isJsonTranscript
-    ? parseToolEventsFromLines(transcriptLines.map((l: any) => String(l.content ?? "")))
-    : call.transcript
-      ? parseToolEventsFromLines(call.transcript.split(/\r?\n/))
-      : [];
+  const toolEvents: ToolEvent[] = (() => {
+    if (callLogs && callLogs.length > 0) {
+      const toolLogs = callLogs.filter(l => l.component === "Tool");
+      if (toolLogs.length > 0) {
+        const groups: ToolEvent[] = [];
+        for (const entry of toolLogs) {
+          if (entry.direction === "request") {
+            const toolName = (entry.requestPayload?.["tool"] as string) ?? "unknown";
+            const args = (entry.requestPayload?.["args"] as Record<string, unknown> | null) ?? null;
+            const turnNumber = (entry.metadata?.["turnNumber"] ?? null) as number | null;
+            groups.push({ toolName, args, result: null, status: "pending", durationMs: null, turnNumber, errorMessage: null });
+          } else if (entry.direction === "response" && groups.length > 0) {
+            const last = groups[groups.length - 1]!;
+            last.result = (entry.responsePayload?.["result"] as string) ?? null;
+            last.status = entry.status === "success" ? "success" : "error";
+          } else if (entry.direction === "system" && entry.metadata?.["event"] === "Execution Completed" && groups.length > 0) {
+            const last = groups[groups.length - 1]!;
+            last.durationMs = (entry.metadata?.["durationMs"] as number) ?? null;
+            if (last.status === "pending") last.status = "success";
+          } else if (entry.status === "error" && entry.direction === "system" && groups.length > 0) {
+            const last = groups[groups.length - 1]!;
+            last.errorMessage = (entry.metadata?.["message"] as string) ?? (entry.metadata?.["error"] as string) ?? null;
+            last.status = "error";
+          }
+        }
+        return groups;
+      }
+    }
+    const lines = isJsonTranscript
+      ? transcriptLines.map((l: any) => String(l.content ?? ""))
+      : call.transcript?.split(/\r?\n/) ?? [];
+    return parseToolEventsFromLines(lines);
+  })();
 
   const callSummary = (call as any).callSummary as string | null | undefined;
   const summarizationEnabled = ((agent as any)?.agentConfig?.summarizationEnabled as boolean | undefined) ?? false;

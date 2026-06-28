@@ -6,7 +6,7 @@ import {
   Filter, Calendar, Headphones, BarChart3, Download, X,
   ChevronDown, ChevronUp, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
-  UserCheck, Users, TrendingUp, Activity
+  UserCheck, Users, TrendingUp, Activity, Globe
 } from "lucide-react";
 import {
   useListCalls,
@@ -514,10 +514,15 @@ export default function CallsList() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
-                            <Phone className="h-3 w-3" />
-                            Live Call
-                          </span>
+                        {(() => {
+                          const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+                              {isWeb ? <Globe className="h-3 w-3" /> : <Phone className="h-3 w-3" />}
+                              {isWeb ? "Web Call" : "Live Call"}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={call.status} />
