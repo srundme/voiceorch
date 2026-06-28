@@ -2783,7 +2783,48 @@ export const GetCampaignAnalyticsResponse = zod.object({
   "statusBreakdown": zod.record(zod.string(), zod.number()),
   "callbacks": zod.number(),
   "totalLeads": zod.number(),
-  "calledLeads": zod.number()
+  "calledLeads": zod.number(),
+  "imported": zod.number().optional(),
+  "called": zod.number().optional(),
+  "connected": zod.number().optional(),
+  "interested": zod.number().optional(),
+  "booked": zod.number().optional(),
+  "transferred": zod.number().optional(),
+  "failed": zod.number().optional(),
+  "pending": zod.number().optional(),
+  "successRate": zod.number().optional(),
+  "connectionRate": zod.number().optional(),
+  "bookingRate": zod.number().optional(),
+  "avgCallDurationS": zod.number().nullish(),
+  "totalCostCents": zod.number().optional(),
+  "avgCostPerBooking": zod.number().nullish()
+})
+
+
+/**
+ * @summary Recent activity timeline for a campaign
+ */
+export const GetCampaignActivityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCampaignActivityQueryParams = zod.object({
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetCampaignActivityResponse = zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.union([zod.number(),zod.string()]),
+  "leadId": zod.number().nullish(),
+  "leadName": zod.string().nullish(),
+  "leadPhone": zod.string().nullish(),
+  "eventType": zod.string(),
+  "data": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date(),
+  "batchName": zod.string().nullish()
+}))
 })
 
 
@@ -3572,14 +3613,23 @@ export const GetBatchWorkspaceKpisParams = zod.object({
 
 export const GetBatchWorkspaceKpisResponse = zod.object({
   "total": zod.number(),
+  "called": zod.number(),
   "connected": zod.number(),
+  "interested": zod.number().optional(),
+  "booked": zod.number().optional(),
+  "transferred": zod.number().optional(),
   "failed": zod.number(),
   "pending": zod.number(),
   "callbacks": zod.number(),
   "incoming": zod.number(),
   "bookings": zod.number(),
   "transfers": zod.number(),
-  "successRate": zod.number()
+  "successRate": zod.number(),
+  "lastActivityAt": zod.coerce.date().nullish(),
+  "avgCallDurationS": zod.number().nullish(),
+  "totalCostCents": zod.number(),
+  "agentName": zod.string().nullish(),
+  "estimatedTimeRemainingMins": zod.number().nullish()
 })
 
 

@@ -103,6 +103,7 @@ import type {
   CallerContact,
   CallerDetail,
   Campaign,
+  CampaignActivity,
   CampaignAnalytics,
   CampaignBatch,
   CampaignBatchCreate,
@@ -152,6 +153,7 @@ import type {
   GetBatchWorkspaceActivityParams,
   GetBookExamAttemptsParams,
   GetBookProgressParams,
+  GetCampaignActivityParams,
   GetCommandCenterActivityStream200,
   GetCommandCenterActivityStreamParams,
   GetCommandCenterLiveOps200,
@@ -7675,6 +7677,95 @@ export function useGetCampaignAnalytics<TData = Awaited<ReturnType<typeof getCam
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCampaignAnalyticsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetCampaignActivityUrl = (id: number,
+    params?: GetCampaignActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/campaigns/${id}/activity?${stringifiedParams}` : `/api/campaigns/${id}/activity`
+}
+
+/**
+ * @summary Recent activity timeline for a campaign
+ */
+export const getCampaignActivity = async (id: number,
+    params?: GetCampaignActivityParams, options?: RequestInit): Promise<CampaignActivity> => {
+
+  return customFetch<CampaignActivity>(getGetCampaignActivityUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCampaignActivityQueryKey = (id: number,
+    params?: GetCampaignActivityParams,) => {
+    return [
+    `/api/campaigns/${id}/activity`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCampaignActivityQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignActivity>>, TError = ErrorType<void>>(id: number,
+    params?: GetCampaignActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignActivityQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignActivity>>> = ({ signal }) => getCampaignActivity(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignActivity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCampaignActivityQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignActivity>>>
+export type GetCampaignActivityQueryError = ErrorType<void>
+
+
+/**
+ * @summary Recent activity timeline for a campaign
+ */
+
+export function useGetCampaignActivity<TData = Awaited<ReturnType<typeof getCampaignActivity>>, TError = ErrorType<void>>(
+ id: number,
+    params?: GetCampaignActivityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCampaignActivity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCampaignActivityQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -2512,6 +2512,37 @@ export interface CampaignAnalytics {
   callbacks: number;
   totalLeads: number;
   calledLeads: number;
+  imported?: number;
+  called?: number;
+  connected?: number;
+  interested?: number;
+  booked?: number;
+  transferred?: number;
+  failed?: number;
+  pending?: number;
+  successRate?: number;
+  connectionRate?: number;
+  bookingRate?: number;
+  avgCallDurationS?: number | null;
+  totalCostCents?: number;
+  avgCostPerBooking?: number | null;
+}
+
+export type CampaignActivityEventData = { [key: string]: unknown } | null;
+
+export interface CampaignActivityEvent {
+  id: number | string;
+  leadId?: number | null;
+  leadName?: string | null;
+  leadPhone?: string | null;
+  eventType: string;
+  data?: CampaignActivityEventData;
+  createdAt: string;
+  batchName?: string | null;
+}
+
+export interface CampaignActivity {
+  events: CampaignActivityEvent[];
 }
 
 export interface DncEntry {
@@ -3830,7 +3861,11 @@ export interface BatchWorkspaceHeader {
 
 export interface BatchWorkspaceKpis {
   total: number;
+  called: number;
   connected: number;
+  interested?: number;
+  booked?: number;
+  transferred?: number;
   failed: number;
   pending: number;
   callbacks: number;
@@ -3838,6 +3873,11 @@ export interface BatchWorkspaceKpis {
   bookings: number;
   transfers: number;
   successRate: number;
+  lastActivityAt?: string | null;
+  avgCallDurationS?: number | null;
+  totalCostCents: number;
+  agentName?: string | null;
+  estimatedTimeRemainingMins?: number | null;
 }
 
 export interface BatchFunnelStage {
@@ -4726,6 +4766,10 @@ export const UpdateLeadCallbackBodyStatus = {
 export type UpdateLeadCallbackBody = {
   status?: UpdateLeadCallbackBodyStatus;
   callbackAt?: string | null;
+};
+
+export type GetCampaignActivityParams = {
+limit?: number;
 };
 
 export type AddToDncBody = {

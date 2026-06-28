@@ -2433,6 +2433,31 @@ paths:
         "401":
           description: Unauthorized
 
+  /campaigns/{id}/activity:
+    get:
+      operationId: getCampaignActivity
+      tags: [campaigns]
+      summary: Recent activity timeline for a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Campaign activity events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignActivity"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
   /campaigns/{id}/batches/{batchId}/analytics:
     get:
       operationId: getBatchAnalytics
@@ -8836,6 +8861,41 @@ components:
         callbacks: { type: integer }
         totalLeads: { type: integer }
         calledLeads: { type: integer }
+        imported:     { type: integer }
+        called:       { type: integer }
+        connected:    { type: integer }
+        interested:   { type: integer }
+        booked:       { type: integer }
+        transferred:  { type: integer }
+        failed:       { type: integer }
+        pending:      { type: integer }
+        successRate:        { type: integer }
+        connectionRate:     { type: integer }
+        bookingRate:        { type: integer }
+        avgCallDurationS:   { type: integer, nullable: true }
+        totalCostCents:     { type: integer }
+        avgCostPerBooking:  { type: integer, nullable: true }
+
+    CampaignActivityEvent:
+      type: object
+      required: [id, eventType, createdAt]
+      properties:
+        id:        { oneOf: [{ type: integer }, { type: string }] }
+        leadId:    { type: integer, nullable: true }
+        leadName:  { type: string, nullable: true }
+        leadPhone: { type: string, nullable: true }
+        eventType: { type: string }
+        data:      { type: object, nullable: true }
+        createdAt: { type: string, format: date-time }
+        batchName: { type: string, nullable: true }
+
+    CampaignActivity:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/CampaignActivityEvent" }
 
     DncEntry:
       type: object
@@ -10357,17 +10417,26 @@ components:
 
     BatchWorkspaceKpis:
       type: object
-      required: [total, connected, failed, pending, callbacks, incoming, bookings, transfers, successRate]
+      required: [total, called, connected, failed, pending, callbacks, incoming, bookings, transfers, successRate, totalCostCents]
       properties:
-        total:       { type: integer }
-        connected:   { type: integer }
-        failed:      { type: integer }
-        pending:     { type: integer }
-        callbacks:   { type: integer }
-        incoming:    { type: integer }
-        bookings:    { type: integer }
-        transfers:   { type: integer }
-        successRate: { type: integer }
+        total:                     { type: integer }
+        called:                    { type: integer }
+        connected:                 { type: integer }
+        interested:                { type: integer }
+        booked:                    { type: integer }
+        transferred:               { type: integer }
+        failed:                    { type: integer }
+        pending:                   { type: integer }
+        callbacks:                 { type: integer }
+        incoming:                  { type: integer }
+        bookings:                  { type: integer }
+        transfers:                 { type: integer }
+        successRate:               { type: integer }
+        lastActivityAt:            { type: string, format: date-time, nullable: true }
+        avgCallDurationS:          { type: integer, nullable: true }
+        totalCostCents:            { type: integer }
+        agentName:                 { type: string, nullable: true }
+        estimatedTimeRemainingMins: { type: integer, nullable: true }
 
     BatchFunnelStage:
       type: object

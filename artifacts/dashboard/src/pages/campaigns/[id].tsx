@@ -8,7 +8,8 @@ import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
-  useListCampaignLeads, useListAgents,
+  useListCampaignLeads, useListAgents, useGetCampaignActivity,
+  useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
   getListCampaignLeadsQueryKey,
 } from "@workspace/api-client-react";
@@ -37,6 +38,7 @@ import {
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
   Phone, Eye, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, CalendarDays, ArrowRightLeft, Radio, Ban,
+  TrendingUp, DollarSign, Target, Flame,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -540,6 +542,85 @@ function BatchRow({ batch, index, campaignId, onDelete }: {
   );
 }
 
+// ── Batch KPI Card (overview tab) ────────────────────────────────────────────
+
+function BatchKpiCard({ batch, index, campaignId }: {
+  batch: CampaignBatch; index: number; campaignId: number;
+}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: kpis } = useGetBatchWorkspaceKpis(campaignId, batch.id, { query: { refetchInterval: 30_000 } as any });
+  // Use live aggregated counts; fall back to batch row only before first KPI load
+  const total  = kpis?.total  ?? batch.totalLeads;
+  const called = kpis?.called ?? batch.calledLeads;
+  const bPct   = total > 0 ? Math.round((called / total) * 100) : 0;
+  const chips = [
+    { label: "Connected",  value: kpis?.connected  ?? 0, cls: "text-blue-500" },
+    { label: "Booked",     value: kpis?.booked     ?? 0, cls: "text-emerald-500" },
+    { label: "Interested", value: kpis?.interested ?? 0, cls: "text-emerald-400" },
+    { label: "Failed",     value: kpis?.failed     ?? 0, cls: "text-red-500" },
+    { label: "Callbacks",  value: kpis?.callbacks  ?? 0, cls: "text-amber-500" },
+  ];
+  const lastActivity = kpis?.lastActivityAt
+    ? formatDistanceToNow(new Date(kpis.lastActivityAt), { addSuffix: true })
+    : null;
+  const etrMins = kpis?.estimatedTimeRemainingMins ?? null;
+  const etrLabel = etrMins != null
+    ? etrMins < 60
+      ? `~${etrMins}m remaining`
+      : `~${Math.round(etrMins / 60)}h remaining`
+    : null;
+  return (
+    <div
+      className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-foreground/20 transition-all"
+      onClick={() => { window.location.href = `${BASE}/app/campaigns/${campaignId}/batches/${batch.id}`; }}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">{batch.name || `Batch ${index + 1}`}</p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <StatusBadge status={batch.status} />
+            {kpis?.agentName && (
+              <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+                <Users className="h-2.5 w-2.5" />{kpis.agentName}
+              </span>
+            )}
+            <span className="text-[10px] text-muted-foreground/40">{total.toLocaleString()} leads</span>
+            {lastActivity && (
+              <span className="text-[10px] text-muted-foreground/30 flex items-center gap-1">
+                <Clock className="h-2.5 w-2.5" />{lastActivity}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col items-end shrink-0 gap-1">
+          {etrLabel && (
+            <span className="text-[9px] text-muted-foreground/30 whitespace-nowrap">{etrLabel}</span>
+          )}
+          <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:translate-x-0.5 transition-transform" />
+        </div>
+      </div>
+      {/* Progress bar — always from live data once kpis loaded */}
+      {total > 0 && (
+        <div className="mb-2">
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${bPct}%` }} />
+          </div>
+          <p className="text-[10px] text-muted-foreground/40 mt-1 font-mono">{bPct}% called ({called.toLocaleString()} / {total.toLocaleString()})</p>
+        </div>
+      )}
+      {/* KPI chips */}
+      {kpis && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {chips.filter(c => c.value > 0).map(c => (
+            <span key={c.label} className={cn("text-[10px] font-semibold", c.cls)}>
+              {c.value.toLocaleString()} {c.label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Leads mini-table ─────────────────────────────────────────────────────────
 
 function LeadsTab({ campaignId }: { campaignId: number }) {
@@ -771,16 +852,29 @@ export default function CampaignDetailPage() {
   }
 
   const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
-  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId);
-  const { data: analytics } = useGetCampaignAnalytics(campaignId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 30_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 30_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: activityData } = useGetCampaignActivity(campaignId, { limit: 50 }, { query: { refetchInterval: 30_000 } as any });
 
   const webhookUrl = campaign
     ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
     : "";
 
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
-  const calledPct = campaign && campaign.totalLeads > 0
-    ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100) : 0;
+  const imported    = analytics?.imported    ?? campaign?.totalLeads  ?? 0;
+  const called      = analytics?.called      ?? campaign?.calledLeads ?? 0;
+  const connected   = analytics?.connected   ?? 0;
+  const interested  = analytics?.interested  ?? 0;
+  const booked      = analytics?.booked      ?? 0;
+  const transferred = analytics?.transferred ?? 0;
+  const failed      = analytics?.failed      ?? 0;
+  const calledPct   = imported > 0 ? Math.round((called / imported) * 100) : 0;
+  const connRate    = analytics?.connectionRate ?? 0;
+  const bookRate    = analytics?.bookingRate    ?? 0;
+  const successRate = analytics?.successRate    ?? 0;
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -881,11 +975,12 @@ export default function CampaignDetailPage() {
         {/* KPI chips */}
         <div className="flex items-center gap-2 pb-3 overflow-x-auto">
           {[
-            { label: "Leads",     value: campaign.totalLeads, tab: "overview" },
-            { label: "Called",    value: campaign.calledLeads, tab: "operations" },
-            { label: "Callbacks", value: analytics?.callbacks ?? 0, tab: "operations" },
-            { label: "Bookings",  value: analytics?.dispositions?.find((d: { label: string }) => d.label.toLowerCase().includes("book"))?.count ?? 0, tab: "operations" },
-            { label: "Transfers", value: analytics?.dispositions?.find((d: { label: string }) => d.label.toLowerCase().includes("transfer"))?.count ?? 0, tab: "operations" },
+            { label: "Leads",      value: imported,                    tab: "overview" },
+            { label: "Called",     value: called,                      tab: "operations" },
+            { label: "Connected",  value: connected,                   tab: "analytics" },
+            { label: "Booked",     value: booked,                      tab: "operations" },
+            { label: "Callbacks",  value: analytics?.callbacks ?? 0,   tab: "operations" },
+            { label: "Transfers",  value: transferred,                 tab: "operations" },
           ].map(kpi => (
             <button key={kpi.label}
               onClick={() => setActiveTab(kpi.tab)}
@@ -912,33 +1007,41 @@ export default function CampaignDetailPage() {
             <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
               {/* Funnel */}
               <div className="bg-card border border-border rounded-xl p-5">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Call Funnel</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Call Funnel</h3>
+                  {analytics && (
+                    <div className="flex items-center gap-3">
+                      {connRate > 0 && <span className="text-[10px] text-blue-500 font-medium">{connRate}% conn.</span>}
+                      {bookRate > 0  && <span className="text-[10px] text-emerald-500 font-medium">{bookRate}% booked</span>}
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 overflow-x-auto pb-1">
                   {[
-                    { label: "Imported",    value: campaign.totalLeads,   cls: "bg-muted/60" },
-                    { label: "Called",      value: campaign.calledLeads,  cls: "bg-blue-500/15" },
-                    { label: "Connected",   value: (analytics?.statusBreakdown as Record<string, number> | undefined)?.["connected"] ?? "—", cls: "bg-blue-500/30" },
-                    { label: "Interested",  value: (analytics?.statusBreakdown as Record<string, number> | undefined)?.["interested"] ?? "—", cls: "bg-emerald-500/15" },
-                    { label: "Booked",      value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("book"))?.count ?? "—", cls: "bg-emerald-500/30" },
-                    { label: "Transferred", value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("transfer"))?.count ?? "—", cls: "bg-purple-500/20" },
+                    { label: "Imported",    value: imported,    cls: "bg-muted/60" },
+                    { label: "Called",      value: called,      cls: "bg-blue-500/15" },
+                    { label: "Connected",   value: connected,   cls: "bg-blue-500/30" },
+                    { label: "Interested",  value: interested,  cls: "bg-emerald-500/15" },
+                    { label: "Booked",      value: booked,      cls: "bg-emerald-500/30" },
+                    { label: "Transferred", value: transferred, cls: "bg-purple-500/20" },
                   ].map((stage, i, arr) => (
                     <div key={stage.label} className="flex items-center shrink-0">
                       <div className={cn("px-4 py-3 rounded-xl text-center min-w-[88px]", stage.cls)}>
-                        <p className="text-base font-bold tabular-nums leading-none">{typeof stage.value === "number" ? stage.value.toLocaleString() : stage.value}</p>
+                        <p className="text-base font-bold tabular-nums leading-none">{stage.value.toLocaleString()}</p>
                         <p className="text-[10px] text-muted-foreground/60 mt-1">{stage.label}</p>
                       </div>
                       {i < arr.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/20 mx-0.5 shrink-0" />}
                     </div>
                   ))}
                 </div>
-                {campaign.totalLeads > 0 && (
+                {imported > 0 && (
                   <div className="mt-4">
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary/40 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
                     </div>
                     <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40">
-                      <span>{campaign.calledLeads.toLocaleString()} called</span>
-                      <span>{(campaign.totalLeads - campaign.calledLeads).toLocaleString()} remaining</span>
+                      <span>{called.toLocaleString()} called</span>
+                      <span>{(imported - called).toLocaleString()} remaining</span>
                     </div>
                   </div>
                 )}
@@ -969,36 +1072,55 @@ export default function CampaignDetailPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {batches.map((batch, i) => {
-                      const bPct = batch.totalLeads > 0 ? Math.round((batch.calledLeads / batch.totalLeads) * 100) : 0;
+                    {batches.map((batch, i) => (
+                      <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Activity Feed */}
+              {(activityData?.events?.length ?? 0) > 0 && (
+                <div className="bg-card border border-border rounded-xl p-5">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <Activity className="h-3.5 w-3.5" /> Recent Activity
+                  </h3>
+                  <div className="space-y-0 divide-y divide-border/40">
+                    {activityData!.events.slice(0, 20).map((ev: {
+                      id: number | string; leadId: number | null; leadName: string | null; leadPhone: string | null;
+                      eventType: string; data: Record<string, unknown> | null; createdAt: string;
+                      batchName?: string | null;
+                    }) => {
+                      const isBatchEv = ev.eventType.startsWith("batch_");
+                      const label = isBatchEv
+                        ? (ev.batchName || (ev.data as Record<string,unknown> | null)?.batchName as string | null || "Batch")
+                        : (ev.leadName || ev.leadPhone || `Lead #${ev.leadId}`);
+                      const evTypeLabel = ev.eventType.replace(/_/g, " ");
+                      const isGood = ["booking_created","transfer_completed","interest_confirmed","batch_completed"].includes(ev.eventType);
+                      const isBad  = ["call_failed","dnc_flagged","opted_out","batch_stopped"].includes(ev.eventType);
+                      const isInfo = isBatchEv && !isGood && !isBad;
                       return (
-                        <div key={batch.id}
-                          className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-foreground/20 transition-all"
-                          onClick={() => { window.location.href = `${BASE}/app/campaigns/${campaignId}/batches/${batch.id}`; }}>
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate">{batch.name || `Batch ${i + 1}`}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] capitalize text-muted-foreground/50">{batch.status}</span>
-                                <span className="text-[10px] text-muted-foreground/40">{batch.totalLeads.toLocaleString()} leads</span>
-                              </div>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 group-hover:translate-x-0.5 transition-transform mt-0.5" />
+                        <div key={String(ev.id)} className="flex items-center gap-3 py-2">
+                          <div className={cn(
+                            "h-1.5 w-1.5 rounded-full shrink-0",
+                            isGood ? "bg-emerald-500" : isBad ? "bg-red-400" : isInfo ? "bg-blue-400/60" : "bg-muted-foreground/30",
+                          )} />
+                          <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+                            <span className={cn(
+                              "text-xs font-medium truncate",
+                              isBatchEv ? "text-muted-foreground/60" : "text-foreground/80",
+                            )}>{label as string}</span>
+                            <span className="text-xs text-muted-foreground/40 capitalize shrink-0">{evTypeLabel}</span>
                           </div>
-                          {batch.totalLeads > 0 && (
-                            <div>
-                              <div className="h-1 bg-muted rounded-full overflow-hidden">
-                                <div className="h-full bg-foreground/20 rounded-full" style={{ width: `${bPct}%` }} />
-                              </div>
-                              <p className="text-[10px] text-muted-foreground/40 mt-1 font-mono">{bPct}% called</p>
-                            </div>
-                          )}
+                          <span className="text-[10px] text-muted-foreground/30 shrink-0 whitespace-nowrap">
+                            {formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true })}
+                          </span>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Webhook */}
               <div className="bg-card border border-border rounded-xl p-4">
@@ -1018,12 +1140,12 @@ export default function CampaignDetailPage() {
               <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {[
-                    { label: "Live Calls",    value: "—",   accent: "text-blue-500" },
-                    { label: "Callbacks Due", value: analytics?.callbacks ?? 0, accent: "text-amber-500" },
-                    { label: "Incoming",      value: "—",   accent: "" },
-                    { label: "Bookings",      value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("book"))?.count ?? 0, accent: "text-emerald-500" },
-                    { label: "Transfers",     value: analytics?.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("transfer"))?.count ?? 0, accent: "text-purple-500" },
-                    { label: "Failed",        value: (analytics?.statusBreakdown as Record<string, number> | undefined)?.["failed"] ?? "—", accent: "text-red-500" },
+                    { label: "Connected",     value: connected,                   accent: "text-blue-500" },
+                    { label: "Interested",    value: interested,                  accent: "text-emerald-400" },
+                    { label: "Booked",        value: booked,                      accent: "text-emerald-500" },
+                    { label: "Callbacks Due", value: analytics?.callbacks ?? 0,   accent: "text-amber-500" },
+                    { label: "Transfers",     value: transferred,                 accent: "text-purple-500" },
+                    { label: "Failed",        value: failed,                      accent: "text-red-500" },
                   ].map(m => (
                     <div key={m.label} className="bg-card border border-border rounded-xl px-3 py-2.5 text-center">
                       <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest leading-none mb-1">{m.label}</p>
@@ -1080,54 +1202,69 @@ export default function CampaignDetailPage() {
               ) : (
                 <>
                   {/* Performance rates */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                       {
                         label: "Connection Rate",
-                        value: analytics.calledLeads > 0
-                          ? `${Math.round(((analytics.statusBreakdown as Record<string, number> | undefined)?.["connected"] ?? 0) / analytics.calledLeads * 100)}%`
-                          : "—",
-                        desc: "Calls that connected",
+                        value: connRate > 0 ? `${connRate}%` : "—",
+                        sub: `${connected.toLocaleString()} of ${called.toLocaleString()} calls`,
                         accent: "text-blue-500",
+                        icon: <TrendingUp className="h-4 w-4" />,
                       },
                       {
                         label: "Booking Rate",
-                        value: analytics.calledLeads > 0
-                          ? `${Math.round(((analytics.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("book"))?.count ?? 0) / analytics.calledLeads) * 100)}%`
-                          : "—",
-                        desc: "Calls that booked",
+                        value: bookRate > 0 ? `${bookRate}%` : "—",
+                        sub: `${booked.toLocaleString()} bookings`,
                         accent: "text-emerald-500",
+                        icon: <Target className="h-4 w-4" />,
                       },
                       {
-                        label: "Transfer Rate",
-                        value: analytics.calledLeads > 0
-                          ? `${Math.round(((analytics.dispositions?.find((d: { label: string; count: number }) => d.label.toLowerCase().includes("transfer"))?.count ?? 0) / analytics.calledLeads) * 100)}%`
+                        label: "Success Rate",
+                        value: successRate > 0 ? `${successRate}%` : "—",
+                        sub: `Booked / Called`,
+                        accent: "text-amber-500",
+                        icon: <Flame className="h-4 w-4" />,
+                      },
+                      {
+                        label: "Avg Cost / Booking",
+                        value: analytics.avgCostPerBooking != null
+                          ? `$${(analytics.avgCostPerBooking / 100).toFixed(2)}`
                           : "—",
-                        desc: "Calls transferred",
-                        accent: "text-purple-500",
+                        sub: (analytics.totalCostCents ?? 0) > 0
+                          ? `$${((analytics.totalCostCents ?? 0) / 100).toFixed(2)} total · ${analytics.avgCallDurationS != null ? `${analytics.avgCallDurationS}s avg call` : ""}`
+                          : "No cost data",
+                        accent: "text-muted-foreground",
+                        icon: <DollarSign className="h-4 w-4" />,
                       },
                     ].map(r => (
-                      <div key={r.label} className="bg-card border border-border rounded-xl p-5">
-                        <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">{r.label}</p>
-                        <p className={cn("text-4xl font-bold mt-2 tabular-nums", r.accent)}>{r.value}</p>
-                        <p className="text-xs text-muted-foreground/40 mt-1">{r.desc}</p>
+                      <div key={r.label} className="bg-card border border-border rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">{r.label}</p>
+                          <span className={cn("opacity-40", r.accent)}>{r.icon}</span>
+                        </div>
+                        <p className={cn("text-3xl font-bold tabular-nums", r.accent)}>{r.value}</p>
+                        <p className="text-[10px] text-muted-foreground/40 mt-1">{r.sub}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Funnel */}
+                  {/* Funnel bar chart */}
                   <div className="bg-card border border-border rounded-xl p-5">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Funnel</h3>
                     <div className="space-y-2">
                       {[
-                        { label: "Imported",  value: campaign.totalLeads },
-                        { label: "Called",    value: campaign.calledLeads },
-                        { label: "Connected", value: (analytics.statusBreakdown as Record<string, number> | undefined)?.["connected"] ?? 0 },
+                        { label: "Imported",    value: imported },
+                        { label: "Called",      value: called },
+                        { label: "Connected",   value: connected },
+                        { label: "Interested",  value: interested },
+                        { label: "Booked",      value: booked },
+                        { label: "Transferred", value: transferred },
+                        { label: "Failed",      value: failed },
                       ].map(stage => {
-                        const pct = campaign.totalLeads > 0 ? Math.round((stage.value / campaign.totalLeads) * 100) : 0;
+                        const pct = imported > 0 ? Math.round((stage.value / imported) * 100) : 0;
                         return (
                           <div key={stage.label} className="flex items-center gap-3">
-                            <span className="text-xs text-muted-foreground/60 w-20 shrink-0">{stage.label}</span>
+                            <span className="text-xs text-muted-foreground/60 w-24 shrink-0">{stage.label}</span>
                             <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
                               <div className="h-full bg-foreground/15 rounded-md flex items-center px-2 transition-all" style={{ width: `${Math.max(pct, 2)}%` }}>
                                 <span className="text-[10px] font-mono text-foreground/70 whitespace-nowrap">{stage.value.toLocaleString()}</span>
@@ -1146,7 +1283,7 @@ export default function CampaignDetailPage() {
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Disposition Breakdown</h3>
                       <div className="space-y-3">
                         {analytics.dispositions.map((d: { label: string; count: number }) => {
-                          const pct = analytics.calledLeads > 0 ? Math.round((d.count / analytics.calledLeads) * 100) : 0;
+                          const pct = called > 0 ? Math.round((d.count / called) * 100) : 0;
                           return (
                             <div key={d.label} className="flex items-center gap-3">
                               <span className="text-xs text-foreground/70 capitalize w-40 shrink-0 truncate">{d.label.replace(/_/g, " ")}</span>

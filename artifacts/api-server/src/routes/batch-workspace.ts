@@ -13,7 +13,7 @@ import {
   callExecutionsTable, callCallbacksTable, callBookingsTable,
   incomingCallsTable, callTransfersTable, leadTimelineTable,
   batchImportRunsTable, leadSourcesTable,
-  agentsTable, callRetriesTable,
+  agentsTable, callRetriesTable, callsTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, isNotNull, inArray, asc } from "drizzle-orm";
 
@@ -39,17 +39,32 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
 
   const campaignId = parseInt(req.params["id"]!, 10);
   const batchId    = parseInt(req.params["batchId"]!, 10);
-  if (isNaN(campaignId) || isNaN(batchId) || !await requireBatch(campaignId, batchId, userId)) {
+  if (isNaN(campaignId) || isNaN(batchId)) {
     res.status(404).json({ error: "Not found" }); return;
   }
+  const batch = await requireBatch(campaignId, batchId, userId);
+  if (!batch) { res.status(404).json({ error: "Not found" }); return; }
 
-  // Lead-level counters (one pass)
+  // Campaign for agent name
+  const [campaign] = await db.select({ agentId: campaignsTable.agentId })
+    .from(campaignsTable).where(eq(campaignsTable.id, campaignId));
+  const agentRow = campaign?.agentId
+    ? (await db.select({ name: agentsTable.name }).from(agentsTable).where(eq(agentsTable.id, campaign.agentId)))[0]
+    : null;
+  const agentName = agentRow?.name ?? null;
+
+  // Lead-level counters (one pass) — all funnel fields
   const [leadKpis] = await db.select({
-    total:      sql<number>`count(*)::int`,
-    connected:  sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected', 'completed', 'transferred'))::int`,
-    failed:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed', 'busy', 'no_pickup'))::int`,
-    success:    sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
-    pending:    sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
+    total:       sql<number>`count(*)::int`,
+    called:      sql<number>`count(*) filter (where ${campaignLeadsTable.callAttempts} > 0)::int`,
+    connected:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('connected', 'completed', 'transferred'))::int`,
+    interested:  sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
+    booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
+    transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
+    failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed', 'busy', 'no_pickup'))::int`,
+    success:     sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
+    pending:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
+    firstAttemptAt: sql<string | null>`min(last_attempt_at)::text`,
   }).from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.batchId, batchId));
 
@@ -85,20 +100,60 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
       )!,
     );
 
-  const total = leadKpis?.total ?? 0;
-  const successCount = leadKpis?.success ?? 0;
-  const successRate = total > 0 ? Math.round((successCount / total) * 100) : 0;
+  // Last activity + avg duration + total cost (join leads → calls)
+  const [costDuration] = await db.select({
+    avgDurationS:   sql<number | null>`round(avg(${callsTable.durationSeconds}))::int`,
+    totalCostCents: sql<number>`coalesce(sum(${callsTable.costCents}),0)::int`,
+  }).from(campaignLeadsTable)
+    .innerJoin(
+      callsTable,
+      and(eq(campaignLeadsTable.callId, callsTable.id), isNotNull(campaignLeadsTable.callId))!,
+    )
+    .where(eq(campaignLeadsTable.batchId, batchId));
+
+  // Last activity from leads (most recent lastAttemptAt or createdAt)
+  const [lastActivity] = await db.select({
+    lastAt: sql<string | null>`max(last_attempt_at)::text`,
+  }).from(campaignLeadsTable)
+    .where(and(eq(campaignLeadsTable.batchId, batchId), isNotNull(campaignLeadsTable.lastAttemptAt)));
+
+  const total        = leadKpis?.total        ?? 0;
+  const called       = leadKpis?.called       ?? 0;
+  const successCount = leadKpis?.success      ?? 0;
+  const successRate  = called > 0 ? Math.round((successCount / called) * 100) : 0;
+
+  // Estimated Time Remaining (pace-based)
+  // Rate = calls made per minute since first attempt; ETR = pending / rate
+  let estimatedTimeRemainingMins: number | null = null;
+  const firstAttemptAt = leadKpis?.firstAttemptAt;
+  if (firstAttemptAt && called > 0) {
+    const elapsedMins = (Date.now() - new Date(firstAttemptAt).getTime()) / 60_000;
+    const ratePerMin = elapsedMins > 0 ? called / elapsedMins : 0;
+    const remaining = total - called - (leadKpis?.failed ?? 0);
+    if (ratePerMin > 0 && remaining > 0) {
+      estimatedTimeRemainingMins = Math.round(remaining / ratePerMin);
+    }
+  }
 
   res.json({
     total,
-    connected:   leadKpis?.connected  ?? 0,
-    failed:      leadKpis?.failed     ?? 0,
-    pending:     leadKpis?.pending    ?? 0,
+    called,
+    connected:        leadKpis?.connected   ?? 0,
+    interested:       leadKpis?.interested  ?? 0,
+    booked:           leadKpis?.booked      ?? 0,
+    transferred:      leadKpis?.transferred ?? 0,
+    failed:           leadKpis?.failed      ?? 0,
+    pending:          leadKpis?.pending     ?? 0,
     callbacks,
     incoming,
     bookings,
     transfers,
     successRate,
+    lastActivityAt:             lastActivity?.lastAt ?? null,
+    avgCallDurationS:           costDuration?.avgDurationS ?? null,
+    totalCostCents:             costDuration?.totalCostCents ?? 0,
+    agentName,
+    estimatedTimeRemainingMins,
   });
 });
 
