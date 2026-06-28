@@ -29,8 +29,17 @@ const BITS         = 16;
 const CHANNELS     = 1;
 const SAMPLE_BYTES = BITS / 8;
 
-/** Minimum audio before we bother running detection (1 second). */
-const MIN_BYTES = 1 * SAMPLE_RATE * SAMPLE_BYTES;
+/**
+ * Minimum audio before we bother running detection. Lowered to 0.5 s so a
+ * detection attempt fires after less caller speech, resolving the Sir/Ma'am
+ * salutation sooner (typically within the caller's first, shorter response).
+ * Tunable in production via GENDER_MIN_AUDIO_MS (milliseconds, default 500).
+ */
+const MIN_AUDIO_MS = (() => {
+  const raw = Number(process.env.GENDER_MIN_AUDIO_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 500;
+})();
+const MIN_BYTES = Math.round((MIN_AUDIO_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
 
 /**
  * Cap on accumulated audio when detection never locks. Keeps memory bounded on
@@ -42,8 +51,16 @@ const MAX_BYTES = 10 * SAMPLE_RATE * SAMPLE_BYTES;
 /** Per-model request timeout. Falls through to the next model on expiry. */
 const MODEL_TIMEOUT_MS = 1_500;
 
-/** Minimum confidence (0–1) a model must report to win and lock the gender. */
-const CONFIDENCE_THRESHOLD = 0.75;
+/**
+ * Minimum confidence (0–1) a model must report to win and lock the gender.
+ * Lowered to 0.60 so a tentative-but-likely result locks sooner (fewer
+ * fall-throughs/retries before the salutation resolves). Tunable in production
+ * via GENDER_CONFIDENCE_THRESHOLD (default 0.60).
+ */
+const CONFIDENCE_THRESHOLD = (() => {
+  const raw = Number(process.env.GENDER_CONFIDENCE_THRESHOLD);
+  return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 0.60;
+})();
 
 const BASE = genderServiceBaseUrl();
 
