@@ -192,48 +192,6 @@ function AgentRow({
   );
 }
 
-/* ─── Compact stat strip item ────────────────────────────────────────────── */
-function StatItem({
-  icon, label, value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-2.5 px-4 py-2 first:pl-0">
-      <span className="text-muted-foreground shrink-0">{icon}</span>
-      <div className="min-w-0">
-        <p className="text-[15px] font-semibold text-foreground tabular-nums leading-none truncate">{value}</p>
-        <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-function StatStrip({ summary }: { summary: AgentMemorySummary }) {
-  return (
-    <div className="flex items-stretch divide-x divide-border">
-      <StatItem
-        icon={<Phone className="w-4 h-4" />}
-        label="Total Calls" value={summary.totalCalls}
-      />
-      <StatItem
-        icon={<BarChart3 className="w-4 h-4" />}
-        label="Facts Captured" value={summary.totalFacts}
-      />
-      <StatItem
-        icon={<Layers className="w-4 h-4" />}
-        label="Episodes" value={summary.totalEpisodes}
-      />
-      <StatItem
-        icon={<Clock className="w-4 h-4" />}
-        label="Last Active" value={<span className="text-[13px]">{timeAgo(summary.lastActiveAt)}</span>}
-      />
-    </div>
-  );
-}
-
 /* ─── Panel header (section title + count) ───────────────────────────────── */
 function PanelHeader({ title, count }: { title: string; count?: number }) {
   return (
@@ -293,8 +251,8 @@ function FactCard({
   }
 
   return (
-    <div className="group rounded-xl border border-border bg-card p-3 flex items-start gap-3 relative">
-      <div className="w-8 h-8 rounded-lg border border-border bg-elevated flex items-center justify-center shrink-0 text-muted-foreground">
+    <div className="group rounded-xl border border-border/50 bg-card/60 p-3 flex items-start gap-3 relative">
+      <div className="w-8 h-8 rounded-lg bg-elevated flex items-center justify-center shrink-0 text-muted-foreground">
         <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0 flex-1 pr-6">
@@ -680,7 +638,7 @@ function CallerListColumn({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="p-3 border-b border-border shrink-0 space-y-2">
+      <div className="p-3 border-b border-border/50 shrink-0 space-y-2">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
           <Input
@@ -787,20 +745,20 @@ function CallerDetailView({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* caller header */}
-      <div className="px-6 pt-5 pb-4 border-b border-border shrink-0">
+      {/* caller header — the primary focus of the page */}
+      <div className="px-6 pt-5 pb-5 shrink-0">
         <div className="flex items-start gap-4">
           <CallerAvatar contact={contact} size="lg" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-[18px] font-semibold text-foreground truncate">{callerDisplayName(contact)}</h2>
+              <h2 className="text-[20px] font-semibold tracking-tight text-foreground truncate">{callerDisplayName(contact)}</h2>
               {web && (
-                <span className="text-[10px] font-medium border rounded-md px-1.5 py-0.5 text-muted-foreground border-border bg-elevated">
+                <span className="text-[10px] font-medium rounded-md px-1.5 py-0.5 text-muted-foreground bg-elevated">
                   Web
                 </span>
               )}
               {contact.lastCallDropped && (
-                <span className="text-[10px] font-medium border rounded-md px-1.5 py-0.5 text-amber-400 border-amber-500/30 bg-amber-500/10">
+                <span className="text-[10px] font-medium rounded-md px-1.5 py-0.5 text-amber-400 bg-amber-500/10">
                   Last call dropped
                 </span>
               )}
@@ -814,29 +772,29 @@ function CallerDetailView({
               <span className="inline-flex items-center gap-1">
                 <CalendarClock className="w-3 h-3" />First seen {formatDate(firstSeen)}
               </span>
-              <span className="inline-flex items-center gap-1">
-                <Clock className="w-3 h-3" />Last active {timeAgo(contact.lastCalledAt)}
-              </span>
             </div>
-          </div>
-          <div className="flex gap-4 shrink-0">
-            {[
-              { label: "Calls", value: contact.callCount },
-              { label: "Facts", value: contact.factCount },
-              { label: "Episodes", value: contact.archiveCount },
-            ].map(s => (
-              <div key={s.label} className="text-center">
-                <p className="text-[16px] font-semibold text-foreground tabular-nums leading-none">{s.value}</p>
-                <p className="text-[9.5px] text-muted-foreground uppercase tracking-wide mt-1">{s.label}</p>
-              </div>
-            ))}
+
+            {/* Compact per-caller metadata (replaces the old top-of-page stat band) */}
+            <div className="flex items-center gap-6 mt-4 flex-wrap">
+              {[
+                { label: "Total Calls", value: String(contact.callCount) },
+                { label: "Facts",       value: String(contact.factCount) },
+                { label: "Episodes",    value: String(contact.archiveCount) },
+                { label: "Last Active", value: timeAgo(contact.lastCalledAt) },
+              ].map(s => (
+                <div key={s.label} className="min-w-0">
+                  <p className="text-[16px] font-semibold text-foreground tabular-nums leading-none truncate">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground/70 uppercase tracking-wider mt-1.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* per-caller tabs */}
       <Tabs value={tab} onValueChange={setTab} className="flex-1 min-h-0 flex flex-col">
-        <TabsList className="shrink-0 h-auto w-full justify-start gap-6 rounded-none border-b border-border bg-transparent px-6 pt-3 pb-0">
+        <TabsList className="shrink-0 h-auto w-full justify-start gap-6 rounded-none border-b border-border/50 bg-transparent px-6 pt-3 pb-0">
           {[
             { value: "overview", label: "Overview" },
             { value: "facts",    label: `Facts (${facts.length})` },
@@ -863,9 +821,9 @@ function CallerDetailView({
             <>
               {/* Overview: Memory Summary up top, then previews that deep-link into the tabs */}
               <TabsContent value="overview" className="mt-0 space-y-6">
-                <div className="rounded-xl border border-border bg-card p-4">
+                <div className="rounded-xl border border-border/50 bg-card/60 p-4">
                   <div className="flex items-center gap-2 mb-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-elevated border border-border flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center">
                       <Brain className="w-3.5 h-3.5 text-muted-foreground" />
                     </div>
                     <h3 className="text-[13px] font-semibold text-foreground">Memory Summary</h3>
@@ -1075,9 +1033,9 @@ export default function MemoryPage() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
       {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+      <div className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0">
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-6 w-6 rounded-md bg-elevated border border-border flex items-center justify-center">
+          <div className="h-6 w-6 rounded-md bg-elevated flex items-center justify-center">
             <Brain className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50">
@@ -1094,28 +1052,27 @@ export default function MemoryPage() {
 
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {isLoading ? (
-          <div className="p-6 space-y-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[58px] rounded-lg" />)}
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            <div className="w-[180px] xl:w-[210px] shrink-0 border-r border-border/50 p-3 space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
             </div>
-            <Skeleton className="h-72 w-full rounded-xl" />
+            <div className="w-[270px] xl:w-[310px] shrink-0 border-r border-border/50 p-3 space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+            </div>
+            <div className="flex-1 min-w-0 p-6 space-y-5">
+              <Skeleton className="h-16 w-72 rounded-xl" />
+              <Skeleton className="h-72 w-full rounded-xl" />
+            </div>
           </div>
         ) : summaries.length === 0 ? (
           <NoAgentsState />
         ) : (
           <>
-            {/* Compact stat strip (selected agent) */}
-            {selected && (
-              <div className="px-6 py-3 border-b border-border shrink-0">
-                <StatStrip summary={selected} />
-              </div>
-            )}
-
             {/* Body: agents · callers · caller detail */}
             <div className="flex-1 min-h-0 flex overflow-hidden">
               {/* Agents rail */}
-              <div className="w-[180px] xl:w-[210px] shrink-0 border-r border-border flex flex-col min-h-0">
-                <div className="p-3 border-b border-border shrink-0 space-y-2">
+              <div className="w-[180px] xl:w-[210px] shrink-0 border-r border-border/50 flex flex-col min-h-0">
+                <div className="p-3 border-b border-border/50 shrink-0 space-y-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
                     <Input
@@ -1148,7 +1105,7 @@ export default function MemoryPage() {
               </div>
 
               {/* Callers list */}
-              <div className="w-[270px] xl:w-[310px] shrink-0 border-r border-border flex flex-col min-h-0">
+              <div className="w-[270px] xl:w-[310px] shrink-0 border-r border-border/50 flex flex-col min-h-0">
                 {selected ? (
                   <CallerListColumn
                     callers={callers}
