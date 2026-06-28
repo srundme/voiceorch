@@ -3,12 +3,16 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { course, courseStats, modules, getPublishedChaptersForModule } from "@/content";
 import { useProgressStore } from "@/hooks/use-progress";
+import { useBookmarksStore } from "@/hooks/use-bookmarks";
+import { useDarkMode } from "@/hooks/use-dark-mode";
 import { getBookExamAttempts, type BookExamAttempts } from "@workspace/api-client-react";
 import { getDeviceId } from "@/lib/device-id";
 import * as Icons from "lucide-react";
 
 export default function Home() {
   const { getModuleProgress } = useProgressStore();
+  const { bookmarked } = useBookmarksStore();
+  const { isDark, toggle: toggleDark } = useDarkMode();
   const [examAttempts, setExamAttempts] = useState<BookExamAttempts | null>(null);
 
   useEffect(() => {
@@ -27,6 +31,43 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
+      {/* Quick-access toolbar */}
+      <div className="sticky top-0 z-50 bg-background/90 backdrop-blur-sm border-b border-border">
+        <div className="max-w-5xl mx-auto px-6 flex items-center justify-between h-12 gap-2">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            <Link href="/search" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all whitespace-nowrap">
+              <Icons.Search size={13} /> Search
+            </Link>
+            <Link href="/glossary" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all whitespace-nowrap">
+              <Icons.BookMarked size={13} /> Glossary
+            </Link>
+            <Link href="/cheatsheet" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all whitespace-nowrap">
+              <Icons.FileCode2 size={13} /> Cheat Sheet
+            </Link>
+            <Link href="/architecture" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all whitespace-nowrap">
+              <Icons.Map size={13} /> Architecture
+            </Link>
+            <Link href="/bookmarks" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all whitespace-nowrap">
+              <Icons.Bookmark size={13} />
+              Bookmarks
+              {bookmarked.length > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white text-[10px] font-bold">{bookmarked.length}</span>
+              )}
+            </Link>
+            <Link href="/certificate" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-all whitespace-nowrap">
+              <Icons.Award size={13} /> Certificate
+            </Link>
+          </div>
+          <button
+            onClick={toggleDark}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all flex-shrink-0"
+            title={isDark ? "Light mode" : "Dark mode"}
+          >
+            {isDark ? <Icons.Sun size={15} /> : <Icons.Moon size={15} />}
+          </button>
+        </div>
+      </div>
+
       {/* Hero */}
       <section className="pt-24 pb-16 px-6 max-w-5xl mx-auto text-center">
         <motion.div

@@ -61,11 +61,16 @@ import { vobizAndPlivo } from "./chapters/m6-vobiz-and-plivo";
 import { webcall } from "./chapters/m6-webcall";
 import { outboundCalls } from "./chapters/m6-outbound-calls";
 import { autoRedial } from "./chapters/m6-auto-redial";
+import { retryEngine } from "./chapters/m6-retry-engine";
+import { callbackScheduling } from "./chapters/m6-callback-scheduling";
+import { webhooksDeepDive } from "./chapters/m6-webhooks";
 
 // ── Module 8 — The Frontend Dashboard ────────────────────────────────────────
 import { reactViteApp } from "./chapters/m7-react-vite-app";
 import { dataHooks } from "./chapters/m7-data-hooks";
 import { agentBuilder } from "./chapters/m7-agent-builder";
+import { memoryCrmPage } from "./chapters/m7-memory-crm";
+import { schedulingUi } from "./chapters/m7-scheduling-ui";
 
 // ── Module 9 — Supporting Systems ────────────────────────────────────────────
 import { minuteRates } from "./chapters/m8-minute-rates";
@@ -93,6 +98,18 @@ import { productionOps } from "./chapters/m11-ops";
 import { genderDetection } from "./chapters/m12-gender-detection";
 import { speakerRecognition } from "./chapters/m12-speaker-recognition";
 import { inCallSpeakerVerify } from "./chapters/m12-speaker-verify";
+
+// ── Module 14 — Multi-Language Support ───────────────────────────────────────
+import { languageDetection } from "./chapters/m13-language-detection";
+import { sarvamDeepDive } from "./chapters/m13-sarvam-deep-dive";
+
+// ── Module 15 — Security & Auth ───────────────────────────────────────────────
+import { googleOauthSessions } from "./chapters/m14-google-oauth-sessions";
+import { adminAuth } from "./chapters/m14-admin-auth";
+
+// ── Module 16 — Debugging & Observability ────────────────────────────────────
+import { readingCallLogs } from "./chapters/m15-reading-call-logs";
+import { reliabilityPatterns } from "./chapters/m15-reliability-patterns";
 
 // Every chapter is authored. Order within each array defines reading order and
 // the module's chapterSlugs (derived below via `.map((c) => c.slug)`).
@@ -160,9 +177,18 @@ const m6Chapters: Chapter[] = [
   webcall,
   outboundCalls,
   autoRedial,
+  retryEngine,
+  callbackScheduling,
+  webhooksDeepDive,
 ];
 
-const m7Chapters: Chapter[] = [reactViteApp, dataHooks, agentBuilder];
+const m7Chapters: Chapter[] = [
+  reactViteApp,
+  dataHooks,
+  agentBuilder,
+  memoryCrmPage,
+  schedulingUi,
+];
 
 const m8Chapters: Chapter[] = [
   minuteRates,
@@ -194,6 +220,21 @@ const m12Chapters: Chapter[] = [
   genderDetection,
   speakerRecognition,
   inCallSpeakerVerify,
+];
+
+const m13Chapters: Chapter[] = [
+  languageDetection,
+  sarvamDeepDive,
+];
+
+const m14Chapters: Chapter[] = [
+  googleOauthSessions,
+  adminAuth,
+];
+
+const m15Chapters: Chapter[] = [
+  readingCallLogs,
+  reliabilityPatterns,
 ];
 
 export const modules: Module[] = [
@@ -323,9 +364,36 @@ export const modules: Module[] = [
     icon: "Mic",
     chapterSlugs: m12Chapters.map((c) => c.slug),
   },
+  {
+    id: "m13", slug: "multi-language", number: "14",
+    title: "Multi-Language Support",
+    tagline: "One agent, ten Indian languages.",
+    description:
+      "How SnapServe handles callers who switch languages mid-call: Azure's Continuous Language Identification, the Sarvam AI stack (saarika STT, bulbul TTS, sarvam-m1 LLM), language-rule prompt injection, and proper-noun exemptions.",
+    icon: "Globe",
+    chapterSlugs: m13Chapters.map((c) => c.slug),
+  },
+  {
+    id: "m14", slug: "security-auth", number: "15",
+    title: "Security & Auth",
+    tagline: "Who you are and what you're allowed to do.",
+    description:
+      "The complete authentication picture: Google OAuth to HS256 JWT to URL-fragment delivery, the admin token system, impersonation exchange codes, and the security patterns that guard webhooks against forged callbacks.",
+    icon: "Shield",
+    chapterSlugs: m14Chapters.map((c) => c.slug),
+  },
+  {
+    id: "m15", slug: "debugging-reliability", number: "16",
+    title: "Debugging & Reliability",
+    tagline: "When things go wrong and how to fix them.",
+    description:
+      "The diagnostic tools and safety nets baked into SnapServe: reading call execution logs to debug live and historical calls, plus the reliability patterns (recording timeouts, stuck-call sweeps, advisory locks, turn safety nets) that keep production stable.",
+    icon: "Bug",
+    chapterSlugs: m15Chapters.map((c) => c.slug),
+  },
 ];
 
-const allChapters: Chapter[] = [
+export const allChapters: Chapter[] = [
   ...mbChapters,
   ...m0Chapters,
   ...m1Chapters,
@@ -340,6 +408,9 @@ const allChapters: Chapter[] = [
   ...m10Chapters,
   ...m11Chapters,
   ...m12Chapters,
+  ...m13Chapters,
+  ...m14Chapters,
+  ...m15Chapters,
 ];
 
 export const course: Course = {
