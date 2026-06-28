@@ -1,0 +1,383 @@
+[
+  {
+    "id": 43906,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.287Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 21,
+      "agentName": "Nora",
+      "asrProvider": "sarvam",
+      "llmProvider": "openai",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 927,
+      "sessionId": "9dfe5d28-aa07-433b-a0d6-3dcbbb9d1908",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-28T11:31:33.279Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 43908,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.287Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "918904887300",
+        "from_number": "917971442589",
+        "agent_name": "Nora",
+        "caller_number": "917971442589",
+        "date": "Sunday, June 28, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: back after  |  Calls: 20  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm or reschedule the in-person appointment booked for Tuesday\n⚠️ ELEVATED RISK (score: 47%) — caller may be frustrated, handle with care\n📊 SENTIMENT ARC: 😐 → 😤 → 😐 → 😐 → 😐 (📈 improving)\n\nKNOWN FACTS:\n• contact_method_preference: phone call  [today]\n• callback_request_time: 2 minutes  [today]\n• location: Madipakkam, Chennai  [today]\n• meeting_type_preference: in person meeting  [today]\n• alternative_time_choice: 9:00 AM  [today]\n• follo"
+    },
+    "metadata": null
+  },
+  {
+    "id": 43905,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.287Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "back after",
+        "callCount": 20
+      },
+      "factCount": 11,
+      "facts": {
+        "contact_method_preference": "phone call",
+        "callback_request_time": "2 minutes",
+        "location": "Madipakkam, Chennai",
+        "meeting_type_preference": "in person meeting",
+        "alternative_time_choice": "9:00 AM",
+        "follow_up_needed": "yes",
+        "preferred_team": "sales team",
+        "preferred_contact_method": "human",
+        "response_to_apointment_offer": "no",
+        "appointment_time_request": "tomorrow at 1 PM",
+        "name": "Gopi"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 43907,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.287Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 43909,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.299Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "openai",
+      "model": "gpt-4.1"
+    }
+  },
+  {
+    "id": 43910,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.302Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 43911,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.305Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "792c25490932",
+      "promptLength": 11767,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: back after  |  Calls: 20  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm or reschedule the in-person appointment boo"
+    }
+  },
+  {
+    "id": 43912,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:33.305Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    }
+  },
+  {
+    "id": 43914,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:34.212Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 43913,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:34.212Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hi Gopi, sorry it looks like we got cut off earlier. How can I help you now?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 43915,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:38.652Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4441,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 127714,
+      "textLength": 76,
+      "firstByteMs": 316
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 4441
+    }
+  },
+  {
+    "id": 43916,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:38.652Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3991,
+      "turnNumber": 0,
+      "durationMs": 4442
+    }
+  },
+  {
+    "id": 43917,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:43.504Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Can you call me back after two minutes?",
+      "endDetectToFinalMs": 128,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 43918,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:43.607Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gpt-4.1",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Sunday, June 28, 2026 at 5:01 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: back after  |  Calls: 20  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\n🎯 PREDICTED REASON FOR THIS CALL: To confirm",
+      "historyLength": 2,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 43919,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:44.371Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 767,
+      "turnNumber": 1,
+      "durationMs": 767
+    }
+  },
+  {
+    "id": 43920,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:44.531Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 43921,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:44.531Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Absolutely, I will call you back after two minutes as requested."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 43922,
+    "callId": 927,
+    "agentId": 21,
+    "ts": "2026-06-28T11:31:44.695Z",
+    "component": "LLM",
+    "provider": "openai",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 767,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Absolutely, I will call you back after two minutes as requested. Is there anything else you’d like to mention before I call back?"
+    },
+    "metadata": {
+      "inputTokens": 5319,
+      "outputTokens": 28,
+      "model": "gpt-4.1",
+      "turnNumber": 1
+    }
+  }
+]

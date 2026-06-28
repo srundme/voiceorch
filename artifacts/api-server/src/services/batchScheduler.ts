@@ -1,4 +1,4 @@
-import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimelineTable } from "@workspace/db";
+import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimelineTable, callsTable } from "@workspace/db";
 import { eq, and, lte, isNull, or, sql, inArray, lt } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -48,6 +48,7 @@ export function startBatchScheduler(): void {
     void pollScheduledBatches();
     void processRetries();
     void sweepStuckCallingLeads();
+    void sweepStuckInProgressCalls();
   }, 60_000);
 
   logger.info({ campaignWebhookBaseUrl: getSelfBaseUrl() }, "Batch scheduler started");
@@ -223,5 +224,62 @@ async function sweepStuckCallingLeads(): Promise<void> {
     logger.info({ count: stuck.length }, "sweepStuckCallingLeads: processed stuck leads");
   } catch (err) {
     logger.error({ err }, "sweepStuckCallingLeads error");
+  }
+}
+
+/**
+ * Safety sweep — runs every 60 s alongside the normal batch poll.
+ *
+ * Finds rows in `calls` that have been stuck in "in_progress" status for
+ * longer than STUCK_CALL_TIMEOUT_MS without their endSession() completing.
+ * This happens when recording.finalize() hangs (e.g. DB pool exhaustion
+ * when multiple calls end simultaneously, all racing to insert WAV blobs),
+ * leaving the db.update(status:"completed") unreachable.
+ *
+ * The 60-second timeout added to recording.finalize() in session.ts is the
+ * primary fix; this sweep is a secondary safety net that closes any calls
+ * that slipped through despite the timeout.
+ */
+const STUCK_CALL_TIMEOUT_MS =
+  parseInt(process.env["STUCK_CALL_TIMEOUT_MS"] ?? "0", 10) || 30 * 60 * 1000;
+
+async function sweepStuckInProgressCalls(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - STUCK_CALL_TIMEOUT_MS);
+
+    const stuck = await db
+      .select({ id: callsTable.id, createdAt: callsTable.createdAt })
+      .from(callsTable)
+      .where(and(
+        eq(callsTable.status, "in_progress"),
+        lt(callsTable.createdAt, cutoff),
+      ))
+      .limit(50);
+
+    if (stuck.length === 0) return;
+
+    for (const call of stuck) {
+      try {
+        const durationSeconds = Math.floor((Date.now() - call.createdAt.getTime()) / 1000);
+        await db
+          .update(callsTable)
+          .set({
+            status: "completed",
+            endedAt: new Date(),
+            durationSeconds,
+          })
+          .where(and(
+            eq(callsTable.id, call.id),
+            eq(callsTable.status, "in_progress"),
+          ));
+        logger.warn({ callId: call.id, durationSeconds }, "Stuck in-progress call auto-closed by sweep");
+      } catch (callErr) {
+        logger.error({ err: callErr, callId: call.id }, "sweepStuckInProgressCalls: error processing call");
+      }
+    }
+
+    logger.info({ count: stuck.length }, "sweepStuckInProgressCalls: processed stuck calls");
+  } catch (err) {
+    logger.error({ err }, "sweepStuckInProgressCalls error");
   }
 }

@@ -1186,10 +1186,18 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     const recLog = createExecutionLogger(session.callId, session.agentId ?? null);
     if (recordingEnabled) {
       logRecordingEvent(recLog, "Recording Started");
-      const result = await session.pipeline.getRecording().finalize(session.callId)
+      // Race the finalize against a 60 s timeout so a hung DB insert (e.g. pool
+      // exhaustion when multiple calls end simultaneously) never blocks the
+      // db.update(status:"completed") below — which is what leaves calls stuck
+      // "in_progress" indefinitely.
+      const finalizeProm = session.pipeline.getRecording().finalize(session.callId);
+      const timeoutProm  = new Promise<{ url: null; error: string }>((resolve) =>
+        setTimeout(() => resolve({ url: null, error: "Recording finalize timed out after 60 s" }), 60_000),
+      );
+      const result = await Promise.race([finalizeProm, timeoutProm])
         .catch((err) => {
           logger.error({ sessionId, callId: session.callId, err }, "Recording finalize threw");
-          return { url: null, error: err instanceof Error ? err.message : String(err) };
+          return { url: null as null, error: err instanceof Error ? err.message : String(err) };
         });
       recordingUrl = result.url;
       recordingError = result.error;
