@@ -13,7 +13,7 @@
  *  next retry row automatically (up to maxAttempts / day).
  */
 
-import { db, scheduledCallbacksTable, agentsTable, providersTable } from "@workspace/db";
+import { db, scheduledCallbacksTable, agentsTable, providersTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
 import { and, eq, lte } from "drizzle-orm";
 import { withDbRetry } from "./db-retry.js";
 import { dialTwilio, dialPlivo, dialVobiz } from "./telephony/dial.js";
@@ -62,6 +62,96 @@ async function pollAndFire(baseUrl: string): Promise<void> {
 
 type CallbackRow = typeof scheduledCallbacksTable.$inferSelect;
 
+/**
+ * Resolve telephony credentials for a scheduled callback.
+ *
+ * Priority:
+ *  1. User's own provider row in `providers` (BYOP)
+ *  2. Platform managed credentials from `platform_settings` / env vars
+ *
+ * Mirrors the credential resolution in `campaignCaller.ts` and `calls.ts`
+ * so that managed-plan users (no provider row) can receive callbacks.
+ */
+async function resolveVobizCreds(userId: string | null, agentId: number): Promise<{
+  authId:     string;
+  authToken:  string;
+  fromNumber: string;
+  isManaged:  boolean;
+} | null> {
+  // 1. Try user-scoped BYOP row
+  if (userId) {
+    const [provRow] = await db
+      .select()
+      .from(providersTable)
+      .where(and(
+        eq(providersTable.providerName, "vobiz"),
+        eq(providersTable.userId, userId),
+      ))
+      .limit(1);
+
+    if (provRow) {
+      const cfg = provRow.extraConfig
+        ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
+        : {} as Record<string, string>;
+      if (cfg["authId"] && cfg["fromNumber"]) {
+        return {
+          authId:     cfg["authId"]!,
+          authToken:  decryptKey(provRow.apiKey),
+          fromNumber: cfg["fromNumber"]!,
+          isManaged:  false,
+        };
+      }
+    }
+  }
+
+  // 2. Fall back to platform managed credentials
+  const [authIdRow, authTokenRow, numbersRow, agentPhoneRow] = await Promise.all([
+    db.select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, "managed_vobiz_auth_id"))
+      .then(r => r[0]),
+    db.select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, "managed_vobiz_auth_token"))
+      .then(r => r[0]),
+    db.select({ value: platformSettingsTable.value })
+      .from(platformSettingsTable)
+      .where(eq(platformSettingsTable.key, "managed_phone_numbers"))
+      .then(r => r[0]),
+    // Check if the agent has a dedicated outbound number assigned
+    db.select({ number: phoneNumbersTable.number })
+      .from(phoneNumbersTable)
+      .where(eq(phoneNumbersTable.agentId, agentId))
+      .limit(1)
+      .then(r => r[0]),
+  ]);
+
+  const managedAuthId    = authIdRow?.value    || process.env["VOBIZ_AUTH_ID"]    || "";
+  const managedAuthToken = authTokenRow?.value  || process.env["VOBIZ_AUTH_TOKEN"] || "";
+
+  if (!managedAuthId || !managedAuthToken) return null;
+
+  // Prefer the agent's assigned outbound number; fall back to random pool number
+  let fromNumber: string | undefined;
+  if (agentPhoneRow?.number) {
+    fromNumber = agentPhoneRow.number;
+  } else {
+    const pool: string[] = numbersRow?.value
+      ? (JSON.parse(numbersRow.value) as string[])
+      : [];
+    fromNumber = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : undefined;
+  }
+
+  if (!fromNumber) return null;
+
+  return {
+    authId:    managedAuthId,
+    authToken: managedAuthToken,
+    fromNumber,
+    isManaged: true,
+  };
+}
+
 async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
   // Claim it atomically — if another instance already claimed it, skip
   const claimed = await db
@@ -81,16 +171,6 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
 
     // ── Telephony (outbound phone call) callback ───────────────────────────
     const provider = agent.telephonyProvider.toLowerCase();
-    const [provRow] = await db
-      .select()
-      .from(providersTable)
-      .where(eq(providersTable.providerName, provider))
-      .limit(1);
-
-    if (!provRow) throw new Error(`No "${provider}" provider configured`);
-    const cfg = provRow.extraConfig
-      ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
-      : {} as Record<string, string>;
 
     const leadQs = cb.campaignLeadId ? `&campaignLeadId=${cb.campaignLeadId}` : "";
     // Pass cbId + cbSig in the status/hangup URL so no-answer detection
@@ -101,6 +181,19 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
     const statusQs = `?cbId=${cb.id}&cbSig=${cbSig}`;
 
     if (provider === "twilio") {
+      // Twilio: scope by userId, no managed fallback (users must BYOP for Twilio)
+      const [provRow] = await db
+        .select()
+        .from(providersTable)
+        .where(and(
+          eq(providersTable.providerName, "twilio"),
+          ...(agent.userId ? [eq(providersTable.userId, agent.userId)] : []),
+        ))
+        .limit(1);
+      if (!provRow) throw new Error(`No "twilio" provider configured for this user`);
+      const cfg = provRow.extraConfig
+        ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
+        : {} as Record<string, string>;
       if (!cfg["accountSid"] || !cfg["fromNumber"]) throw new Error("Twilio config missing accountSid or fromNumber");
       await dialTwilio({
         accountSid: cfg["accountSid"]!, authToken: decryptKey(provRow.apiKey),
@@ -109,6 +202,19 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status${statusQs}`,
       });
     } else if (provider === "plivo") {
+      // Plivo: scope by userId, no managed fallback
+      const [provRow] = await db
+        .select()
+        .from(providersTable)
+        .where(and(
+          eq(providersTable.providerName, "plivo"),
+          ...(agent.userId ? [eq(providersTable.userId, agent.userId)] : []),
+        ))
+        .limit(1);
+      if (!provRow) throw new Error(`No "plivo" provider configured for this user`);
+      const cfg = provRow.extraConfig
+        ? (JSON.parse(provRow.extraConfig) as Record<string, string>)
+        : {} as Record<string, string>;
       if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Plivo config missing authId or fromNumber");
       await dialPlivo({
         authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
@@ -116,10 +222,12 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}${leadQs}`,
       });
     } else if (provider === "vobiz") {
-      if (!cfg["authId"] || !cfg["fromNumber"]) throw new Error("Vobiz config missing authId or fromNumber");
+      // VoBiz: try user BYOP row first, fall back to platform managed credentials
+      const creds = await resolveVobizCreds(agent.userId ?? null, cb.agentId);
+      if (!creds) throw new Error(`No "vobiz" credentials available for this callback (neither BYOP nor managed)`);
       await dialVobiz({
-        authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
-        fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
+        authId: creds.authId, authToken: creds.authToken,
+        fromNumber: creds.fromNumber, toNumber: cb.toNumber,
         answerUrl:  `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status${statusQs}`,
       });

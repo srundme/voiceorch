@@ -144,7 +144,8 @@ export async function dialVobiz(opts: {
   const url  = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/`;
   const body: Record<string, string | number> = {
     to: opts.toNumber, from: opts.fromNumber,
-    answer_url: opts.answerUrl, hangup_url: opts.hangupUrl,
+    answer_url: opts.answerUrl, answer_method: "POST",
+    hangup_url: opts.hangupUrl, hangup_method: "POST",
   };
   if (opts.maxDurationSeconds && opts.maxDurationSeconds > 0) {
     // Vobiz max is 86400 s (24 h); cap to avoid 400 on large wallet balances
