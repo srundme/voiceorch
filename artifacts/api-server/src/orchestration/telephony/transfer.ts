@@ -13,9 +13,7 @@ export type TransferType = "warm" | "cold";
 
 /**
  * Calls VoBiz REST API to redirect the active call to a new XML URL.
- * POST https://api.vobiz.ai/api/v1/Account/{authId}/Call/{callUuid}/
- * (No /Transfer/ suffix — the transfer action is distinguished by the
- *  legs/aleg_url body parameters sent to the plain Call resource URL.)
+ * POST https://api.vobiz.ai/api/v1/Account/{authId}/Call/{callUuid}/Transfer/
  */
 export async function transferVobizCall(opts: {
   authId: string;
@@ -23,7 +21,7 @@ export async function transferVobizCall(opts: {
   callUuid: string;
   xmlUrl: string;
 }): Promise<void> {
-  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/`;
+  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/Transfer/`;
   // VoBiz uses custom X-Auth-ID / X-Auth-Token headers (same as its dial API),
   // NOT standard HTTP Basic auth.  Sending Basic auth causes an immediate 401.
   const resp = await fetch(url, {
@@ -40,10 +38,14 @@ export async function transferVobizCall(opts: {
   logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl }, "VoBiz transfer initiated");
 }
 
-/** VoiceXML response that dials the target number directly. */
+/**
+ * VoBiz cold transfer XML — dials the target number.
+ * VoBiz (Plivo-compatible) requires <Number> inside <Dial>;
+ * bare <Dial>NUMBER</Dial> is Twilio syntax and causes VoBiz to drop the call.
+ */
 export function buildTransferXml(target: string): string {
   const e = xmlEscape(target);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 /**
@@ -122,10 +124,13 @@ export async function transferPlivoCall(opts: {
   logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl }, "Plivo transfer initiated");
 }
 
-/** Plivo XML response that dials the target number. */
+/**
+ * Plivo cold transfer XML — dials the target number.
+ * Plivo requires <Number> inside <Dial>; bare <Dial>NUMBER</Dial> is Twilio syntax.
+ */
 export function buildPlivoTransferXml(target: string): string {
   const e = xmlEscape(target);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 /**

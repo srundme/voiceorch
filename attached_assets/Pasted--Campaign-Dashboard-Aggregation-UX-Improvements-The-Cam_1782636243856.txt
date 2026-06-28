@@ -1,0 +1,469 @@
+# Campaign Dashboard Aggregation & UX Improvements
+
+The Campaign dashboard is currently not synchronized with the underlying Batch data.
+
+Example:
+
+Campaign Dashboard
+
+Booked = 0
+
+↓
+
+Open Batch B8
+
+Booked = 1
+
+This should never happen.
+
+A Campaign is simply a collection of Batches.
+
+Therefore every Campaign metric must always be computed from all of its Batches.
+
+---
+
+# Required Architecture Change
+
+The Campaign page should NOT maintain its own statistics.
+
+Instead, it should aggregate all Batch metrics.
+
+Conceptually:
+
+Campaign Stats
+
+=
+
+SUM(Batch 1)
+
++
+
+SUM(Batch 2)
+
++
+
+SUM(Batch 3)
+
++
+
+...
+
++
+
+SUM(Batch N)
+
+There must be a single source of truth.
+
+Batch is the source of truth.
+
+Campaign is an aggregated view.
+
+Never store duplicate counters.
+
+---
+
+# Campaign Funnel
+
+The funnel should be computed dynamically.
+
+Imported
+
+=
+
+SUM(batch.imported)
+
+Called
+
+=
+
+SUM(batch.called)
+
+Connected
+
+=
+
+SUM(batch.connected)
+
+Interested
+
+=
+
+SUM(batch.interested)
+
+Booked
+
+=
+
+SUM(batch.booked)
+
+Transferred
+
+=
+
+SUM(batch.transferred)
+
+Callbacks
+
+=
+
+SUM(batch.callbacks)
+
+Failed
+
+=
+
+SUM(batch.failed)
+
+Pending
+
+=
+
+SUM(batch.pending)
+
+No Contact
+
+=
+
+SUM(batch.noContact)
+
+Everything should always equal the sum of all batches.
+
+---
+
+# Live Updates
+
+Whenever a call finishes
+
+↓
+
+Lead outcome changes
+
+↓
+
+Batch statistics update
+
+↓
+
+Campaign statistics update automatically
+
+No manual refresh.
+
+No delayed sync.
+
+No separate update job.
+
+Campaign should react immediately.
+
+---
+
+# Progress Indicator
+
+Currently the campaign progress bar only shows imported.
+
+Instead calculate:
+
+Imported
+
+██████████
+
+Called
+
+█████████
+
+Connected
+
+███████
+
+Interested
+
+████
+
+Booked
+
+███
+
+Transferred
+
+█
+
+Each stage should display:
+
+Count
+
+Percentage
+
+Hover tooltip
+
+Example
+
+Booked
+
+24
+
+31%
+
+---
+
+# Batch Cards
+
+Each Batch card should display much richer information.
+
+Current
+
+Batch B8
+
+Running
+
+2 Leads
+
+Improved
+
+Batch B8
+
+Running
+
+2 Leads
+
+██████░░░
+
+50%
+
+Connected
+
+1
+
+Booked
+
+1
+
+Interested
+
+1
+
+Failed
+
+0
+
+Callbacks
+
+0
+
+Estimated Time Remaining
+
+8 mins
+
+Last Activity
+
+2 mins ago
+
+Agent
+
+Nora
+
+This lets users quickly understand which batch is performing well without opening it.
+
+---
+
+# Campaign Summary Cards
+
+Current
+
+Leads
+
+Called
+
+Callbacks
+
+Bookings
+
+Transfers
+
+Recommended
+
+Total Leads
+
+Imported
+
+Called
+
+Connected
+
+Interested
+
+Booked
+
+Transferred
+
+Callbacks
+
+Failed
+
+Success Rate
+
+Connection Rate
+
+Booking Rate
+
+Average Call Duration
+
+Cost
+
+Average Cost Per Booking
+
+The top metrics should reflect the health of the entire campaign.
+
+---
+
+# Batch Health
+
+Each batch should have a status indicator.
+
+🟢 Healthy
+
+Running normally
+
+🟡 Delayed
+
+Calls are progressing slowly
+
+🔴 Failed
+
+Calls failing
+
+🔵 Scheduled
+
+Not started
+
+This makes monitoring easier.
+
+---
+
+# Recent Activity Feed
+
+Add a campaign activity timeline.
+
+Examples
+
+2:14 PM
+
+Lead booked
+
+John
+
+2:12 PM
+
+Batch B8 started
+
+2:09 PM
+
+Lead connected
+
+2:04 PM
+
+Lead transferred
+
+2:00 PM
+
+Campaign started
+
+Users should immediately understand what is happening.
+
+---
+
+# Real-Time Synchronization
+
+Whenever a lead changes state:
+
+Imported
+
+↓
+
+Calling
+
+↓
+
+Connected
+
+↓
+
+Interested
+
+↓
+
+Booked
+
+↓
+
+Transferred
+
+↓
+
+Completed
+
+Every affected metric should update automatically across:
+
+Campaign
+
+Batch
+
+Lead List
+
+Analytics
+
+No page refresh should be required.
+
+---
+
+# Backend Changes
+
+Implement a centralized aggregation service.
+
+CampaignStatsService
+
+Responsibilities:
+
+- Aggregate statistics from all batches.
+- Compute campaign totals in real time.
+- Emit updates whenever a batch changes.
+- Prevent duplicated counters.
+- Provide a single source of truth.
+
+All pages should consume this service instead of maintaining independent counters.
+
+---
+
+# Performance
+
+Do not recalculate everything on every page load.
+
+Instead:
+
+- Incrementally update aggregates when a lead outcome changes.
+- Cache campaign aggregates.
+- Invalidate only the affected campaign when a batch updates.
+
+This ensures scalability for campaigns containing thousands of batches and hundreds of thousands of leads.
+
+---
+
+# Goal
+
+The Campaign Dashboard must always represent the real-time aggregated state of all batches.
+
+Users should never see different numbers between:
+
+Campaign Dashboard
+
+↓
+
+Batch Overview
+
+↓
+
+Lead Table
+
+↓
+
+Analytics
+
+All views must stay synchronized using a single source of truth.
