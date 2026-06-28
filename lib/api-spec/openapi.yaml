@@ -10340,6 +10340,8 @@ components:
             calledLeads:      { type: integer }
             createdAt:        { type: string, format: date-time }
             scheduledStartAt: { type: string, format: date-time, nullable: true }
+            maxAttempts:      { type: integer }
+            retryDelayMinutes: { type: integer }
         campaign:
           type: object
           properties:
@@ -10415,6 +10417,7 @@ components:
         disposition:        { type: string, nullable: true }
         callAttempts:       { type: integer }
         lastAttemptAt:      { type: string, format: date-time, nullable: true }
+        nextRetryAt:        { type: string, format: date-time, nullable: true }
         callId:             { type: integer, nullable: true }
         createdAt:          { type: string, format: date-time }
         callback:

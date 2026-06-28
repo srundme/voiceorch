@@ -46,7 +46,7 @@ type BatchWorkspaceLead = {
   id: number; name: string | null; phone: string;
   callStatus: string; operationalOutcome: string;
   disposition: string | null; callAttempts: number;
-  lastAttemptAt: string | null; callId: number | null; createdAt: string;
+  lastAttemptAt: string | null; nextRetryAt: string | null; callId: number | null; createdAt: string;
   callback: { status: string; callbackAt: string | null } | null;
   booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
   transfer: { status: string; transferTo: string } | null;
@@ -76,6 +76,7 @@ type BatchHeader = {
     id: number; name: string; status: string; leadSource: string;
     totalLeads: number; calledLeads: number; createdAt: string;
     scheduledStartAt: string | null;
+    maxAttempts: number; retryDelayMinutes: number;
   };
   campaign: { id: number; name: string; agentName: string | null; fromNumber: string | null };
   source: { name: string; type: string } | null;
@@ -295,7 +296,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
-function LeadsTab({ campaignId, batchId }: { campaignId: number; batchId: number }) {
+function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; batchId: number; maxAttempts: number }) {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -437,7 +438,29 @@ function LeadsTab({ campaignId, batchId }: { campaignId: number; batchId: number
                     </td>
                     {/* Attempts */}
                     <td className="px-3 py-2.5 hidden lg:table-cell">
-                      <span className="text-[10px] tabular-nums text-muted-foreground/60">{lead.callAttempts}</span>
+                      {(() => {
+                        const exhausted = lead.callAttempts >= maxAttempts;
+                        const oneLeft   = !exhausted && lead.callAttempts === maxAttempts - 1;
+                        const counterCls = exhausted
+                          ? "text-red-500"
+                          : oneLeft
+                          ? "text-amber-500"
+                          : "text-muted-foreground/60";
+                        const TERMINAL = ["completed", "failed", "skipped"];
+                        const showRetry = lead.nextRetryAt && !TERMINAL.includes(lead.callStatus);
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <span className={cn("text-[10px] tabular-nums font-medium", counterCls)}>
+                              {lead.callAttempts} / {maxAttempts}
+                            </span>
+                            {showRetry && (
+                              <span className="text-[9px] text-amber-500/80 tabular-nums" title={new Date(lead.nextRetryAt!).toLocaleString()}>
+                                {formatDistanceToNow(new Date(lead.nextRetryAt!), { addSuffix: true })}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     {/* Last Activity */}
                     <td className="px-3 py-2.5 hidden lg:table-cell">
@@ -906,7 +929,7 @@ export default function BatchWorkspacePage() {
       {/* ── Tab Content ─────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">
         {activeTab === "overview"  && <OverviewTab  campaignId={campaignId} batchId={batchId} header={header} />}
-        {activeTab === "leads"     && <LeadsTab     campaignId={campaignId} batchId={batchId} />}
+        {activeTab === "leads"     && <LeadsTab     campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} />}
         {activeTab === "activity"  && <ActivityTab  campaignId={campaignId} batchId={batchId} />}
         {activeTab === "sources"   && <SourcesTab   campaignId={campaignId} batchId={batchId} />}
       </div>

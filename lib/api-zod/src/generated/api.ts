@@ -3545,7 +3545,9 @@ export const GetBatchWorkspaceHeaderResponse = zod.object({
   "totalLeads": zod.number().optional(),
   "calledLeads": zod.number().optional(),
   "createdAt": zod.coerce.date().optional(),
-  "scheduledStartAt": zod.coerce.date().nullish()
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "maxAttempts": zod.number().optional(),
+  "retryDelayMinutes": zod.number().optional()
 }).optional(),
   "campaign": zod.object({
   "id": zod.number().optional(),
@@ -3624,6 +3626,7 @@ export const ListBatchWorkspaceLeadsResponse = zod.object({
   "disposition": zod.string().nullish(),
   "callAttempts": zod.number(),
   "lastAttemptAt": zod.coerce.date().nullish(),
+  "nextRetryAt": zod.coerce.date().nullish(),
   "callId": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "callback": zod.object({

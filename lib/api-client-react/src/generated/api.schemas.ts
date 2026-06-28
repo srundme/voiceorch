@@ -3806,6 +3806,8 @@ export type BatchWorkspaceHeaderBatch = {
   calledLeads?: number;
   createdAt?: string;
   scheduledStartAt?: string | null;
+  maxAttempts?: number;
+  retryDelayMinutes?: number;
 };
 
 export type BatchWorkspaceHeaderCampaign = {
@@ -3874,6 +3876,7 @@ export interface BatchWorkspaceLead {
   disposition?: string | null;
   callAttempts: number;
   lastAttemptAt?: string | null;
+  nextRetryAt?: string | null;
   callId?: number | null;
   createdAt: string;
   callback?: BatchWorkspaceLeadCallbackInfo;

@@ -13,9 +13,9 @@ import {
   callExecutionsTable, callCallbacksTable, callBookingsTable,
   incomingCallsTable, callTransfersTable, leadTimelineTable,
   batchImportRunsTable, leadSourcesTable,
-  agentsTable,
+  agentsTable, callRetriesTable,
 } from "@workspace/db";
-import { eq, and, sql, desc, isNotNull, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, isNotNull, inArray, asc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -190,6 +190,12 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     lastAttemptAt:      campaignLeadsTable.lastAttemptAt,
     callId:             campaignLeadsTable.callId,
     createdAt:          campaignLeadsTable.createdAt,
+    nextRetryAt:        sql<string | null>`(
+      select scheduled_at from call_retries
+      where lead_id = ${campaignLeadsTable.id} and status = 'pending'
+      order by scheduled_at asc
+      limit 1
+    )`,
   }).from(campaignLeadsTable)
     .where(where)
     .orderBy(desc(campaignLeadsTable.lastAttemptAt), desc(campaignLeadsTable.createdAt))
@@ -252,6 +258,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
   const items = leads.map(l => ({
     ...l,
     lastAttemptAt: l.lastAttemptAt?.toISOString() ?? null,
+    nextRetryAt:   l.nextRetryAt ? new Date(l.nextRetryAt).toISOString() : null,
     createdAt:     l.createdAt.toISOString(),
     callback:  callbackMap.has(l.id) ? {
       status:     callbackMap.get(l.id)!.status,
@@ -437,14 +444,16 @@ router.get("/campaigns/:id/batches/:batchId/workspace/header", async (req, res):
 
   res.json({
     batch: {
-      id:         batch.id,
-      name:       batch.name,
-      status:     batch.status,
-      leadSource: batch.leadSource,
-      totalLeads: batch.totalLeads,
-      calledLeads: batch.calledLeads,
-      createdAt:  batch.createdAt.toISOString(),
+      id:               batch.id,
+      name:             batch.name,
+      status:           batch.status,
+      leadSource:       batch.leadSource,
+      totalLeads:       batch.totalLeads,
+      calledLeads:      batch.calledLeads,
+      createdAt:        batch.createdAt.toISOString(),
       scheduledStartAt: batch.scheduledStartAt?.toISOString() ?? null,
+      maxAttempts:      batch.maxAttempts,
+      retryDelayMinutes: batch.retryDelayMinutes,
     },
     campaign: {
       id:         campaignId,
