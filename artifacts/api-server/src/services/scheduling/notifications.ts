@@ -30,6 +30,19 @@ function getTransporter() {
   });
 }
 
+/**
+ * Sends a generic email via the Gmail transport (GMAIL_USER + GMAIL_APP_PASSWORD).
+ * Throws if env vars are absent so callers can decide how to handle the failure.
+ */
+export async function sendGmailEmail(to: string, subject: string, htmlBody: string): Promise<void> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    throw new Error("Gmail transport not configured: GMAIL_USER and GMAIL_APP_PASSWORD must be set.");
+  }
+  const from = process.env["GMAIL_USER"]!;
+  await transporter.sendMail({ from, to, subject, html: htmlBody });
+}
+
 function formatDateTime(date: Date, timezone: string): string {
   try {
     return new Intl.DateTimeFormat("en-US", {

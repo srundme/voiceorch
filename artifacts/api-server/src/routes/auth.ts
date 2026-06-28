@@ -19,7 +19,7 @@ import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSe
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
-import { sendBrevoEmail } from "../services/brevo.js";
+import { sendGmailEmail } from "../services/scheduling/notifications.js";
 import { registerTransientKey } from "../services/rate-limit-cleanup.js";
 import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
 import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
@@ -282,7 +282,7 @@ router.post("/auth/password-reset/request", async (req, res): Promise<void> => {
     `;
 
     try {
-      await sendBrevoEmail(normalizedEmail, "Your SnapServe password reset code", htmlBody);
+      await sendGmailEmail(normalizedEmail, "Your SnapServe password reset code", htmlBody);
     } catch (emailErr) {
       logger.warn({ emailErr, email: normalizedEmail }, "OTP email send failed");
     }
