@@ -1,9 +1,9 @@
-import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable } from "@workspace/db";
-import { eq, and, lte, isNull, or, sql, inArray } from "drizzle-orm";
+import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimelineTable } from "@workspace/db";
+import { eq, and, lte, isNull, or, sql, inArray, lt } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { scheduleRetry, processRetries } from "./retryEngine.js";
 import { logger } from "../lib/logger.js";
-import { processRetries } from "./retryEngine.js";
 
 let started = false;
 
@@ -31,6 +31,15 @@ export function getAllCampaignConcurrency(): Map<number, number> {
   return new Map(activeCampaignCalls);
 }
 
+/**
+ * How long a lead may remain in "calling" without a terminal webhook before the
+ * scheduler treats it as stuck and fails it. Most telephony providers deliver
+ * the hangup within seconds; 15 minutes is a very conservative ceiling.
+ * Overridable via the STUCK_CALLING_TIMEOUT_MS env var.
+ */
+const STUCK_CALLING_TIMEOUT_MS =
+  parseInt(process.env["STUCK_CALLING_TIMEOUT_MS"] ?? "0", 10) || 15 * 60 * 1000;
+
 export function startBatchScheduler(): void {
   if (started) return;
   started = true;
@@ -38,6 +47,7 @@ export function startBatchScheduler(): void {
   setInterval(() => {
     void pollScheduledBatches();
     void processRetries();
+    void sweepStuckCallingLeads();
   }, 60_000);
 
   logger.info({ campaignWebhookBaseUrl: getSelfBaseUrl() }, "Batch scheduler started");
@@ -148,4 +158,70 @@ async function countCallingLeads(campaignId: number): Promise<number> {
       inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
     ));
   return result[0]?.count ?? 0;
+}
+
+/**
+ * Safety sweep — runs every 60 s alongside the normal batch poll.
+ *
+ * Finds campaign leads that have been stuck in "calling" status for longer than
+ * STUCK_CALLING_TIMEOUT_MS without receiving a terminal webhook (busy / failed /
+ * no-answer).  This happens when a provider never delivers the hangup callback
+ * (e.g. Plivo before the status URL was wired, or a network split).
+ *
+ * Stuck leads are transitioned to "failed" and offered for retry so they do
+ * not permanently block the concurrency counter and are eventually re-dialed.
+ */
+async function sweepStuckCallingLeads(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - STUCK_CALLING_TIMEOUT_MS);
+
+    const stuck = await db.select().from(campaignLeadsTable)
+      .where(and(
+        eq(campaignLeadsTable.callStatus, "calling"),
+        lt(campaignLeadsTable.lastAttemptAt, cutoff),
+      ))
+      .limit(200);
+
+    if (stuck.length === 0) return;
+
+    for (const lead of stuck) {
+      try {
+        await db.update(campaignLeadsTable)
+          .set({ callStatus: "failed", notes: "Stuck in calling — no terminal webhook received; auto-failed by scheduler" })
+          .where(and(
+            eq(campaignLeadsTable.id, lead.id),
+            eq(campaignLeadsTable.callStatus, "calling"),
+          ));
+
+        await db.insert(leadTimelineTable).values({
+          leadId:     lead.id,
+          campaignId: lead.campaignId,
+          eventType:  "call_ended",
+          data:       { callStatus: "failed", reason: "stuck_calling_sweep", timeoutMs: STUCK_CALLING_TIMEOUT_MS },
+        });
+
+        const [campaign] = await db.select().from(campaignsTable)
+          .where(eq(campaignsTable.id, lead.campaignId));
+
+        if (campaign) {
+          await scheduleRetry({
+            leadId:            lead.id,
+            campaignId:        lead.campaignId,
+            currentAttempts:   lead.callAttempts ?? 0,
+            maxAttempts:       campaign.maxAttempts ?? 1,
+            retryDelayMinutes: campaign.retryDelayMinutes ?? 60,
+            reason:            "stuck_calling",
+          });
+        }
+
+        logger.warn({ leadId: lead.id, campaignId: lead.campaignId, lastAttemptAt: lead.lastAttemptAt }, "Stuck calling lead auto-failed by sweep");
+      } catch (leadErr) {
+        logger.error({ err: leadErr, leadId: lead.id }, "sweepStuckCallingLeads: error processing lead");
+      }
+    }
+
+    logger.info({ count: stuck.length }, "sweepStuckCallingLeads: processed stuck leads");
+  } catch (err) {
+    logger.error({ err }, "sweepStuckCallingLeads error");
+  }
 }

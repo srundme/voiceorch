@@ -82,6 +82,12 @@ export async function dialPlivo(opts: {
   fromNumber: string;
   toNumber: string;
   answerUrl: string;
+  /**
+   * URL Plivo POSTs to when the call terminates (busy/failed/no-answer/completed).
+   * Required for campaign status callbacks so `handleCampaignLeadTerminalStatus`
+   * can update the lead and schedule retries.
+   */
+  hangupUrl?: string;
   /** Max call duration in seconds. Plivo hangs up at this limit. */
   maxDurationSeconds?: number;
   /**
@@ -97,6 +103,10 @@ export async function dialPlivo(opts: {
     to: opts.toNumber, from: opts.fromNumber,
     answer_url: opts.answerUrl, answer_method: "POST",
   };
+  if (opts.hangupUrl) {
+    callBody["hangup_url"] = opts.hangupUrl;
+    callBody["hangup_method"] = "POST";
+  }
   if (opts.maxDurationSeconds && opts.maxDurationSeconds > 0) {
     callBody["time_limit"] = Math.floor(opts.maxDurationSeconds);
   }

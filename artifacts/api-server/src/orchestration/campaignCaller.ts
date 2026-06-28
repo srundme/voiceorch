@@ -232,12 +232,14 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       const authId = creds.authId;
       const fromNumber = campaign.fromNumber ?? creds.fromNumber;
       if (!authId || !fromNumber) throw new Error("Plivo config missing authId or fromNumber");
+      const plivoLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
       await dialPlivo({
         authId,
         authToken: creds.apiKey,
         fromNumber,
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${agent.id}&campaignLeadId=${lead.id}`,
+        hangupUrl: `${baseUrl}/api/webhooks/plivo/campaign-status?campaignLeadId=${lead.id}&campaignLeadSig=${plivoLeadSig}`,
         ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
       });
     } else if (provider === "vobiz") {

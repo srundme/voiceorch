@@ -318,7 +318,7 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     importRunId = run?.id ?? null;
   }
 
-  const [fresh] = await db.select().from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batch!.id));
+  let [fresh] = await db.select().from(campaignBatchesTable).where(eq(campaignBatchesTable.id, batch!.id));
 
   const wantsImmediateStart =
     (fresh && fresh.scheduledStartAt && fresh.scheduledStartAt <= new Date()) || !!body.autoStart;
@@ -330,6 +330,9 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     }
     await db.update(campaignBatchesTable).set({ status: "running" }).where(eq(campaignBatchesTable.id, fresh!.id));
     await fireStartBatch(fresh!, campaign);
+    // Reflect the status update in the object used to build the response so the
+    // frontend sees "running" immediately instead of the stale "draft" value.
+    fresh = { ...fresh!, status: "running" as const };
   }
 
   const summary: ImportSummaryResult = {

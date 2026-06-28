@@ -341,6 +341,47 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
   res.set("Content-Type", "text/xml").send(xml);
 });
 
+// ── Plivo campaign status callback ────────────────────────────────────────────
+
+/**
+ * POST /api/webhooks/plivo/campaign-status
+ *
+ * Plivo POSTs here when a campaign call terminates (busy / no-answer / failed /
+ * completed). We validate the HMAC-signed `campaignLeadSig` embedded in the
+ * URL at call-creation time, then call `handleCampaignLeadTerminalStatus` so
+ * the lead is updated and a retry is scheduled when attempts remain.
+ *
+ * Plivo body fields of interest:
+ *   CallStatus — "busy" | "failed" | "no-answer" | "completed" | ...
+ *   CallUUID   — Plivo call identifier (attacker-controlled, not trusted here)
+ */
+router.post("/webhooks/plivo/campaign-status", (req, res): void => {
+  req.log.info({ body: req.body, query: req.query }, "Plivo campaign status callback");
+  res.sendStatus(204);
+
+  (async () => {
+    const campaignLeadId  = parseInt(String(req.query["campaignLeadId"]  ?? "0"), 10) || 0;
+    const campaignLeadSig = String(req.query["campaignLeadSig"] ?? "");
+    const callStatus      = String(req.body?.CallStatus ?? req.body?.call_status ?? "");
+
+    if (campaignLeadId <= 0) {
+      logger.warn({ query: req.query }, "Plivo campaign-status: missing campaignLeadId — ignoring");
+      return;
+    }
+
+    const expectedSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${campaignLeadId}`).digest("hex");
+    const sigValid =
+      campaignLeadSig.length === expectedSig.length &&
+      timingSafeEqual(Buffer.from(campaignLeadSig), Buffer.from(expectedSig));
+    if (!sigValid) {
+      logger.warn({ campaignLeadId }, "Plivo campaign-status: campaignLeadSig invalid — ignoring");
+      return;
+    }
+
+    await handleCampaignLeadTerminalStatus({ campaignLeadId, rawCallStatus: callStatus });
+  })().catch((err) => logger.error({ err }, "Plivo campaign-status webhook handler error"));
+});
+
 // ── Vobiz ────────────────────────────────────────────────────────────────────
 
 /** Resolve HTTP base URL (for VoiceXML action / redirect attributes) */
