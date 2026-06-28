@@ -44,7 +44,7 @@ export async function transferVobizCall(opts: {
  * bare <Dial>NUMBER</Dial> is Twilio syntax and causes VoBiz to drop the call.
  */
 export function buildTransferXml(target: string): string {
-  const e = xmlEscape(target);
+  const e = xmlEscape(normalizePhone(target));
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
@@ -53,7 +53,7 @@ export function buildTransferXml(target: string): string {
  * (fetched from whisperUrl) to the operator only before bridging both legs.
  */
 export function buildVobizWarmTransferXml(target: string, whisperUrl: string): string {
-  const e = xmlEscape(target);
+  const e = xmlEscape(normalizePhone(target));
   const w = xmlEscape(whisperUrl);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
 }
@@ -85,7 +85,7 @@ export async function transferTwilioCall(opts: {
 
 /** TwiML response that dials the target number. */
 export function buildTwilioTransferTwiML(target: string): string {
-  const e = xmlEscape(target);
+  const e = xmlEscape(normalizePhone(target));
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>${e}</Dial>\n</Response>`;
 }
 
@@ -95,7 +95,7 @@ export function buildTwilioTransferTwiML(target: string): string {
  * Twilio fetches whisperUrl when the <Number> destination answers.
  */
 export function buildTwilioWarmTransferTwiML(target: string, whisperUrl: string): string {
-  const e = xmlEscape(target);
+  const e = xmlEscape(normalizePhone(target));
   const w = xmlEscape(whisperUrl);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
 }
@@ -129,7 +129,7 @@ export async function transferPlivoCall(opts: {
  * Plivo requires <Number> inside <Dial>; bare <Dial>NUMBER</Dial> is Twilio syntax.
  */
 export function buildPlivoTransferXml(target: string): string {
-  const e = xmlEscape(target);
+  const e = xmlEscape(normalizePhone(target));
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
@@ -138,7 +138,7 @@ export function buildPlivoTransferXml(target: string): string {
  * (fetched from whisperUrl) to the operator only before bridging both legs.
  */
 export function buildPlivoWarmTransferXml(target: string, whisperUrl: string): string {
-  const e = xmlEscape(target);
+  const e = xmlEscape(normalizePhone(target));
   const w = xmlEscape(whisperUrl);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
 }
@@ -147,4 +147,13 @@ export function buildPlivoWarmTransferXml(target: string, whisperUrl: string): s
 
 function xmlEscape(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Normalise a phone number for use in XML or API bodies:
+ * strip whitespace and common formatting characters (spaces, dashes, parentheses).
+ * Preserves leading + for E.164 numbers.
+ */
+function normalizePhone(s: string): string {
+  return s.replace(/[\s\-().]/g, "");
 }
