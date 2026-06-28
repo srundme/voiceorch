@@ -665,6 +665,16 @@ export async function createSession(params: {
     return inserted;
   })();
 
+  // ── Mark campaign lead as connected (media stream established) ────────────────
+  if (params.campaignLeadId) {
+    void db.update(campaignLeadsTable)
+      .set({ callStatus: "connected" })
+      .where(eq(campaignLeadsTable.id, params.campaignLeadId))
+      .catch((err) => {
+        logger.warn({ campaignLeadId: params.campaignLeadId, err }, "Failed to mark campaign lead connected");
+      });
+  }
+
   // ── Call Started lifecycle row (enables Logs tab for telephony calls) ─────────
   writeCallStartedLog(callRecord.id, params.agentId, {
     callType: isWebcall ? "Webcall" : "Live Call",
@@ -1161,6 +1171,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         ? { metadata: JSON.stringify({ transferredTo: session.transferredTo }) }
         : {}),
     }).where(eq(callsTable.id, session.callId));
+
+    // ── Mark campaign lead terminal (drains the active Connected count) ──────────
+    if (session.campaignLeadId) {
+      const terminalLeadStatus = session.wasTransferred ? "transferred" : "completed";
+      void db.update(campaignLeadsTable)
+        .set({ callStatus: terminalLeadStatus })
+        .where(eq(campaignLeadsTable.id, session.campaignLeadId))
+        .catch((err) => {
+          logger.warn({ campaignLeadId: session.campaignLeadId, err }, "Failed to mark campaign lead terminal");
+        });
+    }
 
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));
     if (call) {

@@ -108,9 +108,9 @@ async function handleCampaignLeadTerminalStatus(opts: {
     return;
   }
 
-  // Only update if still 'calling' — avoid clobbering completed/skipped/already-updated leads
-  if (lead.callStatus !== "calling") {
-    logger.info({ campaignLeadId, callStatus: lead.callStatus }, "Campaign lead terminal status: lead not in calling state — skipping");
+  // Only update if still 'calling' or 'connected' — avoid clobbering completed/skipped/already-updated leads
+  if (lead.callStatus !== "calling" && lead.callStatus !== "connected") {
+    logger.info({ campaignLeadId, callStatus: lead.callStatus }, "Campaign lead terminal status: lead not in active state — skipping");
     return;
   }
 

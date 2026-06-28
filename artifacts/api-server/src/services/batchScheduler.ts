@@ -1,5 +1,5 @@
 import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable } from "@workspace/db";
-import { eq, and, lte, isNull, or, sql } from "drizzle-orm";
+import { eq, and, lte, isNull, or, sql, inArray } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { logger } from "../lib/logger.js";
@@ -145,7 +145,7 @@ async function countCallingLeads(campaignId: number): Promise<number> {
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaignId),
-      eq(campaignLeadsTable.callStatus, "calling"),
+      inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
     ));
   return result[0]?.count ?? 0;
 }

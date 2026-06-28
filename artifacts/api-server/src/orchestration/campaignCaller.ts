@@ -10,7 +10,7 @@ import {
   db, campaignsTable, campaignLeadsTable, agentsTable, providersTable,
   platformSettingsTable, callExecutionsTable, leadTimelineTable,
 } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { dialTwilio, dialPlivo, dialVobiz, resolveAmdConfig } from "./telephony/dial.js";
 import { decryptKey } from "../lib/crypto.js";
 import { logger } from "../lib/logger.js";
@@ -107,7 +107,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       .from(campaignLeadsTable)
       .where(and(
         eq(campaignLeadsTable.campaignId, campaign.id),
-        eq(campaignLeadsTable.callStatus, "calling"),
+        inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
       )))[0]?.count ?? 0;
 
     if (currentlyActive >= limit) {

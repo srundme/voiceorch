@@ -91,7 +91,7 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
     .from(campaignLeadsTable)
     .where(and(
       eq(campaignLeadsTable.campaignId, campaign.id),
-      eq(campaignLeadsTable.callStatus, "calling"),
+      inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
     ));
   const slots = Math.max(0, limit - Number(active));
   if (slots <= 0) return;
