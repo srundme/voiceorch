@@ -14,8 +14,10 @@ import {
   useGetCall,
   useGetAgent,
   useUpdateCallDisposition,
+  useGetCallCallerMemory,
   getGetCallQueryKey,
   getGetAgentQueryKey,
+  getGetCallCallerMemoryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -910,6 +912,10 @@ export function CallDetailContent({
     query: { enabled: !!agentId, queryKey: getGetAgentQueryKey(agentId!) }
   });
 
+  const { data: callerMemory } = useGetCallCallerMemory(id, {
+    query: { enabled: !!id, queryKey: getGetCallCallerMemoryQueryKey(id) }
+  });
+
   const { data: callLogs, isLoading: logsLoading } = useQuery<ExecutionLogEvent[]>({
     queryKey: ["call-logs", id],
     enabled: !!id,
@@ -1600,6 +1606,81 @@ export function CallDetailContent({
                 />
               </CardContent>
             </Card>
+
+            {/* Caller Memory (caller-scoped CRM) */}
+            {callerMemory && (callerMemory.factCount > 0 || callerMemory.episodeCount > 0 || callerMemory.summary || callerMemory.name) && (
+              <Card>
+                <CardHeader className="py-3 border-b">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-primary/70" />
+                      Caller Memory
+                    </CardTitle>
+                    {agentId != null && callerMemory.phoneNumber && (
+                      <Link
+                        href={`/app/memory?agentId=${agentId}&caller=${encodeURIComponent(callerMemory.phoneNumber)}`}
+                      >
+                        <Button variant="ghost" size="sm" className="h-6 gap-1 text-xs px-2">
+                          View in CRM <ArrowRight className="h-3 w-3" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                  <CardDescription className="text-[10px] mt-1">
+                    What this agent remembers about this caller across calls
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-3 space-y-3">
+                  {(callerMemory.name || callerMemory.phoneNumber) && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium text-foreground/90">
+                        {callerMemory.name || callerMemory.phoneNumber}
+                      </span>
+                      {callerMemory.callCount > 0 && (
+                        <Badge variant="secondary" className="text-[10px] h-5">
+                          {callerMemory.callCount} {callerMemory.callCount === 1 ? "call" : "calls"}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+
+                  {callerMemory.summary && (
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {callerMemory.summary}
+                    </p>
+                  )}
+
+                  {callerMemory.facts.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+                        Facts ({callerMemory.factCount})
+                      </p>
+                      {callerMemory.facts.slice(0, 6).map(f => (
+                        <div key={f.id} className="flex items-start gap-2 text-xs">
+                          <Tag className="h-3 w-3 mt-0.5 text-muted-foreground/60 shrink-0" />
+                          <span className="text-foreground/80">
+                            <span className="text-muted-foreground/70">{f.key}:</span> {f.value}
+                          </span>
+                        </div>
+                      ))}
+                      {callerMemory.factCount > 6 && (
+                        <p className="text-[10px] text-muted-foreground/40 pl-5">
+                          +{callerMemory.factCount - 6} more
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {callerMemory.episodeCount > 0 && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 pt-1 border-t border-border">
+                      <Activity className="h-3 w-3" />
+                      {callerMemory.episodeCount} {callerMemory.episodeCount === 1 ? "episode" : "episodes"} remembered
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Latency Metrics */}
             {(call.sttLatencyMs || call.llmLatencyMs || call.ttsFirstChunkMs) && (

@@ -1117,6 +1117,20 @@ export interface CallerDetail {
   episodes: CallerDetailEpisode[];
 }
 
+export interface CallCallerMemory {
+  /** @nullable */
+  phoneNumber: string | null;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  summary?: string | null;
+  callCount: number;
+  factCount: number;
+  episodeCount: number;
+  facts: CallerDetailFact[];
+  episodes: CallerDetailEpisode[];
+}
+
 export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
 
 

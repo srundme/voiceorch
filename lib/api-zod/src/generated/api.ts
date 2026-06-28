@@ -1075,6 +1075,52 @@ export const UpdateCallResponse = zod.object({
 
 
 /**
+ * @summary Caller memory context for the caller on this call (caller-scoped facts/episodes/profile)
+ */
+export const GetCallCallerMemoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCallCallerMemoryResponse = zod.object({
+  "phoneNumber": zod.string().nullable(),
+  "name": zod.string().nullish(),
+  "summary": zod.string().nullish(),
+  "callCount": zod.number(),
+  "factCount": zod.number(),
+  "episodeCount": zod.number(),
+  "facts": zod.array(zod.object({
+  "id": zod.number(),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "sourceCallId": zod.number().nullish(),
+  "sourceSentenceIds": zod.array(zod.number()),
+  "createdAt": zod.coerce.date(),
+  "history": zod.array(zod.object({
+  "id": zod.number(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "createdAt": zod.coerce.date()
+}))
+})),
+  "episodes": zod.array(zod.object({
+  "id": zod.number(),
+  "callId": zod.number().nullish(),
+  "summary": zod.string().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "insightFactIds": zod.array(zod.number()),
+  "sentences": zod.array(zod.object({
+  "id": zod.number(),
+  "sequenceNum": zod.number(),
+  "speaker": zod.string(),
+  "text": zod.string()
+}))
+}))
+})
+
+
+/**
  * @summary Initiate an outbound phone call via the agent's telephony provider
  */
 export const InitiateOutboundCallBody = zod.object({

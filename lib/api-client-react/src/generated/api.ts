@@ -92,6 +92,7 @@ import type {
   BookingUpdate,
   BulkActionCampaignCallbacks200,
   Call,
+  CallCallerMemory,
   CallEndPayload,
   CallInput,
   CallStatusCount,
@@ -2141,6 +2142,83 @@ export const useUpdateCall = <TError = ErrorType<void>,
       > => {
       return useMutation(getUpdateCallMutationOptions(options));
     }
+
+export const getGetCallCallerMemoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/calls/${id}/caller-memory`
+}
+
+/**
+ * @summary Caller memory context for the caller on this call (caller-scoped facts/episodes/profile)
+ */
+export const getCallCallerMemory = async (id: number, options?: RequestInit): Promise<CallCallerMemory> => {
+
+  return customFetch<CallCallerMemory>(getGetCallCallerMemoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCallCallerMemoryQueryKey = (id: number,) => {
+    return [
+    `/api/calls/${id}/caller-memory`
+    ] as const;
+    }
+
+
+export const getGetCallCallerMemoryQueryOptions = <TData = Awaited<ReturnType<typeof getCallCallerMemory>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallCallerMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCallCallerMemoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCallCallerMemory>>> = ({ signal }) => getCallCallerMemory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCallCallerMemory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCallCallerMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof getCallCallerMemory>>>
+export type GetCallCallerMemoryQueryError = ErrorType<void>
+
+
+/**
+ * @summary Caller memory context for the caller on this call (caller-scoped facts/episodes/profile)
+ */
+
+export function useGetCallCallerMemory<TData = Awaited<ReturnType<typeof getCallCallerMemory>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallCallerMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCallCallerMemoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getInitiateOutboundCallUrl = () => {
 

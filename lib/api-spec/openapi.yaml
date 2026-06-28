@@ -623,6 +623,27 @@ paths:
         "404":
           description: Not found
 
+  /calls/{id}/caller-memory:
+    get:
+      operationId: getCallCallerMemory
+      tags: [calls]
+      summary: Caller memory context for the caller on this call (caller-scoped facts/episodes/profile)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Caller memory context for this call's caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallCallerMemory"
+        "404":
+          description: Call not found
+
   /calls/outbound:
     post:
       operationId: initiateOutboundCall
@@ -7395,6 +7416,31 @@ components:
       type: object
       required: [facts, episodes]
       properties:
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallerDetailFact"
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallerDetailEpisode"
+
+    CallCallerMemory:
+      type: object
+      required: [phoneNumber, callCount, factCount, episodeCount, facts, episodes]
+      properties:
+        phoneNumber:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        summary:
+          type: ["string", "null"]
+        callCount:
+          type: integer
+        factCount:
+          type: integer
+        episodeCount:
+          type: integer
         facts:
           type: array
           items:

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, isNull, inArray } from "drizzle-orm";
-import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable } from "@workspace/db";
+import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, canonicalizeCallerKey, humanPhone } from "@workspace/db";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -14,6 +14,7 @@ import {
   ListCallsQueryParams,
   ListCallsResponse,
   GetCallResponse,
+  GetCallCallerMemoryResponse,
   UpdateCallResponse,
   EndCallResponse,
 } from "@workspace/api-zod";
@@ -579,6 +580,106 @@ router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
   }
   const enriched = await enrichCall(call);
   res.json(GetCallResponse.parse(enriched));
+});
+
+// Caller-scoped memory context for the caller on a given call. Mirrors the
+// runtime caller-key derivation (orchestration/session.ts) so the Call Log
+// detail page shows the SAME memory the live pipeline reads/writes.
+router.get("/calls/:id/caller-memory", requireAuth, async (req, res): Promise<void> => {
+  const params = GetCallParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Validation failed", issues: params.error.issues });
+    return;
+  }
+  const clerkId = (req as any).clerkUserId as string;
+  const [call] = await db.select().from(callsTable).where(eq(callsTable.id, params.data.id));
+  if (!call) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  // Ownership check identical to GET /calls/:id.
+  if (call.userId && call.userId !== clerkId) {
+    res.status(404).json({ error: "Call not found" });
+    return;
+  }
+  if (!call.userId) {
+    const [agent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable).where(eq(agentsTable.id, call.agentId));
+    if (agent?.userId && agent.userId !== clerkId) {
+      res.status(404).json({ error: "Call not found" });
+      return;
+    }
+  }
+
+  // SINGLE source of truth for the memory key — same as session.ts.
+  const fromNumber = call.fromNumber ?? "";
+  const toNumber = call.toNumber ?? "";
+  const callerKey = canonicalizeCallerKey(
+    humanPhone(fromNumber, toNumber) ??
+      (fromNumber.startsWith("webcall-user-") ? fromNumber : null),
+  );
+
+  if (!callerKey) {
+    res.json(GetCallCallerMemoryResponse.parse({
+      phoneNumber: null,
+      name: null,
+      summary: null,
+      callCount: 0,
+      factCount: 0,
+      episodeCount: 0,
+      facts: [],
+      episodes: [],
+    }));
+    return;
+  }
+
+  const [profileRows, allFacts, allEpisodes] = await Promise.all([
+    db.select().from(callerProfilesTable)
+      .where(and(eq(callerProfilesTable.agentId, call.agentId), eq(callerProfilesTable.phoneNumber, callerKey)))
+      .limit(1),
+    db.select().from(callerFactsTable)
+      .where(and(eq(callerFactsTable.agentId, call.agentId), eq(callerFactsTable.phoneNumber, callerKey)))
+      .orderBy(desc(callerFactsTable.createdAt)),
+    db.select().from(callerCallArchiveTable)
+      .where(and(eq(callerCallArchiveTable.agentId, call.agentId), eq(callerCallArchiveTable.phoneNumber, callerKey)))
+      .orderBy(desc(callerCallArchiveTable.createdAt))
+      .limit(20),
+  ]);
+
+  const profile = profileRows[0];
+  const currentFacts = allFacts.filter(f => f.supersededById === null);
+
+  const facts = currentFacts.map(f => ({
+    id:                f.id,
+    key:               f.key,
+    value:             f.value,
+    confidence:        f.confidence,
+    sourceCallId:      f.sourceCallId,
+    sourceSentenceIds: [] as number[],
+    createdAt:         f.createdAt,
+    history:           [] as Array<{ id: number; value: string; confidence: number; createdAt: Date }>,
+  }));
+
+  const episodes = allEpisodes.map(ep => ({
+    id:              ep.id,
+    callId:          ep.callId,
+    summary:         ep.summary,
+    durationSeconds: ep.durationSeconds,
+    createdAt:       ep.createdAt,
+    insightFactIds:  [] as number[],
+    sentences:       [] as Array<{ id: number; sequenceNum: number; speaker: string; text: string }>,
+  }));
+
+  res.json(GetCallCallerMemoryResponse.parse({
+    phoneNumber:  callerKey,
+    name:         profile?.name ?? null,
+    summary:      profile?.summary ?? null,
+    callCount:    profile?.callCount ?? allEpisodes.length,
+    factCount:    currentFacts.length,
+    episodeCount: allEpisodes.length,
+    facts,
+    episodes,
+  }));
 });
 
 router.patch("/calls/:id", requireAuth, async (req, res): Promise<void> => {
