@@ -21,12 +21,14 @@ export async function transferVobizCall(opts: {
   callUuid: string;
   xmlUrl: string;
 }): Promise<void> {
-  const url   = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/Transfer/`;
-  const creds = Buffer.from(`${opts.authId}:${opts.authToken}`).toString("base64");
+  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/Transfer/`;
+  // VoBiz uses custom X-Auth-ID / X-Auth-Token headers (same as its dial API),
+  // NOT standard HTTP Basic auth.  Sending Basic auth causes an immediate 401.
   const resp = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${creds}`,
+      "X-Auth-ID":    opts.authId,
+      "X-Auth-Token": opts.authToken,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ legs: "aleg", aleg_url: opts.xmlUrl, aleg_method: "GET" }),
