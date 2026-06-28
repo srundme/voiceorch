@@ -1,6 +1,6 @@
 import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, scheduledCallbacksTable, campaignsTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
@@ -21,6 +21,7 @@ import {
 } from "./sessionStore.js";
 import { destroyAudioSession } from "./audioPool.js";
 import { disposeCall } from "../services/disposition.js";
+import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
@@ -1198,6 +1199,76 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         .catch((err) => {
           logger.warn({ campaignLeadId: session.campaignLeadId, err }, "Failed to mark campaign lead terminal");
         });
+
+      // ── Compute & persist operational outcome (fire-and-forget) ────────────
+      // Runs shortly after the lead status is persisted above. Checks for a
+      // booking created during this call (bookings.call_id = session.callId),
+      // a pending callback, and max-attempts exhaustion, then writes the
+      // canonical operationalOutcome so the batch workspace KPI cards update.
+      void (async () => {
+        try {
+          const leadId = session.campaignLeadId!;
+
+          // Booking: the native_booking tool writes bookings.call_id = callId
+          const [bookingRow] = await db
+            .select({ id: bookingsTable.id })
+            .from(bookingsTable)
+            .where(eq(bookingsTable.callId, session.callId))
+            .limit(1);
+          const hasBooking = !!bookingRow;
+
+          // Pending callback scheduled for this lead during the call
+          const [cbRow] = await db
+            .select({ id: scheduledCallbacksTable.id })
+            .from(scheduledCallbacksTable)
+            .where(and(
+              eq(scheduledCallbacksTable.campaignLeadId, leadId),
+              eq(scheduledCallbacksTable.status, "pending"),
+            ))
+            .limit(1);
+          const hasPendingCallback = !!cbRow;
+
+          // Max-attempts check
+          const [freshLead] = await db
+            .select({ callAttempts: campaignLeadsTable.callAttempts, campaignId: campaignLeadsTable.campaignId })
+            .from(campaignLeadsTable)
+            .where(eq(campaignLeadsTable.id, leadId))
+            .limit(1);
+
+          let maxAttemptsReached = false;
+          if (freshLead) {
+            const [camp] = await db
+              .select({ maxAttempts: campaignsTable.maxAttempts })
+              .from(campaignsTable)
+              .where(eq(campaignsTable.id, freshLead.campaignId))
+              .limit(1);
+            if (camp) {
+              maxAttemptsReached = (freshLead.callAttempts ?? 0) >= (camp.maxAttempts ?? 1);
+            }
+          }
+
+          const termStatus = session.wasTransferred ? "transferred" : "completed";
+          const outcome = computeOperationalOutcome({
+            callStatus:           termStatus,
+            disposition:          null, // disposeCall runs async; a later taxonomy run may update this
+            hasBooking,
+            hasCompletedTransfer: session.wasTransferred,
+            hasPendingCallback,
+            maxAttemptsReached,
+            isDncBlocked:         false,
+          });
+
+          if (freshLead) {
+            await setOperationalOutcome(db, leadId, freshLead.campaignId, outcome);
+            logger.info(
+              { leadId, outcome, hasBooking, wasTransferred: session.wasTransferred, hasPendingCallback },
+              "Campaign lead operational outcome set",
+            );
+          }
+        } catch (outcomeErr) {
+          logger.warn({ campaignLeadId: session.campaignLeadId, outcomeErr }, "Failed to set campaign lead operational outcome");
+        }
+      })();
     }
 
     const [call] = await db.select().from(callsTable).where(eq(callsTable.id, session.callId));

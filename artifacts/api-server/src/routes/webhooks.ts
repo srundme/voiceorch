@@ -11,6 +11,7 @@ import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
 import { scheduleRetry } from "../services/retryEngine.js";
+import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { APP_SECRET } from "../lib/app-secret.js";
 
 const router: IRouter = Router();
@@ -127,8 +128,9 @@ async function handleCampaignLeadTerminalStatus(opts: {
 
   // Schedule a retry if the campaign allows more attempts
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId));
+  let retryScheduled = false;
   if (campaign) {
-    await scheduleRetry({
+    retryScheduled = await scheduleRetry({
       leadId:            campaignLeadId,
       campaignId:        lead.campaignId,
       currentAttempts:   lead.callAttempts ?? 0,
@@ -138,7 +140,28 @@ async function handleCampaignLeadTerminalStatus(opts: {
     });
   }
 
-  logger.info({ campaignLeadId, rawCallStatus, leadStatus }, "Campaign lead updated to terminal status");
+  // Compute and persist operational outcome for no-contact / failed cases.
+  // If a retry was scheduled the outcome stays "pending"; once attempts are
+  // exhausted it moves to "no_contact" (busy/no_pickup) or "failed".
+  try {
+    const maxAttemptsReached = !retryScheduled && campaign != null;
+    const outcome = computeOperationalOutcome({
+      callStatus:           leadStatus,
+      disposition:          null,
+      hasBooking:           false,
+      hasCompletedTransfer: false,
+      hasPendingCallback:   false,
+      maxAttemptsReached,
+      isDncBlocked:         false,
+    });
+    if (outcome !== "pending") {
+      await setOperationalOutcome(db, campaignLeadId, lead.campaignId, outcome);
+    }
+  } catch (outcomeErr) {
+    logger.warn({ campaignLeadId, outcomeErr }, "Failed to set operational outcome after terminal status");
+  }
+
+  logger.info({ campaignLeadId, rawCallStatus, leadStatus, retryScheduled }, "Campaign lead updated to terminal status");
 }
 
 /**
@@ -682,7 +705,25 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
       agentId    = cb.agentId;
       dbToNumber = cb.toNumber;
     } else {
-      // First-call status — must anchor to a real call record in the DB.
+      // ── Campaign lead path (busy/no-answer/failed before connection) ──────────
+      // Check campaignLeadId FIRST — before requiring CallUUID — because VoBiz
+      // may omit CallUUID in the body of a busy/failed status callback, which
+      // previously caused the callUuid length gate to silently discard the event
+      // and never schedule a retry.
+      if (campaignLeadId > 0) {
+        const expectedSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${campaignLeadId}`).digest("hex");
+        const sigValid =
+          campaignLeadSig.length === expectedSig.length &&
+          timingSafeEqual(Buffer.from(campaignLeadSig), Buffer.from(expectedSig));
+        if (!sigValid) {
+          logger.warn({ campaignLeadId }, "VoBiz status: campaignLeadSig invalid — ignoring");
+          return;
+        }
+        await handleCampaignLeadTerminalStatus({ campaignLeadId, rawCallStatus: callStatus });
+        return;
+      }
+
+      // ── Non-campaign call: must anchor to a call record via CallUUID ──────────
       // Require UUID-length identifier (VoBiz UUIDs are 36 chars) to prevent
       // trivial substring-match attacks with short/common tokens.
       if (!callUuid || callUuid.length < 20) {
@@ -697,21 +738,7 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
         ))
         .limit(1);
       if (!call) {
-        // No DB call record — this is an unanswered campaign call (busy/no-answer/failed).
-        // Validate the HMAC embedded at call-creation time before mutating any state.
-        if (campaignLeadId > 0) {
-          const expectedSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${campaignLeadId}`).digest("hex");
-          const sigValid =
-            campaignLeadSig.length === expectedSig.length &&
-            timingSafeEqual(Buffer.from(campaignLeadSig), Buffer.from(expectedSig));
-          if (!sigValid) {
-            logger.warn({ campaignLeadId }, "VoBiz status: campaignLeadSig invalid — ignoring");
-            return;
-          }
-          await handleCampaignLeadTerminalStatus({ campaignLeadId, rawCallStatus: callStatus });
-        } else {
-          logger.warn({ callUuid }, "VoBiz status: no matching call in DB — ignoring");
-        }
+        logger.warn({ callUuid }, "VoBiz status: no matching call in DB — ignoring");
         return;
       }
       agentId    = call.agentId;
