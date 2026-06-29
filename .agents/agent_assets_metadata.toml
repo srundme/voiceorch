@@ -198,3 +198,9 @@ id = "czNxv_lIFAVxCRZpBlbW-"
 uri = "file://exports/system-architecture.svg"
 type = "image"
 title = "SnapServe System Architecture Diagram"
+
+[[outputs]]
+id = "or03xgqd0tNDiaGzfIGf2"
+uri = "file://exports/system-architecture.pdf"
+type = "pdf"
+title = "SnapServe System Architecture Diagram (PDF)"
