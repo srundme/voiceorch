@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Award, Download, ArrowLeft, CheckCircle2, Star } from "lucide-react";
 import { useProgressStore } from "@/hooks/use-progress";
+import { useInternStore } from "@/hooks/use-intern";
 import { allChapters } from "@/content";
 
 function CertificateSVG({ name, date }: { name: string; date: string }) {
@@ -81,14 +82,16 @@ function CertificateSVG({ name, date }: { name: string; date: string }) {
 
 export default function Certificate() {
   const { completedChapters } = useProgressStore();
-  const [name, setName] = useState("");
+  const { profile } = useInternStore();
   const svgRef = useRef<HTMLDivElement>(null);
+
+  const name = profile?.name ?? "";
 
   const publishedChapters = allChapters.filter(c => c.status === "published");
   const completedCount = publishedChapters.filter(c => completedChapters.includes(c.slug)).length;
   const totalCount = publishedChapters.length;
   const percentage = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
-  const eligible = percentage >= 80;
+  const eligible = completedCount >= totalCount;
 
   const date = new Date().toLocaleDateString("en-US", {
     year: "numeric",
@@ -105,7 +108,7 @@ export default function Certificate() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `snapserve-certificate-${(name || "reader").toLowerCase().replace(/\s+/g, "-")}.svg`;
+    a.download = `snapserve-certificate-${(name || "intern").toLowerCase().replace(/\s+/g, "-")}.svg`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -127,7 +130,7 @@ export default function Certificate() {
             <h1 className="text-4xl font-bold font-serif text-foreground">Certificate</h1>
           </div>
           <p className="text-muted-foreground text-lg mb-8">
-            Complete 80% of chapters to earn your certificate of completion.
+            Complete all chapters and pass the final exam to earn your certificate.
           </p>
 
           {/* Progress bar */}
@@ -150,47 +153,36 @@ export default function Certificate() {
               </div>
             ) : (
               <p className="text-muted-foreground text-sm mt-3">
-                Complete {Math.ceil(totalCount * 0.8) - completedCount} more chapters to unlock.
+                Complete {totalCount - completedCount} more chapter{totalCount - completedCount !== 1 ? "s" : ""} to unlock.
               </p>
             )}
           </div>
 
           {eligible ? (
             <>
-              {/* Name input */}
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-foreground mb-2">
-                  Your name (appears on the certificate)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter your full name…"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary transition-colors"
-                />
+              {/* Name display */}
+              <div className="mb-6 p-4 rounded-xl bg-orange-50 border border-orange-200 flex items-center gap-3">
+                <CheckCircle2 size={18} className="text-primary flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Certificate issued to</p>
+                  <p className="font-bold text-foreground text-lg">{name || "Intern"}</p>
+                </div>
               </div>
 
               {/* Certificate preview */}
               <div ref={svgRef} className="mb-6 shadow-2xl rounded-2xl overflow-hidden border-2 border-orange-200">
-                <CertificateSVG name={name || "Your Name"} date={date} />
+                <CertificateSVG name={name || "Intern"} date={date} />
               </div>
 
               {/* Download button */}
               <div className="flex gap-4">
                 <button
                   onClick={handleDownload}
-                  disabled={!name.trim()}
-                  className="flex-grow flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-lg transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex-grow flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-lg transition-all hover:opacity-90 active:scale-95"
                 >
                   <Download size={22} /> Download Certificate (SVG)
                 </button>
               </div>
-              {!name.trim() && (
-                <p className="text-sm text-muted-foreground mt-2 text-center">
-                  Enter your name above to enable download
-                </p>
-              )}
             </>
           ) : (
             <div className="text-center py-16">
@@ -199,7 +191,7 @@ export default function Certificate() {
               </div>
               <h2 className="text-2xl font-serif font-bold text-foreground mb-4">Keep reading!</h2>
               <p className="text-muted-foreground text-lg mb-8">
-                You need to complete at least <strong>80%</strong> of chapters ({Math.ceil(totalCount * 0.8)} of {totalCount}) to unlock your certificate.
+                You need to complete <strong>all {totalCount} chapters</strong> to unlock your certificate.
               </p>
               <Link
                 href="/"

@@ -13,6 +13,8 @@ import {
 import { getDeviceId } from "@/lib/device-id";
 import { Button } from "@/components/ui/button";
 import { MarkdownText } from "@/components/MarkdownText";
+import { useProgressStore } from "@/hooks/use-progress";
+import { allChapters } from "@/content";
 
 type Phase = "intro" | "exam" | "result";
 type AnswerMap = Record<string, number | number[]>;
@@ -32,6 +34,12 @@ function arraysEqual(a: number[], b: number[]): boolean {
 }
 
 export default function Exam() {
+  // Chapter completion gate
+  const { completedChapters } = useProgressStore();
+  const publishedChapters = allChapters.filter(c => c.status === "published");
+  const allDone = publishedChapters.every(c => completedChapters.includes(c.slug));
+  const remainingCount = publishedChapters.filter(c => !completedChapters.includes(c.slug)).length;
+
   const [phase, setPhase] = useState<Phase>("intro");
   const [exam, setExam] = useState<BookExam | null>(null);
   const [attempts, setAttempts] = useState<BookExamAttempts | null>(null);
@@ -188,6 +196,40 @@ export default function Exam() {
       <Shell>
         <div className="text-center py-32">
           <Icons.Loader2 className="mx-auto text-primary animate-spin" size={40} />
+        </div>
+      </Shell>
+    );
+  }
+
+  /* ── Chapter gate ────────────────────────────────────────────────────── */
+  if (!allDone) {
+    return (
+      <Shell>
+        <div className="max-w-xl mx-auto px-6 py-24 text-center">
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-muted mb-8">
+            <Icons.Lock size={40} className="text-muted-foreground opacity-50" />
+          </div>
+          <h1 className="text-3xl font-serif font-bold text-foreground mb-4">Exam Locked</h1>
+          <p className="text-muted-foreground text-lg mb-4 leading-relaxed">
+            You still have <strong className="text-foreground">{remainingCount} chapter{remainingCount !== 1 ? "s" : ""}</strong> to complete before the exam unlocks.
+          </p>
+          <p className="text-muted-foreground text-sm mb-10">
+            The exam is designed to test everything in the book — read all chapters first to give yourself the best chance.
+          </p>
+          <div className="h-3 rounded-full bg-muted overflow-hidden mb-8 max-w-xs mx-auto">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.round(((publishedChapters.length - remainingCount) / publishedChapters.length) * 100)}%` }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              className="h-full bg-primary rounded-full"
+            />
+          </div>
+          <p className="text-sm font-medium text-foreground mb-8">
+            {publishedChapters.length - remainingCount} / {publishedChapters.length} chapters completed
+          </p>
+          <Link href="/">
+            <Button className="rounded-full px-8">Continue Reading →</Button>
+          </Link>
         </div>
       </Shell>
     );

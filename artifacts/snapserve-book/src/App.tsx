@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useProgressStore } from "@/hooks/use-progress";
 import { GlobalNav } from "@/components/GlobalNav";
+import { InternGate } from "@/components/InternGate";
 import NotFound from "@/pages/not-found";
 
 // Pages
@@ -52,8 +53,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <GlobalNav />
-          <Router />
+          <InternGate>
+            <GlobalNav />
+            <Router />
+          </InternGate>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
