@@ -39,7 +39,7 @@ export default function Slide1() {
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>01 / 11</div>
+          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>01 / 12</div>
         </div>
       </div>
     </div>

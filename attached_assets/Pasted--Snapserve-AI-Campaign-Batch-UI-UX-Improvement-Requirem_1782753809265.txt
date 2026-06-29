@@ -1,0 +1,656 @@
+# Snapserve AI – Campaign & Batch UI/UX Improvement Requirements
+
+## Objective
+
+The current Campaign and Batch modules are functionally working well. I do **not** want to introduce any new backend logic, APIs, database changes, or business logic.
+
+This task is **purely a UI/UX refinement** to improve usability, readability, consistency, and reduce user effort while keeping all existing functionality intact.
+
+The goal is to make the interface feel more polished and enterprise-grade without changing how the system works.
+
+---
+
+# General Design Principles
+
+Throughout the Campaign and Batch modules:
+
+- Improve visual hierarchy.
+- Increase whitespace between sections.
+- Improve typography hierarchy.
+- Keep spacing consistent.
+- Use consistent status colors across every page.
+- Make important metrics visually prominent.
+- Reduce visual clutter.
+- Improve scanability.
+- Do NOT modify backend logic or workflows.
+
+---
+
+# 1. Campaign Overview
+
+## Current Issues
+
+- KPI cards are too small.
+- Funnel feels disconnected from KPIs.
+- Batch cards don't immediately communicate their status.
+- Everything has similar visual weight.
+
+## Improvements
+
+### KPI Cards
+
+Increase the size of the KPI cards.
+
+Current KPIs:
+
+- Leads
+- Called
+- Connected
+- Booked
+- Callbacks
+- Transfers
+
+Make the values larger and easier to scan.
+
+Example hierarchy:
+
+- Label (small)
+- Metric (large)
+- Optional percentage (small)
+
+No backend changes required.
+
+---
+
+### Funnel
+
+Keep the same data.
+
+Improve layout so every funnel stage has equal spacing.
+
+Example flow:
+
+Imported
+↓
+
+Called
+↓
+
+Connected
+↓
+
+Interested
+↓
+
+Booked
+↓
+
+Transferred
+
+This should naturally guide the user's eyes from left to right.
+
+---
+
+### Batch Cards
+
+Current cards don't communicate enough information.
+
+Without changing backend data, redesign each card to clearly show:
+
+- Batch Name
+- Running Status
+- Progress Bar
+- Total Leads
+- Connected
+- Interested
+- Booked
+- Failed
+- Last Updated
+
+This information already exists.
+
+Only improve presentation.
+
+---
+
+# 2. Campaign → Operations
+
+Current page contains too many stacked summary rows.
+
+Simplify the hierarchy.
+
+Instead of:
+
+Summary Cards
+
+↓
+
+Queue Cards
+
+↓
+
+Filters
+
+↓
+
+Table
+
+Use:
+
+Summary Cards
+
+↓
+
+Filters
+
+↓
+
+Table
+
+Convert queue statistics into compact filter chips.
+
+Example:
+
+Queued (0)
+
+Calling (0)
+
+Retry (2)
+
+Callback (1)
+
+No Pickup (5)
+
+instead of individual metric cards.
+
+This reduces clutter significantly.
+
+---
+
+# 3. Campaign Leads
+
+This page has the biggest usability issue.
+
+Currently Status filters and Outcome filters appear as one continuous group.
+
+Users cannot understand the difference.
+
+Separate them visually.
+
+Example:
+
+STATUS
+
+All
+
+Pending
+
+Calling
+
+Completed
+
+Failed
+
+----------------------
+
+OUTCOME
+
+Booked
+
+Interested
+
+Callback
+
+Transferred
+
+Busy
+
+No Contact
+
+Wrong Number
+
+Do not change backend logic.
+
+Only improve grouping.
+
+---
+
+### Table Improvements
+
+Keep the existing data.
+
+Improve readability by changing column order.
+
+Suggested order:
+
+Lead
+
+Status
+
+Outcome
+
+Attempts
+
+Last Activity
+
+Actions
+
+The user naturally wants to know:
+
+Who
+
+↓
+
+What happened
+
+↓
+
+When
+
+↓
+
+What can I do
+
+---
+
+# 4. Campaign Analytics
+
+Current analytics page has excessive empty space.
+
+Improvements:
+
+- Reduce KPI card height.
+- Increase Funnel visibility.
+- Make Funnel the primary visual element.
+- Keep same calculations.
+- Do not change metrics.
+
+---
+
+# 5. Campaign Settings
+
+Current page is good.
+
+Only improve layout.
+
+Suggestions:
+
+- Increase spacing between sections.
+- Make Campaign Details and Concurrency appear as balanced cards.
+- Reduce unnecessary empty space below Save button.
+
+No functionality changes.
+
+---
+
+# 6. Batch Overview
+
+This page already has a solid structure.
+
+Minor UI improvements only.
+
+---
+
+### Progress Card
+
+Instead of:
+
+Total
+
+Called
+
+Remaining
+
+Display:
+
+Total Leads
+
+Called
+
+Remaining
+
+with slightly larger typography.
+
+---
+
+### Batch Details
+
+Group information visually.
+
+Example:
+
+GENERAL
+
+Status
+
+Created
+
+Scheduled
+
+----------------
+
+SOURCE
+
+CSV
+
+Import Name
+
+Grouping makes scanning easier.
+
+---
+
+# 7. Batch Leads
+
+Current page has the same issue as Campaign Leads.
+
+Separate:
+
+STATUS
+
+from
+
+OUTCOME
+
+Example:
+
+STATUS
+
+Completed
+
+Failed
+
+Pending
+
+Calling
+
+-------------------
+
+OUTCOME
+
+Booked
+
+Interested
+
+Callback
+
+Busy
+
+No Contact
+
+Transferred
+
+Wrong Number
+
+This is purely a UI grouping improvement.
+
+---
+
+### Attempts
+
+Instead of displaying:
+
+1/2
+
+Display:
+
+Attempt 1 of 2
+
+This is much clearer for users.
+
+No backend changes.
+
+---
+
+# 8. Batch Activity
+
+Current activity stream looks like plain text.
+
+Improve visual distinction.
+
+Examples:
+
+🟢 Call Started
+
+🔴 Call Ended
+
+🟣 Outcome Updated
+
+📁 Import Completed
+
+📅 Callback Scheduled
+
+Use icons and spacing only.
+
+Do not modify activity events.
+
+---
+
+# 9. Batch Sources
+
+Current source displays:
+
+Unknown
+
+Instead display the actual source label where available.
+
+Example:
+
+CSV Import
+
+This is only a display improvement.
+
+---
+
+# 10. Navigation Consistency
+
+Campaign Tabs:
+
+Overview
+
+Operations
+
+Leads
+
+Analytics
+
+Settings
+
+Batch Tabs:
+
+Overview
+
+Leads
+
+Activity
+
+Sources
+
+Improve consistency by:
+
+- Stronger active state
+- Slightly thicker underline
+- Higher font weight
+- Better spacing
+
+Do not modify routing.
+
+---
+
+# 11. Status Color Consistency
+
+Use one consistent color system everywhere.
+
+Example:
+
+Pending → Gray
+
+Calling → Blue
+
+Connected → Cyan
+
+Interested → Orange
+
+Booked → Green
+
+Callback → Yellow
+
+Transferred → Purple
+
+Failed → Red
+
+Busy → Slate
+
+No Contact → Neutral Gray
+
+The same status should always use the same color throughout the application.
+
+---
+
+# 12. Typography
+
+Currently almost every label uses similar sizing.
+
+Improve typography hierarchy.
+
+Suggested:
+
+Campaign Name
+
+22px
+
+Section Titles
+
+16px
+
+Card Labels
+
+12px
+
+Metric Values
+
+28px
+
+Table Headers
+
+13px
+
+Table Values
+
+14px
+
+This improves readability significantly.
+
+---
+
+# 13. Spacing
+
+Increase vertical spacing between:
+
+- Sections
+- Cards
+- Filters
+- Tables
+- Tabs
+
+The UI currently feels compressed.
+
+Slightly increasing spacing will make the application feel much more premium.
+
+---
+
+# 14. Empty States
+
+Avoid blank tables.
+
+Instead display meaningful empty states.
+
+Example:
+
+"No leads match the selected filters."
+
+[Clear Filters]
+
+This is only a UI improvement.
+
+---
+
+# 15. Information Hierarchy
+
+Maintain the same hierarchy across every page.
+
+Campaign Pages:
+
+Header
+
+↓
+
+Summary KPIs
+
+↓
+
+Tabs
+
+↓
+
+Filters
+
+↓
+
+Main Content
+
+Batch Pages:
+
+Header
+
+↓
+
+Summary KPIs
+
+↓
+
+Tabs
+
+↓
+
+Filters
+
+↓
+
+Main Content
+
+Users should never have to search for information.
+
+Every page should follow the same layout structure.
+
+---
+
+# Important Constraints
+
+This task is strictly a UI/UX refinement.
+
+Do NOT:
+
+- Change backend logic.
+- Change API contracts.
+- Change routing.
+- Change database schema.
+- Introduce new business logic.
+- Modify campaign execution.
+- Modify batch execution.
+- Add new workflows.
+- Change calculations.
+
+Only improve:
+
+- Layout
+- Typography
+- Alignment
+- Visual hierarchy
+- Grouping
+- Spacing
+- Colors
+- Scanability
+- Readability
+- Overall user experience
+
+The objective is to make the existing product feel cleaner, more intuitive, and enterprise-ready while preserving 100% of the current functionality.

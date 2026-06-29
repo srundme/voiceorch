@@ -180,3 +180,15 @@ id = "7MquQvS2VR0fj3UoIcvGW"
 uri = "file://sample-certificate.svg"
 type = "image"
 title = "Sample Certificate — Aarav Mehta"
+
+[[outputs]]
+id = "a2f3YknO9jRgQQnkbfxbs"
+uri = "file://.local/outputs/SnapServe-Product-Overview.pdf"
+type = "pdf"
+title = "SnapServe Product Overview.pdf"
+
+[[outputs]]
+id = "OyjMEsuGkU_85myxptBuL"
+uri = "file://.local/outputs/Bolna-Orchestrator.pdf"
+type = "pdf"
+title = "Bolna Orchestrator.pdf"

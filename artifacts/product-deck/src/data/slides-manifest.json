@@ -32,24 +32,32 @@
     "speakerNotes": ""
   },
   {
-    "id": "e5b4a7f6-5f8c-40ce-9b65-b28d4e5f6a05",
+    "id": "2b0ecb5a-a2d1-4186-bb1d-4ff3e90ddf90",
     "position": 5,
+    "filepath": "src/pages/slides/Slide12.tsx",
+    "title": "System Architecture",
+    "description": "End-to-end system diagram and the move to proprietary STT/LLM/TTS models",
+    "speakerNotes": ""
+  },
+  {
+    "id": "e5b4a7f6-5f8c-40ce-9b65-b28d4e5f6a05",
+    "position": 6,
     "filepath": "src/pages/slides/Slide5.tsx",
-    "title": "Product Capabilities",
-    "description": "Core platform features and capabilities",
+    "title": "Caller Memory",
+    "description": "Cross-call caller memory as a compounding, defensible moat",
     "speakerNotes": ""
   },
   {
     "id": "f6c5b8a7-6a9d-41df-8c76-c39e5f6a7b06",
-    "position": 6,
+    "position": 7,
     "filepath": "src/pages/slides/Slide6.tsx",
-    "title": "Caller Memory",
-    "description": "Cross-call memory as a compounding differentiator",
+    "title": "Who It's For",
+    "description": "Target verticals and buyer segments for SnapServe",
     "speakerNotes": ""
   },
   {
     "id": "a7d6c9b8-7b0e-42ea-9d87-d40f6a7b8c07",
-    "position": 7,
+    "position": 8,
     "filepath": "src/pages/slides/Slide7.tsx",
     "title": "Why Now",
     "description": "Structural shifts that make 2026 the right time",
@@ -57,7 +65,7 @@
   },
   {
     "id": "b8e7d0c9-8c1f-43fb-8e98-e51a7b8c9d08",
-    "position": 8,
+    "position": 9,
     "filepath": "src/pages/slides/Slide8.tsx",
     "title": "Market Opportunity",
     "description": "TAM / SAM / SOM market sizing and future share",
@@ -65,7 +73,7 @@
   },
   {
     "id": "c9f8e1d0-9d2a-44ac-9fa9-f62b8c9d0e09",
-    "position": 9,
+    "position": 10,
     "filepath": "src/pages/slides/Slide9.tsx",
     "title": "Competitive Landscape",
     "description": "SnapServe versus Vapi and Bolna capability matrix",
@@ -73,7 +81,7 @@
   },
   {
     "id": "d0a9f2e1-0e3b-45bd-8aba-073c9d0e1f10",
-    "position": 10,
+    "position": 11,
     "filepath": "src/pages/slides/Slide10.tsx",
     "title": "Why SnapServe Wins",
     "description": "Four structural advantages competitors cannot copy quickly",
@@ -81,7 +89,7 @@
   },
   {
     "id": "e1b0a3f2-1f4c-46ce-9bcb-184d0e1f2a11",
-    "position": 11,
+    "position": 12,
     "filepath": "src/pages/slides/Slide11.tsx",
     "title": "Roadmap",
     "description": "From orchestration engine to India's default voice layer",
