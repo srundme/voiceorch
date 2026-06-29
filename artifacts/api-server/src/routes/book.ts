@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, sql, desc, and, gt } from "drizzle-orm";
 import { z } from "zod";
-import { db, bookProgressTable, bookExamAttemptsTable } from "@workspace/db";
+import { db, bookProgressTable, bookExamAttemptsTable, bookInternsTable } from "@workspace/db";
 import {
   EXAM_DURATION_MINUTES,
   EXAM_PASS_MARKS,
@@ -265,6 +265,46 @@ router.get("/book/exam/attempts", async (req, res): Promise<void> => {
     passed: rows.some((r) => r.passed),
     attemptCount: rows.length,
   });
+});
+
+// POST /api/book/interns/register — link a name+email identity to a deviceId
+router.post("/book/interns/register", async (req, res): Promise<void> => {
+  const Body = z.object({
+    name: z.string().min(2).max(200),
+    email: z.string().email(),
+    deviceId: DeviceId,
+  });
+  const parsed = Body.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+    return;
+  }
+  const { name, email, deviceId } = parsed.data;
+  try {
+    const [row] = await db
+      .insert(bookInternsTable)
+      .values({ name, email, deviceId, registeredAt: new Date(), lastActivityAt: new Date() })
+      .onConflictDoUpdate({
+        target: bookInternsTable.email,
+        set: { name, deviceId, lastActivityAt: new Date() },
+      })
+      .returning({ id: bookInternsTable.id });
+    res.json({ id: row!.id });
+  } catch (err) {
+    req.log.error({ err }, "book/interns/register failed");
+    res.status(500).json({ error: "Failed to register intern" });
+  }
+});
+
+// PATCH /api/book/interns/:deviceId/activity — update lastActivityAt on chapter complete
+router.patch("/book/interns/:deviceId/activity", async (req, res): Promise<void> => {
+  const parsed = DeviceId.safeParse(req.params["deviceId"]);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid deviceId" }); return; }
+  await db
+    .update(bookInternsTable)
+    .set({ lastActivityAt: new Date() })
+    .where(eq(bookInternsTable.deviceId, parsed.data));
+  res.json({ ok: true });
 });
 
 export default router;

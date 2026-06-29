@@ -47,3 +47,4 @@ export * from "./utterances";
 export * from "./crm-connections";
 export * from "./book-progress";
 export * from "./book-exam";
+export * from "./book-interns";

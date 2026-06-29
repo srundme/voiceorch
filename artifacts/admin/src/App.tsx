@@ -37,6 +37,7 @@ import PricingPage from "@/pages/usage/pricing";
 import AllocationsPage from "@/pages/usage/allocations";
 import AlertsPage from "@/pages/usage/alerts";
 
+import BookInternsPage from "@/pages/book-interns";
 import FamilyCompaniesPage from "@/pages/family/companies";
 import FamilyCompanyDetailPage from "@/pages/family/company-detail";
 import PolicyKBPage from "@/pages/family/policy-kb";
@@ -101,6 +102,9 @@ function Router() {
       <ProtectedRoute path="/settings" component={PlatformSettings} />
       <ProtectedRoute path="/dpdp" component={DpdpPage} />
       <ProtectedRoute path="/audit-logs" component={AuditLogsPage} />
+
+      {/* Engineering Programme */}
+      <ProtectedRoute path="/book-interns" component={BookInternsPage} />
 
       {/* Family module */}
       <ProtectedRoute path="/family/companies" component={FamilyCompaniesPage} />

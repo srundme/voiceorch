@@ -4,6 +4,15 @@ import type { AdminFailedCall } from "@workspace/api-client-react";
 
 export type { AdminFailedCall };
 
+// Book Interns
+export function useBookInterns() {
+  return useQuery({
+    queryKey: ["admin", "book-interns"],
+    queryFn: () => adminFetch<any[]>("/book/interns"),
+    refetchInterval: 60000,
+  });
+}
+
 // Overview
 export function useOverview() {
   return useQuery({

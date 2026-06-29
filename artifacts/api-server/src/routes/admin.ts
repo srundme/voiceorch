@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, callsTable, agentsTable, scheduledCallbacksTable, bookingsTable, eventTypesTable, schedulingCalendarsTable, platformSettingsTable, usageSpikeDismissalsTable, usageSpikeNotificationsTable, alertNotificationLogTable, providerMinuteRatesTable, bookInternsTable, bookProgressTable, bookExamAttemptsTable } from "@workspace/db";
 import { invalidateMinuteRatesCache } from "../services/minute-rates.js";
 import { sendTestEmail } from "../services/scheduling/notifications.js";
 import { eq, sql, count, sum, desc, lt, gt, and, inArray, ilike, like } from "drizzle-orm";
@@ -1426,6 +1426,52 @@ router.get("/admin/gcal-connections", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "admin/gcal-connections failed");
     res.status(500).json({ error: "Failed to load Google Calendar connections" });
+  }
+});
+
+// GET /api/admin/book/interns — list all registered interns with progress
+router.get("/admin/book/interns", async (req, res): Promise<void> => {
+  try {
+    const interns = await db
+      .select()
+      .from(bookInternsTable)
+      .orderBy(desc(bookInternsTable.registeredAt));
+
+    const result = await Promise.all(
+      interns.map(async (intern) => {
+        const [progress] = intern.deviceId
+          ? await db
+              .select({ completedChapters: bookProgressTable.completedChapters })
+              .from(bookProgressTable)
+              .where(eq(bookProgressTable.deviceId, intern.deviceId))
+              .limit(1)
+          : [undefined];
+
+        const examRows = intern.deviceId
+          ? await db
+              .select({ passed: bookExamAttemptsTable.passed, score: bookExamAttemptsTable.score })
+              .from(bookExamAttemptsTable)
+              .where(eq(bookExamAttemptsTable.deviceId, intern.deviceId))
+          : [];
+
+        return {
+          id: intern.id,
+          name: intern.name,
+          email: intern.email,
+          deviceId: intern.deviceId,
+          registeredAt: intern.registeredAt.toISOString(),
+          lastActivityAt: intern.lastActivityAt.toISOString(),
+          completedChapters: progress?.completedChapters?.length ?? 0,
+          examPassed: examRows.some((r) => r.passed),
+          examScore: examRows.length > 0 ? examRows.reduce((m, r) => Math.max(m, r.score), 0) : null,
+        };
+      }),
+    );
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "admin/book/interns failed");
+    res.status(500).json({ error: "Failed to load book interns" });
   }
 });
 

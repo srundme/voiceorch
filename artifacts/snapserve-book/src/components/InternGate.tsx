@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, GraduationCap, FileText, FlaskConical, Trophy } from "lucide-react";
 import { useInternStore } from "@/hooks/use-intern";
+import { getDeviceId } from "@/lib/device-id";
 
 const PERKS = [
   { icon: FileText,      text: "77 chapters across 17 modules" },
@@ -31,10 +32,18 @@ export function InternGate({ children }: { children: ReactNode }) {
       return;
     }
     setSubmitting(true);
-    setTimeout(() => {
-      register(name.trim(), email.trim());
-      setSubmitting(false);
-    }, 700);
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    // Register in localStorage first so the book opens immediately
+    register(trimmedName, trimmedEmail);
+    // Then sync to server (fire-and-forget — doesn't block the UX)
+    const deviceId = getDeviceId();
+    fetch("/api/book/interns/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmedName, email: trimmedEmail, deviceId }),
+    }).catch(() => { /* silent — local profile already saved */ });
+    setSubmitting(false);
   };
 
   return (

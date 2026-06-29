@@ -21,6 +21,7 @@ import {
   Building2,
   ShieldCheck,
   ShieldX,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/call-pricing",     label: "Call Pricing",      icon: PhoneCall },
     { href: "/settings",       label: "Settings",         icon: Settings },
     { href: "/dpdp",           label: "DPDP Erasure",     icon: ShieldX },
+    { href: "/book-interns",     label: "Book Interns",     icon: GraduationCap, section: "Engineering Programme" },
     { href: "/family/companies", label: "Companies",      icon: Building2,  section: "Family Insurance" },
     { href: "/family/agents",    label: "AI Agents",      icon: ShieldCheck },
   ];
