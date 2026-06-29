@@ -7,6 +7,7 @@
       "/artifacts/api-server/**",
       "/artifacts/dashboard/**",
       "/artifacts/admin/**",
+      "/artifacts/snapserve-book/**",
       "/lib/**",
       "/pnpm-lock.yaml",
       "/pnpm-workspace.yaml",
