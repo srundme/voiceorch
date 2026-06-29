@@ -970,12 +970,13 @@ import { callTransfersTable } from "@workspace/db";
 
 router.get("/webhooks/vobiz/transfer-xml", (req, res): void => {
   const target = String(req.query["target"] ?? "").trim();
+  const callerId = String(req.query["callerId"] ?? "").trim() || undefined;
   if (!target) {
     res.status(400).set("Content-Type", "text/xml")
       .send("<Response><Speak>Transfer target missing.</Speak><Hangup/></Response>");
     return;
   }
-  res.set("Content-Type", "text/xml").send(buildTransferXml(target));
+  res.set("Content-Type", "text/xml").send(buildTransferXml(target, callerId));
 });
 
 router.get("/webhooks/twilio/transfer-xml", (req, res): void => {
@@ -1038,6 +1039,7 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
   const target     = String(req.query["target"] ?? "").trim();
   const transferId = String(req.query["transferId"] ?? "").trim();
   const token      = String(req.query["token"] ?? "").trim();
+  const callerId   = String(req.query["callerId"] ?? "").trim() || undefined;
   if (!target || !transferId || !token) {
     res.status(400).set("Content-Type", "text/xml")
       .send("<Response><Speak>Warm transfer parameters missing.</Speak><Hangup/></Response>");
@@ -1045,7 +1047,7 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
   }
   const baseUrl = getSelfBaseUrl();
   const whisperUrl = `${baseUrl}/api/webhooks/vobiz/warm-briefing-xml?transferId=${encodeURIComponent(transferId)}&token=${encodeURIComponent(token)}`;
-  res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl));
+  res.set("Content-Type", "text/xml").send(buildVobizWarmTransferXml(target, whisperUrl, callerId));
 });
 
 // ── P2-C: Warm briefing XML — spoken to the OPERATOR only when they answer ────

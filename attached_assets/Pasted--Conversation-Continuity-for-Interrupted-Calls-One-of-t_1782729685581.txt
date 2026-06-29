@@ -1,0 +1,285 @@
+# Conversation Continuity for Interrupted Calls
+
+One of the biggest problems in AI outbound calling is that calls can end unexpectedly due to reasons outside the customer's control.
+
+Examples:
+
+- Network interruption
+- Carrier disconnect
+- Call dropped
+- Phone battery died
+- Signal lost
+- Telephony provider issue
+- Customer accidentally disconnected
+- Platform timeout
+
+Currently, when the retry call happens, the AI starts the conversation from the beginning.
+
+This creates a poor customer experience because the customer has already spent time talking to the AI.
+
+We need true conversation continuity.
+
+---
+
+# Desired Behaviour
+
+Whenever a retry call is placed to the same lead, the AI must determine whether the previous conversation actually finished.
+
+If the previous conversation ended unexpectedly, the AI should continue from where it stopped instead of restarting the conversation.
+
+---
+
+# How to Detect an Interrupted Call
+
+A call should be classified as "Interrupted" if any of the following are true:
+
+• No farewell or closing statement was spoken.
+• The customer disconnected in the middle of a conversation.
+• The agent was still collecting information.
+• A booking or transfer workflow was not completed.
+• The call ended because of a telephony or network issue.
+• The conversation objective was not completed.
+• The call terminated unexpectedly without a natural ending.
+
+Examples:
+
+Agent:
+"Can I confirm your preferred appointment time?"
+
+(Call disconnects)
+
+This should be classified as:
+
+Conversation Interrupted = TRUE
+
+NOT
+
+Conversation Completed.
+
+---
+
+# Conversation Completion Detection
+
+Store a flag for every call:
+
+conversationCompleted
+
+TRUE
+
+FALSE
+
+This should not depend only on call duration.
+
+Instead determine it using:
+
+- Transcript analysis
+- Final agent message
+- Final customer message
+- Tool execution status
+- Call termination reason
+- Whether the workflow reached completion
+
+Example:
+
+Booking completed
+Agent confirmed booking
+Customer acknowledged
+
+conversationCompleted = TRUE
+
+Example:
+
+Agent was asking for preferred time
+
+Call disconnected
+
+conversationCompleted = FALSE
+
+---
+
+# Persist Conversation Context
+
+For every call store:
+
+Call ID
+
+Lead ID
+
+Campaign ID
+
+Batch ID
+
+Conversation Summary
+
+Conversation Transcript
+
+Extracted Customer Information
+
+Completed Steps
+
+Pending Steps
+
+Current Intent
+
+Last Agent Message
+
+Last Customer Message
+
+ConversationCompleted
+
+Termination Reason
+
+Tool Execution History
+
+Memory Updates
+
+This data should be persisted and linked to the Lead.
+
+---
+
+# Resume Context on Retry
+
+Before placing a retry call, the AI must load:
+
+- Previous transcript
+- Conversation summary
+- Customer memory
+- Completed workflow steps
+- Pending workflow steps
+- Last tool executions
+- Last agent response
+- Last customer response
+
+The AI should inject this into the system context before generating the first response.
+
+---
+
+# First Message on Retry
+
+Do NOT restart with:
+
+"Hello, I'm calling from..."
+
+Instead continue naturally.
+
+Examples:
+
+"Hi John, our previous call got disconnected while we were scheduling your appointment. Let's continue from where we left off."
+
+"We were discussing the available time slots before the call got interrupted."
+
+"The previous call disconnected unexpectedly. I already have the information you shared, so let's continue."
+
+Never ask for information that has already been collected.
+
+---
+
+# Workflow State Recovery
+
+Every workflow should be resumable.
+
+Example:
+
+Booking Flow
+
+✓ Customer Name
+
+✓ Date
+
+✗ Time
+
+Call disconnected
+
+Next call:
+
+Resume from:
+
+"What time would you prefer?"
+
+NOT
+
+"What is your name?"
+
+"What date would you like?"
+
+Do not repeat completed steps.
+
+---
+
+# Memory Integration
+
+The retry call should combine:
+
+1. Long-term customer memory
+2. Previous call summary
+3. Previous transcript
+4. Current campaign context
+5. Previous tool execution results
+
+This becomes the conversation context for the retry.
+
+---
+
+# Tool State Recovery
+
+If tools were already executed successfully:
+
+Do not execute them again unless required.
+
+Example:
+
+Availability tool already executed.
+
+Do not call it again.
+
+Reuse previous availability unless it has expired.
+
+If booking was already completed successfully:
+
+Never attempt another booking.
+
+---
+
+# Conversation Summary
+
+After every completed or interrupted call generate an internal summary.
+
+Example:
+
+Customer:
+
+John
+
+Interested in booking.
+
+Preferred tomorrow afternoon.
+
+Discussed available slots.
+
+Selected 3 PM.
+
+Call disconnected before booking confirmation.
+
+Pending:
+
+Confirm booking.
+
+This summary should be much smaller than the full transcript and should be used as the primary context for retry calls.
+
+---
+
+# Retry Behaviour
+
+Retry calls should behave like continuing a paused conversation, not starting a brand-new conversation.
+
+The customer should feel that the AI remembers exactly where the previous call stopped.
+
+---
+
+# Goal
+
+The AI should provide seamless conversation continuity across multiple calls.
+
+Customers should never need to repeat information already provided.
+
+Every retry should continue naturally from the last unfinished point in the conversation, using the previous transcript, generated summary, customer memory, and workflow state.

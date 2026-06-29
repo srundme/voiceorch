@@ -826,7 +826,12 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
 
   const baseUrl = resolveWebhookBase(req, typeof webhookBaseUrl === "string" ? webhookBaseUrl : undefined);
   const encodedTarget = encodeURIComponent(target.trim());
-  const xmlCallbackUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodedTarget}`;
+  // VoBiz needs a callerId (a VoBiz-provisioned number on the account) on the
+  // <Dial> to the human agent. The provider's configured fromNumber is that
+  // number; without it the outbound bridge is rejected and the caller dropped.
+  const platformCallerId = cfg["fromNumber"];
+  const callerIdQs = platformCallerId ? `&callerId=${encodeURIComponent(platformCallerId)}` : "";
+  const xmlCallbackUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodedTarget}${callerIdQs}`;
 
   const handoffMsg = typeof warmMessage === "string" && warmMessage.trim()
     ? warmMessage.trim()

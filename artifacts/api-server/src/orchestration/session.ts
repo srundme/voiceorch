@@ -60,6 +60,11 @@ interface ActiveSession {
   metricsAcc: MetricsAcc;
   wasTransferred: boolean;
   transferredTo: string | null;
+  /** Imperatively mark/unmark the call as transferred from OUTSIDE createSession
+   *  (e.g. the manual POST /calls/:id/transfer path via triggerTransfer). Sets the
+   *  in-memory closure flag the vobiz.ts WS-close guard reads synchronously. Pass
+   *  null to reset on a failed transfer. */
+  setTransferred(to: string | null): void;
   // Cross-call memory
   callerPhone: string | null;           // human's phone number (null for webcall/unknown)
   callerProfileSnapshot: CallerProfile | null;  // profile at call start (for callCount delta)
@@ -959,6 +964,16 @@ export async function createSession(params: {
           },
         });
 
+        // Set the transfer flag BEFORE calling the provider API. Providers (esp.
+        // VoBiz) send the media-stream "stop" / close the WS *during* the transfer
+        // API call, which fires onCallEnd → ws.close(). If wasTransferred were still
+        // false at that moment, we'd send a close frame that VoBiz treats as a
+        // hang-up, aborting the in-flight transfer. Reset to false in the catch
+        // block below if the transfer API call fails.
+        wasTransferred = true;
+        transferredTo = to;
+        void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+
         if (tprov === "twilio") {
           const authToken = providerKeys.get("twilio") ?? "";
           const extra = providerKeys.get("twilio:extraConfig");
@@ -988,21 +1003,25 @@ export async function createSession(params: {
           const extra = providerKeys.get("vobiz:extraConfig");
           const cfg = extra ? (JSON.parse(extra) as Record<string, string>) : {};
           const authId = cfg["authId"] ?? "";
+          // VoBiz needs a callerId on the <Dial> to the human agent — it must be a
+          // VoBiz-provisioned number on the account (our platform number), NOT the
+          // customer. Outbound: fromNumber is the platform number; inbound:
+          // toNumber is the platform number.
+          const callerId = params.callDirection === "outbound" ? params.fromNumber : params.toNumber;
+          const callerIdQs = callerId ? `&callerId=${encodeURIComponent(callerId)}` : "";
           let xmlUrl: string;
           if (isWarm && transferId && briefingToken) {
-            xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}`;
+            xmlUrl = `${baseUrl}/api/webhooks/vobiz/warm-transfer-xml?target=${encodeURIComponent(to)}&transferId=${transferId}&token=${encodeURIComponent(briefingToken)}${callerIdQs}`;
           } else {
-            xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}`;
+            xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
           }
           await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
         }
         // suppress unused-import warnings for builders not used via direct call
         void buildTwilioWarmTransferTwiML; void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;
 
-        // Mark as successfully transferred only after the provider call succeeds
-        wasTransferred = true;
-        transferredTo = to;
-        void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+        // wasTransferred / transferredTo were already set BEFORE the provider call
+        // (see comment above) to win the WS-close race. Nothing to set here.
         logExec(EXEC_COMPONENTS.Tool, "system", {
           status: "success",
           metadata: {
@@ -1015,6 +1034,12 @@ export async function createSession(params: {
         });
         return true;
       } catch (err) {
+        // Transfer failed — undo the optimistic flag set before the provider call
+        // so normal call-end (ws.close) proceeds and the call isn't left hanging
+        // with a dead AI stream.
+        wasTransferred = false;
+        transferredTo = null;
+        void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
         const errMsg = err instanceof Error ? err.message : String(err);
         logger.error({ callId: callRecord.id, err }, "Provider call transfer API failed");
         logExec(EXEC_COMPONENTS.Tool, "system", {
@@ -1063,6 +1088,7 @@ export async function createSession(params: {
     metricsAcc,
     get wasTransferred() { return wasTransferred; },
     get transferredTo() { return transferredTo; },
+    setTransferred(to: string | null) { wasTransferred = to !== null; transferredTo = to; },
     get naturalEndTriggered() { return naturalEndTriggered; },
     get callerProfileSnapshot() { return callerProfileSnapshot; },
     get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
@@ -1186,21 +1212,33 @@ export async function triggerTransfer(
     }
   }
 
-  // Execute VoBiz transfer
-  await transferVobizCall({
-    authId: vobizAuthId,
-    authToken: vobizAuthToken,
-    callUuid: externalCallId,
-    xmlUrl: xmlCallbackUrl,
-  });
-
-  // Mark session as transferred
-  if (sessionId) {
+  // Mark session as transferred BEFORE the provider call. VoBiz sends the
+  // media-stream "stop" / closes the WS *during* the transfer REST call, which
+  // fires onCallEnd → ws.close(). The guard in vobiz.ts reads the in-memory flag
+  // via getSession()?.wasTransferred, so it must be set synchronously here (Redis
+  // meta alone is not read by that guard). Reset on failure so a dropped transfer
+  // still ends the call normally instead of hanging with a dead AI stream.
+  const markTransferred = (to: string | null): void => {
+    if (!sessionId) return;
     const session = sessions.get(sessionId);
-    if (session) {
-      void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: target },
-        (session.pipeline as any).config?.agentConfig?.maxDuration ?? 600 + 600);
-    }
+    if (!session) return;
+    session.setTransferred(to);
+    void patchSessionMeta(sessionId, { wasTransferred: to !== null, transferredTo: to },
+      (session.pipeline as any).config?.agentConfig?.maxDuration ?? 600 + 600);
+  };
+  markTransferred(target);
+
+  // Execute VoBiz transfer
+  try {
+    await transferVobizCall({
+      authId: vobizAuthId,
+      authToken: vobizAuthToken,
+      callUuid: externalCallId,
+      xmlUrl: xmlCallbackUrl,
+    });
+  } catch (err) {
+    markTransferred(null);
+    throw err;
   }
 
   return true;

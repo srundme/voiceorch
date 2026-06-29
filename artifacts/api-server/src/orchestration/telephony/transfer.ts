@@ -54,19 +54,24 @@ export async function transferVobizCall(opts: {
  * VoBiz (Plivo-compatible) requires <Number> inside <Dial>;
  * bare <Dial>NUMBER</Dial> is Twilio syntax and causes VoBiz to drop the call.
  */
-export function buildTransferXml(target: string): string {
+export function buildTransferXml(target: string, callerId?: string): string {
   const e = xmlEscape(normalizePhone(target));
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
+  // VoBiz requires a callerId on <Dial> for the outbound bridge to the human
+  // agent — it must be a VoBiz-provisioned number on the account (our platform
+  // number).  Without it the outbound dial is rejected and the caller is dropped.
+  const c = callerId ? ` callerId="${xmlEscape(normalizePhone(callerId))}"` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial${c}>\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 /**
  * Warm transfer XML for VoBiz/Plivo — dials the operator and plays a briefing
  * (fetched from whisperUrl) to the operator only before bridging both legs.
  */
-export function buildVobizWarmTransferXml(target: string, whisperUrl: string): string {
+export function buildVobizWarmTransferXml(target: string, whisperUrl: string, callerId?: string): string {
   const e = xmlEscape(normalizePhone(target));
   const w = xmlEscape(whisperUrl);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
+  const c = callerId ? ` callerId="${xmlEscape(normalizePhone(callerId))}"` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial${c}>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 // ── Twilio ───────────────────────────────────────────────────────────────────
@@ -157,7 +162,14 @@ export function buildPlivoWarmTransferXml(target: string, whisperUrl: string): s
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function xmlEscape(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Escapes both element text AND attribute values (callerId is query-derived and
+  // lands in a `callerId="..."` attribute, so quotes must be escaped too).
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 /**
