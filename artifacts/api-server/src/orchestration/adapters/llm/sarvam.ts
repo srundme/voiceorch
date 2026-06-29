@@ -104,7 +104,18 @@ function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[
  * ```json (or plain ```) fence and an `arguments` value that is itself a JSON
  * string. Returns null when the text is not a well-formed tool call — the caller
  * then treats the buffer as genuine reply text rather than dropping it.
+ *
+ * Sarvam does not commit to a single envelope shape. As well as the canonical
+ * OpenAI form `{"name": "...", "arguments": {...}}` it also emits variants like
+ * `{"tool": "transfer_to_human", "reason": "..."}` — the tool name under `tool`
+ * (also seen: `function`/`action`) and the args spread as bare top-level keys
+ * with no `arguments` wrapper. We recognise the name under any of these keys and
+ * derive args from `arguments`/`parameters`/`args` when present, otherwise from
+ * the remaining top-level keys.
  */
+const TOOL_NAME_KEYS = ["name", "tool", "function", "action", "tool_name"] as const;
+const TOOL_ARGS_KEYS = ["arguments", "parameters", "args", "input"] as const;
+
 function parseSerializedToolCall(
   raw: string,
 ): { name: string; args: Record<string, unknown> } | null {
@@ -124,22 +135,57 @@ function parseSerializedToolCall(
   if (!obj || typeof obj !== "object") return null;
 
   const rec = obj as Record<string, unknown>;
-  const name = rec["name"];
-  if (typeof name !== "string" || name.length === 0) return null;
 
-  let args: Record<string, unknown> = {};
-  const rawArgs = rec["arguments"];
-  if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
-    args = rawArgs as Record<string, unknown>;
-  } else if (typeof rawArgs === "string" && rawArgs.trim().length > 0) {
-    try {
-      const parsedArgs = JSON.parse(rawArgs);
-      if (parsedArgs && typeof parsedArgs === "object" && !Array.isArray(parsedArgs)) {
-        args = parsedArgs as Record<string, unknown>;
-      }
-    } catch {
-      // malformed nested JSON — leave args empty
+  // Resolve the tool name under any of the keys Sarvam is known to use.
+  let name: string | null = null;
+  let nameKey: string | null = null;
+  for (const k of TOOL_NAME_KEYS) {
+    const v = rec[k];
+    if (typeof v === "string" && v.length > 0) {
+      name = v;
+      nameKey = k;
+      break;
     }
+  }
+  if (!name) return null;
+
+  // Resolve args from an explicit wrapper key if present.
+  let args: Record<string, unknown> = {};
+  let argsResolved = false;
+  let argsKey: string | null = null;
+  for (const k of TOOL_ARGS_KEYS) {
+    const rawArgs = rec[k];
+    if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
+      args = rawArgs as Record<string, unknown>;
+      argsResolved = true;
+      argsKey = k;
+      break;
+    }
+    if (typeof rawArgs === "string" && rawArgs.trim().length > 0) {
+      try {
+        const parsedArgs = JSON.parse(rawArgs);
+        if (parsedArgs && typeof parsedArgs === "object" && !Array.isArray(parsedArgs)) {
+          args = parsedArgs as Record<string, unknown>;
+          argsResolved = true;
+          argsKey = k;
+          break;
+        }
+      } catch {
+        // malformed nested JSON — keep looking / fall through to bare-keys path
+      }
+    }
+  }
+
+  // No explicit args wrapper: treat the remaining top-level keys (e.g. `reason`)
+  // as the args object so envelopes like {"tool": "...", "reason": "..."} carry
+  // their payload through to the executor.
+  if (!argsResolved) {
+    const rest: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rec)) {
+      if (k === nameKey || k === argsKey) continue;
+      rest[k] = v;
+    }
+    args = rest;
   }
 
   return { name, args };
