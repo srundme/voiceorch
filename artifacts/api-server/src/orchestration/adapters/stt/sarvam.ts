@@ -315,18 +315,28 @@ export class SarvamSTT implements STTAdapter {
     };
 
     // ── WebSocket health monitoring ───────────────────────────────────────────
-    // Sarvam sends speech_start / speech_end / transcript on every event.
-    // If >3 s pass with no message while we are inside an active speech segment,
-    // the connection has silently died. Fire onConnectionDead so webcall.ts can
-    // fall back to batch STT immediately rather than waiting for the last-resort
-    // 8 s fallback timer.
-    let lastMsgAt       = Date.now();
-    let inSpeechSegment = false;
-    const HEARTBEAT_MS  = 300;
-    const WS_DEAD_MS    = 3_000;
+    // Sarvam sends speech_start / speech_end / transcript on every event. A socket
+    // can go ZOMBIE — readyState OPEN but no traffic — without ever emitting "close".
+    // If >3 s pass with no inbound message WHILE we are actively streaming caller
+    // audio inside a speech segment, treat it as dead and terminate the socket so the
+    // ws.on("close") handler reconnects. The lastAudioSentAt guard prevents false
+    // positives during agent playback (caller frames are gated → silence is expected,
+    // not death). deadFired latches so we act once per episode, not on every tick.
+    let lastMsgAt        = Date.now();
+    let lastAudioSentAt  = 0;
+    let inSpeechSegment  = false;
+    let deadFired        = false;
+    const HEARTBEAT_MS   = 300;
+    const WS_DEAD_MS     = 3_000;
 
     const sendChunk = (chunk: Buffer) => {
       if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
+      const now = Date.now();
+      // Resuming after a send gap (caller frames were gated during agent playback):
+      // grant Sarvam a fresh WS_DEAD_MS window before the zombie check can fire. Without
+      // this, a stale lastMsgAt from before the gap would trip a false positive on the
+      // very first chunk after playback and terminate a perfectly healthy socket.
+      if (now - lastAudioSentAt > WS_DEAD_MS) lastMsgAt = now;
       ws.send(
         JSON.stringify({
           audio: {
@@ -336,6 +346,7 @@ export class SarvamSTT implements STTAdapter {
           },
         }),
       );
+      lastAudioSentAt = now; // proves we are ACTIVELY streaming — gates the zombie detector
     };
 
     const openSocket = () => {
@@ -348,6 +359,8 @@ export class SarvamSTT implements STTAdapter {
       ws.on("open", () => {
         wsReady = true;
         reconnectAttempts = 0;
+        deadFired = false;      // fresh socket — re-arm the zombie detector
+        lastMsgAt = Date.now(); // and start its silence window from now, not the dead socket's last frame
         logger.info(
           { langCode, model, mode },
           "Sarvam streaming STT: WebSocket opened",
@@ -367,6 +380,7 @@ export class SarvamSTT implements STTAdapter {
         // VAD signals — official type values: "speech_start" / "speech_end"
         // (legacy guessed values "events" + signal_type also handled for safety)
         lastMsgAt = Date.now();
+        deadFired = false; // any inbound frame proves the socket is alive — re-arm the detector
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
           inSpeechSegment    = true;
           speechEndReceived  = false; // caller is speaking again; clear the speech_end flag
@@ -566,12 +580,24 @@ export class SarvamSTT implements STTAdapter {
 
     // Start the heartbeat AFTER sttObj is created so the interval can reference it.
     const heartbeatInterval = setInterval(() => {
-      if (!inSpeechSegment || intentionallyClosed) return;
-      if (ws.readyState !== WebSocket.OPEN) return;
+      if (intentionallyClosed || deadFired) return;       // torn down, or already handled this episode
+      if (!inSpeechSegment) return;                        // only meaningful mid-utterance
+      if (ws.readyState !== WebSocket.OPEN) return;        // CONNECTING/CLOSING handled elsewhere
+      // Suppress false positives: during agent playback the pipeline gates caller frames,
+      // so we are NOT sending audio and Sarvam is legitimately silent. Only suspect death
+      // when we have recently been actively streaming audio to the socket.
+      if (Date.now() - lastAudioSentAt > WS_DEAD_MS) return;
       const silenceMs = Date.now() - lastMsgAt;
       if (silenceMs > WS_DEAD_MS) {
-        logger.warn({ langCode, silenceMs }, "Sarvam STT: WS silent during speech — connection dead, firing onConnectionDead");
-        sttObj.onConnectionDead?.();
+        deadFired = true; // fire-once latch: reset by any inbound message or a fresh socket
+        logger.warn(
+          { langCode, silenceMs },
+          "Sarvam STT: WS silent while streaming audio — terminating zombie socket to force reconnect",
+        );
+        try { sttObj.onConnectionDead?.(); } catch { /* optional external consumer hook */ }
+        // Self-heal: terminate the dead socket so ws.on("close") runs the existing
+        // exponential-backoff reconnect (terminate → 1006, which is not an auth code).
+        try { ws.terminate(); } catch { try { ws.close(); } catch { /* noop */ } }
       }
     }, HEARTBEAT_MS);
 

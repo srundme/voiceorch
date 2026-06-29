@@ -46,7 +46,14 @@ export async function transferVobizCall(opts: {
   });
   const text = await resp.text();
   if (!resp.ok) throw new Error(`VoBiz transfer API error ${resp.status}: ${text}`);
-  logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl }, "VoBiz transfer initiated");
+  // Log the response body (capped) so we can see whether VoBiz accepted the warm-transfer
+  // XML — in particular whether it honours the <Number url="…"> operator-whisper attribute.
+  // Redact the capability token from the logged URL so it never lands in logs.
+  const redactedXmlUrl = opts.xmlUrl.replace(/([?&]token=)[^&]*/gi, "$1REDACTED");
+  logger.info(
+    { callUuid: opts.callUuid, xmlUrl: redactedXmlUrl, status: resp.status, response: text.slice(0, 500) },
+    "VoBiz transfer initiated",
+  );
 }
 
 /**
@@ -71,7 +78,14 @@ export function buildVobizWarmTransferXml(target: string, whisperUrl: string, ca
   const e = xmlEscape(normalizePhone(target));
   const w = xmlEscape(whisperUrl);
   const c = callerId ? ` callerId="${xmlEscape(normalizePhone(callerId))}"` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial${c}>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
+  // VoBiz is Plivo-compatible. The per-<Number> `url` attribute is a TWILIO-ONLY
+  // whisper convention that Plivo/VoBiz silently IGNORE — which is exactly why the
+  // operator was being bridged with NO briefing. The Plivo-standard operator whisper
+  // is the `confirmSound` attribute on <Dial>: the provider fetches that URL when the
+  // operator answers and plays the returned <Speak> to the OPERATOR ONLY, then bridges
+  // the caller automatically. We deliberately omit `confirmKey` so no DTMF acceptance
+  // is required (a missing confirmKey ⇒ auto-connect after the sound, per Plivo XML).
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial${c} confirmSound="${w}">\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 // ── Twilio ───────────────────────────────────────────────────────────────────
@@ -156,7 +170,10 @@ export function buildPlivoTransferXml(target: string): string {
 export function buildPlivoWarmTransferXml(target: string, whisperUrl: string): string {
   const e = xmlEscape(normalizePhone(target));
   const w = xmlEscape(whisperUrl);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial>\n    <Number url="${w}" method="GET">${e}</Number>\n  </Dial>\n</Response>`;
+  // Same root-cause fix as VoBiz: <Number url="…"> is a Twilio-only whisper and is
+  // silently ignored by Plivo. The Plivo-standard operator whisper is `confirmSound`
+  // on <Dial>, which plays to the operator only then auto-bridges (no `confirmKey`).
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Dial confirmSound="${w}">\n    <Number>${e}</Number>\n  </Dial>\n</Response>`;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

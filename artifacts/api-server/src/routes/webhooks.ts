@@ -1112,6 +1112,13 @@ async function warmBriefingXml(
     res.set("Content-Type", "text/xml").send(
       `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  ${speakVerb(provider, escaped)}\n</Response>`
     );
+    // PROOF the provider actually fetched the operator-whisper URL. If this line is
+    // absent after a warm transfer, the provider (e.g. VoBiz) silently ignored the
+    // <Number url="…"> whisper attribute and the operator was bridged with NO briefing.
+    logger.info(
+      { transferId, provider, summaryLen: summary.length },
+      "warm-briefing-xml: briefing served to operator leg",
+    );
     // Mark transfer as connected now that operator answered
     void db.update(callTransfersTable)
       .set({ status: "connected", connectedAt: new Date() })
