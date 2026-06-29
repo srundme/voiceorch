@@ -470,10 +470,17 @@ export async function createSession(params: {
       const langPrefRaw = latchedFactsMap.get("language_pref");
       const mappedSttLang = langPrefRaw ? LANG_PREF_TO_BCP47[langPrefRaw.toLowerCase()] : undefined;
       if (mappedSttLang && mappedSttLang !== agentConfig.sttConfig.language) {
+        const prevSttLang = agentConfig.sttConfig.language;
         agentConfig.sttConfig.language = mappedSttLang;
         agentConfig.language = mappedSttLang;
+        // Also patch the in-memory profile so the language-injection block below
+        // seeds initialLanguage from the fact-based preference rather than the
+        // DB-stored preferredLanguage (which reflects old calls in the wrong language).
+        if (callerProfileSnapshot) {
+          callerProfileSnapshot = { ...callerProfileSnapshot, preferredLanguage: mappedSttLang };
+        }
         logger.info(
-          { agentId: params.agentId, callerPhone, langPref: langPrefRaw, from: agentConfig.sttConfig.language, to: mappedSttLang },
+          { agentId: params.agentId, callerPhone, langPref: langPrefRaw, from: prevSttLang, to: mappedSttLang },
           "STT language overridden from caller memory language_pref",
         );
       }

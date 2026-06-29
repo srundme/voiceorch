@@ -121,7 +121,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
         {
           name: "end_call",
           description:
-            "End the phone call. Call this when the conversation is complete, the caller says goodbye, all objectives are met, or the caller requests to end the call.",
+            "End the phone call. ONLY call this when the caller EXPLICITLY says goodbye, bye, wants to hang up, or clearly states their needs are fully addressed AND they are done. Do NOT call this if the caller says 'hello', 'hi', or any greeting — that means they are still in the conversation. Do NOT end the call just because the topic seems concluded — always ask 'Is there anything else I can help you with?' first and wait for a clear goodbye or dismissal before ending.",
           parameters: { type: "object", properties: {}, required: [] },
         },
       ];
