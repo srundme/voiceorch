@@ -75,14 +75,27 @@ Gemini/OpenAI unaffected (no thinking mode, tool_choice:auto works fine).
   `delta.content`. These must be stripped before forwarding to TTS.
 - **Fix in sarvam.ts:** `token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end)\|>/g, "")` applied to every content token.
 
-## Tool call streaming format — accumulate delta.tool_calls
-- Sarvam-30b DOES emit standard OpenAI-style streaming tool calls when reasoning is on:
-  `delta.tool_calls[0]={index,id,function:{name,arguments:""}}` first, then argument
-  fragment chunks, then `finish_reason:"tool_calls"`, then usage chunk, then `[DONE]`.
-- **How to apply:** accumulate `delta.tool_calls` into `Map<index,{id,name,args}>`;
-  at end-of-stream fire onToolCall (first tool) OR onDone (plain text) — exactly one.
-  Drop leading whitespace-only `delta.content` ("\n" artifact) and ignore any content
-  once a tool delta has been seen, so TTS never speaks tool-turn noise.
+## Tool call streaming is UNRELIABLE — two shapes, must handle both
+Sarvam's `stream:true` tool calling is inconsistent. The SAME agent/model emits a
+tool call one of two ways across calls:
+1. **Structured (primary):** `delta.tool_calls[0]={index,id,function:{name,arguments:""}}`
+   first, then argument fragment chunks, `finish_reason:"tool_calls"`, usage chunk, `[DONE]`.
+2. **Serialized JSON text (fallback):** the WHOLE tool call arrives as a plain-text JSON
+   blob inside `delta.content`, e.g. `{ "name":"transfer_to_human", "arguments":{...} }`
+   (optionally inside a ```json fence). NO `delta.tool_calls` at all.
+- **Why this matters:** if you only route on `delta.tool_calls`, shape #2 falls through to
+  the text path and the raw JSON is streamed to TTS — the caller literally HEARS the JSON
+  (confirmed: a Sarvam web call spoke `{"name":"transfer_to_human"...}` aloud).
+- **How to apply (in sarvam.ts):**
+  - Structured path: accumulate `delta.tool_calls` into `Map<index,{id,name,args}>`; ignore
+    any content once a tool delta has been seen.
+  - Serialized fallback (tools-enabled turns only): buffer-and-sniff. If the FIRST
+    non-whitespace `delta.content` of the turn begins with `{` or `` ` `` (fence),
+    WITHHOLD all content from onToken/TTS and accumulate it; at end-of-stream parse it
+    (`parseSerializedToolCall`, tolerating a fence + an `arguments` that is itself a JSON
+    string) → `onToolCall` on success, else `onDone(buffer)` so genuine text is never dropped.
+  - Replies NOT starting with `{`/fence stream normally (TTFT preserved). Drop leading
+    whitespace-only `delta.content` ("\n" artifact). Fire exactly one terminal callback.
 
 ## Other
 - Strict user/assistant alternation starting with a user turn — merge consecutive

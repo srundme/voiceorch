@@ -17,20 +17,31 @@ import { toOpenAIMessages } from "./openai-messages.js";
  *   Thinking is ON BY DEFAULT. For voice agents we DISABLE it by sending
  *   `reasoning_effort: null` to keep latency low (an agent can opt back in).
  *
- * Tool calling — single STREAMING path:
- *   Sarvam-30b emits standard OpenAI-style streaming tool calls. With
- *   `stream:true`, `reasoning_effort:null` and `tool_choice:"auto"` it returns:
+ * Tool calling — STREAMING with a buffered fallback (Sarvam is unreliable here):
+ *   The PRIMARY path is standard OpenAI-style streaming tool calls. With
+ *   `stream:true` and `tool_choice:"auto"` Sarvam may return:
  *     • delta.tool_calls[0] = { index, id, function:{ name, arguments:"" } }  (first)
  *     • delta.tool_calls[0] = { index, function:{ arguments:"<fragment>" } }   (rest)
  *       — argument fragments must be CONCATENATED across chunks by index.
  *     • a chunk with finish_reason:"tool_calls"
  *     • a final chunk with empty `choices` carrying `usage`, then `data: [DONE]`.
- *   (Occasionally a whitespace-only delta.content:"\n" is interleaved — ignored.)
+ *     (Occasionally a whitespace-only delta.content:"\n" is interleaved — ignored.)
  *
- *   So we stream EVERYTHING — plain replies and tool turns alike — for low TTFT,
- *   accumulate tool-call fragments, and at end-of-stream fire either onToolCall
- *   (a tool was requested) or onDone (a plain text reply). Reasoning content is
- *   never forwarded to TTS.
+ *   BUT Sarvam's streaming endpoint is unreliable: it INTERMITTENTLY emits the
+ *   tool call as a plain-text JSON blob inside `delta.content` (e.g.
+ *   `{ "name": "transfer_to_human", "arguments": { … } }`, optionally wrapped in a
+ *   ```json fence) instead of structured delta.tool_calls. If that text were
+ *   forwarded to TTS the caller would HEAR the raw JSON. So when tools are enabled
+ *   we buffer-and-sniff: if the first non-whitespace reply content begins with `{`
+ *   or a code fence, we WITHHOLD all content from onToken/TTS and resolve it at
+ *   end-of-stream — parse it as a tool call (→ onToolCall) or, if parsing fails,
+ *   treat it as genuine text (→ onDone) so it is never silently dropped.
+ *
+ *   So we stream plain replies (not starting with `{`/fence) for low TTFT, while
+ *   accumulating either structured tool-call fragments OR a possible serialized
+ *   tool-call buffer, and at end-of-stream fire exactly one of onToolCall (a tool
+ *   was requested) or onDone (a plain text reply). Reasoning content is never
+ *   forwarded to TTS.
  *
  * Streaming framing: each `data:` line is a chat.completion.chunk. SSE events can
  * split across TCP reads, so we buffer and dispatch only complete `\n`-terminated
@@ -69,6 +80,53 @@ function sanitizeForAlternation(messages: ConversationTurn[]): ConversationTurn[
   }
 
   return merged;
+}
+
+/**
+ * Parse a serialized tool call that Sarvam emitted as plain JSON text in
+ * delta.content (instead of structured delta.tool_calls). Tolerates an optional
+ * ```json (or plain ```) fence and an `arguments` value that is itself a JSON
+ * string. Returns null when the text is not a well-formed tool call — the caller
+ * then treats the buffer as genuine reply text rather than dropping it.
+ */
+function parseSerializedToolCall(
+  raw: string,
+): { name: string; args: Record<string, unknown> } | null {
+  let text = raw.trim();
+  // Strip an optional ```json … ``` (or bare ```) fence.
+  if (text.startsWith("```")) {
+    text = text.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
+  }
+  if (!text.startsWith("{")) return null;
+
+  let obj: unknown;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object") return null;
+
+  const rec = obj as Record<string, unknown>;
+  const name = rec["name"];
+  if (typeof name !== "string" || name.length === 0) return null;
+
+  let args: Record<string, unknown> = {};
+  const rawArgs = rec["arguments"];
+  if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
+    args = rawArgs as Record<string, unknown>;
+  } else if (typeof rawArgs === "string" && rawArgs.trim().length > 0) {
+    try {
+      const parsedArgs = JSON.parse(rawArgs);
+      if (parsedArgs && typeof parsedArgs === "object" && !Array.isArray(parsedArgs)) {
+        args = parsedArgs as Record<string, unknown>;
+      }
+    } catch {
+      // malformed nested JSON — leave args empty
+    }
+  }
+
+  return { name, args };
 }
 
 export class SarvamLLM implements LLMAdapter {
@@ -213,6 +271,14 @@ export class SarvamLLM implements LLMAdapter {
     // without ever swallowing inter-word spaces in a real reply.
     let sawRealContent = false;
 
+    // Buffered serialized-tool-call sniffing (tools-enabled turns only). When the
+    // first non-whitespace reply content begins with `{` or a code fence, the turn
+    // may be a tool call emitted as JSON text (Sarvam streaming is unreliable); we
+    // withhold ALL content from onToken/TTS and resolve it at end-of-stream.
+    let jsonSniffDecided = false; // first-content JSON-vs-text decision made?
+    let bufferingJson = false;    // withholding content as a possible tool call?
+    let jsonBuffer = "";          // accumulated content while buffering
+
     const handleData = (data: string): void => {
       if (data === "[DONE]") return;
       try {
@@ -271,6 +337,39 @@ export class SarvamLLM implements LLMAdapter {
         token = token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end)\|>/g, "");
         if (!token) return;
 
+        // Buffer-and-sniff serialized tool calls (tools-enabled turns only).
+        // Sarvam's streaming endpoint sometimes emits a tool call as a plain-text
+        // JSON blob in delta.content (or a ```json fence) instead of structured
+        // delta.tool_calls. If the FIRST non-whitespace content of the turn looks
+        // like JSON, withhold ALL content from onToken/TTS and resolve it at
+        // end-of-stream. Replies that don't start with `{`/fence stream normally,
+        // preserving TTFT for ordinary conversation.
+        if (hasTools) {
+          if (bufferingJson) {
+            jsonBuffer += token;
+            return;
+          }
+          if (!jsonSniffDecided) {
+            const peek = (jsonBuffer + token).replace(/^\s+/, "");
+            if (peek === "") {
+              // Only whitespace so far — hold it and wait for real content.
+              jsonBuffer += token;
+              return;
+            }
+            jsonSniffDecided = true;
+            const firstChar = peek[0];
+            if (firstChar === "{" || firstChar === "`") {
+              bufferingJson = true;
+              jsonBuffer += token;
+              return;
+            }
+            // Not a serialized tool call — stream normally from the cleaned peek
+            // onward (drops the held leading whitespace, like the check below).
+            jsonBuffer = "";
+            token = peek;
+          }
+        }
+
         // Drop leading whitespace-only tokens (tool-turn "\n" artifact / trimmable
         // preamble); forward everything once real content has started.
         if (!sawRealContent && /^\s*$/.test(token)) return;
@@ -321,6 +420,20 @@ export class SarvamLLM implements LLMAdapter {
         options.onToolCall(picked.name, args);
         return; // exactly one terminal callback — do NOT also call onDone
       }
+    }
+
+    // Buffered serialized-tool-call fallback: Sarvam emitted the tool call as JSON
+    // text in delta.content instead of structured delta.tool_calls (none of it was
+    // forwarded to TTS). Parse the withheld buffer; on success execute the tool,
+    // otherwise speak it as genuine text — never silently drop it.
+    if (bufferingJson) {
+      const parsedCall = options?.onToolCall ? parseSerializedToolCall(jsonBuffer) : null;
+      if (parsedCall && options?.onToolCall) {
+        options.onToolCall(parsedCall.name, parsedCall.args);
+        return; // exactly one terminal callback — do NOT also call onDone
+      }
+      onDone(jsonBuffer, usage);
+      return;
     }
 
     // Plain text reply.
