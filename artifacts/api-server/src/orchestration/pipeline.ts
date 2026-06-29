@@ -423,6 +423,11 @@ export class OrchestrationPipeline {
    *  language preference. Falls back to currentLang only if the caller spoke
    *  nothing but English the whole call. */
   private lastNonEnglishLang: string = "";
+  /** Sticky language the caller EXPLICITLY requested (e.g. "speak in English").
+   *  Once set it overrides per-turn script auto-detection so a single Indic-script
+   *  utterance can't silently drag the agent back to its default language; only
+   *  another explicit request changes it. null = follow script auto-detection. */
+  private requestedLangLatch: string | null = null;
 
   // Repetition guard (call 548): the last spoken assistant line + how many times
   // in a row the model has repeated itself. Used by the per-turn anti-repeat nudge
@@ -769,18 +774,25 @@ export class OrchestrationPipeline {
           // This drives the per-turn LLM language instruction on the next turn.
           if (this.agent.languageAutoDetect) {
             let detected = lang ?? detectScriptLanguage(text);
-            // Language-switch intent: if the caller explicitly names "English" as a
-            // standalone word inside an Indic-script utterance, treat it as a request
-            // to switch to English — overrides the script-detection result.
-            // e.g. "जी English में बात करा जी।" → script=Hindi, intent=English.
-            // Word-boundary check avoids false positives from "English teacher", etc.
-            if (detected && detected !== "en-IN" && /\bEnglish\b/i.test(text)) {
-              logger.info(
-                { callId: this.config.callId, text: text.slice(0, 60), scriptDetected: detected },
-                "Auto-detect: English-switch intent overrides script detection",
-              );
-              detected = "en-IN";
+            // Explicit language request (e.g. "speak in English", "Hindi me baat
+            // karo") LATCHES the caller's chosen output language so it STICKS for
+            // the rest of the call. Without the latch, the very next Indic-script
+            // utterance flips currentLang back via script detection and the agent
+            // reverts — the caller asks for English, gets one English reply, then
+            // is dragged back to Hindi (prod call 1022). The latch only changes on
+            // another explicit request, never via passive script detection.
+            const requested = detectExplicitLanguageRequest(text);
+            if (requested) {
+              if (requested !== this.requestedLangLatch) {
+                logger.info(
+                  { callId: this.config.callId, requested, text: text.slice(0, 60) },
+                  "Auto-detect: explicit language request latched",
+                );
+              }
+              this.requestedLangLatch = requested;
             }
+            // A latched explicit request overrides per-turn script detection.
+            if (this.requestedLangLatch) detected = this.requestedLangLatch;
             if (detected) {
               if (detected !== this.currentLang) {
                 logger.info(
@@ -2679,6 +2691,7 @@ export class OrchestrationPipeline {
     // inline tags that some LLMs emit as text instead of using the tool API.
     const filterThinkToken = makeThinkFilter();
     const filterFnTag = makeFunctionTagFilter();
+    const filterToolTail = makeToolTailFilter();
     const filterMarkup = makeMarkupTagFilter();
     const filterBrackets = makeBracketFilter();
     // Defense-in-depth tool-envelope guard: validated against the names of the
@@ -3195,7 +3208,9 @@ export class OrchestrationPipeline {
           if (!afterThink) return;               // token was entirely inside a think block
           const afterFn = filterFnTag(afterThink); // strip <function=…> inline tags from TTS
           if (!afterFn) return;
-          const filtered = filterMarkup(afterFn);  // strip <emotion>/<break> markup from TTS
+          const afterToolTail = filterToolTail(afterFn); // kill leaked <arg_value>/<tool_call> tail mid-reply
+          if (!afterToolTail) return;
+          const filtered = filterMarkup(afterToolTail);  // strip <emotion>/<break> markup from TTS
           if (!filtered) return;
           const afterBrackets = filterBrackets(filtered); // drop long [instruction…] leaks
           if (!afterBrackets) return;
@@ -3300,7 +3315,9 @@ export class OrchestrationPipeline {
               if (!afterThink) return;
               const afterFn = filterFnTag(afterThink);
               if (!afterFn) return;
-              const filtered = filterMarkup(afterFn);
+              const afterToolTail = filterToolTail(afterFn);
+              if (!afterToolTail) return;
+              const filtered = filterMarkup(afterToolTail);
               if (!filtered) return;
               const afterBrackets = filterBrackets(filtered);
               if (!afterBrackets) return;
@@ -3453,7 +3470,7 @@ export class OrchestrationPipeline {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse)))).trim();
+    const cleanResponse = stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim();
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
@@ -3817,6 +3834,7 @@ export class OrchestrationPipeline {
 
     const filterThinkToken = makeThinkFilter();
     const filterFnTag = makeFunctionTagFilter();
+    const filterToolTail = makeToolTailFilter();
     const filterMarkup = makeMarkupTagFilter();
     const filterBrackets = makeBracketFilter();
     // Defense-in-depth tool-envelope guard (same as the main turn) — withholds a
@@ -3920,7 +3938,9 @@ export class OrchestrationPipeline {
           if (!afterThink) return;
           const afterFn = filterFnTag(afterThink);
           if (!afterFn) return;
-          const filtered = filterMarkup(afterFn);
+          const afterToolTail = filterToolTail(afterFn);
+          if (!afterToolTail) return;
+          const filtered = filterMarkup(afterToolTail);
           if (!filtered) return;
           const afterBrackets = filterBrackets(filtered);
           if (!afterBrackets) return;
@@ -3982,7 +4002,7 @@ export class OrchestrationPipeline {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse)))).trim();
+    const cleanResponse = stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim();
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length
@@ -4311,6 +4331,75 @@ function stripFunctionTags(text: string): string {
 }
 
 /**
+ * Whole-string counterpart to makeToolTailFilter for the final-flush / history
+ * text. Removes well-formed tool blocks and any DANGLING tool tag (and its JSON
+ * tail) the model emitted as text — e.g. a lone `<arg_value>{ … }` with no close
+ * (prod call 1022) — so a leaked tool call is never spoken on the final flush or
+ * stored in the transcript. Everything from the first dangling tool marker to
+ * end-of-string is dropped (conversational text effectively never follows a
+ * serialized tool call).
+ */
+function stripToolArtifacts(text: string): string {
+  return text
+    .replace(/<function\b[^>]*>[\s\S]*?<\/function>/gi, "")
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/<arg_key>[\s\S]*?<\/arg_key>/gi, "")
+    .replace(/<arg_value>[\s\S]*?<\/arg_value>/gi, "")
+    .replace(/<\/?(?:function|arg_key|arg_value|tool_call|tools)\b[\s\S]*$/i, "")
+    .replace(/<\|(?:tool|python_tag)[\s\S]*$/i, "")
+    .replace(/[^\S\r\n]{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * Detect an explicit caller request to switch the agent's SPOKEN language.
+ * Returns "en-IN" / "hi-IN" or null. Deliberately conservative — only English
+ * and Hindi are matched (the agent's working language pair) AND a real request/
+ * switch cue must be present, so a bare mention ("English teacher", "do you
+ * support Hindi?", "I don't know English") never latches. Simple negation
+ * ("don't speak English", "English mat bolo") is stripped; on a true two-language
+ * tie Hindi wins as the agent's safer base-language fallback.
+ */
+function detectExplicitLanguageRequest(text: string): string | null {
+  const t = text.toLowerCase();
+
+  // Language mentions (romanised + Devanagari).
+  const mentionsEn = /\benglish\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी/i.test(text);
+  const mentionsHi = /\bhindi\b|हिन्दी|हिंदी/i.test(text);
+  if (!mentionsEn && !mentionsHi) return null;
+
+  // Require an actual request/switch cue so a BARE mention never latches:
+  // "English teacher", "do you support Hindi?", "I don't know English" must be
+  // ignored. Cues: a request/switch verb, "in/to <lang>", or "<lang> me/mein".
+  const hasRequestVerb =
+    /\b(speak|speaking|talk|talking|say|reply|respond|answer|continue|switch|change|use|prefer|please)\b/.test(t) ||
+    /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t);
+  const hasInLang =
+    /\b(in|into|to)\s+(english|hindi)\b/.test(t) ||
+    /(english|hindi|अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी)\s*(me|mein|mai|main|में|मे)\b/.test(t);
+  if (!hasRequestVerb && !hasInLang) return null;
+
+  // Light negation guard: "don't speak English" / "English mat bolo" must not
+  // latch that language.
+  const negEn =
+    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\benglish\b/.test(t) ||
+    /\benglish\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na)\b/.test(t);
+  const negHi =
+    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\bhindi\b/.test(t) ||
+    /\bhindi\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na)\b/.test(t);
+
+  const wantsEn = mentionsEn && !negEn;
+  const wantsHi = mentionsHi && !negHi;
+
+  // Exactly one positively requested → latch it. Hindi wins a true tie (it's the
+  // agent's base language, the safer fallback); a negated other was cleared above.
+  if (wantsHi && !wantsEn) return "hi-IN";
+  if (wantsEn && !wantsHi) return "en-IN";
+  if (wantsHi && wantsEn) return "hi-IN";
+  return null;
+}
+
+/**
  * Strips inline prosody/markup tags the LLM sometimes emits — `<emotion …>`,
  * `</emotion>`, and self-closing `<break …/>` — while KEEPING the speakable
  * text between them. Without this they reach TTS verbatim and get XML-escaped
@@ -4343,6 +4432,61 @@ function extractInlineFunctionTag(text: string): { name: string; args: Record<st
     try { args = JSON.parse(body) as Record<string, unknown>; } catch { /* ignore malformed args */ }
   }
   return { name, args };
+}
+
+/**
+ * Stateful per-turn kill-switch for serialized tool-call markup that an LLM
+ * leaks into the TEXT stream AFTER some conversational text — so the start-of-
+ * reply envelope guard (which only inspects the first non-whitespace char) never
+ * sees it. sarvam-30b, for example, appended a bare `<arg_value>{ "scheduled_at":
+ * null }` tail after its spoken sentence (prod call 1022); the `<function=…>`
+ * filter does not match it, so it was sent to TTS and read aloud. Once ANY tool
+ * marker is seen, everything from it to the end of the turn is suppressed.
+ * Markers split across streaming chunks are handled by holding back only a tail
+ * that is a prefix of a marker; ordinary text flushes immediately.
+ */
+function makeToolTailFilter(): (token: string) => string {
+  const MARKERS = [
+    "<function", "<arg_value", "<arg_key", "<tool_call", "</tool_call",
+    "<tools>", "<|tool", "<|python_tag|>",
+  ];
+  const MAXLEN = Math.max(...MARKERS.map((m) => m.length));
+  let buf = "";
+  let killed = false;
+
+  return function filterToolTailToken(token: string): string {
+    if (killed) return "";
+    buf += token;
+    // Markers are lowercase; match case-insensitively (toLowerCase preserves
+    // length so indices/slices stay aligned with the original-cased buf).
+    const lower = buf.toLowerCase();
+
+    let cut = -1;
+    for (const m of MARKERS) {
+      const idx = lower.indexOf(m);
+      if (idx !== -1 && (cut === -1 || idx < cut)) cut = idx;
+    }
+    if (cut !== -1) {
+      killed = true;
+      const out = buf.slice(0, cut);
+      buf = "";
+      return out;
+    }
+
+    // No complete marker yet. Hold back only a trailing fragment that could be
+    // the START of a marker split across streaming chunks; flush the rest now.
+    // Any held tail that turns out to be real text is recovered by the
+    // cleanResponse final flush (which also runs stripToolArtifacts).
+    let hold = 0;
+    const maxCheck = Math.min(MAXLEN - 1, buf.length);
+    for (let k = maxCheck; k > 0; k--) {
+      const tail = lower.slice(lower.length - k);
+      if (MARKERS.some((m) => m.startsWith(tail))) { hold = k; break; }
+    }
+    const out = hold > 0 ? buf.slice(0, buf.length - hold) : buf;
+    buf = hold > 0 ? buf.slice(buf.length - hold) : "";
+    return out;
+  };
 }
 
 /**

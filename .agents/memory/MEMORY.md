@@ -61,3 +61,5 @@
 - [VoBiz transfer UUID mismatch](vobiz-transfer-uuid.md) — dial API returns REST call_uuid; answer-webhook CallUUID + start.callId are stream-session UUIDs; Transfer API needs the dial UUID
 - [Caller-memory key is direction-aware](caller-memory-direction-key.md) — use resolveCallerKey(dir,from,to) not humanPhone; outbound keys off `to`; plumb dir=out through ALL entry points incl VoBiz queue/IVR redirects
 - [Planning executeSql hits dev DB](planning-db-vs-prod-logs.md) — executeSql queries DEV; prod is a separate DB, same call ID can be a different call; trust user's prod logs
+- [Tool-call tail leaks to TTS](tool-tail-tts-leak.md) — envelope guard only checks first char; a tool tag appended AFTER text slips through and gets spoken; need mid/end-of-stream kill-switch + whole-string strip
+- [Explicit language request must latch](language-request-latch.md) — per-turn script auto-detect drags caller back to default; latch explicit requests but require a request cue (not bare mentions) or you trap them
