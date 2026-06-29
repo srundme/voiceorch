@@ -1,0 +1,2132 @@
+[
+  {
+    "id": 44486,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.445Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 39,
+      "agentName": "testing live call",
+      "asrProvider": "sarvam",
+      "llmProvider": "sarvam",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "ba68de3b-0899-4b9c-8fd9-35aca74b4bf1"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 937,
+      "sessionId": "live-937",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-29T05:22:57.435Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 44487,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.446Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": null,
+      "factCount": 1,
+      "facts": {
+        "budget_range": "25"
+      },
+      "recentCallsCount": 0
+    },
+    "metadata": null
+  },
+  {
+    "id": 44488,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.446Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-39",
+        "from_number": "webcall-user-104843180913508370916",
+        "agent_name": "testing live call",
+        "caller_number": "webcall-user-104843180913508370916",
+        "date": "Monday, June 29, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which may belong to a previous caller on the same number.\n=====================================\n\n## IDENTITY\n\nYou are Varsha, a real human Real Estate Sales Executive for Rav"
+    },
+    "metadata": null
+  },
+  {
+    "id": 44489,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.446Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 44490,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.446Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "model": "sarvam-30b"
+    }
+  },
+  {
+    "id": 44492,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.490Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 44491,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.490Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "ba68de3b-0899-4b9c-8fd9-35aca74b4bf1"
+    }
+  },
+  {
+    "id": 44494,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.490Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "bc34e5b30698",
+      "promptLength": 19542,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this cal"
+    }
+  },
+  {
+    "id": 44493,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.490Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 44495,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:57.490Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 44496,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:58.452Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1010,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 5,
+      "firstByteMs": 224
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1010
+    }
+  },
+  {
+    "id": 44497,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:22:58.452Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 0,
+      "durationMs": 1010
+    }
+  },
+  {
+    "id": 44498,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:05.258Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 92,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44499,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:05.264Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:53 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 2,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44501,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.062Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ம்ம்ம்..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44500,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.062Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44502,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.751Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1492,
+      "turnNumber": 1,
+      "durationMs": 1492
+    }
+  },
+  {
+    "id": 44504,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.843Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 779,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 9,
+      "firstByteMs": 259
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 779
+    }
+  },
+  {
+    "id": 44503,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.843Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 1,
+      "durationMs": 781
+    }
+  },
+  {
+    "id": 44505,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.843Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44506,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.843Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம்!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44507,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:06.845Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1492,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "வணக்கம்! நான் வரஷா, நீங்க இப்போ சொத்து தேடுறீங்களா?"
+    },
+    "metadata": {
+      "inputTokens": 5441,
+      "outputTokens": 235,
+      "model": "sarvam-30b",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44508,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:07.691Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 845,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 22754,
+      "textLength": 8,
+      "firstByteMs": 162
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 845
+    }
+  },
+  {
+    "id": 44511,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:07.691Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நான் வரஷா, நீங்க இப்போ சொத்து தேடுறீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44509,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:07.691Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 711,
+      "turnNumber": 1,
+      "durationMs": 846
+    }
+  },
+  {
+    "id": 44510,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:07.691Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 44512,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:10.870Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3182,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 42,
+      "firstByteMs": 318
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3182
+    }
+  },
+  {
+    "id": 44513,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:10.871Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 1,
+      "durationMs": 3183
+    }
+  },
+  {
+    "id": 44514,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:12.711Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமாம்",
+      "endDetectToFinalMs": 112,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44515,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:12.713Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:53 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 4,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44517,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:13.513Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "பாக்கறேன்..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44516,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:13.513Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44518,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:13.856Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1145,
+      "turnNumber": 2,
+      "durationMs": 1145
+    }
+  },
+  {
+    "id": 44519,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:13.937Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1145,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, எந்த ஏரியா தேடுறீங்க? சொல்லுங்க."
+    },
+    "metadata": {
+      "inputTokens": 5495,
+      "outputTokens": 173,
+      "model": "sarvam-30b",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44520,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:14.430Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 915,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 12,
+      "firstByteMs": 132
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 915
+    }
+  },
+  {
+    "id": 44522,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:14.430Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 2,
+      "durationMs": 917
+    }
+  },
+  {
+    "id": 44521,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:14.430Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44523,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:14.430Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, எந்த ஏரியா தேடுறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44524,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:17.246Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2813,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79074,
+      "textLength": 26,
+      "firstByteMs": 333
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 2813
+    }
+  },
+  {
+    "id": 44525,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:17.246Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2471,
+      "turnNumber": 2,
+      "durationMs": 2813
+    }
+  },
+  {
+    "id": 44526,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:17.246Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44527,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:17.246Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சொல்லுங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 44529,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:18.272Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1027,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 10,
+      "firstByteMs": 267
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 1027
+    }
+  },
+  {
+    "id": 44528,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:18.272Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 2,
+      "durationMs": 1028
+    }
+  },
+  {
+    "id": 44530,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:19.777Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Red Hill",
+      "endDetectToFinalMs": 86,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44531,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:19.785Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:53 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 6,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44533,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:20.578Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஒரு நிமிஷம்..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44532,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:20.578Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44535,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:21.859Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1280,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 32994,
+      "textLength": 14,
+      "firstByteMs": 280
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1280
+    }
+  },
+  {
+    "id": 44534,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:21.859Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1031,
+      "turnNumber": 3,
+      "durationMs": 1281
+    }
+  },
+  {
+    "id": 44536,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:22.565Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 2788,
+      "turnNumber": 3,
+      "durationMs": 2788
+    }
+  },
+  {
+    "id": 44537,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:22.634Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44538,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:22.634Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, Red Hills-ல எங்ககிட்ட plots இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44539,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:22.680Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2788,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, Red Hills-ல எங்ககிட்ட plots இருக்கு. உங்களுக்கு அதுல interest இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 5520,
+      "outputTokens": 448,
+      "model": "sarvam-30b",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44542,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:25.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3059,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 41,
+      "firstByteMs": 138
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 3059
+    }
+  },
+  {
+    "id": 44540,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:25.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44541,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:25.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 3,
+      "durationMs": 3059
+    }
+  },
+  {
+    "id": 44543,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:25.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு அதுல interest இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 44544,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:27.622Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1927,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 56034,
+      "textLength": 33,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1927
+    }
+  },
+  {
+    "id": 44545,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:27.622Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1751,
+      "turnNumber": 3,
+      "durationMs": 1928
+    }
+  },
+  {
+    "id": 44546,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:29.143Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமாம் Ma'am",
+      "endDetectToFinalMs": 123,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44547,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:29.145Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:53 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 8,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44548,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:29.946Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44549,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:29.946Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆமா, ஆமா..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44550,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:31.756Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1810,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 53474,
+      "textLength": 11,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 1810
+    }
+  },
+  {
+    "id": 44551,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:31.756Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1671,
+      "turnNumber": 4,
+      "durationMs": 1811
+    }
+  },
+  {
+    "id": 44552,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:33.480Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 4337,
+      "turnNumber": 4,
+      "durationMs": 4337
+    }
+  },
+  {
+    "id": 44555,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:33.558Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4337,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, உங்களுக்கு senior executive-கிட்ட பேசலாமா?"
+    },
+    "metadata": {
+      "inputTokens": 5562,
+      "outputTokens": 743,
+      "model": "sarvam-30b",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44554,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:33.558Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்களுக்கு senior executive-கிட்ட பேசலாமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44553,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:33.558Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 44557,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:36.875Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3318,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99554,
+      "textLength": 47,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 3318
+    }
+  },
+  {
+    "id": 44556,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:36.875Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3111,
+      "turnNumber": 4,
+      "durationMs": 3318
+    }
+  },
+  {
+    "id": 44558,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:38.554Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ம் பேசலாம்",
+      "endDetectToFinalMs": 145,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44559,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:38.558Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:53 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 10,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44560,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:39.359Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44561,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:39.359Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆமா, ஆமா..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44562,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:40.793Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 2239,
+      "turnNumber": 5,
+      "durationMs": 2239
+    }
+  },
+  {
+    "id": 44563,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:41.040Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2239,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "{\n \"name\": \"transfer_to_human\",\n \"arguments\": {\n \"reason\": \"Customer wants to be connected to senior executive\"\n }\n}"
+    },
+    "metadata": {
+      "inputTokens": 5583,
+      "outputTokens": 452,
+      "model": "sarvam-30b",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44564,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:41.307Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1948,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 56034,
+      "textLength": 11,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1948
+    }
+  },
+  {
+    "id": 44565,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:41.307Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1751,
+      "turnNumber": 5,
+      "durationMs": 1950
+    }
+  },
+  {
+    "id": 44566,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:41.307Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44567,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:41.307Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "{\n \"name\": \"transfer_to_human\",\n \"arguments\": {\n \"reason\": \"Customer wants to be connected to senior executive\"\n }\n}"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 44569,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:48.700Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 7392,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 224994,
+      "textLength": 116,
+      "firstByteMs": 128
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 7392
+    }
+  },
+  {
+    "id": 44568,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:48.700Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 7031,
+      "turnNumber": 5,
+      "durationMs": 7393
+    }
+  },
+  {
+    "id": 44570,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:56.201Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "இதுதான்.",
+      "endDetectToFinalMs": 73,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44571,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:56.203Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:53 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 12,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44573,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:57.003Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44572,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:57.003Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆமா, ஆமா..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44574,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:58.257Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 2056,
+      "turnNumber": 6,
+      "durationMs": 2056
+    }
+  },
+  {
+    "id": 44575,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:58.333Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2056,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நான் உங்கள senior executive-கிட்ட connect பண்ணட்டுமா?"
+    },
+    "metadata": {
+      "inputTokens": 5656,
+      "outputTokens": 395,
+      "model": "sarvam-30b",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44576,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:58.753Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1749,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 50914,
+      "textLength": 11,
+      "firstByteMs": 164
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1749
+    }
+  },
+  {
+    "id": 44577,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:58.753Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1591,
+      "turnNumber": 6,
+      "durationMs": 1751
+    }
+  },
+  {
+    "id": 44578,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:58.753Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44579,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:23:58.753Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நான் உங்கள senior executive-கிட்ட connect பண்ணட்டுமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 44581,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:02.688Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3933,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112354,
+      "textLength": 58,
+      "firstByteMs": 330
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 3933
+    }
+  },
+  {
+    "id": 44580,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:02.688Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3511,
+      "turnNumber": 6,
+      "durationMs": 3934
+    }
+  },
+  {
+    "id": 44582,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:04.244Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Connect பண்ணுங்க ma'am.",
+      "endDetectToFinalMs": 359,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44583,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:04.249Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-30b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 10:54 AM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 0\n\nKNOWN FACTS:\n• budget_range: 25  [2 days ago]\n\n⚠️ NAME PRIORITY RULE: If the caller states th",
+      "historyLength": 14,
+      "tools": [
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44584,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:05.046Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44585,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:05.046Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஒரு நிமிஷம்..."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44587,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:06.295Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1248,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 35554,
+      "textLength": 14,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 1248
+    }
+  },
+  {
+    "id": 44586,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:06.295Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1111,
+      "turnNumber": 7,
+      "durationMs": 1250
+    }
+  },
+  {
+    "id": 44588,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:07.837Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 3593,
+      "turnNumber": 7,
+      "durationMs": 3593
+    }
+  },
+  {
+    "id": 44590,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:07.952Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3593,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நான் உங்கள senior executive-கிட்ட connect பண்றேன்!"
+    },
+    "metadata": {
+      "inputTokens": 5673,
+      "outputTokens": 513,
+      "model": "sarvam-30b",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44589,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:07.952Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44591,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:07.952Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நான் உங்கள senior executive-கிட்ட connect பண்றேன்!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 44592,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:11.404Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3452,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 55,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 3452
+    }
+  },
+  {
+    "id": 44593,
+    "callId": 937,
+    "agentId": 39,
+    "ts": "2026-06-29T05:24:11.404Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 7,
+      "durationMs": 3453
+    }
+  }
+]
