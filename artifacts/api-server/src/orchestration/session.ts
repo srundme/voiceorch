@@ -994,7 +994,7 @@ export async function createSession(params: {
           } else {
             xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}`;
           }
-          await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl });
+          await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
         }
         // suppress unused-import warnings for builders not used via direct call
         void buildTwilioWarmTransferTwiML; void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;

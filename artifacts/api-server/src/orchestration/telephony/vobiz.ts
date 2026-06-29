@@ -179,7 +179,20 @@ export async function handleVobizWebSocket(
               stopSilence();            // first real audio → drop silence immediately
               sendAudioToVobiz(audio);
             },
-            onCallEnd: () => { stopSilence(); ws.close(); },
+            onCallEnd: () => {
+              stopSilence();
+              // Do NOT close the WS if the call was transferred — VoBiz has
+              // already closed the AI stream (sent "stop") and is in the process
+              // of redirecting the call leg to the human agent via the Transfer API.
+              // Sending a WS close frame at this point makes VoBiz treat the
+              // call itself as hung-up, aborting the in-flight transfer.
+              const sess = sessionId ? getSession(sessionId) : null;
+              if (sess?.wasTransferred) {
+                logger.info({ sessionId }, "Vobiz onCallEnd: skipping ws.close() — call is being transferred");
+                return;
+              }
+              ws.close();
+            },
             onBargeIn: sendBargeIn,
           });
           stopSilence();                // safety-net: session ready with no audio yet

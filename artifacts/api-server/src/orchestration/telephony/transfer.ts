@@ -17,16 +17,35 @@ export type TransferType = "warm" | "cold";
  *
  * NOTE: The correct endpoint is /Call/{uuid}/ (no /Transfer/ suffix).
  * VoBiz docs: https://docs.vobiz.ai/call/transfer-call
+ *
+ * Leg direction:
+ *   - Inbound calls: the customer is the A-leg (they called in; our answer XML
+ *     runs on their side). Redirect "aleg" so the customer is bridged to the
+ *     human agent.
+ *   - Outbound calls: the customer is the B-leg (we dialled them; VoBiz runs
+ *     our answer XML on the destination side). Redirect "bleg" so the customer
+ *     is bridged to the human agent. Using "aleg" for outbound redirects
+ *     VoBiz's own origination side instead of the customer — which drops the call.
  */
 export async function transferVobizCall(opts: {
   authId: string;
   authToken: string;
   callUuid: string;
   xmlUrl: string;
+  callDirection?: "inbound" | "outbound";
 }): Promise<void> {
   // VoBiz Transfer API: POST /api/v1/Account/{auth_id}/Call/{call_uuid}/
   // (no /Transfer/ suffix — that path 404s)
   const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/`;
+
+  // For outbound calls the customer (B-leg) is the destination we dialled; the
+  // A-leg is VoBiz's own origination side.  Redirect the customer's leg so they
+  // are bridged to the human agent.  For inbound calls the customer is A-leg.
+  const isOutbound = opts.callDirection === "outbound";
+  const body = isOutbound
+    ? { legs: "bleg", bleg_url: opts.xmlUrl, bleg_method: "GET" }
+    : { legs: "aleg", aleg_url: opts.xmlUrl, aleg_method: "GET" };
+
   // VoBiz uses custom X-Auth-ID / X-Auth-Token headers (same as its dial API),
   // NOT standard HTTP Basic auth.  Sending Basic auth causes an immediate 401.
   const resp = await fetch(url, {
@@ -36,11 +55,11 @@ export async function transferVobizCall(opts: {
       "X-Auth-Token": opts.authToken,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ legs: "aleg", aleg_url: opts.xmlUrl, aleg_method: "GET" }),
+    body: JSON.stringify(body),
   });
   const text = await resp.text();
   if (!resp.ok) throw new Error(`VoBiz transfer API error ${resp.status}: ${text}`);
-  logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl }, "VoBiz transfer initiated");
+  logger.info({ callUuid: opts.callUuid, xmlUrl: opts.xmlUrl, legs: isOutbound ? "bleg" : "aleg" }, "VoBiz transfer initiated");
 }
 
 /**
