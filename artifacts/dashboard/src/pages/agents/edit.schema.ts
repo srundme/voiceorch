@@ -53,6 +53,8 @@ export const agentFormSchema = z.object({
     description: z.string().optional(),
     transferTo: z.string().optional(),
     warmHandoffMessage: z.string().optional(),
+    transferMode: z.enum(["cold", "warm_summary"]).optional(),
+    summaryPrompt: z.string().optional(),
     url: z.string().optional(),
     method: z.enum(["GET", "POST"]).optional(),
     secret: z.string().optional(),

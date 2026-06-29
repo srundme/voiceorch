@@ -1060,15 +1060,27 @@ router.get("/webhooks/vobiz/warm-transfer-xml", (req, res): void => {
 // that is never recomputable from public inputs, so sequential transferId enumeration
 // cannot yield a usable token. Without a valid token the endpoint returns 403.
 
+/**
+ * Twilio uses <Say>; Plivo & VoBiz (Plivo-compatible) use <Speak>. Emitting the
+ * wrong verb is silently ignored by the provider, so the human agent gets bridged
+ * in with NO briefing — defeating the whole point of a context-aware/warm transfer.
+ */
+function speakVerb(provider: "twilio" | "plivo" | "vobiz", text: string): string {
+  return provider === "twilio"
+    ? `<Say voice="Polly.Joanna">${text}</Say>`
+    : `<Speak>${text}</Speak>`;
+}
+
 async function warmBriefingXml(
   transferId: number,
   token: string,
   res: import("express").Response,
+  provider: "twilio" | "plivo" | "vobiz",
 ): Promise<void> {
+  const forbidden = `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  ${speakVerb(provider, "Forbidden.")}\n  <Hangup/>\n</Response>`;
   // Reject immediately if token looks unusable (saves a DB round-trip)
   if (!token || token.length < 32) {
-    res.status(403).set("Content-Type", "text/xml")
-      .send(`<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>Forbidden.</Say>\n  <Hangup/>\n</Response>`);
+    res.status(403).set("Content-Type", "text/xml").send(forbidden);
     return;
   }
 
@@ -1089,8 +1101,7 @@ async function warmBriefingXml(
       timingSafeEqual(tokenBuf, storedBuf);
     if (!tokenValid) {
       logger.warn({ transferId }, "warm-briefing-xml: invalid or missing token — rejected");
-      res.status(403).set("Content-Type", "text/xml")
-        .send(`<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>Forbidden.</Say>\n  <Hangup/>\n</Response>`);
+      res.status(403).set("Content-Type", "text/xml").send(forbidden);
       return;
     }
 
@@ -1099,7 +1110,7 @@ async function warmBriefingXml(
     const escaped = summary
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     res.set("Content-Type", "text/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say voice="Polly.Joanna">${escaped}</Say>\n</Response>`
+      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  ${speakVerb(provider, escaped)}\n</Response>`
     );
     // Mark transfer as connected now that operator answered
     void db.update(callTransfersTable)
@@ -1107,8 +1118,9 @@ async function warmBriefingXml(
       .where(eq(callTransfersTable.id, transferId))
       .catch(() => {/* non-fatal */});
   } catch (err) {
-    res.set("Content-Type", "text/xml")
-      .send(`<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Say>A customer is being transferred to you.</Say>\n</Response>`);
+    res.set("Content-Type", "text/xml").send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  ${speakVerb(provider, "A customer is being transferred to you.")}\n</Response>`
+    );
   }
 }
 
@@ -1116,21 +1128,21 @@ router.get("/webhooks/twilio/warm-briefing-xml", async (req, res): Promise<void>
   const id    = parseInt(String(req.query["transferId"] ?? ""), 10);
   const token = String(req.query["token"] ?? "");
   if (!id) { res.status(400).send("Missing transferId"); return; }
-  await warmBriefingXml(id, token, res);
+  await warmBriefingXml(id, token, res, "twilio");
 });
 
 router.get("/webhooks/plivo/warm-briefing-xml", async (req, res): Promise<void> => {
   const id    = parseInt(String(req.query["transferId"] ?? ""), 10);
   const token = String(req.query["token"] ?? "");
   if (!id) { res.status(400).send("Missing transferId"); return; }
-  await warmBriefingXml(id, token, res);
+  await warmBriefingXml(id, token, res, "plivo");
 });
 
 router.get("/webhooks/vobiz/warm-briefing-xml", async (req, res): Promise<void> => {
   const id    = parseInt(String(req.query["transferId"] ?? ""), 10);
   const token = String(req.query["token"] ?? "");
   if (!id) { res.status(400).send("Missing transferId"); return; }
-  await warmBriefingXml(id, token, res);
+  await warmBriefingXml(id, token, res, "vobiz");
 });
 
 // ── Recording callbacks ────────────────────────────────────────────────────────

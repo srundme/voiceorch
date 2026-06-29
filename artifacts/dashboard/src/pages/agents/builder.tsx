@@ -1797,12 +1797,34 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                     </div>
                   )}
                   {toolType === "call_transfer" && (
-                    <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-[10px] text-muted-foreground">Warm Handoff Message</FormLabel>
-                        <FormControl><Input placeholder="Connecting you with a specialist now…" className="h-8 text-xs" {...f} /></FormControl>
-                      </FormItem>
-                    )} />
+                    <div className="space-y-3">
+                      <FormField control={form.control} name={`tools.${index}.warmHandoffMessage`} render={({ field: f }) => (
+                        <FormItem className="space-y-1">
+                          <FormLabel className="text-[10px] text-muted-foreground">Warm Handoff Message</FormLabel>
+                          <FormControl><Input placeholder="Connecting you with a specialist now…" className="h-8 text-xs" {...f} /></FormControl>
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name={`tools.${index}.transferMode`} render={({ field: f }) => (
+                        <FormItem className="space-y-1">
+                          <FormLabel className="text-[10px] text-muted-foreground">Transfer Mode</FormLabel>
+                          <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cold" className="text-xs">Cold — connect immediately</SelectItem>
+                              <SelectItem value="warm_summary" className="text-xs">Warm — brief the agent first (context-aware)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )} />
+                      {form.watch(`tools.${index}.transferMode`) === "warm_summary" && (
+                        <FormField control={form.control} name={`tools.${index}.summaryPrompt`} render={({ field: f }) => (
+                          <FormItem className="space-y-1">
+                            <FormLabel className="text-[10px] text-muted-foreground">Briefing Prompt (optional)</FormLabel>
+                            <FormControl><Textarea className="min-h-[60px] text-xs resize-none" placeholder="Default: customer name, core issue, urgency, and key context the agent needs." {...f} /></FormControl>
+                          </FormItem>
+                        )} />
+                      )}
+                    </div>
                   )}
                 </div>
               );

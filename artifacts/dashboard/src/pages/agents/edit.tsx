@@ -1582,6 +1582,30 @@ export default function AgentEdit() {
                               <FormMessage />
                             </FormItem>
                           )} />
+                          <FormField control={form.control} name={`tools.${index}.transferMode`} render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Transfer Mode</FormLabel>
+                              <Select value={f.value ?? "cold"} onValueChange={f.onChange}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="cold">Cold — connect the caller immediately</SelectItem>
+                                  <SelectItem value="warm_summary">Warm — brief the human agent first (context-aware)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormDescription className="text-[10px]">Warm mode generates an AI summary of the conversation and speaks it privately to the human agent before bridging the caller.</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          {form.watch(`tools.${index}.transferMode`) === "warm_summary" && (
+                            <FormField control={form.control} name={`tools.${index}.summaryPrompt`} render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Briefing Prompt (optional)</FormLabel>
+                                <FormControl><Textarea className="min-h-[60px] text-sm" placeholder="Defaults to: customer name, core issue, priority/urgency, and key context the agent needs to resolve it quickly." {...f} /></FormControl>
+                                <FormDescription className="text-[10px]">Instructions for how the AI should summarise the call for the human agent. Leave blank to use the default.</FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                          )}
                         </>
                       )}
                     </div>
