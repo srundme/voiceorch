@@ -2310,19 +2310,68 @@ export class OrchestrationPipeline {
       const prompt = tool.summaryPrompt?.trim() || defaultPrompt;
       logger.info({ callId: this.config.callId }, "Warm transfer: generating operator summary");
 
-      try {
+      // Generate the briefing with one LLM adapter (primary or fallback).
+      const generateSummary = async (llm: NonNullable<typeof this.fallbackLlm>): Promise<string> => {
         let summaryText = "";
-        await this.llm.chat(
+        await llm.chat(
           this.conversationHistory,
           prompt,
           (token) => { summaryText += token; },
           (full)  => { summaryText = full; },
         );
-        operatorSummary = stripReasoningBlocks(summaryText).trim();
-        logger.info({ callId: this.config.callId, summaryLength: operatorSummary.length }, "Warm transfer: operator summary ready");
-      } catch (err) {
-        logger.error({ callId: this.config.callId, err }, "Warm transfer: summary generation failed — proceeding with cold transfer");
+        return stripReasoningBlocks(summaryText).trim();
+      };
+
+      // Try the primary LLM, then the configured fallback LLM (mirrors the turn-loop
+      // fallback). Without this, a primary-LLM failure (e.g. a retired/unavailable
+      // model returning 404) silently downgrades the warm transfer to a context-free
+      // cold transfer — the operator gets no briefing.
+      try {
+        operatorSummary = await generateSummary(this.llm);
+        if (!operatorSummary && this.fallbackLlm) {
+          logger.warn({ callId: this.config.callId }, "Warm transfer: primary LLM produced empty summary — retrying with fallback LLM");
+          operatorSummary = await generateSummary(this.fallbackLlm);
+        }
+      } catch (primaryErr) {
+        logger.warn(
+          { callId: this.config.callId, err: toReadableError(primaryErr, "LLM error"), fallbackProvider: this.agent.fallbackLlmProvider },
+          "Warm transfer: primary LLM summary failed — attempting fallback LLM",
+        );
+        if (this.fallbackLlm) {
+          try {
+            operatorSummary = await generateSummary(this.fallbackLlm);
+            logger.info({ callId: this.config.callId }, "Warm transfer: operator summary generated via fallback LLM");
+          } catch (fallbackErr) {
+            logger.error(
+              { callId: this.config.callId, err: toReadableError(fallbackErr, "Fallback LLM error") },
+              "Warm transfer: fallback LLM also failed",
+            );
+          }
+        } else {
+          logger.error({ callId: this.config.callId }, "Warm transfer: no fallback LLM configured");
+        }
       }
+
+      // Last resort: if no LLM could produce a summary, hand the operator the raw tail
+      // of the conversation so the warm transfer still carries SOME context instead of
+      // degrading to a context-free cold transfer.
+      if (!operatorSummary) {
+        const MAX_BRIEF_CHARS = 1000;
+        let recent = this.conversationHistory
+          .filter((t) => t.role === "user" || t.role === "assistant")
+          .slice(-6)
+          .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`.trim())
+          .filter((line) => line.length > 0)
+          .join(". ");
+        // Keep the most-recent tail if it overruns — protects TTS/XML length limits.
+        if (recent.length > MAX_BRIEF_CHARS) recent = "…" + recent.slice(recent.length - MAX_BRIEF_CHARS);
+        if (recent) {
+          operatorSummary = `Automatic summary unavailable. Here is the recent conversation. ${recent}`;
+          logger.warn({ callId: this.config.callId }, "Warm transfer: using raw-transcript fallback briefing");
+        }
+      }
+
+      logger.info({ callId: this.config.callId, summaryLength: operatorSummary?.length ?? 0 }, "Warm transfer: operator summary ready");
     }
 
     // Notify session layer (triggers telephony transfer); only end the call if it succeeded

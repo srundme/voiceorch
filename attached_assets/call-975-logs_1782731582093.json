@@ -1,0 +1,378 @@
+[
+  {
+    "id": 48206,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.246Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Gopi",
+        "callCount": 2
+      },
+      "factCount": 2,
+      "facts": {
+        "interested_in": "one to one events on Stay PG's",
+        "name": "Gopi"
+      },
+      "recentCallsCount": 2
+    },
+    "metadata": null
+  },
+  {
+    "id": 48205,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.246Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-21",
+        "from_number": "webcall-user-115005227503912676259",
+        "agent_name": "Nora",
+        "caller_number": "webcall-user-115005227503912676259",
+        "date": "Monday, June 29, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: SnapServe — Voice AI with Memory, Campaigns &amp; Scheduling\nContent: SnapServe — Voice AI with Memory, Campaigns &amp; Scheduling\n\nEverything Vapi, Bolna, and Retell skip. Caller memory, auto-redial, campaigns, and scheduling. Bring your own provider. Built by AITEL.\nKeywords: https://snapserve.ai/\n\n=== END KNOWLEDGE BASE ===\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Gopi  |  Calls: 2  |  Last: yesterday\n\nKNOWN FACTS:\n• interested_in: one to on"
+    },
+    "metadata": null
+  },
+  {
+    "id": 48208,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.246Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 21,
+      "agentName": "Nora",
+      "asrProvider": "sarvam",
+      "llmProvider": "anthropic",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 975,
+      "sessionId": "live-975",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-06-29T11:07:52.236Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 48209,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.246Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "sourceIds": [
+        4
+      ],
+      "injected": true,
+      "preview": "Title: SnapServe — Voice AI with Memory, Campaigns &amp; Scheduling\nContent: SnapServe — Voice AI with Memory, Campaigns &amp; Scheduling\n\nEverything Vapi, Bolna, and Retell skip. Caller memory, auto-redial, campaigns, and scheduling. Bring your own provider. Built by AITEL.\nKeywords: https://snapserve.ai/"
+    },
+    "metadata": null
+  },
+  {
+    "id": 48207,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.246Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 48210,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.273Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "anthropic",
+      "model": "claude-3-5-haiku-20241022"
+    }
+  },
+  {
+    "id": 48212,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.273Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "e2ab6bc43d6b",
+      "promptLength": 9851,
+      "preview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: SnapServe — Voice AI with Memory, Campaigns &amp; Sc"
+    }
+  },
+  {
+    "id": 48211,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.273Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "3592acce-42b8-4ac3-afeb-1997a7c91ce6"
+    }
+  },
+  {
+    "id": 48213,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.273Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 48214,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.534Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 48215,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:52.534Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 48216,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:53.692Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1160,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 5,
+      "firstByteMs": 379
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1160
+    }
+  },
+  {
+    "id": 48217,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:53.692Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 0,
+      "durationMs": 1161
+    }
+  },
+  {
+    "id": 48218,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:55.965Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 92,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 48219,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:56.271Z",
+    "component": "LLM",
+    "provider": "anthropic",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "claude-3-5-haiku-20241022",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common English word.\n\n[CURRENT DATE & TIME] Monday, June 29, 2026 at 4:37 PM GMT+5:30 (Asia/Kolkata)\n\n=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: SnapServ",
+      "historyLength": 2,
+      "tools": [
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "book_appointment",
+        "check_availability",
+        "transfer_to_human",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 48220,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:56.547Z",
+    "component": "LLM",
+    "provider": "anthropic",
+    "direction": "response",
+    "status": "error",
+    "latencyMs": 279,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "error": "LLM error: Anthropic 404: {\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: claude-3-5-haiku-20241022\"},\"request_id\":\"req_011CcXSnFnVADBXrzuCZk2Q8\"}",
+      "turnNumber": 1,
+      "errorMessage": "LLM error: Anthropic 404: {\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: claude-3-5-haiku-20241022\"},\"request_id\":\"req_011CcXSnFnVADBXrzuCZk2Q8\"}"
+    }
+  },
+  {
+    "id": 48221,
+    "callId": 975,
+    "agentId": 21,
+    "ts": "2026-06-29T11:07:56.554Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "error",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "failed",
+        "reasonLabel": "Call failed due to an error",
+        "component": "LLM",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": "LLM error: Anthropic 404: {\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: claude-3-5-haiku-20241022\"},\"request_id\":\"req_011CcXSnFnVADBXrzuCZk2Q8\"}",
+        "expected": false,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Error",
+        "durationSeconds": 4,
+        "turns": 0,
+        "lastComponent": "LLM",
+        "lastUserTranscript": "Hello",
+        "lastAgentResponse": "Hello",
+        "recordingStatus": null,
+        "warningCount": 0,
+        "errorCount": 1,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 4,
+      "turns": 0,
+      "errorMessage": "LLM error: Anthropic 404: {\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: claude-3-5-haiku-20241022\"},\"request_id\":\"req_011CcXSnFnVADBXrzuCZk2Q8\"}"
+    }
+  }
+]
