@@ -28,6 +28,7 @@ import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { formatDistanceToNow, format } from "date-fns";
+import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -104,53 +105,34 @@ function fmtRelative(iso: string): string {
   return formatDistanceToNow(new Date(iso), { addSuffix: true });
 }
 
-// ── Status / outcome config ───────────────────────────────────────────────────
-
-const CALL_STATUS: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Pending",   cls: "bg-muted/50 text-muted-foreground border-border"             },
-  calling:   { label: "Calling",   cls: "bg-sky-500/10 text-sky-600 border-sky-500/20"               },
-  completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"   },
-  failed:    { label: "Failed",    cls: "bg-red-500/10 text-red-500 border-red-500/20"               },
-  skipped:   { label: "Skipped",   cls: "bg-muted/30 text-muted-foreground/60 border-border"         },
-};
-
-const OUTCOME: Record<string, { label: string; color: string }> = {
-  pending:              { label: "Pending",          color: "text-muted-foreground/50" },
-  booking_created:      { label: "Booked",           color: "text-emerald-500"         },
-  transfer_completed:   { label: "Transferred",      color: "text-sky-500"             },
-  callback_requested:   { label: "Callback",         color: "text-amber-500"           },
-  interest_confirmed:   { label: "Interested",       color: "text-violet-500"          },
-  no_contact:           { label: "No Contact",       color: "text-muted-foreground/60" },
-  dnc_blocked:          { label: "DNC",              color: "text-red-400"             },
-  failed:               { label: "Failed",           color: "text-red-500"             },
-};
-
-const BATCH_STATUS: Record<string, { label: string; cls: string }> = {
-  draft:     { label: "Draft",     cls: "bg-muted/50 text-muted-foreground border-border"           },
-  running:   { label: "Running",   cls: "bg-sky-500/10 text-sky-600 border-sky-500/30"             },
-  paused:    { label: "Paused",    cls: "bg-amber-500/10 text-amber-600 border-amber-500/30"       },
-  completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
-  stopped:   { label: "Stopped",   cls: "bg-red-500/10 text-red-500 border-red-500/30"             },
-};
+// ── Status / outcome config — canonical maps from shared lib ─────────────────
+// BATCH_STATUS_MAP, callStatusCfg(), outcomeCfg() imported from @/lib/campaign-status
 
 const EVENT_CFG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  lead_imported:         { label: "Lead Imported",        icon: <Users className="h-3 w-3"         />, color: "text-violet-500"   },
+  lead_imported:         { label: "Lead Imported",        icon: <FileText className="h-3 w-3"      />, color: "text-violet-400"   },
   call_started:          { label: "Call Started",         icon: <PhoneCall className="h-3 w-3"     />, color: "text-sky-500"      },
   call_completed:        { label: "Call Completed",       icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
-  booking_created:       { label: "Booking Created",      icon: <Calendar className="h-3 w-3"      />, color: "text-emerald-500"  },
-  transfer_completed:    { label: "Transfer Completed",   icon: <ArrowRightLeft className="h-3 w-3"/>, color: "text-sky-500"      },
+  call_failed:           { label: "Call Failed",          icon: <XCircle className="h-3 w-3"       />, color: "text-red-500"      },
+  booking_created:       { label: "Booking Created",      icon: <Calendar className="h-3 w-3"      />, color: "text-violet-500"   },
+  transfer_completed:    { label: "Transferred",          icon: <ArrowRightLeft className="h-3 w-3"/>, color: "text-sky-400"      },
   callback_scheduled:    { label: "Callback Scheduled",   icon: <Bell className="h-3 w-3"          />, color: "text-amber-500"    },
   callback_completed:    { label: "Callback Completed",   icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
-  disposition_set:       { label: "Disposition Set",      icon: <Activity className="h-3 w-3"      />, color: "text-muted-foreground/60" },
-  outcome_updated:       { label: "Outcome Updated",      icon: <TrendingUp className="h-3 w-3"    />, color: "text-violet-500"   },
+  interest_confirmed:    { label: "Interested",           icon: <TrendingUp className="h-3 w-3"    />, color: "text-emerald-400"  },
+  dnc_flagged:           { label: "DNC Flagged",          icon: <AlertTriangle className="h-3 w-3" />, color: "text-red-400"      },
+  batch_started:         { label: "Batch Started",        icon: <PhoneCall className="h-3 w-3"     />, color: "text-sky-500"      },
+  batch_completed:       { label: "Batch Completed",      icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
+  batch_stopped:         { label: "Batch Stopped",        icon: <XCircle className="h-3 w-3"       />, color: "text-red-500"      },
+  batch_paused:          { label: "Batch Paused",         icon: <Activity className="h-3 w-3"      />, color: "text-amber-500"    },
+  disposition_set:       { label: "Disposition Set",      icon: <Activity className="h-3 w-3"      />, color: "text-muted-foreground/50" },
+  outcome_updated:       { label: "Outcome Updated",      icon: <TrendingUp className="h-3 w-3"    />, color: "text-violet-400"   },
 };
 
 // ── BatchStatusBadge ──────────────────────────────────────────────────────────
 
 function BatchStatusBadge({ status }: { status: string }) {
-  const cfg = BATCH_STATUS[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
+  const cfg = BATCH_STATUS_MAP[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
   return (
-    <span className={cn("inline-flex items-center text-[10px] font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
+    <span className={cn("inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
       {cfg.label}
     </span>
   );
@@ -174,7 +156,7 @@ function KpiCard({ icon, label, value, color, onClick, active }: {
     >
       <div className="flex items-center gap-1.5 mb-1">
         <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
-        <span className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">{label}</span>
+        <span className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40">{label}</span>
       </div>
       <p className={cn("text-xl font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
     </button>
@@ -196,14 +178,14 @@ function BatchFunnelView({ funnel }: { funnel: BatchFunnel }) {
         const pct = Math.round((s.value / total) * 100);
         return (
           <div key={s.key} className="flex items-center gap-3">
-            <span className="text-[10px] text-muted-foreground/60 w-20 text-right shrink-0">{s.label}</span>
+            <span className="text-xs text-muted-foreground/60 w-20 text-right shrink-0">{s.label}</span>
             <div className="flex-1 h-5 bg-muted/30 rounded-sm overflow-hidden">
               <div
                 className={cn("h-full rounded-sm transition-all duration-500", COLORS[i])}
                 style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
               />
             </div>
-            <span className="text-[10px] font-mono font-semibold w-16 tabular-nums">
+            <span className="text-xs font-mono font-semibold w-16 tabular-nums">
               {s.value.toLocaleString()} <span className="text-muted-foreground/40">({pct}%)</span>
             </span>
           </div>
@@ -244,42 +226,49 @@ function OverviewTab({ campaignId, batchId, header }: {
         )}
       </div>
 
-      {/* Batch info cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {/* Batch Details */}
+      {/* Progress card — Total Leads / Called / Remaining */}
+      <div className="rounded-xl border border-border/40 bg-card p-5">
+        <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40 mb-4">Progress</p>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="text-center">
+            <p className="text-3xl font-bold tabular-nums text-foreground">{(b?.totalLeads ?? 0).toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase tracking-wider">Total Leads</p>
+          </div>
+          <div className="text-center">
+            <p className="text-3xl font-bold tabular-nums text-sky-500">{(b?.calledLeads ?? 0).toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase tracking-wider">Called</p>
+          </div>
+          <div className="text-center">
+            <p className="text-3xl font-bold tabular-nums text-amber-500">{((b?.totalLeads ?? 0) - (b?.calledLeads ?? 0)).toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase tracking-wider">Remaining</p>
+          </div>
+        </div>
+        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-sky-500/70 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
+        </div>
+        <p className="text-xs text-muted-foreground/40 mt-1.5 text-right tabular-nums">{calledPct}% complete</p>
+      </div>
+
+      {/* Batch info cards — GENERAL + SOURCE */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* GENERAL */}
         <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
-          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Batch Details</p>
+          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40">General</p>
           <Row label="Status">
             {b && <BatchStatusBadge status={b.status} />}
           </Row>
           <Row label="Created">{b ? format(new Date(b.createdAt), "MMM d, yyyy HH:mm") : "—"}</Row>
-          <Row label="Scheduled Start">{b?.scheduledStartAt ? format(new Date(b.scheduledStartAt), "MMM d, yyyy HH:mm") : "Not scheduled"}</Row>
-          <Row label="Lead Source">{b?.leadSource ?? "—"}</Row>
-          <Row label="Source Name">{header?.source?.name ?? "—"}</Row>
-        </div>
-
-        {/* Campaign & Agent */}
-        <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
-          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Campaign & Agent</p>
+          <Row label="Scheduled">{b?.scheduledStartAt ? format(new Date(b.scheduledStartAt), "MMM d, yyyy HH:mm") : "Not scheduled"}</Row>
           <Row label="Campaign">{c?.name ?? "—"}</Row>
           <Row label="Agent">{c?.agentName ?? "No agent"}</Row>
-          <Row label="From Number">{c?.fromNumber ?? "Unset"}</Row>
+          <Row label="Phone">{c?.fromNumber ?? "Unset"}</Row>
         </div>
 
-        {/* Progress */}
+        {/* SOURCE */}
         <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
-          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40">Progress</p>
-          <Row label="Total Leads">{b?.totalLeads ?? 0}</Row>
-          <Row label="Called">{b?.calledLeads ?? 0}</Row>
-          <Row label="Remaining">{((b?.totalLeads ?? 0) - (b?.calledLeads ?? 0))}</Row>
-          <Row label="Progress">
-            <div className="flex items-center gap-2">
-              <div className="h-1.5 w-20 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary/50 rounded-full" style={{ width: `${calledPct}%` }} />
-              </div>
-              <span className="text-xs font-mono">{calledPct}%</span>
-            </div>
-          </Row>
+          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40">Source</p>
+          <Row label="Type">{b?.leadSource === "csv" ? "CSV Import" : (b?.leadSource ?? "—")}</Row>
+          <Row label="Name">{header?.source?.name ?? "—"}</Row>
         </div>
       </div>
     </div>
@@ -289,7 +278,7 @@ function OverviewTab({ campaignId, batchId, header }: {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[10px] text-muted-foreground/50 shrink-0">{label}</span>
+      <span className="text-xs text-muted-foreground/50 shrink-0">{label}</span>
       <span className="text-xs font-medium text-right">{children}</span>
     </div>
   );
@@ -353,34 +342,47 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
   return (
     <div className="flex flex-col h-full">
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border/30">
-        <div className="flex items-center gap-1">
-          {STATUS_FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => { setStatus(f.key); setPage(0); }}
-              className={cn(
-                "px-2.5 py-1 rounded text-[11px] font-medium transition-colors",
-                status === f.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40",
-              )}
-            >{f.label}</button>
-          ))}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 border-b border-border/30">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Status</span>
+          <div className="flex items-center gap-0.5">
+            {STATUS_FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setStatus(f.key); setPage(0); }}
+                className={cn(
+                  "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                  status === f.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40",
+                )}
+              >{f.label}</button>
+            ))}
+          </div>
         </div>
-        <div className="w-px h-4 bg-border/50" />
-        <div className="flex items-center gap-1 flex-wrap">
-          {OUTCOME_FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => { setOutcome(f.key); setPage(0); }}
-              className={cn(
-                "px-2.5 py-1 rounded text-[11px] font-medium transition-colors",
-                outcome === f.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40",
-              )}
-            >{f.label}</button>
-          ))}
+        <div className="h-4 w-px bg-border/50 shrink-0" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Outcome</span>
+          <div className="flex items-center gap-0.5 flex-wrap">
+            {OUTCOME_FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setOutcome(f.key); setPage(0); }}
+                className={cn(
+                  "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                  outcome === f.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40",
+                )}
+              >{f.label}</button>
+            ))}
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground/40">{total.toLocaleString()} leads</span>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {(status !== "all" || outcome !== "all") && (
+            <button
+              onClick={() => { setStatus("all"); setOutcome("all"); setPage(0); }}
+              className="text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
+              Clear filters
+            </button>
+          )}
+          <span className="text-xs text-muted-foreground/40">{total.toLocaleString()} leads</span>
           <Button size="sm" variant="ghost" className={cn("h-6 w-6 p-0", isFetching && "opacity-60")}
             onClick={() => qc.invalidateQueries({ queryKey })}>
             <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
@@ -393,53 +395,51 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <Users className="h-7 w-7 text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground/40">No leads in this view</p>
+            <p className="text-sm text-muted-foreground/40">No leads match the current filters</p>
+            {(status !== "all" || outcome !== "all") && (
+              <button
+                onClick={() => { setStatus("all"); setOutcome("all"); setPage(0); }}
+                className="text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/30">
               <tr>
-                <th className="px-4 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Outcome</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Disposition</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Attempts</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Last Activity</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Booking</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Transfer</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Callback</th>
-                <th className="px-3 py-2 text-right text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider w-20">Actions</th>
+                {/* Lead → Status → Outcome → Attempts → Last Activity → Actions */}
+                <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Outcome</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Attempts</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Last Activity</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider w-20">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
               {items.map(lead => {
-                const sc = CALL_STATUS[lead.callStatus] ?? { label: lead.callStatus, cls: "bg-muted/50 text-muted-foreground border-border" };
-                const oc = OUTCOME[lead.operationalOutcome] ?? { label: lead.operationalOutcome, color: "text-muted-foreground/50" };
+                const sc = callStatusCfg(lead.callStatus);
+                const oc = outcomeCfg(lead.operationalOutcome ?? "");
                 return (
                   <tr key={lead.id} className="hover:bg-muted/20 transition-colors">
                     {/* Lead */}
                     <td className="px-4 py-2.5">
                       <p className="font-medium truncate max-w-[110px]">{lead.name ?? "—"}</p>
-                      <p className="text-[10px] font-mono text-muted-foreground/60">{lead.phone}</p>
+                      <p className="text-xs font-mono text-muted-foreground/60">{lead.phone}</p>
                     </td>
                     {/* Status */}
                     <td className="px-3 py-2.5">
-                      <span className={cn("inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border", sc.cls)}>
+                      <span className={cn("inline-flex text-xs font-semibold px-2 py-0.5 rounded border", sc.cls)}>
                         {sc.label}
                       </span>
                     </td>
                     {/* Outcome */}
                     <td className="px-3 py-2.5 hidden sm:table-cell">
-                      <span className={cn("text-[10px] font-medium", oc.color)}>{oc.label}</span>
-                    </td>
-                    {/* Disposition */}
-                    <td className="px-3 py-2.5 hidden md:table-cell">
-                      <span className="text-[10px] text-muted-foreground/70 truncate max-w-[80px] block">
-                        {lead.disposition ?? "—"}
-                      </span>
+                      <span className={cn("text-xs font-medium", oc.color)}>{oc.label}</span>
                     </td>
                     {/* Attempts */}
-                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       {(() => {
                         const exhausted = lead.callAttempts >= maxAttempts;
                         const oneLeft   = !exhausted && lead.callAttempts === maxAttempts - 1;
@@ -452,12 +452,12 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
                         const showRetry = lead.nextRetryAt && !TERMINAL.includes(lead.callStatus);
                         return (
                           <div className="flex flex-col gap-0.5">
-                            <span className={cn("text-[10px] tabular-nums font-medium", counterCls)}>
-                              {lead.callAttempts} / {maxAttempts}
+                            <span className={cn("text-xs tabular-nums font-medium", counterCls)}>
+                              Attempt {Math.max(1, lead.callAttempts)} of {maxAttempts}
                             </span>
                             {showRetry && (
-                              <span className="text-[9px] text-amber-500/80 tabular-nums" title={new Date(lead.nextRetryAt!).toLocaleString()}>
-                                {formatDistanceToNow(new Date(lead.nextRetryAt!), { addSuffix: true })}
+                              <span className="text-xs text-amber-500/80 tabular-nums" title={new Date(lead.nextRetryAt!).toLocaleString()}>
+                                retry {formatDistanceToNow(new Date(lead.nextRetryAt!), { addSuffix: true })}
                               </span>
                             )}
                           </div>
@@ -466,36 +466,9 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
                     </td>
                     {/* Last Activity */}
                     <td className="px-3 py-2.5 hidden lg:table-cell">
-                      <span className="text-[10px] text-muted-foreground/60">
+                      <span className="text-xs text-muted-foreground/60">
                         {lead.lastAttemptAt ? fmtRelative(lead.lastAttemptAt) : "—"}
                       </span>
-                    </td>
-                    {/* Booking */}
-                    <td className="px-3 py-2.5 hidden xl:table-cell">
-                      {lead.booking ? (
-                        <div className="flex items-center gap-1 text-emerald-500">
-                          <Calendar className="h-2.5 w-2.5" />
-                          <span className="text-[10px]">{lead.booking.meetingStatus}</span>
-                        </div>
-                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
-                    </td>
-                    {/* Transfer */}
-                    <td className="px-3 py-2.5 hidden xl:table-cell">
-                      {lead.transfer ? (
-                        <div className="flex items-center gap-1 text-sky-500">
-                          <ArrowRightLeft className="h-2.5 w-2.5" />
-                          <span className="text-[10px]">{lead.transfer.status}</span>
-                        </div>
-                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
-                    </td>
-                    {/* Callback */}
-                    <td className="px-3 py-2.5 hidden xl:table-cell">
-                      {lead.callback ? (
-                        <div className="flex items-center gap-1 text-amber-500">
-                          <Bell className="h-2.5 w-2.5" />
-                          <span className="text-[10px]">{lead.callback.status}</span>
-                        </div>
-                      ) : <span className="text-muted-foreground/30 text-[10px]">—</span>}
                     </td>
                     {/* Actions */}
                     <td className="px-3 py-2.5">
@@ -532,7 +505,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
 
       {/* Pagination */}
       {total > LIMIT && (
-        <div className="flex items-center justify-between px-5 py-2 border-t border-border/30 text-[11px] text-muted-foreground/50">
+        <div className="flex items-center justify-between px-5 py-2 border-t border-border/30 text-xs text-muted-foreground/50">
           <span>{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total.toLocaleString()}</span>
           <div className="flex items-center gap-1">
             <Button size="sm" variant="ghost" className="h-6 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
@@ -611,18 +584,18 @@ function ActivityTab({ campaignId, batchId }: { campaignId: number; batchId: num
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn("text-xs font-medium", cfg.color)}>{cfg.label}</span>
                     {(evt.leadName || evt.leadPhone) && (
-                      <span className="text-[10px] text-muted-foreground/60 truncate">
+                      <span className="text-xs text-muted-foreground/60 truncate">
                         {evt.leadName ?? evt.leadPhone}
                       </span>
                     )}
                     {typeof evt.data?.disposition === "string" && evt.data.disposition && (
-                      <span className="text-[10px] text-muted-foreground/50 italic">
+                      <span className="text-xs text-muted-foreground/50 italic">
                         &ldquo;{evt.data.disposition}&rdquo;
                       </span>
                     )}
                   </div>
                 </div>
-                <span className="text-[10px] text-muted-foreground/40 shrink-0">{fmtRelative(evt.createdAt)}</span>
+                <span className="text-xs text-muted-foreground/40 shrink-0">{fmtRelative(evt.createdAt)}</span>
               </div>
             );
           })}
@@ -648,23 +621,29 @@ function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: numb
       {/* Source Summary */}
       {sources.length > 0 && (
         <div className="rounded-xl border border-border/40 bg-card p-4">
-          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40 mb-3">Source Summary</p>
+          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40 mb-3">Source Summary</p>
           <div className="space-y-0">
             {sources.map((s, i) => (
               <div key={i} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0">
                 <div className="flex items-center gap-2 min-w-[130px]">
-                  <Database className="h-3 w-3 text-muted-foreground/40" />
+                  {s.sourceType === "csv" ? (
+                    <FileText className="h-3 w-3 text-muted-foreground/40" />
+                  ) : (
+                    <Database className="h-3 w-3 text-muted-foreground/40" />
+                  )}
                   <div>
                     <p className="text-xs font-medium">{s.sourceName}</p>
-                    <p className="text-[10px] text-muted-foreground/50 uppercase">{s.sourceType}</p>
+                    <p className="text-xs text-muted-foreground/50 uppercase">
+                      {s.sourceType === "csv" ? "CSV Import" : s.sourceType}
+                    </p>
                   </div>
                 </div>
-                <div className="flex gap-4 text-[11px] flex-wrap">
-                  <div className="text-center"><p className="text-foreground font-semibold">{s.importRuns}</p><p className="text-muted-foreground/40 text-[9px]">Runs</p></div>
-                  <div className="text-center"><p className="text-foreground font-semibold">{s.totalRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Total</p></div>
-                  <div className="text-center"><p className="text-emerald-500 font-semibold">{s.validRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Valid</p></div>
-                  <div className="text-center"><p className="text-amber-500 font-semibold">{s.duplicates.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Dupes</p></div>
-                  <div className="text-center"><p className="text-red-500 font-semibold">{s.errors.toLocaleString()}</p><p className="text-muted-foreground/40 text-[9px]">Errors</p></div>
+                <div className="flex gap-4 text-xs flex-wrap">
+                  <div className="text-center"><p className="text-foreground font-semibold">{s.importRuns}</p><p className="text-muted-foreground/40 text-xs">Runs</p></div>
+                  <div className="text-center"><p className="text-foreground font-semibold">{s.totalRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Total</p></div>
+                  <div className="text-center"><p className="text-emerald-500 font-semibold">{s.validRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Valid</p></div>
+                  <div className="text-center"><p className="text-amber-500 font-semibold">{s.duplicates.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Dupes</p></div>
+                  <div className="text-center"><p className="text-red-500 font-semibold">{s.errors.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Errors</p></div>
                 </div>
               </div>
             ))}
@@ -675,7 +654,7 @@ function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: numb
       {/* Import Run History */}
       <div className="rounded-xl border border-border/40 bg-card overflow-hidden">
         <div className="px-4 py-3 border-b border-border/30">
-          <p className="text-[9px] uppercase tracking-widest font-semibold text-muted-foreground/40 flex items-center gap-2">
+          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40 flex items-center gap-2">
             <FileText className="h-3 w-3" /> Import Runs
           </p>
         </div>
@@ -688,13 +667,13 @@ function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: numb
           <table className="w-full text-xs">
             <thead className="border-b border-border/30 bg-muted/10">
               <tr>
-                <th className="px-4 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">File / Source</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Status</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Total</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Created</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Dupes</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Errors</th>
-                <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">When</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">File / Source</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Status</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">Total</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Created</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Dupes</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Errors</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">When</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/20">
@@ -702,11 +681,15 @@ function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: numb
                 <tr key={r.id} className="hover:bg-muted/10">
                   <td className="px-4 py-2.5">
                     <p className="font-medium truncate max-w-[160px]">{r.fileName ?? r.sourceName ?? "Unknown"}</p>
-                    {r.sourceType && <p className="text-[10px] text-muted-foreground/50 uppercase">{r.sourceType}</p>}
+                    {r.sourceType && (
+                      <p className="text-xs text-muted-foreground/50 uppercase">
+                        {r.sourceType === "csv" ? "CSV Import" : r.sourceType}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 hidden sm:table-cell">
                     <span className={cn(
-                      "inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border",
+                      "inline-flex text-xs font-semibold px-2 py-0.5 rounded border",
                       r.status === "completed" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
                       r.status === "failed"    ? "bg-red-500/10 text-red-500 border-red-500/20" :
                       "bg-amber-500/10 text-amber-600 border-amber-500/20",
@@ -716,7 +699,7 @@ function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: numb
                   </td>
                   <td className="px-3 py-2.5">
                     <p className="tabular-nums">{r.totalRows}</p>
-                    <p className="text-[10px] text-emerald-500">{r.createdRows} created</p>
+                    <p className="text-xs text-emerald-500">{r.createdRows} created</p>
                   </td>
                   <td className="px-3 py-2.5 hidden md:table-cell">
                     <span className={cn("tabular-nums", r.duplicateRows > 0 ? "text-amber-500" : "text-muted-foreground/50")}>
@@ -860,7 +843,7 @@ export default function BatchWorkspacePage() {
             </Link>
             <div>
               {/* Breadcrumb */}
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 mb-0.5">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/50 mb-0.5">
                 <Link href="/app/campaigns">
                   <span className="hover:text-foreground transition-colors">Campaigns</span>
                 </Link>
@@ -877,19 +860,19 @@ export default function BatchWorkspacePage() {
                 <h2 className="text-lg font-semibold tracking-tight">{header?.batch.name ?? "Batch Workspace"}</h2>
                 {header && <BatchStatusBadge status={batchStatus} />}
                 {header?.campaign.agentName && (
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground/50">
                     <User className="h-2.5 w-2.5" />
                     {header.campaign.agentName}
                   </span>
                 )}
                 {header?.campaign.fromNumber && (
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground/50">
                     <Phone className="h-2.5 w-2.5" />
                     {header.campaign.fromNumber}
                   </span>
                 )}
                 {header?.source && (
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground/50">
                     <Database className="h-2.5 w-2.5" />
                     {header.source.name}
                   </span>
@@ -943,10 +926,10 @@ export default function BatchWorkspacePage() {
             key={t.key}
             onClick={() => setActiveTab(t.key)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors",
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-none border-b-2 text-xs font-medium transition-colors -mb-px",
               activeTab === t.key
-                ? "bg-foreground/10 text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
+                ? "border-foreground text-foreground font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             {t.icon} {t.label}

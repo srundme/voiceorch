@@ -14,7 +14,7 @@ import {
   getListCampaignLeadsQueryKey,
 } from "@workspace/api-client-react";
 import type { CampaignBatch } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +41,29 @@ import {
   TrendingUp, DollarSign, Target, Flame,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type LiveQueueMetrics = {
+  total: number;
+  queued: number;
+  calling: number;
+  connected: number;
+  retryScheduled: number;
+  callbackScheduled: number;
+  nopickup: number;
+  failed: number;
+};
+
+async function apiFetch<T>(url: string): Promise<T> {
+  const token = localStorage.getItem("voiceorch:session");
+  const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json() as Promise<T>;
+}
 
 // ── CSV parser ───────────────────────────────────────────────────────────────
 
@@ -81,30 +102,27 @@ function parseCsv(text: string): { headers: string[]; rows: Record<string, strin
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
-  const configs: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-    draft:     { label: "Draft",     icon: <PauseCircle className="h-3 w-3" />,  cls: "bg-muted/50 text-muted-foreground border-border" },
-    running:   { label: "Running",   icon: <PlayCircle className="h-3 w-3" />,   cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
-    paused:    { label: "Paused",    icon: <PauseCircle className="h-3 w-3" />,  cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
-    completed: { label: "Completed", icon: <CheckCircle2 className="h-3 w-3" />, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
-    stopped:   { label: "Stopped",   icon: <XCircle className="h-3 w-3" />,      cls: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20" },
+  const iconMap: Record<string, React.ReactNode> = {
+    draft:     <PauseCircle className="h-3 w-3" />,
+    running:   <PlayCircle  className="h-3 w-3" />,
+    paused:    <PauseCircle className="h-3 w-3" />,
+    completed: <CheckCircle2 className="h-3 w-3" />,
+    stopped:   <XCircle     className="h-3 w-3" />,
+    active:    <PlayCircle  className="h-3 w-3" />,
   };
-  const cfg = configs[status] ?? { label: status, icon: <Activity className="h-3 w-3" />, cls: "bg-muted/50 text-muted-foreground border-border" };
+  const cfg = BATCH_STATUS_MAP[status] ?? CAMPAIGN_STATUS_MAP[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
-      {cfg.icon}{cfg.label}
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
+      {iconMap[status] ?? <Activity className="h-3 w-3" />}{cfg.label}
     </span>
   );
 }
 
 function CampaignStatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    draft: "bg-muted/50 text-muted-foreground border-border",
-    active: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-    paused: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  };
+  const cfg = CAMPAIGN_STATUS_MAP[status] ?? { label: status, cls: "bg-muted/50 text-muted-foreground border-border" };
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border", map[status] ?? "bg-muted/50 text-muted-foreground border-border")}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
+      {cfg.label}
     </span>
   );
 }
@@ -154,7 +172,7 @@ function CampaignTabPlaceholder({
       <div className={cn("mb-4", c.icon)}>{icon}</div>
       <h3 className="text-sm font-semibold text-foreground/80 mb-1.5">{title}</h3>
       <p className="text-xs text-muted-foreground/50 leading-relaxed mb-4">{description}</p>
-      <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full border", c.badge)}>
+      <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", c.badge)}>
         Coming in Phase 3
       </span>
     </div>
@@ -286,7 +304,7 @@ function CreateBatchWizard({
             {steps.map((s, i) => (
               <div key={s} className="flex items-center gap-1.5 flex-1">
                 <div className={cn(
-                  "flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-all",
+                  "flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-all",
                   i < stepIdx ? "bg-foreground/10 text-muted-foreground" :
                   i === stepIdx ? "bg-foreground text-background" : "text-muted-foreground/30"
                 )}>
@@ -331,7 +349,7 @@ function CreateBatchWizard({
                       <p className="text-xs text-muted-foreground/60">
                         {src === "csv" ? "Upload a spreadsheet of leads" : "Leads arrive via Meta Ads or webhook"}
                       </p>
-                      {source === src && <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
+                      {source === src && <div className="mt-2 flex items-center gap-1 text-xs text-emerald-600"><CheckCircle2 className="h-3 w-3" /> Selected</div>}
                     </button>
                   ))}
                 </div>
@@ -379,7 +397,7 @@ function CreateBatchWizard({
                       <thead>
                         <tr className="bg-muted/40 border-b border-border">
                           {csvData.headers.map(h => (
-                            <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{h}</th>
+                            <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -512,12 +530,12 @@ function BatchRow({ batch, index, campaignId, onDelete }: {
           <p className="text-sm font-medium text-foreground">{batch.name}</p>
           <StatusBadge status={batch.status} />
           {(batch as unknown as Record<string, unknown>)["leadSource"] !== "csv" && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20 capitalize">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20 capitalize">
               {String((batch as unknown as Record<string, unknown>)["leadSource"] ?? "csv")}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground/50">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground/50">
           <span className="flex items-center gap-1"><Users className="h-3 w-3" />{batch.totalLeads} leads</span>
           <span>{batch.calledLeads} called ({calledPct}%)</span>
           {batch.scheduledStartAt && (
@@ -529,7 +547,7 @@ function BatchRow({ batch, index, campaignId, onDelete }: {
         <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
           <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
         </div>
-        <span className="text-[10px] text-muted-foreground/40 w-7 text-right font-mono">{calledPct}%</span>
+        <span className="text-xs text-muted-foreground/40 w-7 text-right font-mono">{calledPct}%</span>
       </div>
       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button type="button" className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
@@ -579,13 +597,13 @@ function BatchKpiCard({ batch, index, campaignId }: {
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <StatusBadge status={batch.status} />
             {kpis?.agentName && (
-              <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+              <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
                 <Users className="h-2.5 w-2.5" />{kpis.agentName}
               </span>
             )}
-            <span className="text-[10px] text-muted-foreground/40">{total.toLocaleString()} leads</span>
+            <span className="text-xs text-muted-foreground/40">{total.toLocaleString()} leads</span>
             {lastActivity && (
-              <span className="text-[10px] text-muted-foreground/30 flex items-center gap-1">
+              <span className="text-xs text-muted-foreground/30 flex items-center gap-1">
                 <Clock className="h-2.5 w-2.5" />{lastActivity}
               </span>
             )}
@@ -593,7 +611,7 @@ function BatchKpiCard({ batch, index, campaignId }: {
         </div>
         <div className="flex flex-col items-end shrink-0 gap-1">
           {etrLabel && (
-            <span className="text-[9px] text-muted-foreground/30 whitespace-nowrap">{etrLabel}</span>
+            <span className="text-xs text-muted-foreground/30 whitespace-nowrap">{etrLabel}</span>
           )}
           <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:translate-x-0.5 transition-transform" />
         </div>
@@ -604,14 +622,14 @@ function BatchKpiCard({ batch, index, campaignId }: {
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${bPct}%` }} />
           </div>
-          <p className="text-[10px] text-muted-foreground/40 mt-1 font-mono">{bPct}% called ({called.toLocaleString()} / {total.toLocaleString()})</p>
+          <p className="text-xs text-muted-foreground/40 mt-1 font-mono">{bPct}% called ({called.toLocaleString()} / {total.toLocaleString()})</p>
         </div>
       )}
       {/* KPI chips */}
       {kpis && (
         <div className="flex items-center gap-3 flex-wrap">
           {chips.filter(c => c.value > 0).map(c => (
-            <span key={c.label} className={cn("text-[10px] font-semibold", c.cls)}>
+            <span key={c.label} className={cn("text-xs font-semibold", c.cls)}>
               {c.value.toLocaleString()} {c.label}
             </span>
           ))}
@@ -628,6 +646,7 @@ function LeadsTab({ campaignId }: { campaignId: number }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const PAGE_SIZE = 30;
 
+  // API call unchanged — status filter only (outcome is visual-reference only).
   const { data, isLoading } = useListCampaignLeads(campaignId, {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
@@ -635,33 +654,74 @@ function LeadsTab({ campaignId }: { campaignId: number }) {
   });
 
   const raw = data as { leads?: unknown[]; total?: number } | unknown[] | undefined;
-  const items = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : ((raw as { leads?: Record<string, unknown>[] })?.leads ?? []);
-  const total = Array.isArray(raw) ? items.length : ((raw as { total?: number })?.total ?? 0);
+  const items = Array.isArray(raw)
+    ? (raw as Record<string, unknown>[])
+    : ((raw as { leads?: Record<string, unknown>[] })?.leads ?? []);
+  const total = Array.isArray(raw)
+    ? items.length
+    : ((raw as { total?: number })?.total ?? 0);
 
-  const STATUS_OPTS = ["all", "pending", "calling", "completed", "failed", "skipped"];
-  const STATUS_CLS: Record<string, string> = {
-    pending: "bg-muted/50 text-muted-foreground border-border",
-    calling: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-    completed: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-    failed: "bg-red-500/10 text-red-600 border-red-500/20",
-    skipped: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-  };
+  const STATUS_OPTS = [
+    { key: "all",       label: "All"       },
+    { key: "pending",   label: "Pending"   },
+    { key: "calling",   label: "Calling"   },
+    { key: "completed", label: "Completed" },
+    { key: "failed",    label: "Failed"    },
+    { key: "skipped",   label: "Skipped"   },
+  ];
+  // Visual-reference outcome chips — no filter state, purely presentational grouping.
+  const OUTCOME_CHIPS = [
+    { key: "booking_created",    label: "Booked",      color: "text-emerald-500"        },
+    { key: "transfer_completed", label: "Transferred", color: "text-purple-500"         },
+    { key: "callback_requested", label: "Callback",    color: "text-amber-500"          },
+    { key: "interest_confirmed", label: "Interested",  color: "text-orange-500"         },
+    { key: "no_contact",         label: "No Contact",  color: "text-muted-foreground/60"},
+    { key: "failed",             label: "Failed",      color: "text-red-500"            },
+  ];
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-        <div className="flex items-center gap-2 flex-wrap">
-          {STATUS_OPTS.map(s => (
-            <button key={s} onClick={() => { setStatusFilter(s); setPage(0); }}
-              className={cn("text-[10px] font-medium px-2.5 py-1 rounded-full border transition-all capitalize",
-                statusFilter === s ? "bg-foreground text-background border-foreground" : "bg-card border-border text-muted-foreground hover:text-foreground"
-              )}>
-              {s}
-            </button>
-          ))}
+      {/* Filter bar — STATUS (functional) + OUTCOME (visual reference grouping) */}
+      <div className="px-5 py-3 border-b border-border">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* STATUS — functional filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Status</span>
+            <div className="flex items-center gap-0.5 flex-wrap">
+              {STATUS_OPTS.map(s => (
+                <button key={s.key} onClick={() => { setStatusFilter(s.key); setPage(0); }}
+                  className={cn("text-xs font-medium px-2.5 py-1 rounded transition-colors",
+                    statusFilter === s.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40"
+                  )}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-4 w-px bg-border/50 shrink-0" />
+          {/* OUTCOME — visual reference (no onClick, no new state) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Outcome</span>
+            <div className="flex items-center gap-1 flex-wrap">
+              {OUTCOME_CHIPS.map(o => (
+                <span key={o.key} className={cn("text-xs font-medium px-2 py-0.5 rounded select-none", o.color)}>
+                  {o.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="ml-auto flex items-center gap-2 shrink-0">
+            {statusFilter !== "all" && (
+              <button onClick={() => { setStatusFilter("all"); setPage(0); }}
+                className="text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
+                Clear filter
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground/40">{isLoading ? "…" : total} leads</span>
+          </div>
         </div>
-        <span className="text-xs text-muted-foreground/40">{isLoading ? "…" : total} leads</span>
       </div>
+
       {isLoading ? (
         <div className="divide-y divide-border/40">{[...Array(4)].map((_, i) => (
           <div key={i} className="flex gap-3 px-5 py-3 animate-pulse">
@@ -669,43 +729,69 @@ function LeadsTab({ campaignId }: { campaignId: number }) {
           </div>
         ))}</div>
       ) : items.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground/40 text-sm">No leads found</div>
+        <div className="py-12 text-center">
+          <Users className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground/40">No leads match the current filter</p>
+          {statusFilter !== "all" && (
+            <button onClick={() => { setStatusFilter("all"); setPage(0); }}
+              className="mt-3 text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
+              Clear filter
+            </button>
+          )}
+        </div>
       ) : (
         <>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/20 border-b border-border/60">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest">Status</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest">Phone</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest hidden sm:table-cell">Name</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest hidden md:table-cell">Disposition</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-medium text-muted-foreground/40 uppercase tracking-widest">Attempts</th>
+                  {/* Lead → Status → Outcome → Attempts → Last Activity → Actions */}
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest">Lead</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest hidden sm:table-cell">Outcome</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest">Attempts</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest hidden md:table-cell">Last Activity</th>
                   <th className="px-4 py-2.5 w-10" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
-                {items.map(lead => (
-                  <tr key={String(lead["id"])} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-2.5">
-                      <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border",
-                        STATUS_CLS[String(lead["callStatus"])] ?? "bg-muted/50 text-muted-foreground border-border"
-                      )}>
-                        {String(lead["callStatus"])}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-mono text-foreground">{String(lead["phone"] ?? "")}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{String(lead["name"] ?? "—")}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground hidden md:table-cell capitalize">{String(lead["disposition"] ?? "—")}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{String(lead["callAttempts"] ?? 0)}</td>
-                    <td className="px-4 py-2.5">
-                      <a href={`${BASE}/app/campaigns/${campaignId}/leads/${String(lead["id"])}`}
-                        className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted transition-colors">
-                        <Eye className="h-3.5 w-3.5 text-muted-foreground/40" />
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {items.map(lead => {
+                  const callStatus = String(lead["callStatus"] ?? "");
+                  const oc = String(lead["operationalOutcome"] ?? "");
+                  const la = lead["lastAttemptAt"] ? String(lead["lastAttemptAt"]) : null;
+                  const statusCfg = callStatusCfg(callStatus);
+                  const ocCfg = outcomeCfg(oc);
+                  return (
+                    <tr key={String(lead["id"])} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-2.5">
+                        <p className="text-xs font-medium text-foreground truncate max-w-[120px]">{String(lead["name"] ?? "—")}</p>
+                        <p className="text-xs font-mono text-muted-foreground/60">{String(lead["phone"] ?? "")}</p>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border", statusCfg.cls)}>
+                          {statusCfg.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                        <span className={cn("text-xs font-medium", ocCfg.color)}>
+                          {oc ? ocCfg.label : "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{String(lead["callAttempts"] ?? 0)}</td>
+                      <td className="px-4 py-2.5 hidden md:table-cell">
+                        <span className="text-xs text-muted-foreground/60">
+                          {la ? formatDistanceToNow(new Date(la), { addSuffix: true }) : "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <a href={`${BASE}/app/campaigns/${campaignId}/leads/${String(lead["id"])}`}
+                          className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted transition-colors">
+                          <Eye className="h-3.5 w-3.5 text-muted-foreground/40" />
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -811,7 +897,7 @@ function SettingsTab({ campaign, campaignId }: { campaign: Record<string, unknow
           <input type="range" min={1} max={100} step={1} value={concurrentCallLimit}
             onChange={e => setConcurrentCallLimit(Number(e.target.value))}
             className="w-full h-1.5 accent-foreground cursor-pointer" />
-          <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40"><span>1</span><span>100</span></div>
+          <div className="flex justify-between mt-1 text-xs text-muted-foreground/40"><span>1</span><span>100</span></div>
         </div>
       </div>
 
@@ -836,6 +922,13 @@ export default function CampaignDetailPage() {
   const update = useUpdateCampaign();
   const [activeTab, setActiveTab] = useState("overview");
   const [opTab, setOpTab] = useState<"all" | "callbacks" | "incoming" | "bookings" | "transfers">("all");
+
+  const { data: liveMetrics } = useQuery<LiveQueueMetrics>({
+    queryKey: ["live-queue-metrics", campaignId],
+    queryFn: () => apiFetch<LiveQueueMetrics>(`${BASE}/api/campaigns/${campaignId}/live-queue/metrics`),
+    refetchInterval: 10_000,
+    enabled: activeTab === "operations",
+  });
 
   async function handleStatusChange(status: "active" | "paused" | "draft") {
     try {
@@ -975,18 +1068,21 @@ export default function CampaignDetailPage() {
         {/* KPI chips */}
         <div className="flex items-center gap-2 pb-3 overflow-x-auto">
           {[
-            { label: "Leads",      value: imported,                    tab: "overview" },
-            { label: "Called",     value: called,                      tab: "operations" },
-            { label: "Connected",  value: connected,                   tab: "analytics" },
-            { label: "Booked",     value: booked,                      tab: "operations" },
-            { label: "Callbacks",  value: analytics?.callbacks ?? 0,   tab: "operations" },
-            { label: "Transfers",  value: transferred,                 tab: "operations" },
+            { label: "Leads",      value: imported,                    tab: "overview",    pct: null },
+            { label: "Called",     value: called,                      tab: "operations",  pct: calledPct > 0 ? calledPct : null },
+            { label: "Connected",  value: connected,                   tab: "analytics",   pct: connRate > 0 ? connRate : null },
+            { label: "Booked",     value: booked,                      tab: "operations",  pct: bookRate > 0 ? bookRate : null },
+            { label: "Callbacks",  value: analytics?.callbacks ?? 0,   tab: "operations",  pct: null },
+            { label: "Transfers",  value: transferred,                 tab: "operations",  pct: null },
           ].map(kpi => (
             <button key={kpi.label}
               onClick={() => setActiveTab(kpi.tab)}
-              className="flex items-center gap-2.5 px-3 py-1.5 bg-card border border-border rounded-lg hover:border-foreground/30 hover:bg-muted/20 transition-colors shrink-0 group">
-              <span className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">{kpi.label}</span>
-              <span className="text-sm font-semibold text-foreground tabular-nums">{kpi.value.toLocaleString()}</span>
+              className="flex flex-col items-start px-3 py-2 bg-card border border-border rounded-lg hover:border-foreground/30 hover:bg-muted/20 transition-colors shrink-0 min-w-[72px]">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-base font-bold text-foreground tabular-nums leading-none">{kpi.value.toLocaleString()}</span>
+                {kpi.pct !== null && <span className="text-xs font-medium text-muted-foreground/50 tabular-nums">{kpi.pct}%</span>}
+              </div>
+              <span className="text-xs text-muted-foreground/40 uppercase tracking-widest mt-0.5">{kpi.label}</span>
             </button>
           ))}
         </div>
@@ -996,7 +1092,7 @@ export default function CampaignDetailPage() {
           <TabsList className="h-auto bg-transparent p-0 gap-0 border-0 -mb-px overflow-x-auto flex-nowrap">
             {(["overview", "operations", "leads", "analytics", "settings"] as const).map(tab => (
               <TabsTrigger key={tab} value={tab}
-                className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
+                className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:border-b-[3px] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </TabsTrigger>
             ))}
@@ -1011,8 +1107,8 @@ export default function CampaignDetailPage() {
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Call Funnel</h3>
                   {analytics && (
                     <div className="flex items-center gap-3">
-                      {connRate > 0 && <span className="text-[10px] text-blue-500 font-medium">{connRate}% conn.</span>}
-                      {bookRate > 0  && <span className="text-[10px] text-emerald-500 font-medium">{bookRate}% booked</span>}
+                      {connRate > 0 && <span className="text-xs text-blue-500 font-medium">{connRate}% conn.</span>}
+                      {bookRate > 0  && <span className="text-xs text-emerald-500 font-medium">{bookRate}% booked</span>}
                     </div>
                   )}
                 </div>
@@ -1028,7 +1124,7 @@ export default function CampaignDetailPage() {
                     <div key={stage.label} className="flex items-center shrink-0">
                       <div className={cn("px-4 py-3 rounded-xl text-center min-w-[88px]", stage.cls)}>
                         <p className="text-base font-bold tabular-nums leading-none">{stage.value.toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground/60 mt-1">{stage.label}</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">{stage.label}</p>
                       </div>
                       {i < arr.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/20 mx-0.5 shrink-0" />}
                     </div>
@@ -1039,7 +1135,7 @@ export default function CampaignDetailPage() {
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary/40 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
                     </div>
-                    <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/40">
+                    <div className="flex justify-between mt-1 text-xs text-muted-foreground/40">
                       <span>{called.toLocaleString()} called</span>
                       <span>{(imported - called).toLocaleString()} remaining</span>
                     </div>
@@ -1112,7 +1208,7 @@ export default function CampaignDetailPage() {
                             )}>{label as string}</span>
                             <span className="text-xs text-muted-foreground/40 capitalize shrink-0">{evTypeLabel}</span>
                           </div>
-                          <span className="text-[10px] text-muted-foreground/30 shrink-0 whitespace-nowrap">
+                          <span className="text-xs text-muted-foreground/30 shrink-0 whitespace-nowrap">
                             {formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true })}
                           </span>
                         </div>
@@ -1124,7 +1220,7 @@ export default function CampaignDetailPage() {
 
               {/* Webhook */}
               <div className="bg-card border border-border rounded-xl p-4">
-                <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
+                <p className="text-xs text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
                 <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
                   <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
                   <CopyButton text={webhookUrl} />
@@ -1136,25 +1232,28 @@ export default function CampaignDetailPage() {
           {/* ── Operations ──────────────────────────────────────────────────── */}
           <TabsContent value="operations" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              {/* Metrics bar */}
-              <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                  {[
-                    { label: "Connected",     value: connected,                   accent: "text-blue-500" },
-                    { label: "Interested",    value: interested,                  accent: "text-emerald-400" },
-                    { label: "Booked",        value: booked,                      accent: "text-emerald-500" },
-                    { label: "Callbacks Due", value: analytics?.callbacks ?? 0,   accent: "text-amber-500" },
-                    { label: "Transfers",     value: transferred,                 accent: "text-purple-500" },
-                    { label: "Failed",        value: failed,                      accent: "text-red-500" },
-                  ].map(m => (
-                    <div key={m.label} className="bg-card border border-border rounded-xl px-3 py-2.5 text-center">
-                      <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest leading-none mb-1">{m.label}</p>
-                      <p className={cn("text-xl font-semibold tabular-nums leading-none", m.accent || "text-foreground")}>
-                        {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+              {/* Live count-chip strip — Queued / Calling / Retry / Callback / No Pickup */}
+              <div className="px-6 py-2.5 border-b border-border/60 bg-muted/5 flex items-center gap-2 overflow-x-auto">
+                {[
+                  { label: "Queued",    value: liveMetrics?.queued            ?? 0, cls: "text-blue-500",   dot: "bg-blue-400",   pulse: false },
+                  { label: "Calling",   value: liveMetrics?.calling           ?? 0, cls: "text-amber-500",  dot: "bg-amber-400",  pulse: true  },
+                  { label: "Retry",     value: liveMetrics?.retryScheduled    ?? 0, cls: "text-sky-500",    dot: "bg-sky-400",    pulse: false },
+                  { label: "Callback",  value: liveMetrics?.callbackScheduled ?? 0, cls: "text-purple-500", dot: "bg-purple-400", pulse: false },
+                  { label: "No Pickup", value: liveMetrics?.nopickup          ?? 0, cls: "text-orange-500", dot: "bg-orange-400", pulse: false },
+                ].map((chip, i) => (
+                  <span key={chip.label} className="flex items-center gap-2 shrink-0">
+                    {i > 0 && <span className="h-3.5 w-px bg-border/50 shrink-0" />}
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn(
+                        "h-1.5 w-1.5 rounded-full shrink-0",
+                        chip.dot,
+                        chip.pulse && chip.value > 0 && "animate-pulse",
+                      )} />
+                      <span className="text-xs text-muted-foreground/60">{chip.label}</span>
+                      <span className={cn("text-xs font-semibold tabular-nums", chip.cls)}>{chip.value.toLocaleString()}</span>
+                    </span>
+                  </span>
+                ))}
               </div>
 
               {/* Sub-nav */}
@@ -1162,10 +1261,10 @@ export default function CampaignDetailPage() {
                 {(["all", "callbacks", "incoming", "bookings", "transfers"] as const).map(t => (
                   <button key={t} onClick={() => setOpTab(t)}
                     className={cn(
-                      "px-4 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap capitalize shrink-0 -mb-px",
+                      "px-4 py-2.5 text-xs border-b-2 transition-colors whitespace-nowrap capitalize shrink-0 -mb-px",
                       opTab === t
-                        ? "border-foreground text-foreground"
-                        : "border-transparent text-muted-foreground/60 hover:text-foreground"
+                        ? "border-foreground text-foreground font-semibold"
+                        : "border-transparent text-muted-foreground/60 font-medium hover:text-foreground"
                     )}>
                     {t === "all" ? "All Work" : t.charAt(0).toUpperCase() + t.slice(1)}
                   </button>
@@ -1239,11 +1338,11 @@ export default function CampaignDetailPage() {
                     ].map(r => (
                       <div key={r.label} className="bg-card border border-border rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">{r.label}</p>
+                          <p className="text-xs text-muted-foreground/50 uppercase tracking-widest">{r.label}</p>
                           <span className={cn("opacity-40", r.accent)}>{r.icon}</span>
                         </div>
                         <p className={cn("text-3xl font-bold tabular-nums", r.accent)}>{r.value}</p>
-                        <p className="text-[10px] text-muted-foreground/40 mt-1">{r.sub}</p>
+                        <p className="text-xs text-muted-foreground/40 mt-1">{r.sub}</p>
                       </div>
                     ))}
                   </div>
@@ -1267,10 +1366,10 @@ export default function CampaignDetailPage() {
                             <span className="text-xs text-muted-foreground/60 w-24 shrink-0">{stage.label}</span>
                             <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
                               <div className="h-full bg-foreground/15 rounded-md flex items-center px-2 transition-all" style={{ width: `${Math.max(pct, 2)}%` }}>
-                                <span className="text-[10px] font-mono text-foreground/70 whitespace-nowrap">{stage.value.toLocaleString()}</span>
+                                <span className="text-xs font-mono text-foreground/70 whitespace-nowrap">{stage.value.toLocaleString()}</span>
                               </div>
                             </div>
-                            <span className="text-[10px] font-mono text-muted-foreground/40 w-9 text-right shrink-0">{pct}%</span>
+                            <span className="text-xs font-mono text-muted-foreground/40 w-9 text-right shrink-0">{pct}%</span>
                           </div>
                         );
                       })}
@@ -1291,7 +1390,7 @@ export default function CampaignDetailPage() {
                                 <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${Math.max(pct, 1)}%` }} />
                               </div>
                               <span className="text-xs font-semibold text-foreground tabular-nums w-12 text-right shrink-0">{d.count.toLocaleString()}</span>
-                              <span className="text-[10px] text-muted-foreground/40 tabular-nums w-8 text-right shrink-0">{pct}%</span>
+                              <span className="text-xs text-muted-foreground/40 tabular-nums w-8 text-right shrink-0">{pct}%</span>
                             </div>
                           );
                         })}
