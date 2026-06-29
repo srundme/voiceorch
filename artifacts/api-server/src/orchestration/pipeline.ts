@@ -1028,7 +1028,13 @@ export class OrchestrationPipeline {
     // Reset turn state and re-enter Listening.
     this.audioBuffer = [];
     this.pendingTranscriptQueue = [];
-    if (!this.closed) this.safetyNet.beginListening();
+    if (!this.closed) {
+      this.safetyNet.beginListening();
+      // Reset the per-agent silence-hangup timer so the caller gets a full
+      // silenceTimeoutSeconds window to respond AFTER the reprompt, not just
+      // whatever is left from the previous turn's audio timestamp.
+      this.resetHangupTimer();
+    }
   }
 
   // ── Audio input ─────────────────────────────────────────────────────────────
