@@ -1,0 +1,48 @@
+<svg viewBox="0 0 800 560" xmlns="http://www.w3.org/2000/svg" width="800" height="560" style="font-family: Georgia, serif;">
+  <!-- Background -->
+  <rect width="800" height="560" fill="#fffbf5" />
+
+  <!-- Decorative border -->
+  <rect x="16" y="16" width="768" height="528" rx="12" fill="none" stroke="#f97316" stroke-width="3" />
+  <rect x="24" y="24" width="752" height="512" rx="8" fill="none" stroke="#fed7aa" stroke-width="1.5" />
+
+  <!-- Corner ornaments -->
+  <g transform="translate(40, 40)"><circle r="8" fill="#f97316" opacity="0.2" /><circle r="4" fill="#f97316" opacity="0.5" /></g>
+  <g transform="translate(760, 40)"><circle r="8" fill="#f97316" opacity="0.2" /><circle r="4" fill="#f97316" opacity="0.5" /></g>
+  <g transform="translate(40, 520)"><circle r="8" fill="#f97316" opacity="0.2" /><circle r="4" fill="#f97316" opacity="0.5" /></g>
+  <g transform="translate(760, 520)"><circle r="8" fill="#f97316" opacity="0.2" /><circle r="4" fill="#f97316" opacity="0.5" /></g>
+
+  <!-- Header -->
+  <text x="400" y="80" text-anchor="middle" font-size="13" fill="#94a3b8" letter-spacing="4" font-family="sans-serif" font-weight="600">THE SNAPSERVE BOOK</text>
+
+  <!-- Graduation cap circle -->
+  <circle cx="400" cy="130" r="28" fill="#fff7ed" stroke="#f97316" stroke-width="2" />
+  <text x="400" y="140" text-anchor="middle" font-size="24">🎓</text>
+
+  <!-- Title -->
+  <text x="400" y="196" text-anchor="middle" font-size="32" fill="#1e293b" font-weight="700" letter-spacing="-0.5">Certificate of Completion</text>
+
+  <!-- This certifies -->
+  <text x="400" y="238" text-anchor="middle" font-size="15" fill="#64748b" font-family="sans-serif">This certifies that</text>
+
+  <!-- Name (example) -->
+  <text x="400" y="295" text-anchor="middle" font-size="40" fill="#f97316" font-style="italic" font-weight="700">Aarav Mehta</text>
+
+  <!-- Underline -->
+  <line x1="160" y1="308" x2="640" y2="308" stroke="#f97316" stroke-width="1.5" opacity="0.4" />
+
+  <!-- Body text -->
+  <text x="400" y="348" text-anchor="middle" font-size="15" fill="#475569" font-family="sans-serif">has successfully completed all chapters and passed the final exam of</text>
+  <text x="400" y="375" text-anchor="middle" font-size="18" fill="#1e293b" font-weight="700">The SnapServe Book: VoiceOrch Codebase Mastery</text>
+
+  <!-- Date -->
+  <text x="400" y="430" text-anchor="middle" font-size="13" fill="#94a3b8" font-family="sans-serif">Awarded on 29 June 2026</text>
+
+  <!-- Footer lines -->
+  <line x1="240" y1="480" x2="400" y2="480" stroke="#cbd5e1" stroke-width="1" />
+  <line x1="400" y1="480" x2="560" y2="480" stroke="#cbd5e1" stroke-width="1" />
+  <text x="320" y="494" text-anchor="middle" font-size="12" fill="#475569" font-family="sans-serif" font-weight="600">SnapServe Team</text>
+  <text x="480" y="494" text-anchor="middle" font-size="12" fill="#475569" font-family="sans-serif" font-weight="600">AI Voice Platform</text>
+  <text x="320" y="505" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="sans-serif">Author</text>
+  <text x="480" y="505" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="sans-serif">SnapServe</text>
+</svg>

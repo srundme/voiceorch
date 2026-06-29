@@ -185,20 +185,37 @@ export default function Certificate() {
               </div>
             </>
           ) : (
-            <div className="text-center py-16">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-muted mb-6">
-                <Star size={40} className="text-muted-foreground opacity-40" />
+            <div>
+              {/* Blurred certificate preview */}
+              <div className="relative mb-8">
+                <div className="blur-sm opacity-60 pointer-events-none select-none rounded-2xl overflow-hidden border-2 border-orange-200 shadow-lg">
+                  <CertificateSVG name={name || "Your Name"} date={date} />
+                </div>
+                {/* Overlay lock badge */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="bg-background/90 backdrop-blur-sm border-2 border-border rounded-2xl px-8 py-6 text-center shadow-xl">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted mb-3">
+                      <Star size={28} className="text-primary opacity-70" />
+                    </div>
+                    <p className="font-bold text-foreground text-lg">Your certificate awaits</p>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      {totalCount - completedCount} chapter{totalCount - completedCount !== 1 ? "s" : ""} left to unlock
+                    </p>
+                  </div>
+                </div>
               </div>
-              <h2 className="text-2xl font-serif font-bold text-foreground mb-4">Keep reading!</h2>
-              <p className="text-muted-foreground text-lg mb-8">
-                You need to complete <strong>all {totalCount} chapters</strong> to unlock your certificate.
-              </p>
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground font-bold transition-all hover:scale-105 active:scale-95"
-              >
-                Continue reading <ArrowLeft size={16} className="rotate-180" />
-              </Link>
+
+              <div className="text-center">
+                <p className="text-muted-foreground mb-6">
+                  Complete <strong>all {totalCount} chapters</strong> to download your personalised certificate.
+                </p>
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground font-bold transition-all hover:scale-105 active:scale-95"
+                >
+                  Continue reading <ArrowLeft size={16} className="rotate-180" />
+                </Link>
+              </div>
             </div>
           )}
         </motion.div>

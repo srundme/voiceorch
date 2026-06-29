@@ -174,3 +174,9 @@ id = "ZuPZgKtka5gy9QTqpeZ1L"
 uri = "file://docs/snapserve-book/SAMPLE-chapter.md"
 type = "text"
 title = "SnapServe Book — Sample Chapter (audio.ts)"
+
+[[outputs]]
+id = "7MquQvS2VR0fj3UoIcvGW"
+uri = "file://sample-certificate.svg"
+type = "image"
+title = "Sample Certificate — Aarav Mehta"
