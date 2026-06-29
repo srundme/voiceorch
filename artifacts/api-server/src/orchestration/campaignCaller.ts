@@ -22,7 +22,6 @@ import { createHmac } from "node:crypto";
 import { APP_SECRET } from "../lib/app-secret.js";
 
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { getRedis } from "../lib/redis.js";
 
 function resolveBaseUrl(): string {
   return getSelfBaseUrl();
@@ -248,7 +247,12 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
       const fromNumber = campaign.fromNumber ?? creds.fromNumber;
       if (!authId || !fromNumber) throw new Error("Vobiz config missing authId or fromNumber");
       const vobizLeadSig = createHmac("sha256", APP_SECRET).update(`campaignlead:${lead.id}`).digest("hex");
-      const vobizCallUuid = await dialVobiz({
+      // The dial response returns a `request_uuid`, NOT the live `call_uuid` that
+      // /Call/{uuid}/Transfer/ requires — so we do NOT persist it for transfer.
+      // For campaign calls the live `CallUUID` is delivered on the answer webhook
+      // and threaded through to the WS session, which writes it onto the (freshly
+      // created) call record. campaignLeadId already correlates dial → webhook.
+      const dialRes = await dialVobiz({
         authId,
         authToken: creds.apiKey,
         fromNumber,
@@ -257,17 +261,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         hangupUrl: `${baseUrl}/api/webhooks/vobiz/status?campaignLeadId=${lead.id}&campaignLeadSig=${vobizLeadSig}`,
         ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
       });
-      // Store the REST call_uuid from the dial response in Redis so the WS
-      // handler can use it as externalCallId for the Transfer API.  VoBiz's
-      // answer-webhook CallUUID and msg.start.callId may be stream-scoped
-      // session IDs rather than the REST call_uuid — using them for
-      // /Call/{uuid}/Transfer/ causes a 404.  TTL 10 min is well beyond any
-      // reasonable call-setup latency.
-      const redis = getRedis();
-      if (redis && vobizCallUuid && vobizCallUuid !== "unknown") {
-        await redis.set(`vobiz:dial:campaignlead:${lead.id}`, vobizCallUuid, { ex: 600 });
-        logger.info({ leadId: lead.id, vobizCallUuid }, "Stored VoBiz dial call_uuid for transfer");
-      }
+      logger.info({ leadId: lead.id, dialRequestUuid: dialRes.requestUuid }, "VoBiz campaign call dialed");
     } else {
       throw new Error(`Outbound not supported for provider: ${provider}`);
     }

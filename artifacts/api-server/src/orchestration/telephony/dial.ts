@@ -3,6 +3,8 @@
  * callback scheduler so neither duplicates the API call logic.
  */
 
+import { logger } from "../../lib/logger.js";
+
 /**
  * Resolve whether AMD (answering-machine / voicemail detection) is enabled for
  * an agent and, for Twilio, which synchronous detection mode to request.
@@ -140,7 +142,7 @@ export async function dialVobiz(opts: {
    * the answer handler reads to gate the AI stream.
    */
   machineDetectionEnabled?: boolean;
-}): Promise<string> {
+}): Promise<{ requestUuid: string | null; callUuid: string | null }> {
   const url  = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/`;
   const body: Record<string, string | number> = {
     to: opts.toNumber, from: opts.fromNumber,
@@ -167,5 +169,15 @@ export async function dialVobiz(opts: {
   });
   if (!resp.ok) throw new Error(`Vobiz API error ${resp.status}: ${await resp.text()}`);
   const data = await resp.json() as { call_uuid?: string; request_uuid?: string };
-  return data.call_uuid ?? data.request_uuid ?? "unknown";
+  // DIAGNOSTIC: VoBiz's synchronous dial response returns a `request_uuid` (an
+  // identifier for THIS outbound API request), NOT the live `call_uuid`. The live
+  // `call_uuid` arrives later on the answer webhook as `CallUUID` and is the ONLY
+  // identifier the /Call/{uuid}/Transfer/ endpoint accepts (a request_uuid 404s).
+  // We therefore record the request_uuid only as a correlation key, never as a
+  // transfer-capable call id.
+  logger.info(
+    { to: opts.toNumber, from: opts.fromNumber, dial_request_uuid: data.request_uuid ?? null, dial_call_uuid: data.call_uuid ?? null },
+    "VoBiz dial response",
+  );
+  return { requestUuid: data.request_uuid ?? null, callUuid: data.call_uuid ?? null };
 }

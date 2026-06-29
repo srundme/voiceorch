@@ -225,7 +225,13 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
   }
 
   const baseUrl = resolveWebhookBase(req, webhookBaseUrl);
-  let providerCallId: string;
+  let providerCallId: string = "";
+  // VoBiz-only correlation: the dial response returns a `request_uuid`, NOT the
+  // live `call_uuid`. We mint our own opaque `corr` token, embed it on the answer
+  // webhook URL, and persist it on the call record so the answer-webhook/WS path
+  // can match THIS exec_* row and write the live `CallUUID` over the placeholder.
+  let vobizRequestUuid: string | null = null;
+  let vobizCorrToken: string | null = null;
   let effectiveFromNumber = "outbound";
 
   // AMD (synchronous voicemail detection) — normalised across both config shapes.
@@ -278,14 +284,19 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
           }
         }
         effectiveFromNumber = cfg["fromNumber"]!;
-        providerCallId = await dialVobiz({
-          authId: cfg["authId"]!, authToken: providerRow!.apiKey,
-          fromNumber: cfg["fromNumber"]!, toNumber,
-          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&dir=out`,
-          hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
-          maxDurationSeconds,
-          ...(amd.enabled && { machineDetectionEnabled: true }),
-        });
+        vobizCorrToken = randomBytes(8).toString("hex");
+        {
+          const dialRes = await dialVobiz({
+            authId: cfg["authId"]!, authToken: providerRow!.apiKey,
+            fromNumber: cfg["fromNumber"]!, toNumber,
+            answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&dir=out&corr=${vobizCorrToken}`,
+            hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+            maxDurationSeconds,
+            ...(amd.enabled && { machineDetectionEnabled: true }),
+          });
+          vobizRequestUuid = dialRes.requestUuid;
+          providerCallId = dialRes.callUuid ?? "";
+        }
       } else {
         // ── Managed platform number — no personal number/KYC required ──
         if (agent.userId) {
@@ -350,14 +361,19 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
             : numbers[Math.floor(Math.random() * numbers.length)]!;
         }
         effectiveFromNumber = fromNumber;
-        providerCallId = await dialVobiz({
-          authId: managedAuthId, authToken: managedAuthToken,
-          fromNumber, toNumber,
-          answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1&dir=out`,
-          hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
-          maxDurationSeconds,
-          ...(amd.enabled && { machineDetectionEnabled: true }),
-        });
+        vobizCorrToken = randomBytes(8).toString("hex");
+        {
+          const dialRes = await dialVobiz({
+            authId: managedAuthId, authToken: managedAuthToken,
+            fromNumber, toNumber,
+            answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1&dir=out&corr=${vobizCorrToken}`,
+            hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
+            maxDurationSeconds,
+            ...(amd.enabled && { machineDetectionEnabled: true }),
+          });
+          vobizRequestUuid = dialRes.requestUuid;
+          providerCallId = dialRes.callUuid ?? "";
+        }
         req.log.info({ agentId, toNumber, fromNumber, managedAuthId }, "Outbound call via managed number");
       }
     } else {
@@ -376,12 +392,20 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
     agentId, toNumber, fromNumber: effectiveFromNumber, status: "in_progress",
     userId: agent.userId ?? null,
     executionId,
-    metadata: JSON.stringify({ providerCallId, provider }),
+    metadata: JSON.stringify({
+      ...(providerCallId ? { providerCallId } : {}),
+      provider,
+      // VoBiz: dial-time placeholder is the request_uuid (correlation only). The
+      // live CallUUID is written over providerCallId/externalCallId when the
+      // answer-webhook WS session reconciles this row by corrToken.
+      ...(vobizRequestUuid ? { requestUuid: vobizRequestUuid } : {}),
+      ...(vobizCorrToken ? { corrToken: vobizCorrToken } : {}),
+    }),
   }).returning();
 
   await db.update(agentsTable).set({ totalCalls: agent.totalCalls + 1 }).where(eq(agentsTable.id, agentId));
 
-  req.log.info({ agentId, toNumber, providerCallId }, "Outbound call initiated");
+  req.log.info({ agentId, toNumber, providerCallId, vobizRequestUuid, vobizCorrToken }, "Outbound call initiated");
   res.status(201).json(GetCallResponse.parse(await enrichCall(call)));
 });
 

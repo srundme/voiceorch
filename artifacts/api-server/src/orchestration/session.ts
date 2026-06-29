@@ -86,6 +86,12 @@ export async function createSession(params: {
   toNumber: string;
   fromNumber: string;
   externalCallId?: string;
+  /** Opaque per-call correlation token minted at outbound dial time (calls.ts) and
+   *  threaded through the answer webhook → WS handler. When set, the pre-created
+   *  outbound exec_* call record is matched by `metadata.corrToken` and updated in
+   *  place with the live `externalCallId` (the VoBiz CallUUID) — avoiding a duplicate
+   *  in_progress record and giving /Call/{uuid}/Transfer/ the id it requires. */
+  corrToken?: string;
   platformTelephony?: boolean;
   /** Call direction — picks the human side for the caller-memory key. Inbound keys
    *  off `fromNumber` (the caller); outbound keys off `toNumber` (the dialed party,
@@ -629,12 +635,35 @@ export async function createSession(params: {
     }
   }
 
-  // For outbound VoBiz calls the HTTP route already created an "exec_*" record.
-  // Reuse it here (matched by providerCallId in its metadata) so there is only
-  // one DB row per call rather than two orphan in_progress records.
+  // For outbound VoBiz calls the HTTP route (calls.ts) already created an "exec_*"
+  // record at dial time. Reuse it here so there is exactly one DB row per call
+  // rather than two orphan in_progress records.
+  //
+  // Matching priority:
+  //   1. corrToken — the opaque token minted at dial and threaded through the
+  //      answer webhook → WS handler. This is the ONLY reliable link for VoBiz:
+  //      the dial response returns a request_uuid, never the live CallUUID, so a
+  //      providerCallId === externalCallId match would never fire for VoBiz.
+  //   2. providerCallId === externalCallId — legacy path for providers (Twilio/
+  //      Plivo) whose dial response IS the live call id.
+  // On match we MERGE the existing metadata so dial-time fields (requestUuid,
+  // corrToken, provider) survive, and write the live externalCallId (the VoBiz
+  // CallUUID) over BOTH providerCallId and externalCallId — that is the id the
+  // /Call/{uuid}/Transfer/ endpoint requires.
   const callRecord = await (async (): Promise<typeof callsTable.$inferSelect> => {
-    if (params.externalCallId) {
-      const [existing] = await withDbRetry("find-existing-call-record", () =>
+    let existing: typeof callsTable.$inferSelect | undefined;
+    if (params.corrToken) {
+      [existing] = await withDbRetry("find-existing-call-record-corr", () =>
+        db.select().from(callsTable)
+          .where(and(
+            sql`${callsTable.metadata}::jsonb->>'corrToken' = ${params.corrToken}`,
+            eq(callsTable.status, "in_progress"),
+          ))
+          .limit(1),
+      );
+    }
+    if (!existing && params.externalCallId) {
+      [existing] = await withDbRetry("find-existing-call-record", () =>
         db.select().from(callsTable)
           .where(and(
             sql`${callsTable.metadata}::jsonb->>'providerCallId' = ${params.externalCallId}`,
@@ -642,21 +671,24 @@ export async function createSession(params: {
           ))
           .limit(1),
       );
-      if (existing) {
-        await withDbRetry("update-existing-call-record", () =>
-          db.update(callsTable).set({
-            metadata: JSON.stringify({
-              providerCallId: params.externalCallId,
-              externalCallId: params.externalCallId,
-              ...(params.platformTelephony ? { platformTelephony: true } : {}),
-              direction: callDirection,
-              ...(callerPhone ? { callerKey: callerPhone } : {}),
-            }),
-          }).where(eq(callsTable.id, existing.id)),
-        );
-        logger.info({ callId: existing.id, externalCallId: params.externalCallId }, "Reusing existing exec_* call record");
-        return existing;
-      }
+    }
+    if (existing) {
+      let prevMeta: Record<string, unknown> = {};
+      try { prevMeta = existing.metadata ? JSON.parse(existing.metadata) as Record<string, unknown> : {}; }
+      catch { prevMeta = {}; }
+      await withDbRetry("update-existing-call-record", () =>
+        db.update(callsTable).set({
+          metadata: JSON.stringify({
+            ...prevMeta,
+            ...(params.externalCallId ? { providerCallId: params.externalCallId, externalCallId: params.externalCallId } : {}),
+            ...(params.platformTelephony ? { platformTelephony: true } : {}),
+            direction: callDirection,
+            ...(callerPhone ? { callerKey: callerPhone } : {}),
+          }),
+        }).where(eq(callsTable.id, existing.id)),
+      );
+      logger.info({ callId: existing.id, externalCallId: params.externalCallId ?? null, corrToken: params.corrToken ?? null, matchedBy: params.corrToken && prevMeta["corrToken"] === params.corrToken ? "corrToken" : "providerCallId" }, "Reusing existing exec_* call record");
+      return existing;
     }
     const [inserted] = await withDbRetry("insert-call-record", () =>
       db.insert(callsTable).values({

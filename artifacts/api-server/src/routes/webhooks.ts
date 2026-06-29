@@ -598,6 +598,10 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   const cfg = (agent?.agentConfig ?? {}) as Record<string, unknown>;
 
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
+  // Opaque per-call correlation token minted at outbound dial (calls.ts). Threaded
+  // into the answer XML / WS URL so the WS session reconciles the pre-created exec_*
+  // record by it. Absent on inbound/campaign calls (those reconcile differently).
+  const corr = req.query["corr"] ? String(req.query["corr"]) : undefined;
   const callDirection: "inbound" | "outbound" = req.query["dir"] === "out" ? "outbound" : "inbound";
   const inboundFrom = String(req.body?.From ?? req.body?.from ?? "").trim() || undefined;
   const inboundTo   = String(req.body?.To   ?? req.body?.to   ?? "").trim() || undefined;
@@ -614,7 +618,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     speakTag: "Speak",
     preloadedCfg: cfg,
     buildVoicemailStreamXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
-      campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true, callDirection,
+      campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
     }),
   });
@@ -635,7 +639,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
         : `\n  <Speak>All agents are busy. Please hold.</Speak>\n  <Wait length="${waitSec}" />`;
       // Preserve direction + campaign/platform context across the redirect so the
       // re-entry into /vobiz/voice keys caller memory off the correct party.
-      const ctxQs = `${platformTelephony ? "&pt=1" : ""}${campaignLeadId ? `&campaignLeadId=${campaignLeadId}` : ""}${callDirection === "outbound" ? "&dir=out" : ""}`;
+      const ctxQs = `${platformTelephony ? "&pt=1" : ""}${campaignLeadId ? `&campaignLeadId=${campaignLeadId}` : ""}${callDirection === "outbound" ? "&dir=out" : ""}${corr ? `&corr=${encodeURIComponent(corr)}` : ""}`;
       const redirectUrl = `${httpBase}/api/webhooks/vobiz/voice?agentId=${agentId}${ctxQs}`;
       res.set("Content-Type", "text/xml").send(
         `<?xml version="1.0" encoding="UTF-8"?>\n<Response>${holdPart}\n  <Redirect method="POST">${escapeXml(redirectUrl)}</Redirect>\n</Response>`
@@ -652,7 +656,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     const spoken   = escapeXml(`${greeting}${menuText ? " " + menuText : ""}`);
     // Preserve direction + campaign/platform context through the IVR menu so the
     // digit-callback and the fallback re-entry both key caller memory correctly.
-    const ctxQs = `${platformTelephony ? "&pt=1" : ""}${campaignLeadId ? `&campaignLeadId=${campaignLeadId}` : ""}${callDirection === "outbound" ? "&dir=out" : ""}`;
+    const ctxQs = `${platformTelephony ? "&pt=1" : ""}${campaignLeadId ? `&campaignLeadId=${campaignLeadId}` : ""}${callDirection === "outbound" ? "&dir=out" : ""}${corr ? `&corr=${encodeURIComponent(corr)}` : ""}`;
     const ivrAction   = `${httpBase}/api/webhooks/vobiz/ivr?agentId=${agentId}${ctxQs}`;
     const fallbackUrl = `${httpBase}/api/webhooks/vobiz/voice?agentId=${agentId}${ctxQs}`;
     res.set("Content-Type", "text/xml").send(
@@ -665,7 +669,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   if (inboundFrom) void cancelPendingRedials(agentId, inboundFrom);
   res.set("Content-Type", "text/xml").send(
     getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
-      campaignLeadId, from: inboundFrom, to: inboundTo, callDirection,
+      campaignLeadId, from: inboundFrom, to: inboundTo, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
     })
   );
@@ -703,6 +707,7 @@ router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
   // memory off the shared platform From number.
   const platformTelephony = req.query["pt"] === "1";
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
+  const corr = req.query["corr"] ? String(req.query["corr"]) : undefined;
   const callDirection: "inbound" | "outbound" = req.query["dir"] === "out" ? "outbound" : "inbound";
   req.log.info({ agentId, digits, callDirection }, "VoBiz IVR digit received");
 
@@ -718,7 +723,7 @@ router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
 
   const wsBase = getWsBaseUrl(req);
   res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBase, targetAgentId, platformTelephony, { campaignLeadId, callDirection }),
+    getVobizAnswerXML(wsBase, targetAgentId, platformTelephony, { campaignLeadId, callDirection, corr }),
   );
 });
 

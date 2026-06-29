@@ -117,6 +117,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const vobizFrom         = qs.get("from")     ?? undefined;
   const vobizTo           = qs.get("to")       ?? undefined;
   const vobizCallUuid     = qs.get("callUuid") ?? undefined;
+  const vobizCorrToken    = qs.get("corr")     ?? undefined;
   const voicemailDelivery = qs.get("vm") === "1";
   // dir=out is appended by every outbound dial site (calls/campaign/callback/meta)
   // so the WS handler keys caller memory off the dialed party, not the shared
@@ -164,7 +165,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection);                                        break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection);                                         break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection); break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

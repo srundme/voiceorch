@@ -2,7 +2,6 @@ import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
-import { getRedis } from "../../lib/redis.js";
 
 /**
  * Vobiz WebSocket handler
@@ -68,6 +67,13 @@ export async function handleVobizWebSocket(
    */
   urlCallUuid?: string,
   callDirection: "inbound" | "outbound" = "inbound",
+  /**
+   * Opaque per-call correlation token minted at outbound dial time (calls.ts) and
+   * threaded through the answer webhook → answer XML → this WS URL. Forwarded to
+   * createSession so the pre-created outbound exec_* record (keyed by corrToken,
+   * NOT by the live CallUUID it does not yet hold) is matched and updated in place.
+   */
+  corrToken?: string,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -121,38 +127,24 @@ export async function handleVobizWebSocket(
         streamId = msg.start?.streamId ?? msg.streamId ?? null;
         const callId = msg.start?.callId ?? null;
 
-        // For outbound campaign calls, the VoBiz dial API returns the REST
-        // call_uuid that /Call/{uuid}/Transfer/ and other REST actions expect.
-        // campaignCaller.ts stores it in Redis before the WebSocket is opened.
-        // Retrieve it now and use it as the highest-priority externalCallId so
-        // Transfer does not fall back to the stream-scoped callId or the
-        // answer-webhook CallUUID (both may be different from the REST call_uuid
-        // and cause a 404 on the Transfer endpoint).
-        let dialCallUuid: string | null = null;
-        if (campaignLeadId) {
-          try {
-            const redis = getRedis();
-            if (redis) {
-              const stored = await redis.get<string>(`vobiz:dial:campaignlead:${campaignLeadId}`);
-              if (stored) {
-                dialCallUuid = stored;
-                logger.info({ campaignLeadId, dialCallUuid }, "Retrieved VoBiz dial call_uuid from Redis for Transfer");
-              }
-            }
-          } catch (err) {
-            logger.warn({ campaignLeadId, err }, "Failed to retrieve VoBiz dial call_uuid from Redis — falling back to webhook/start callId");
-          }
-        }
-
-        // Priority: dial call_uuid (REST-authoritative) → answer-webhook callUuid → start.callId
-        const resolvedCallId = dialCallUuid ?? urlCallUuid ?? callId ?? null;
+        // The live VoBiz call_uuid — the ONLY identifier /Call/{uuid}/Transfer/
+        // accepts — is delivered on the HTTP answer webhook as `CallUUID` and
+        // forwarded here as `urlCallUuid`. The dial-API response only returns a
+        // `request_uuid` (a request id that 404s on Transfer), so it is NEVER used
+        // as the transfer call_uuid; it survives only as a correlation key on the
+        // call record. `msg.start.callId` is a stream-session id and is a last
+        // resort only. Priority: answer-webhook CallUUID → stream callId.
+        const resolvedCallId = urlCallUuid ?? callId ?? null;
 
         const params = msg.start?.customParameters ?? {};
         // Priority: URL query params (most reliable) → start.from/to → customParameters → fallback
         const fromNumber = urlFrom ?? msg.start?.from ?? params["From"] ?? "+10000000000";
         const toNumber   = urlTo   ?? msg.start?.to   ?? params["To"]   ?? "+10000000001";
 
-        logger.info({ agentId, streamId, callId, resolvedCallId, dialCallUuid, urlCallUuid: urlCallUuid ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
+        // DIAGNOSTIC: prove which id is used for Transfer. `resolvedCallId` (the
+        // answer-webhook CallUUID) is what /Transfer/ uses; `streamCallId` is the
+        // WS stream-session id and `corrToken` links back to the dial request_uuid.
+        logger.info({ agentId, streamId, streamCallId: callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, corrToken: corrToken ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
         // ── Silence keepalive during session init ───────────────────────────
         // VoBiz drops the call if the audio bridge receives no data for ~2 s
@@ -177,6 +169,7 @@ export async function handleVobizWebSocket(
             toNumber,
             fromNumber,
             externalCallId: resolvedCallId ?? undefined,
+            corrToken,
             platformTelephony,
             callDirection,
             customParameters: params,
@@ -266,7 +259,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; callDirection?: "inbound" | "outbound" } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound" } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -287,6 +280,11 @@ export function getVobizAnswerXML(
   // can use it as externalCallId — the canonical REST API identifier needed for
   // the /Call/{uuid}/Transfer/ endpoint (msg.start.callId may differ).
   if (opts.callUuid) qsParts.push(`callUuid=${encodeURIComponent(opts.callUuid)}`);
+  // Opaque per-call correlation token minted at outbound dial time (calls.ts).
+  // The WS handler forwards it to createSession so the pre-created exec_* row can
+  // be matched and updated in place with the live CallUUID (the dial response only
+  // carried a request_uuid, which can never match providerCallId === CallUUID).
+  if (opts.corr) qsParts.push(`corr=${encodeURIComponent(opts.corr)}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
   // XML-escape the URL before embedding in the <Stream> text node.  Bare "&" in
