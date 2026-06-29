@@ -456,6 +456,29 @@ export async function createSession(params: {
   if (callerCtxResult) {
     callerProfileSnapshot = callerCtxResult.profile;
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
+
+    // Override STT language from caller memory language_pref fact.
+    // Sarvam hi-IN codemix produces Hindi/Marathi garbage when the caller speaks
+    // English — initializing with the remembered language prevents this.
+    {
+      const LANG_PREF_TO_BCP47: Record<string, string> = {
+        "english": "en-IN", "hindi": "hi-IN", "tamil": "ta-IN",
+        "telugu": "te-IN", "kannada": "kn-IN", "malayalam": "ml-IN",
+        "marathi": "mr-IN", "bengali": "bn-IN", "gujarati": "gu-IN",
+        "punjabi": "pa-IN", "odia": "or-IN", "urdu": "ur-IN",
+      };
+      const langPrefRaw = latchedFactsMap.get("language_pref");
+      const mappedSttLang = langPrefRaw ? LANG_PREF_TO_BCP47[langPrefRaw.toLowerCase()] : undefined;
+      if (mappedSttLang && mappedSttLang !== agentConfig.sttConfig.language) {
+        agentConfig.sttConfig.language = mappedSttLang;
+        agentConfig.language = mappedSttLang;
+        logger.info(
+          { agentId: params.agentId, callerPhone, langPref: langPrefRaw, from: agentConfig.sttConfig.language, to: mappedSttLang },
+          "STT language overridden from caller memory language_pref",
+        );
+      }
+    }
+
     if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
       agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult);
       {

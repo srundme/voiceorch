@@ -68,7 +68,7 @@ import {
 /** Built-in tool always injected into the LLM tool list (telephony calls only). */
 const SCHEDULE_CALLBACK_TOOL_DEF: ToolDefinition = {
   name: "schedule_callback",
-  description: "Schedule a callback call for this caller. Call this when the caller asks to be called back later — either at a specific time they mention (e.g. 'call me at 3pm', 'tomorrow morning') or in general ('call me later', 'call me back'). If a specific time is mentioned, provide scheduled_at. Otherwise omit it and the system will call back in 1 hour.",
+  description: "Schedule a callback call for this caller. ONLY call this when the caller EXPLICITLY and UNAMBIGUOUSLY asks to be called back — e.g. 'call me back', 'call me later', 'please call me at 3pm', 'I'm busy now, call tomorrow'. Do NOT trigger this tool if the caller is confused, skeptical, negative, or gave a vague/unclear response. The intent to receive a callback must be clear and deliberate. If uncertain whether the caller actually wants a callback, ask them directly first.",
   parameters: {
     type: "object",
     properties: {
