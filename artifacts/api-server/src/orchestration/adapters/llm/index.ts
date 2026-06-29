@@ -18,7 +18,9 @@ export function createLLMAdapter(
   /** Optional override for the provider's base URL (e.g. self-hosted vLLM endpoint). */
   baseUrl?: string,
   /** Optional resolved generation params. Currently only the Sarvam adapter consumes these. */
-  genParams?: LLMGenerationParams
+  genParams?: LLMGenerationParams,
+  /** Optional call id for diagnostic logging only. Currently only the Sarvam adapter uses it. */
+  callId?: number
 ): LLMAdapter {
   if (STUB_PROVIDERS_ENABLED) return createStubLLM();
   switch (provider.toLowerCase()) {
@@ -31,7 +33,7 @@ export function createLLMAdapter(
     case "gemini":
       return new QwenLLM(apiKey, model);
     case "sarvam":
-      return new SarvamLLM(apiKey, model, genParams);
+      return new SarvamLLM(apiKey, model, genParams, callId);
     case "deepseek":
       return new DeepSeekLLM(apiKey, model);
     case "anthropic":

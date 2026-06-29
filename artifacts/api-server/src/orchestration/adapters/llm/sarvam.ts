@@ -1,5 +1,21 @@
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
+import { logger } from "../../../lib/logger.js";
+
+/**
+ * Gated raw-SSE diagnostic flag (OFF by default). When SARVAM_RAW_SSE_DEBUG is
+ * "1" or "true", the adapter emits a single structured record each time the
+ * buffer-and-sniff path resolves a tool call that Sarvam streamed as JSON text
+ * in delta.content (instead of structured delta.tool_calls). Read dynamically so
+ * the flag can be toggled without a code change. Behaviour is otherwise unchanged.
+ */
+function rawSseDebugEnabled(): boolean {
+  const v = process.env.SARVAM_RAW_SSE_DEBUG;
+  return v === "1" || v === "true";
+}
+
+/** Max chars of the withheld content buffer to include in a diagnostic record. */
+const RAW_SSE_DIAG_MAX_BUFFER = 2000;
 
 /**
  * Sarvam AI — Chat Completions (OpenAI-compatible endpoint)
@@ -133,10 +149,13 @@ export class SarvamLLM implements LLMAdapter {
   private key: string;
   private model: string;
   private genParams: LLMGenerationParams;
+  /** Correlation id for diagnostic logging only; never used for request logic. */
+  private callId?: number;
 
-  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams, callId?: number) {
     this.key = apiKey;
     this.genParams = genParams ?? {};
+    this.callId = callId;
     const ALIASES: Record<string, string> = {
       "sarvam-m":        "sarvam-30b",
       "sarvam-2b":       "sarvam-30b",
@@ -428,6 +447,25 @@ export class SarvamLLM implements LLMAdapter {
     // otherwise speak it as genuine text — never silently drop it.
     if (bufferingJson) {
       const parsedCall = options?.onToolCall ? parseSerializedToolCall(jsonBuffer) : null;
+      if (rawSseDebugEnabled()) {
+        logger.warn(
+          {
+            evt: "sarvam_raw_sse_json_in_content",
+            callId: this.callId,
+            model: this.model,
+            sawToolDelta,
+            parseSucceeded: parsedCall !== null,
+            resolvedToolName: parsedCall?.name ?? null,
+            fellBackToText: parsedCall === null,
+            jsonBufferLength: jsonBuffer.length,
+            jsonBuffer:
+              jsonBuffer.length > RAW_SSE_DIAG_MAX_BUFFER
+                ? `${jsonBuffer.slice(0, RAW_SSE_DIAG_MAX_BUFFER)}…[truncated]`
+                : jsonBuffer,
+          },
+          "Sarvam raw SSE diagnostic: tool call emitted as JSON in delta.content",
+        );
+      }
       if (parsedCall && options?.onToolCall) {
         options.onToolCall(parsedCall.name, parsedCall.args);
         return; // exactly one terminal callback — do NOT also call onDone
