@@ -191,6 +191,73 @@ function parseSerializedToolCall(
   return { name, args };
 }
 
+/**
+ * Parse a serialized tool call that Sarvam emitted as a BRACKET / key-value text
+ * envelope in delta.content instead of structured delta.tool_calls or a JSON
+ * blob. Observed shape (production Call #945):
+ *
+ *   [transfer_to_human]
+ *   reason: Caller requested connection to a senior executive
+ *
+ * The tool name is the bracketed token on the first line; any following
+ * `key: value` (or `key = value`) lines become the args. If there is residual
+ * text after the bracket but no key:value pairs are found, the whole remainder
+ * is captured under `reason` so the payload still reaches the executor. Returns
+ * null when the text is not a bracket envelope.
+ */
+function parseBracketToolCall(
+  raw: string,
+): { name: string; args: Record<string, unknown> } | null {
+  let text = raw.trim();
+  // Strip an optional ```…``` fence in case the model wrapped the bracket form.
+  if (text.startsWith("```")) {
+    text = text.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
+  }
+  const m = /^\[\s*([a-zA-Z][a-zA-Z0-9_-]*)\s*\]/.exec(text);
+  if (!m || !m[1]) return null;
+  const name = m[1];
+
+  const rest = text.slice(m[0].length).trim();
+  const args: Record<string, unknown> = {};
+  if (rest) {
+    for (const line of rest.split(/\r?\n/)) {
+      const kv = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*(.*)$/.exec(line);
+      if (kv && kv[1]) args[kv[1]] = (kv[2] ?? "").trim();
+    }
+    // No structured key:value lines — keep the residual text as the reason so a
+    // bare `[tool_name]\n<free text>` envelope still carries its payload.
+    if (Object.keys(args).length === 0) args["reason"] = rest;
+  }
+  return { name, args };
+}
+
+export type ToolEnvelopeFormat = "json" | "bracket";
+
+/**
+ * Unified serialized-tool-call parser. Sarvam does not commit to a single
+ * envelope shape, so we try each known textual form in turn (JSON content
+ * envelope, then bracket/key-value envelope) and return the first that yields a
+ * tool name. When `validNames` is supplied, the resolved name MUST be one of the
+ * tools offered this turn — this prevents ordinary text that merely starts with
+ * `{`/`[` from being misclassified as a tool call (false positives are spoken as
+ * text instead). New textual shapes can be added by appending another parser to
+ * the chain below.
+ */
+export function parseToolEnvelope(
+  raw: string,
+  validNames?: Set<string>,
+): { name: string; args: Record<string, unknown>; format: ToolEnvelopeFormat } | null {
+  const nameOk = (n: string) => !validNames || validNames.size === 0 || validNames.has(n);
+
+  const json = parseSerializedToolCall(raw);
+  if (json && nameOk(json.name)) return { ...json, format: "json" };
+
+  const bracket = parseBracketToolCall(raw);
+  if (bracket && nameOk(bracket.name)) return { ...bracket, format: "bracket" };
+
+  return null;
+}
+
 export class SarvamLLM implements LLMAdapter {
   private key: string;
   private model: string;
@@ -257,11 +324,17 @@ export class SarvamLLM implements LLMAdapter {
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      onToolDetected?: (info: { format: "structured" | "json" | "bracket" }) => void;
+      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket"; args: Record<string, unknown> }) => void;
       onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
     const supportsTools = TOOL_CAPABLE_MODELS.has(this.model);
     const hasTools = supportsTools && (options?.tools?.length ?? 0) > 0;
+
+    // Names of the tools offered this turn — used to validate a parsed envelope
+    // so ordinary text that merely starts with `{`/`[` is not misfired as a tool.
+    const validToolNames = new Set<string>((options?.tools ?? []).map((t) => t.name));
 
     const sanitized = sanitizeForAlternation(messages);
 
@@ -403,12 +476,15 @@ export class SarvamLLM implements LLMAdapter {
         if (!token) return;
 
         // Buffer-and-sniff serialized tool calls (tools-enabled turns only).
-        // Sarvam's streaming endpoint sometimes emits a tool call as a plain-text
-        // JSON blob in delta.content (or a ```json fence) instead of structured
-        // delta.tool_calls. If the FIRST non-whitespace content of the turn looks
-        // like JSON, withhold ALL content from onToken/TTS and resolve it at
-        // end-of-stream. Replies that don't start with `{`/fence stream normally,
-        // preserving TTFT for ordinary conversation.
+        // Sarvam's streaming endpoint sometimes emits a tool call as plain text in
+        // delta.content instead of structured delta.tool_calls — observed shapes:
+        // a JSON blob (`{…}`, optionally ```json-fenced) and a bracket/key-value
+        // envelope (`[transfer_to_human]\nreason: …`, Call #945). If the FIRST
+        // non-whitespace content of the turn begins with `{`, a code fence, or
+        // `[`, withhold ALL content from onToken/TTS and resolve it at
+        // end-of-stream (parsed by the unified parseToolEnvelope). Replies that
+        // don't start with one of those markers stream normally, preserving TTFT
+        // for ordinary conversation.
         if (hasTools) {
           if (bufferingJson) {
             jsonBuffer += token;
@@ -423,7 +499,7 @@ export class SarvamLLM implements LLMAdapter {
             }
             jsonSniffDecided = true;
             const firstChar = peek[0];
-            if (firstChar === "{" || firstChar === "`") {
+            if (firstChar === "{" || firstChar === "`" || firstChar === "[") {
               bufferingJson = true;
               jsonBuffer += token;
               return;
@@ -469,30 +545,37 @@ export class SarvamLLM implements LLMAdapter {
     // Report usage exactly once, before the terminal callback.
     if (usage) options?.onUsage?.(usage);
 
-    // Tool turn: dispatch the first (lowest-index) tool call that has a name.
+    // Tool turn (structured path): dispatch the first (lowest-index) tool call.
     if (toolAcc.size > 0 && options?.onToolCall) {
       const picked = [...toolAcc.entries()]
         .sort((a, b) => a[0] - b[0])
         .map(([, v]) => v)
         .find((v) => v.name);
       if (picked?.name) {
+        options.onToolDetected?.({ format: "structured" });
         let args: Record<string, unknown> = {};
         try {
           args = JSON.parse(picked.args || "{}") as Record<string, unknown>;
         } catch {
           // malformed args — call with empty args
         }
+        options.onToolParsed?.({ name: picked.name, format: "structured", args });
         options.onToolCall(picked.name, args);
         return; // exactly one terminal callback — do NOT also call onDone
       }
     }
 
-    // Buffered serialized-tool-call fallback: Sarvam emitted the tool call as JSON
-    // text in delta.content instead of structured delta.tool_calls (none of it was
-    // forwarded to TTS). Parse the withheld buffer; on success execute the tool,
-    // otherwise speak it as genuine text — never silently drop it.
+    // Buffered serialized-tool-call fallback: Sarvam emitted the tool call as
+    // plain text in delta.content instead of structured delta.tool_calls (none of
+    // it was forwarded to TTS). Resolve the withheld buffer through the unified
+    // parser (JSON envelope OR bracket/key-value envelope), validating the name
+    // against the tools offered this turn; on success execute the tool, otherwise
+    // speak it as genuine text — never silently drop it.
     if (bufferingJson) {
-      const parsedCall = options?.onToolCall ? parseSerializedToolCall(jsonBuffer) : null;
+      const parsedCall = options?.onToolCall
+        ? parseToolEnvelope(jsonBuffer, validToolNames)
+        : null;
+      if (parsedCall) options?.onToolDetected?.({ format: parsedCall.format });
       if (rawSseDebugEnabled()) {
         logger.warn(
           {
@@ -502,6 +585,7 @@ export class SarvamLLM implements LLMAdapter {
             sawToolDelta,
             parseSucceeded: parsedCall !== null,
             resolvedToolName: parsedCall?.name ?? null,
+            resolvedFormat: parsedCall?.format ?? null,
             fellBackToText: parsedCall === null,
             jsonBufferLength: jsonBuffer.length,
             jsonBuffer:
@@ -509,10 +593,11 @@ export class SarvamLLM implements LLMAdapter {
                 ? `${jsonBuffer.slice(0, RAW_SSE_DIAG_MAX_BUFFER)}…[truncated]`
                 : jsonBuffer,
           },
-          "Sarvam raw SSE diagnostic: tool call emitted as JSON in delta.content",
+          "Sarvam raw SSE diagnostic: tool call emitted as text in delta.content",
         );
       }
       if (parsedCall && options?.onToolCall) {
+        options.onToolParsed?.({ name: parsedCall.name, format: parsedCall.format, args: parsedCall.args });
         options.onToolCall(parsedCall.name, parsedCall.args);
         return; // exactly one terminal callback — do NOT also call onDone
       }

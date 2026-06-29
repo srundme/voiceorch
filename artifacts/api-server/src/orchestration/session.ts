@@ -916,6 +916,17 @@ export async function createSession(params: {
         } = await import("./telephony/transfer.js");
         const tprov = params.telephonyProvider;
 
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "info",
+          metadata: {
+            event:    "Transfer Started",
+            provider: tprov ?? "unknown",
+            target:   to,
+            mode:     isWarm ? "warm" : "cold",
+            callUuid: params.externalCallId,
+          },
+        });
+
         if (tprov === "twilio") {
           const authToken = providerKeys.get("twilio") ?? "";
           const extra = providerKeys.get("twilio:extraConfig");
@@ -960,6 +971,16 @@ export async function createSession(params: {
         wasTransferred = true;
         transferredTo = to;
         void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "success",
+          metadata: {
+            event:    "Transfer Completed",
+            provider: tprov ?? "unknown",
+            target:   to,
+            mode:     isWarm ? "warm" : "cold",
+            callUuid: params.externalCallId,
+          },
+        });
         return true;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);

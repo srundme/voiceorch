@@ -449,6 +449,16 @@ export interface LLMAdapter {
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
+      /** Fired the moment the adapter recognises that the model output contains a
+       *  tool call, BEFORE the name/args are fully parsed. `format` records which
+       *  serialized shape was detected (structured streaming, JSON content
+       *  envelope, or a bracket/key-value text envelope). Used for execution-log
+       *  visibility only — currently emitted by the Sarvam adapter. */
+      onToolDetected?: (info: { format: "structured" | "json" | "bracket" }) => void;
+      /** Fired once the detected tool envelope has been parsed into a name + args
+       *  (just before onToolCall). Used for execution-log visibility only —
+       *  currently emitted by the Sarvam adapter. */
+      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket"; args: Record<string, unknown> }) => void;
       /** Called once per chat() invocation with token counts when the provider
        *  returns them — fires on BOTH text turns and tool-call turns so the
        *  pipeline accumulates usage regardless of whether a tool was invoked. */

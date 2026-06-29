@@ -1940,6 +1940,12 @@ export class OrchestrationPipeline {
     logToolExecutionStarted(this.logFn, { tool: toolName, turnNumber: this._activeTurnIndex });
     try {
       const result = await this.handleToolCallInner(toolName, args);
+      this.logExec("Tool", "system", {
+        status: "success",
+        durationMs: Date.now() - _toolStart,
+        turnNumber: this._activeTurnIndex,
+        metadata: { event: "Tool Executed", tool: toolName, result: (result ?? "unavailable").substring(0, 800) },
+      });
       this.logFn("Tool", "system", {
         status: "success",
         durationMs: Date.now() - _toolStart,
@@ -2626,6 +2632,10 @@ export class OrchestrationPipeline {
     const filterFnTag = makeFunctionTagFilter();
     const filterMarkup = makeMarkupTagFilter();
     const filterBrackets = makeBracketFilter();
+    // Defense-in-depth tool-envelope guard: validated against the names of the
+    // tools offered this turn so only a genuine serialized tool call is withheld
+    // from TTS (ordinary bracketed text streams normally).
+    const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -3140,7 +3150,12 @@ export class OrchestrationPipeline {
           if (!filtered) return;
           const afterBrackets = filterBrackets(filtered); // drop long [instruction…] leaks
           if (!afterBrackets) return;
-          pendingText += afterBrackets;
+          // Defense-in-depth: even if an adapter leaks a serialized tool envelope
+          // into the token stream (instead of resolving it via onToolCall), the
+          // guard withholds it from TTS so a tool call is never spoken aloud.
+          const afterEnvelope = envelopeGuard.filter(afterBrackets);
+          if (!afterEnvelope) return;
+          pendingText += afterEnvelope;
           const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
@@ -3149,9 +3164,28 @@ export class OrchestrationPipeline {
         toolDefs.length > 0
           ? {
               tools: toolDefs,
+              onToolDetected: (info) => {
+                this.logExec("Tool", "system", {
+                  status: "info",
+                  turnNumber: _currentTurnIndex,
+                  metadata: { event: "Tool Detected", format: info.format },
+                });
+              },
+              onToolParsed: (info) => {
+                this.logExec("Tool", "system", {
+                  status: "info",
+                  turnNumber: _currentTurnIndex,
+                  metadata: { event: "Tool Parsed", tool: info.name, format: info.format, args: info.args },
+                });
+              },
               onToolCall: (name, args) => {
                 triggeredToolName = name;
                 triggeredToolArgs = args;
+                this.logExec("Tool", "system", {
+                  status: "info",
+                  turnNumber: _currentTurnIndex,
+                  metadata: { event: "onToolCall Invoked", tool: name, args },
+                });
               },
               onUsage: (usage) => {
                 this.hasRealLlmUsage = true;
@@ -3277,6 +3311,22 @@ export class OrchestrationPipeline {
     // Safety net: clear filler timer if LLM completed without streaming any tokens
     // (e.g. pure tool-call response that never invokes onToken)
     if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+
+    // Defense-in-depth anomaly: the LLM streamed a serialized tool envelope as
+    // text (it should have been resolved by the adapter's onToolCall path). The
+    // guard withheld it from TTS so it was never spoken — record it for triage.
+    if (envelopeGuard.suppressed()) {
+      this.logExec("Tool", "system", {
+        status: "info",
+        turnNumber: _currentTurnIndex,
+        warningFlags: ["tool_envelope_suppressed"],
+        metadata: {
+          event: "Tool Envelope Suppressed",
+          detail: "LLM streamed a tool envelope as text; withheld from TTS",
+          preview: envelopeGuard.captured().slice(0, 200),
+        },
+      });
+    }
 
     // LLM response execution-log row — logged before tool handling so the
     // timeline reads LLM request → LLM response → Tool request → Tool response
@@ -3720,6 +3770,9 @@ export class OrchestrationPipeline {
     const filterFnTag = makeFunctionTagFilter();
     const filterMarkup = makeMarkupTagFilter();
     const filterBrackets = makeBracketFilter();
+    // Defense-in-depth tool-envelope guard (same as the main turn) — withholds a
+    // leaked serialized tool envelope from TTS on chained tool turns too.
+    const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
     const sentenceQueue: string[] = [];
     let wakePlayer: (() => void) | null = null;
@@ -3822,7 +3875,9 @@ export class OrchestrationPipeline {
           if (!filtered) return;
           const afterBrackets = filterBrackets(filtered);
           if (!afterBrackets) return;
-          pendingText += afterBrackets;
+          const afterEnvelope = envelopeGuard.filter(afterBrackets);
+          if (!afterEnvelope) return;
+          pendingText += afterEnvelope;
           const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
           for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
           pendingText = remainder;
@@ -3831,9 +3886,28 @@ export class OrchestrationPipeline {
         attachTools
           ? {
               tools: toolDefs,
+              onToolDetected: (info) => {
+                this.logExec("Tool", "system", {
+                  status: "info",
+                  turnNumber: this._activeTurnIndex,
+                  metadata: { event: "Tool Detected", format: info.format },
+                });
+              },
+              onToolParsed: (info) => {
+                this.logExec("Tool", "system", {
+                  status: "info",
+                  turnNumber: this._activeTurnIndex,
+                  metadata: { event: "Tool Parsed", tool: info.name, format: info.format, args: info.args },
+                });
+              },
               onToolCall: (name, args) => {
                 triggeredToolName = name;
                 triggeredToolArgs = args;
+                this.logExec("Tool", "system", {
+                  status: "info",
+                  turnNumber: this._activeTurnIndex,
+                  metadata: { event: "onToolCall Invoked", tool: name, args },
+                });
               },
               onUsage: (usage) => {
                 this.hasRealLlmUsage = true;
@@ -4395,6 +4469,79 @@ function makeBracketFilter(): (token: string) => string {
       }
     }
     return out;
+  };
+}
+
+/** Extract the tool names from an array of provider tool definitions, which may
+ *  be shaped as either `{ function: { name } }` (OpenAI-style) or `{ name }`. */
+function toolNamesOf(toolDefs: unknown[]): Set<string> {
+  const names = new Set<string>();
+  for (const t of toolDefs) {
+    const name = (t as any)?.function?.name ?? (t as any)?.name;
+    if (typeof name === "string" && name) names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Defense-in-depth tool-envelope guard for the LLM→TTS token stream.
+ *
+ * The primary fix for serialized tool calls lives in each LLM adapter (which
+ * resolves the envelope via onToolCall and never forwards it to onToken). This
+ * guard is a last line of defense: if ANY adapter still leaks a tool envelope
+ * into the token stream, the guard withholds it so a tool call is never spoken
+ * aloud to the caller. It inspects only the FIRST non-whitespace content of the
+ * reply:
+ *   • starts with `{` or a ``` fence  → JSON/fenced envelope, suppress
+ *   • starts with `[<validToolName>]` → bracket envelope, suppress
+ *   • anything else                   → ordinary text, flush and stop guarding
+ * Ordinary bracketed text (e.g. "[laughs]") is NOT suppressed because its name
+ * is not in validToolNames. Once the first decision is made the guard becomes a
+ * pass-through (or a sink, if suppressing), so it never affects mid-reply text.
+ */
+function makeToolEnvelopeGuard(validToolNames: Set<string>): {
+  filter: (token: string) => string;
+  suppressed: () => boolean;
+  captured: () => string;
+} {
+  let decided = false;
+  let suppress = false;
+  let held = "";      // leading content withheld until the decision is made
+  let captured = "";  // full suppressed text (for the anomaly log)
+
+  return {
+    filter(token: string): string {
+      if (decided) {
+        if (suppress) { captured += token; return ""; }
+        return token;
+      }
+      held += token;
+      const peek = held.replace(/^\s+/, "");
+      if (peek === "") return ""; // only whitespace so far — keep holding
+      const first = peek[0];
+      if (first === "{" || first === "`") {
+        decided = true; suppress = true; captured = held; return "";
+      }
+      if (first === "[") {
+        const close = peek.indexOf("]");
+        if (close === -1) {
+          // Wait for the closing bracket, but cap how long we hold so a normal
+          // reply that merely contains a "[" is not withheld indefinitely.
+          if (peek.length > 64) { decided = true; suppress = false; return held; }
+          return "";
+        }
+        const name = peek.slice(1, close).trim();
+        if (validToolNames.has(name)) {
+          decided = true; suppress = true; captured = held; return "";
+        }
+        // A short bracket that is not a known tool (e.g. "[laughs]") — flush.
+        decided = true; suppress = false; return held;
+      }
+      // Ordinary text — flush everything held so far and stop guarding.
+      decided = true; suppress = false; return held;
+    },
+    suppressed: () => suppress,
+    captured: () => captured,
   };
 }
 

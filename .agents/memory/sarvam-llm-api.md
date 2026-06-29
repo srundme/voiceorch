@@ -75,27 +75,44 @@ Gemini/OpenAI unaffected (no thinking mode, tool_choice:auto works fine).
   `delta.content`. These must be stripped before forwarding to TTS.
 - **Fix in sarvam.ts:** `token.replace(/<\|(?:message|thinking|endofthinking|endofmessage|im_start|im_end)\|>/g, "")` applied to every content token.
 
-## Tool call streaming is UNRELIABLE — two shapes, must handle both
+## Tool call streaming is UNRELIABLE — THREE shapes, must handle all
 Sarvam's `stream:true` tool calling is inconsistent. The SAME agent/model emits a
-tool call one of two ways across calls:
+tool call one of three ways across calls:
 1. **Structured (primary):** `delta.tool_calls[0]={index,id,function:{name,arguments:""}}`
    first, then argument fragment chunks, `finish_reason:"tool_calls"`, usage chunk, `[DONE]`.
-2. **Serialized JSON text (fallback):** the WHOLE tool call arrives as a plain-text JSON
+2. **Serialized JSON text:** the WHOLE tool call arrives as a plain-text JSON
    blob inside `delta.content`, e.g. `{ "name":"transfer_to_human", "arguments":{...} }`
    (optionally inside a ```json fence). NO `delta.tool_calls` at all.
-- **Why this matters:** if you only route on `delta.tool_calls`, shape #2 falls through to
-  the text path and the raw JSON is streamed to TTS — the caller literally HEARS the JSON
-  (confirmed: a Sarvam web call spoke `{"name":"transfer_to_human"...}` aloud).
+3. **Bracket / key-value text:** the tool arrives as a bracket envelope in
+   `delta.content`, e.g. `[transfer_to_human]\nreason: <text>` (the bracketed
+   token is the tool name; following `key: value` / `key = value` lines are args;
+   a bare `[tool]\n<free text>` puts the residual under `reason`). NO
+   `delta.tool_calls`. Confirmed in prod: this fell through to TTS and the call
+   ended in silence because the bracket form was never parsed (only JSON was).
+- **Why this matters:** if you only route on `delta.tool_calls` (or only sniff JSON),
+  shapes #2/#3 fall through to the text path — the caller HEARS the envelope or the
+  transfer never dispatches.
 - **How to apply (in sarvam.ts):**
   - Structured path: accumulate `delta.tool_calls` into `Map<index,{id,name,args}>`; ignore
     any content once a tool delta has been seen.
-  - Serialized fallback (tools-enabled turns only): buffer-and-sniff. If the FIRST
-    non-whitespace `delta.content` of the turn begins with `{` or `` ` `` (fence),
-    WITHHOLD all content from onToken/TTS and accumulate it; at end-of-stream parse it
-    (`parseSerializedToolCall`, tolerating a fence + an `arguments` that is itself a JSON
-    string) → `onToolCall` on success, else `onDone(buffer)` so genuine text is never dropped.
-  - Replies NOT starting with `{`/fence stream normally (TTFT preserved). Drop leading
-    whitespace-only `delta.content` ("\n" artifact). Fire exactly one terminal callback.
+  - Text fallback (tools-enabled turns only): buffer-and-sniff. If the FIRST
+    non-whitespace `delta.content` begins with `{`, `` ` `` (fence), **or `[`**,
+    WITHHOLD all content from onToken/TTS and accumulate it; at end-of-stream resolve via
+    the unified `parseToolEnvelope(raw, validNames)` (tries JSON then bracket) → `onToolCall`
+    on success, else `onDone(buffer)` so genuine text is never dropped.
+  - **Validate the parsed name against the tools offered this turn** (`validNames =
+    new Set(options.tools.map(t=>t.name))`) so ordinary text that merely starts with
+    `{`/`[` (e.g. `[laughs]`) is NOT misfired as a tool — it streams as text instead.
+  - Replies NOT starting with `{`/fence/`[` stream normally (TTFT preserved). Fire exactly
+    one terminal callback.
+- **Defense-in-depth (pipeline.ts):** a `makeToolEnvelopeGuard(validToolNames)` sits after
+  the bracket filter in BOTH onToken chains (main turn + continueWithToolResult). If ANY
+  adapter still leaks an envelope to onToken, the guard withholds it from TTS and logs a
+  "Tool Envelope Suppressed" row — a tool call is never spoken aloud regardless of adapter.
+- **Execution-log markers** (Call Logs visibility): adapter fires `onToolDetected{format}` +
+  `onToolParsed{name,format,args}`; pipeline logs Tool Detected → Tool Parsed → onToolCall
+  Invoked → Tool Executed; session.ts onCallTransfer logs Transfer Started → Transfer
+  Completed/Failed. `ExecStatus` has no "warning" — use `status:"info"` + `warningFlags:[...]`.
 
 ## Other
 - Strict user/assistant alternation starting with a user turn — merge consecutive
