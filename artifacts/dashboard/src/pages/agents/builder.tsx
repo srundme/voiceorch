@@ -1228,7 +1228,7 @@ function VoiceTab({ form }: { form: any }) {
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
-  const recordingEnabled = form.watch("recordingEnabled") ?? false;
+  const recordingEnabled = form.watch("recordingEnabled") ?? true;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
 
@@ -4607,7 +4607,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
-      tools: [], genderDetectionEnabled: false, recordingEnabled: false, languageAutoDetect: false,
+      tools: [], genderDetectionEnabled: false, recordingEnabled: true, languageAutoDetect: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
