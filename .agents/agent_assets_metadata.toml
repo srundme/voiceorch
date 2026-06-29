@@ -192,3 +192,9 @@ id = "OyjMEsuGkU_85myxptBuL"
 uri = "file://.local/outputs/Bolna-Orchestrator.pdf"
 type = "pdf"
 title = "Bolna Orchestrator.pdf"
+
+[[outputs]]
+id = "czNxv_lIFAVxCRZpBlbW-"
+uri = "file://exports/system-architecture.svg"
+type = "image"
+title = "SnapServe System Architecture (SVG)"
