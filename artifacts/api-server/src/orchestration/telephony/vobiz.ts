@@ -2,6 +2,8 @@ import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
+import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 /**
  * Vobiz WebSocket handler
@@ -74,6 +76,12 @@ export async function handleVobizWebSocket(
    * NOT by the live CallUUID it does not yet hold) is matched and updated in place.
    */
   corrToken?: string,
+  /**
+   * Scheduled-callback row ID, present when this call was fired by the callback
+   * poller (network_drop or callback_requested reason). Used to load
+   * resumeContext from the originating call and inject it into the session.
+   */
+  callbackId?: number,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -162,6 +170,26 @@ export async function handleVobizWebSocket(
           if (silenceTimer) { clearInterval(silenceTimer); silenceTimer = null; }
         };
 
+        // Load resumeContext and callback reason from the originating call if this is a callback
+        let priorResumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
+        let sourceCallbackReason: string | undefined;
+        if (callbackId) {
+          try {
+            const [cbRow] = await db.select({ createdFromCallId: scheduledCallbacksTable.createdFromCallId, reason: scheduledCallbacksTable.reason })
+              .from(scheduledCallbacksTable)
+              .where(eq(scheduledCallbacksTable.id, callbackId));
+            sourceCallbackReason = cbRow?.reason ?? undefined;
+            if (cbRow?.reason === "network_drop" && cbRow.createdFromCallId) {
+              const [srcCall] = await db.select({ resumeContext: callsTable.resumeContext })
+                .from(callsTable)
+                .where(eq(callsTable.id, cbRow.createdFromCallId));
+              if (srcCall?.resumeContext) priorResumeContext = srcCall.resumeContext;
+            }
+          } catch (ctxErr) {
+            logger.warn({ callbackId, ctxErr }, "Vobiz: failed to load resumeContext from prior call — continuing without it");
+          }
+        }
+
         try {
           const { sessionId: sid } = await createSession({
             agentId,
@@ -175,6 +203,8 @@ export async function handleVobizWebSocket(
             customParameters: params,
             campaignLeadId,
             voicemailDelivery,
+            resumeContext: priorResumeContext,
+            sourceCallbackReason,
             onAudioOut: (audio: Buffer) => {
               stopSilence();            // first real audio → drop silence immediately
               sendAudioToVobiz(audio);
@@ -272,7 +302,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound" } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -298,6 +328,8 @@ export function getVobizAnswerXML(
   // be matched and updated in place with the live CallUUID (the dial response only
   // carried a request_uuid, which can never match providerCallId === CallUUID).
   if (opts.corr) qsParts.push(`corr=${encodeURIComponent(opts.corr)}`);
+  // Embed cbId so the WS handler can load prior call's resumeContext for inject.
+  if (opts.cbId) qsParts.push(`cbId=${opts.cbId}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
   // XML-escape the URL before embedding in the <Stream> text node.  Bare "&" in

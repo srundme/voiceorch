@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, json, index, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, json, jsonb, index, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
@@ -39,6 +39,19 @@ export const callsTable = pgTable("calls", {
   successEvaluation: text("success_evaluation"), // "PASS / FAIL + reason" from LLM pass
   // Token optimization tracking
   tokensSaved: integer("tokens_saved"),
+  // Conversation continuity
+  /** True when the call ended naturally (goodbye / transfer). False/null = dropped. */
+  conversationCompleted: boolean("conversation_completed"),
+  /** LLM-generated context snapshot for the next auto-callback to resume from. */
+  resumeContext: jsonb("resume_context").$type<{
+    summary: string;
+    extractedFacts: string[];
+    completedSteps: string[];
+    pendingSteps: string[];
+    lastAgentMessage: string;
+    lastCustomerMessage: string;
+    toolResults: string[];
+  }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
 });

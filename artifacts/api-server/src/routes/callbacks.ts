@@ -46,6 +46,8 @@ router.get("/callbacks", async (req, res): Promise<void> => {
     conditions.push(eq(scheduledCallbacksTable.reason, "callback_requested"));
   } else if (reason === "no_answer") {
     conditions.push(eq(scheduledCallbacksTable.reason, "no_answer"));
+  } else if (reason === "network_drop") {
+    conditions.push(eq(scheduledCallbacksTable.reason, "network_drop"));
   }
 
   const where = and(...conditions)!;
@@ -181,23 +183,25 @@ router.get("/callbacks/stats", async (req, res): Promise<void> => {
     .where(eq(agentsTable.userId, userId));
   const ids = agentIds.map(a => a.id);
   if (ids.length === 0) {
-    res.json({ pendingCallbacks: 0, pendingRedials: 0, dueNow: 0 });
+    res.json({ pendingCallbacks: 0, pendingRedials: 0, pendingNetworkDrops: 0, dueNow: 0 });
     return;
   }
 
   const [m] = await db
     .select({
-      pendingCallbacks: sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.reason} = 'callback_requested')::int`,
-      pendingRedials:   sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.reason} = 'no_answer')::int`,
-      dueNow:           sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.scheduledAt} <= now())::int`,
+      pendingCallbacks:     sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.reason} = 'callback_requested')::int`,
+      pendingRedials:     sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.reason} = 'no_answer')::int`,
+      pendingNetworkDrops: sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.reason} = 'network_drop')::int`,
+      dueNow:             sql<number>`count(*) filter (where ${scheduledCallbacksTable.status} = 'pending' and ${scheduledCallbacksTable.scheduledAt} <= now())::int`,
     })
     .from(scheduledCallbacksTable)
     .where(inArray(scheduledCallbacksTable.agentId, ids));
 
   res.json({
-    pendingCallbacks: m?.pendingCallbacks ?? 0,
-    pendingRedials:   m?.pendingRedials   ?? 0,
-    dueNow:           m?.dueNow           ?? 0,
+    pendingCallbacks:     m?.pendingCallbacks     ?? 0,
+    pendingRedials:       m?.pendingRedials       ?? 0,
+    pendingNetworkDrops:  m?.pendingNetworkDrops  ?? 0,
+    dueNow:               m?.dueNow               ?? 0,
   });
 });
 

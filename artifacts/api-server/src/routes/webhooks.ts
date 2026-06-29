@@ -277,7 +277,8 @@ router.post("/webhooks/twilio/voice", async (req, res): Promise<void> => {
   const wsBaseUrl = getWsBaseUrl(req);
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   const callDirection = req.query["dir"] === "out" ? "outbound" : "inbound";
-  const twiml = getTwilioVoiceTwiML(wsBaseUrl, agentId, campaignLeadId, callDirection);
+  const twilioAnswerCbId = req.query["cbId"] ? (parseInt(String(req.query["cbId"]), 10) || undefined) : undefined;
+  const twiml = getTwilioVoiceTwiML(wsBaseUrl, agentId, campaignLeadId, callDirection, twilioAnswerCbId);
 
   res.set("Content-Type", "text/xml").send(twiml);
 });
@@ -338,7 +339,8 @@ router.post("/webhooks/plivo/voice", async (req, res): Promise<void> => {
   const wsBaseUrl = getWsBaseUrl(req);
   const campaignLeadId = req.query["campaignLeadId"] ? parseInt(String(req.query["campaignLeadId"]), 10) : undefined;
   const callDirection = req.query["dir"] === "out" ? "outbound" : "inbound";
-  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId, callDirection);
+  const plivoAnswerCbId = req.query["cbId"] ? (parseInt(String(req.query["cbId"]), 10) || undefined) : undefined;
+  const xml = getPlivoAnswerXML(wsBaseUrl, agentId, campaignLeadId, callDirection, plivoAnswerCbId);
 
   res.set("Content-Type", "text/xml").send(xml);
 });
@@ -603,6 +605,10 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   // record by it. Absent on inbound/campaign calls (those reconcile differently).
   const corr = req.query["corr"] ? String(req.query["corr"]) : undefined;
   const callDirection: "inbound" | "outbound" = req.query["dir"] === "out" ? "outbound" : "inbound";
+  // Scheduled callback row ID — present when the call was fired by the callback
+  // poller (network_drop / callback_requested). Threaded into the WS URL so the
+  // WS handler can load the prior call's resumeContext for context injection.
+  const answerCbId = req.query["cbId"] ? (parseInt(String(req.query["cbId"]), 10) || undefined) : undefined;
   const inboundFrom = String(req.body?.From ?? req.body?.from ?? "").trim() || undefined;
   const inboundTo   = String(req.body?.To   ?? req.body?.to   ?? "").trim() || undefined;
 
@@ -671,6 +677,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
       campaignLeadId, from: inboundFrom, to: inboundTo, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
+      cbId: answerCbId,
     })
   );
 });

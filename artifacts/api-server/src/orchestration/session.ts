@@ -1,6 +1,6 @@
 import { createHmac, createHash, randomBytes } from "crypto";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
-import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, scheduledCallbacksTable, campaignsTable } from "@workspace/db";
+import { db, agentsTable, callsTable, providersTable, platformSettingsTable, campaignLeadsTable, knowledgeEntriesTable, callTransfersTable, usersTable, walletTransactionsTable, bookingsTable, scheduledCallbacksTable, campaignsTable, executionLogsTable } from "@workspace/db";
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlock } from "./kb-retrieval.js";
@@ -25,7 +25,7 @@ import { computeOperationalOutcome, setOperationalOutcome } from "../services/op
 import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
-import { scheduleNoAnswerRedial } from "../services/autoRedial.js";
+import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { recordCallExecution } from "./campaignCaller.js";
 import {
   resolveCallerKey,
@@ -75,6 +75,10 @@ interface ActiveSession {
   // Dropped-call detection: true when pipeline triggered the end (phrase/timeout/tool)
   // false means WS just closed — i.e. call was likely dropped mid-conversation
   naturalEndTriggered: boolean;
+  /** When this call was itself spawned from a scheduled callback, the callback's reason
+   *  (e.g. "network_drop"). Prevents re-scheduling another callback when a retry call
+   *  itself drops — enforces the single-retry-only invariant. */
+  sourceCallbackReason: string | null;
   /** Name latched mid-call via latchCallerName (caller said "my name is X").
    *  Used to guard against LLM-extraction contamination at call-end. */
   callerNameLatchedThisCall: string | null;
@@ -121,6 +125,22 @@ export async function createSession(params: {
    *  (acoustic VAD cue) then speaks the agent's configured `voicemailMessage` once
    *  in full and hangs up. Used by the Vobiz AMD `leave_message` path. */
   voicemailDelivery?: boolean;
+  /** When this call was spawned by a scheduled callback, the callback's reason string
+   *  (e.g. "network_drop"). Stored in session state and used in endSession to prevent
+   *  a dropped retry call from scheduling yet another callback (single-retry invariant). */
+  sourceCallbackReason?: string;
+  /** Context snapshot from the previous call, generated after a network drop.
+   *  When present, injected into the system prompt so the agent resumes naturally
+   *  instead of treating the callback as a cold start. */
+  resumeContext?: {
+    summary: string;
+    extractedFacts?: string[];
+    completedSteps?: string[];
+    pendingSteps?: string[];
+    lastAgentMessage?: string;
+    lastCustomerMessage?: string;
+    toolResults?: string[];
+  };
 }): Promise<{ sessionId: string; callDbId: number }> {
 
   // Browser "Live Test" transport — labels the call record + lifecycle log so the
@@ -482,6 +502,41 @@ export async function createSession(params: {
         "Caller memory injected into system prompt"
       );
     }
+  }
+
+  // ── Inject prior-call resume context (network-drop callback) ─────────────────
+  if (params.resumeContext) {
+    const rc = params.resumeContext;
+    const sections: string[] = ["=== PREVIOUS CALL CONTEXT ==="];
+    sections.push(`Summary: ${rc.summary}`);
+    if (rc.extractedFacts?.length) {
+      sections.push(`Customer facts already collected:\n${rc.extractedFacts.map(f => `- ${f}`).join("\n")}`);
+    }
+    if (rc.completedSteps?.length) {
+      sections.push(`Steps already completed:\n${rc.completedSteps.map(s => `- ${s}`).join("\n")}`);
+    }
+    if (rc.pendingSteps?.length) {
+      sections.push(`Steps still pending (start from the first one):\n${rc.pendingSteps.map(s => `- ${s}`).join("\n")}`);
+    }
+    if (rc.lastAgentMessage) {
+      sections.push(`Last thing the agent said: "${rc.lastAgentMessage}"`);
+    }
+    if (rc.lastCustomerMessage) {
+      sections.push(`Last thing the customer said: "${rc.lastCustomerMessage}"`);
+    }
+    if (rc.toolResults?.length) {
+      sections.push(`=== TOOL STATE (do NOT re-execute these) ===\n${rc.toolResults.map(t => `- ${t}`).join("\n")}`);
+    }
+    sections.push(
+      `=== RESUME DIRECTIVE ===\n` +
+      `The caller was disconnected mid-call. Open with a brief acknowledgement (e.g. "We got disconnected — let me pick up from where we left off"). ` +
+      `Then continue directly from the first pending step above. ` +
+      `NEVER re-ask for information already listed in Customer facts. ` +
+      `NEVER repeat steps already marked as completed. ` +
+      `NEVER re-execute tools listed in TOOL STATE.`
+    );
+    agentConfig.systemPrompt += `\n\n${sections.join("\n\n")}`;
+    logger.info({ agentId: params.agentId }, "Resume context injected into system prompt for network-drop callback");
   }
 
   // ── Resolve dynamic variables in system prompt ─────────────────────────────
@@ -1094,10 +1149,11 @@ export async function createSession(params: {
     get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
     personaHash,
     callerPhone,
-    agentUserId:      agent.userId ?? null,
-    agentLlmProvider: agent.llmProvider,
-    agentLlmModel:    agent.llmModel ?? "",
-    campaignLeadId:   params.campaignLeadId ?? null,
+    agentUserId:          agent.userId ?? null,
+    agentLlmProvider:     agent.llmProvider,
+    agentLlmModel:        agent.llmModel ?? "",
+    campaignLeadId:       params.campaignLeadId ?? null,
+    sourceCallbackReason: params.sourceCallbackReason ?? null,
   });
 
   // Persist initial session metadata to Redis
@@ -1308,6 +1364,26 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
     }).getUsageTotals?.() ?? null;
     const tokensSavedValue = pipelineUsage?.tokensSaved ?? 0;
 
+    // Check if a booking was completed during this call (native_booking tool writes bookings.call_id)
+    let bookingCompletedThisCall = false;
+    try {
+      const [bookingRow] = await db
+        .select({ id: bookingsTable.id })
+        .from(bookingsTable)
+        .where(eq(bookingsTable.callId, session.callId))
+        .limit(1);
+      bookingCompletedThisCall = !!bookingRow;
+    } catch { /* non-critical — default to false */ }
+
+    // Closing-statement signal: if the final portion of the transcript contains
+    // typical farewell language from the agent (cross-language), treat as completed
+    // even when the transport closed without the pipeline explicitly calling end_call.
+    const closingPhrases = ["thank you", "goodbye", "bye", "have a great", "have a nice", "take care",
+      "talk soon", "speak soon", "धन्यवाद", "अलविदा", "नमस्ते", "நன்றி", "நல்வாழ்த்துக்கள்"];
+    const lastChunk = (transcript ?? "").slice(-600).toLowerCase();
+    const hasClosingSignal = metricsAcc.count > 0 && closingPhrases.some(p => lastChunk.includes(p));
+    const conversationCompleted = session.naturalEndTriggered || session.wasTransferred || bookingCompletedThisCall || hasClosingSignal;
+
     await db.update(callsTable).set({
       status: callStatus,
       endedAt,
@@ -1316,6 +1392,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       sttLatencyMs: avgSttMs,
       llmLatencyMs: avgLlmMs,
       ttsFirstChunkMs: avgTtsMs,
+      conversationCompleted,
       ...(tokensSavedValue > 0 ? { tokensSaved: tokensSavedValue } : {}),
       ...(recordingUrl ? { recordingUrl } : {}),
       ...(recordingError ? { recordingError } : {}),
@@ -1432,22 +1509,120 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           });
       }
 
-      // ── Auto-redial on unexpected drop ───────────────────────────────────────
-      // If the agent has autoRedial enabled and the call ended without a natural
-      // goodbye (user hangup / network drop), schedule a callback.  Fires even
-      // for very short calls so testing any feature works end-to-end.
+      // ── Resume context generation (fire-and-forget, every non-trivial call) ────
+      // Runs after every call with a meaningful transcript (not just drops) so the
+      // context is stored and ready if a network-drop callback fires.
+      // Campaign calls are excluded — they manage their own retry context.
+      const isCampaignCall  = !!session.campaignLeadId;
+      if (ag && transcript && transcript.length > 100 && !isCampaignCall) {
+        void (async () => {
+          try {
+            const ctxLlmProvs = await db.select().from(providersTable).where(
+              and(
+                eq(providersTable.isActive, true),
+                ...(session.agentUserId ? [eq(providersTable.userId, session.agentUserId)] : []),
+                eq(providersTable.providerName, session.agentLlmProvider),
+              ),
+            );
+            // Decrypt BYOP provider key — same as all other post-call LLM paths
+            let ctxLlmKey: string | null = ctxLlmProvs[0] ? decryptKey(ctxLlmProvs[0].apiKey) : null;
+            let ctxLlmProvider = session.agentLlmProvider;
+            let ctxLlmModel    = session.agentLlmModel;
+            if (!ctxLlmKey) {
+              const [row] = await db.select().from(platformSettingsTable).where(eq(platformSettingsTable.key, "managed_qwen_key"));
+              ctxLlmKey = row?.value?.trim() || process.env["GROQ_API_KEY"] || null;
+              if (ctxLlmKey) {
+                ctxLlmProvider = "groq";
+                ctxLlmModel    = "llama-3.3-70b-versatile";
+              }
+            }
+            if (!ctxLlmKey) return;
+
+            // Read persisted tool execution log from DB so toolResults is based on
+            // actual execution history, not inferred from transcript text alone.
+            const toolExecRows = await db
+              .select({
+                metadata: executionLogsTable.metadata,
+                responsePayload: executionLogsTable.responsePayload,
+              })
+              .from(executionLogsTable)
+              .where(
+                and(
+                  eq(executionLogsTable.callId, session.callId),
+                  eq(executionLogsTable.component, "Tool"),
+                  eq(executionLogsTable.direction, "response"),
+                ),
+              )
+              .orderBy(executionLogsTable.ts);
+            const toolLogLines = toolExecRows.map((r) => {
+              const m = r.metadata as Record<string, unknown> | null;
+              const toolName  = (m?.["tool"] as string | undefined) ?? "unknown_tool";
+              const toolResult = (m?.["result"] as string | undefined)
+                ?? JSON.stringify(r.responsePayload ?? {}).slice(0, 300);
+              return `${toolName}: ${toolResult}`;
+            });
+            const toolLogBlock = toolLogLines.length > 0
+              ? `\n\nTool execution log (EXACT results — use these verbatim for toolResults):\n${toolLogLines.join("\n")}`
+              : "";
+
+            const ctxLlm = createLLMAdapter(ctxLlmProvider, ctxLlmKey, ctxLlmModel);
+            const ctxUserContent =
+              `The following is a transcript of a voice call. ` +
+              `Extract a complete context snapshot so the agent can continue naturally if it needs to call back.\n\n` +
+              `Transcript:\n${transcript.slice(-4000)}${toolLogBlock}\n\n` +
+              `Respond ONLY with a JSON object (no markdown, no explanation) with these exact keys:\n` +
+              `{"summary":"<2-3 sentence summary of the whole call>",` +
+              `"extractedFacts":["<fact about the customer: name, date, preference, etc.>"],` +
+              `"completedSteps":["<step that was fully completed>"],` +
+              `"pendingSteps":["<step that was not yet completed, in order>"],` +
+              `"lastAgentMessage":"<verbatim or paraphrased last thing the agent said>",` +
+              `"lastCustomerMessage":"<verbatim or paraphrased last thing the customer said>",` +
+              `"toolResults":["<exact tool name: exact result from tool execution log above>"]}`
+            let jsonStr = "";
+            await ctxLlm.chat(
+              [{ role: "user", content: ctxUserContent }],
+              "You are a call analyst. Extract a context snapshot from a voice call transcript as a JSON object. Respond only with valid JSON, no markdown, no explanation.",
+              () => {},
+              (full) => { jsonStr = full; },
+            );
+            const stripped = jsonStr.trim().replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+            const parsed = JSON.parse(stripped) as {
+              summary: string;
+              extractedFacts: string[];
+              completedSteps: string[];
+              pendingSteps: string[];
+              lastAgentMessage: string;
+              lastCustomerMessage: string;
+              toolResults: string[];
+            };
+            if (parsed?.summary) {
+              await db.update(callsTable).set({ resumeContext: parsed }).where(eq(callsTable.id, session.callId));
+              logger.info({ sessionId }, "Resume context generated and stored");
+            }
+          } catch (ctxErr) {
+            logger.warn({ sessionId, ctxErr }, "Resume context generation failed — callback will proceed without prior context");
+          }
+        })();
+      }
+
+      // ── Network-drop detection + auto-callback ────────────────────────────────
+      // When autoRedial is enabled, the call dropped unexpectedly, it's a real PSTN
+      // call, schedule an immediate single-attempt network-drop callback.
+      // SINGLE-RETRY INVARIANT: if this call was itself a network-drop callback retry
+      // (sourceCallbackReason === "network_drop"), never schedule another — prevents
+      // an infinite redial chain when the retry call also drops.
       const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
       const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred;
-      if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && session.callerPhone) {
-        void scheduleNoAnswerRedial({
-          agentId:               ag.id,
-          toNumber:              session.callerPhone,
-          userId:                ag.userId ?? null,
-          callId:                session.callId,
-          maxAttempts:           autoRedialCfg.maxAttempts ?? 3,
-          redialIntervalMinutes: autoRedialCfg.delayMinutes ?? 2,
+      const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
+      const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";
+      if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
+        void scheduleNetworkDropCallback({
+          agentId:  ag.id,
+          toNumber: session.callerPhone!,
+          userId:   ag.userId ?? null,
+          callId:   session.callId,
         }).catch((rdErr) => {
-          logger.warn({ sessionId, rdErr }, "Auto-redial scheduling failed");
+          logger.warn({ sessionId, rdErr }, "Network-drop callback scheduling failed");
         });
       }
 

@@ -15,7 +15,7 @@ export const scheduledCallbacksTable = pgTable("scheduled_callbacks", {
   triggeredAt:           timestamp("triggered_at"),
   createdAt:             timestamp("created_at").defaultNow().notNull(),
   // ── Auto-redial fields ────────────────────────────────────────────────────────
-  reason:                text("reason").default("callback_requested"), // callback_requested | no_answer
+  reason:                text("reason").default("callback_requested"), // callback_requested | no_answer | network_drop
   attemptCount:          integer("attempt_count").notNull().default(1),
   maxAttempts:           integer("max_attempts").notNull().default(5),
   redialIntervalMinutes: integer("redial_interval_minutes").notNull().default(30),

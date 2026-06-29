@@ -30,7 +30,7 @@ interface CallbackItem {
   toNumber: string;
   scheduledAt: string | null;
   status: "pending" | "triggering" | "triggered" | "cancelled" | "failed";
-  reason: "callback_requested" | "no_answer";
+  reason: "callback_requested" | "no_answer" | "network_drop";
   attemptCount: number | null;
   maxAttempts: number | null;
   redialIntervalMinutes: number | null;
@@ -51,19 +51,22 @@ interface CallbackListResponse {
 interface CallbackStats {
   pendingCallbacks: number;
   pendingRedials: number;
+  pendingNetworkDrops: number;
   dueNow: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function reasonLabel(reason: CallbackItem["reason"]) {
-  return reason === "callback_requested" ? "Callback" : "Auto-Redial";
+  if (reason === "callback_requested") return "Callback";
+  if (reason === "network_drop") return "Network Drop";
+  return "Auto-Redial";
 }
 
 function reasonColor(reason: CallbackItem["reason"]) {
-  return reason === "callback_requested"
-    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-    : "bg-orange-500/10 text-orange-400 border-orange-500/20";
+  if (reason === "callback_requested") return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+  if (reason === "network_drop") return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+  return "bg-orange-500/10 text-orange-400 border-orange-500/20";
 }
 
 function statusColor(status: CallbackItem["status"]) {
@@ -88,11 +91,12 @@ function formatScheduled(at: string | null) {
 
 function StatsBanner({ stats }: { stats?: CallbackStats }) {
   return (
-    <div className="grid grid-cols-3 gap-4 mb-6">
+    <div className="grid grid-cols-4 gap-4 mb-6">
       {[
-        { label: "Pending Callbacks",  value: stats?.pendingCallbacks ?? "—", icon: <PhoneCall className="w-4 h-4 text-blue-400" /> },
-        { label: "Pending Auto-Redials", value: stats?.pendingRedials ?? "—",   icon: <PhoneMissed className="w-4 h-4 text-orange-400" /> },
-        { label: "Due Now",            value: stats?.dueNow ?? "—",            icon: <Clock className="w-4 h-4 text-yellow-400" /> },
+        { label: "Pending Callbacks",     value: stats?.pendingCallbacks     ?? "—", icon: <PhoneCall className="w-4 h-4 text-blue-400" /> },
+        { label: "Pending Auto-Redials",  value: stats?.pendingRedials       ?? "—", icon: <PhoneMissed className="w-4 h-4 text-orange-400" /> },
+        { label: "Pending Net Drop Retry", value: stats?.pendingNetworkDrops ?? "—", icon: <PhoneMissed className="w-4 h-4 text-amber-400" /> },
+        { label: "Due Now",               value: stats?.dueNow               ?? "—", icon: <Clock className="w-4 h-4 text-yellow-400" /> },
       ].map(({ label, value, icon }) => (
         <div key={label} className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-1">{icon}<span className="text-xs text-muted-foreground">{label}</span></div>
@@ -367,7 +371,7 @@ export default function CallbacksPage() {
       {/* Filter row */}
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted-foreground">Filter by type:</span>
-        {(["all", "callback_requested", "no_answer"] as const).map((r) => (
+        {(["all", "callback_requested", "no_answer", "network_drop"] as const).map((r) => (
           <Button
             key={r}
             size="sm"
@@ -375,7 +379,7 @@ export default function CallbacksPage() {
             className="h-7 text-xs"
             onClick={() => setReasonFilter(r)}
           >
-            {r === "all" ? "All" : r === "callback_requested" ? "Callbacks" : "Auto-Redials"}
+            {r === "all" ? "All" : r === "callback_requested" ? "Callbacks" : r === "network_drop" ? "Network Drop" : "Auto-Redials"}
           </Button>
         ))}
       </div>

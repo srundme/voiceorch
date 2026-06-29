@@ -118,6 +118,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const vobizTo           = qs.get("to")       ?? undefined;
   const vobizCallUuid     = qs.get("callUuid") ?? undefined;
   const vobizCorrToken    = qs.get("corr")     ?? undefined;
+  const vobizCallbackId   = qs.has("cbId") ? (parseInt(qs.get("cbId")!, 10) || undefined) : undefined;
   const voicemailDelivery = qs.get("vm") === "1";
   // dir=out is appended by every outbound dial site (calls/campaign/callback/meta)
   // so the WS handler keys caller memory off the dialed party, not the shared
@@ -163,9 +164,9 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   wss.handleUpgrade(request, socket, head, (ws: import("ws").WebSocket) => {
     logger.info({ provider, agentId, platformTelephony, campaignLeadId, url: safeUrl }, "WebSocket upgraded");
     switch (provider) {
-      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection);                                        break;
-      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection);                                         break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken); break;
+      case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
+      case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                        break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

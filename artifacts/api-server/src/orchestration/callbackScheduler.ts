@@ -201,7 +201,7 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialTwilio({
         accountSid: cfg["accountSid"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}${leadQs}&dir=out`,
+        webhookUrl: `${baseUrl}/api/webhooks/twilio/voice?agentId=${cb.agentId}${leadQs}&dir=out&cbId=${cb.id}`,
         statusCallbackUrl: `${baseUrl}/api/webhooks/twilio/status${statusQs}`,
       });
     } else if (provider === "plivo") {
@@ -225,16 +225,19 @@ async function fireCallback(cb: CallbackRow, baseUrl: string): Promise<void> {
       await dialPlivo({
         authId: cfg["authId"]!, authToken: decryptKey(provRow.apiKey),
         fromNumber: cfg["fromNumber"]!, toNumber: cb.toNumber,
-        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}${leadQs}&dir=out`,
+        answerUrl: `${baseUrl}/api/webhooks/plivo/voice?agentId=${cb.agentId}${leadQs}&dir=out&cbId=${cb.id}`,
       });
     } else if (provider === "vobiz") {
       // VoBiz: try user BYOP row first, fall back to platform managed credentials
       const creds = await resolveVobizCreds(agent.userId ?? null, cb.agentId);
       if (!creds) throw new Error(`No "vobiz" credentials available for this callback (neither BYOP nor managed)`);
+      // Embed cbId in the answer URL so the VoBiz voice webhook can pass it to
+      // the WS handler, which loads the prior call's resumeContext for injection.
+      const answerCbQs = `&cbId=${cb.id}`;
       await dialVobiz({
         authId: creds.authId, authToken: creds.authToken,
         fromNumber: creds.fromNumber, toNumber: cb.toNumber,
-        answerUrl:  `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}&dir=out`,
+        answerUrl:  `${baseUrl}/api/webhooks/vobiz/voice?agentId=${cb.agentId}${leadQs}&dir=out${answerCbQs}`,
         hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status${statusQs}`,
       });
     } else {

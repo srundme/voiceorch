@@ -6098,7 +6098,7 @@ export const ListCallbacksResponse = zod.object({
   "toNumber": zod.string(),
   "scheduledAt": zod.coerce.date().nullable(),
   "status": zod.enum(['pending', 'triggering', 'triggered', 'cancelled', 'failed']),
-  "reason": zod.enum(['callback_requested', 'no_answer']),
+  "reason": zod.enum(['callback_requested', 'no_answer', 'network_drop']),
   "attemptCount": zod.number().nullable(),
   "maxAttempts": zod.number().nullable(),
   "redialIntervalMinutes": zod.number().nullish(),
@@ -6120,6 +6120,7 @@ export const ListCallbacksResponse = zod.object({
 export const GetCallbackStatsResponse = zod.object({
   "pendingCallbacks": zod.number(),
   "pendingRedials": zod.number(),
+  "pendingNetworkDrops": zod.number(),
   "dueNow": zod.number()
 })
 

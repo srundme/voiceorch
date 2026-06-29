@@ -11175,7 +11175,7 @@ components:
         toNumber:              { type: string }
         scheduledAt:           { type: string, format: date-time, nullable: true }
         status:                { type: string, enum: [pending, triggering, triggered, cancelled, failed] }
-        reason:                { type: string, enum: [callback_requested, no_answer] }
+        reason:                { type: string, enum: [callback_requested, no_answer, network_drop] }
         attemptCount:          { type: integer, nullable: true }
         maxAttempts:           { type: integer, nullable: true }
         redialIntervalMinutes: { type: integer, nullable: true }
@@ -11199,11 +11199,12 @@ components:
 
     ScheduledCallbackStats:
       type: object
-      required: [pendingCallbacks, pendingRedials, dueNow]
+      required: [pendingCallbacks, pendingRedials, pendingNetworkDrops, dueNow]
       properties:
-        pendingCallbacks: { type: integer }
-        pendingRedials:   { type: integer }
-        dueNow:           { type: integer }
+        pendingCallbacks:    { type: integer }
+        pendingRedials:      { type: integer }
+        pendingNetworkDrops: { type: integer }
+        dueNow:              { type: integer }
 
     RescheduleCallbackBody:
       type: object

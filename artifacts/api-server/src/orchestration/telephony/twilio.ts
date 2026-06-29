@@ -2,6 +2,8 @@ import type { WebSocket } from "ws";
 import { createSession, getSession, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
+import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 /**
  * Twilio Media Streams WebSocket handler
@@ -37,6 +39,7 @@ export async function handleTwilioWebSocket(
   agentId: number,
   campaignLeadId?: number,
   callDirection: "inbound" | "outbound" = "inbound",
+  callbackId?: number,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamSid: string | null = null;
@@ -72,6 +75,39 @@ export async function handleTwilioWebSocket(
         const toNumber = params["To"] ?? "+10000000000";
         const fromNumber = params["From"] ?? "+10000000001";
 
+        // Load resume context from prior call when this is a network-drop callback
+        let resumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
+        if (callbackId) {
+          try {
+            const [cbRow] = await db
+              .select({ reason: scheduledCallbacksTable.reason, createdFromCallId: scheduledCallbacksTable.createdFromCallId })
+              .from(scheduledCallbacksTable)
+              .where(eq(scheduledCallbacksTable.id, callbackId));
+            if (cbRow?.reason === "network_drop" && cbRow.createdFromCallId) {
+              const [priorCall] = await db
+                .select({ resumeContext: callsTable.resumeContext })
+                .from(callsTable)
+                .where(eq(callsTable.id, cbRow.createdFromCallId));
+              if (priorCall?.resumeContext) resumeContext = priorCall.resumeContext;
+            }
+          } catch (rcErr) {
+            logger.warn({ callbackId, rcErr }, "Twilio: failed to load resume context — proceeding without it");
+          }
+        }
+
+        // Also thread the callback reason into session state so endSession can
+        // guard against re-scheduling another callback (single-retry invariant).
+        let sourceCallbackReason: string | undefined;
+        try {
+          if (callbackId) {
+            const [cbRow] = await db
+              .select({ reason: scheduledCallbacksTable.reason })
+              .from(scheduledCallbacksTable)
+              .where(eq(scheduledCallbacksTable.id, callbackId));
+            sourceCallbackReason = cbRow?.reason ?? undefined;
+          }
+        } catch { /* non-critical */ }
+
         try {
           const { sessionId: sid } = await createSession({
             agentId,
@@ -81,6 +117,8 @@ export async function handleTwilioWebSocket(
             externalCallId: callSid ?? undefined,
             callDirection,
             campaignLeadId,
+            resumeContext,
+            sourceCallbackReason,
             onAudioOut: sendAudioToTwilio,
             onCallEnd: () => ws.close(),
             onBargeIn: () => {
@@ -146,10 +184,12 @@ export function getTwilioVoiceTwiML(
   agentId: number,
   campaignLeadId?: number,
   callDirection: "inbound" | "outbound" = "inbound",
+  callbackId?: number,
 ): string {
   const parts: string[] = [];
   if (campaignLeadId) parts.push(`campaignLeadId=${campaignLeadId}`);
   if (callDirection === "outbound") parts.push("dir=out");
+  if (callbackId) parts.push(`cbId=${callbackId}`);
   const qs = parts.length ? `?${parts.join("&")}` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

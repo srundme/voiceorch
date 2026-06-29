@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -1691,6 +1691,27 @@ export default function AgentEdit() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Conversation Continuity ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <PhoneCall className="h-4 w-4 text-green-400" /> Conversation Continuity
+              </CardTitle>
+              <CardDescription>Automatically call the customer back if the call drops mid-conversation, and resume from where you left off.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField control={form.control} name="autoRedialEnabled" render={({ field }) => (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Auto-retry on network drop</p>
+                    <p className="text-xs text-muted-foreground">When a call drops unexpectedly, automatically call the customer back within 30 seconds and resume the conversation from the last topic. One retry attempt only. Campaign calls are excluded.</p>
+                  </div>
+                  <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                </div>
+              )} />
             </CardContent>
           </Card>
 

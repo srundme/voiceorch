@@ -130,6 +130,37 @@ export async function scheduleCallbackRequested(opts: {
 }
 
 /**
+ * Schedule a single network-drop callback for the most recent call.
+ * Fires immediately (scheduledAt = now); only one attempt; not a redial chain.
+ * Campaign calls are excluded — they manage their own retry logic.
+ */
+export async function scheduleNetworkDropCallback(opts: {
+  agentId:   number;
+  toNumber:  string;
+  userId?:   string | null;
+  callId?:   number | null;
+}): Promise<number | null> {
+  const [row] = await db.insert(scheduledCallbacksTable).values({
+    agentId:           opts.agentId,
+    toNumber:          opts.toNumber,
+    userId:            opts.userId ?? null,
+    scheduledAt:       new Date(),
+    createdFromCallId: opts.callId ?? null,
+    reason:            "network_drop",
+    attemptCount:      1,
+    maxAttempts:       1,
+    redialIntervalMinutes: 0,
+    callbackSecret:    genCallbackSecret(),
+  }).returning({ id: scheduledCallbacksTable.id });
+
+  logger.info(
+    { agentId: opts.agentId, toNumber: opts.toNumber, callId: opts.callId },
+    "Network-drop: auto-callback scheduled",
+  );
+  return row?.id ?? null;
+}
+
+/**
  * Schedule a no-answer redial for an outbound call that wasn't picked up.
  * Pass maxAttempts and redialIntervalMinutes from agent config (or use defaults).
  */

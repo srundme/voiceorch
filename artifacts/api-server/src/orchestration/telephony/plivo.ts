@@ -3,6 +3,8 @@ import { createSession, getSession, endSession, failSession } from "../session.j
 import { encodeMulaw, decodeMulaw } from "../audio.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
+import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 /**
  * Plivo AudioSocket / Multistream WebSocket handler
@@ -39,6 +41,7 @@ export async function handlePlivoWebSocket(
   agentId: number,
   campaignLeadId?: number,
   callDirection: "inbound" | "outbound" = "inbound",
+  callbackId?: number,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -86,6 +89,28 @@ export async function handlePlivoWebSocket(
         const toNumber = event.start?.to ?? "+10000000001";
         const callId = event.start?.call_id ?? event.call_id;
 
+        // Load resume context and callback reason from prior call when this is a callback
+        let resumeContext: Parameters<typeof createSession>[0]["resumeContext"] | undefined;
+        let sourceCallbackReason: string | undefined;
+        if (callbackId) {
+          try {
+            const [cbRow] = await db
+              .select({ reason: scheduledCallbacksTable.reason, createdFromCallId: scheduledCallbacksTable.createdFromCallId })
+              .from(scheduledCallbacksTable)
+              .where(eq(scheduledCallbacksTable.id, callbackId));
+            sourceCallbackReason = cbRow?.reason ?? undefined;
+            if (cbRow?.reason === "network_drop" && cbRow.createdFromCallId) {
+              const [priorCall] = await db
+                .select({ resumeContext: callsTable.resumeContext })
+                .from(callsTable)
+                .where(eq(callsTable.id, cbRow.createdFromCallId));
+              if (priorCall?.resumeContext) resumeContext = priorCall.resumeContext;
+            }
+          } catch (rcErr) {
+            logger.warn({ callbackId, rcErr }, "Plivo: failed to load resume context — proceeding without it");
+          }
+        }
+
         try {
           const { sessionId: sid } = await createSession({
             agentId,
@@ -95,6 +120,8 @@ export async function handlePlivoWebSocket(
             externalCallId: callId,
             callDirection,
             campaignLeadId,
+            resumeContext,
+            sourceCallbackReason,
             onAudioOut: sendAudioToPlivo,
             onCallEnd: () => ws.close(),
             onBargeIn: sendBargeIn,
@@ -150,10 +177,12 @@ export function getPlivoAnswerXML(
   agentId: number,
   campaignLeadId?: number,
   callDirection: "inbound" | "outbound" = "inbound",
+  callbackId?: number,
 ): string {
   const parts: string[] = [];
   if (campaignLeadId) parts.push(`campaignLeadId=${campaignLeadId}`);
   if (callDirection === "outbound") parts.push("dir=out");
+  if (callbackId) parts.push(`cbId=${callbackId}`);
   const qs = parts.length ? `?${parts.join("&")}` : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

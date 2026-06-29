@@ -4415,6 +4415,7 @@ export type ScheduledCallbackItemReason = typeof ScheduledCallbackItemReason[key
 export const ScheduledCallbackItemReason = {
   callback_requested: 'callback_requested',
   no_answer: 'no_answer',
+  network_drop: 'network_drop',
 } as const;
 
 export interface ScheduledCallbackItem {
@@ -4445,6 +4446,7 @@ export interface ScheduledCallbackListResponse {
 export interface ScheduledCallbackStats {
   pendingCallbacks: number;
   pendingRedials: number;
+  pendingNetworkDrops: number;
   dueNow: number;
 }
 
