@@ -803,21 +803,23 @@ function ZapierMakeRecipe({ firstWebhookUrl }: { firstWebhookUrl: string }) {
 // Step 1: pick campaign + optional list/view filter + select contacts
 // Step 2: map CRM raw fields → agent variables + writeback config → import
 
-function CrmImportDialog({
+export function CrmImportDialog({
   connection,
   open,
   onClose,
+  defaultCampaignId,
 }: {
   connection: CrmConnection;
   open: boolean;
   onClose: () => void;
+  defaultCampaignId?: number;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
   // Step 1 state
   const [step, setStep]             = useState<1 | 2>(1);
-  const [campaignId, setCampaignId] = useState<number | null>(null);
+  const [campaignId, setCampaignId] = useState<number | null>(defaultCampaignId ?? null);
   const [query, setQuery]           = useState("");
   const [listId, setListId]         = useState<string>("");
   const [selected, setSelected]     = useState<Set<string>>(new Set());

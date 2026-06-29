@@ -35,7 +35,7 @@ import {
   leadTimelineTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { encryptKey } from "../lib/crypto.js";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { getSelfBaseUrl, getAppOrigins } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
 import { APP_SECRET } from "../lib/app-secret.js";
@@ -268,7 +268,66 @@ router.get("/crm/callback/:provider", async (req, res): Promise<void> => {
     if (provider === "hubspot") {
       result = await exchangeHubSpotCode(code);
     } else if (provider === "zoho") {
-      result = await exchangeZohoCode(code);
+      const zohoResult = await exchangeZohoCode(code);
+
+      // Upsert connection by userId + provider + accountId
+      const existingRows = await db.select({ id: crmConnectionsTable.id, encryptedTokens: crmConnectionsTable.encryptedTokens })
+        .from(crmConnectionsTable)
+        .where(and(
+          eq(crmConnectionsTable.userId, statePayload.userId),
+          eq(crmConnectionsTable.provider, provider),
+          eq(crmConnectionsTable.accountId, zohoResult.accountId),
+        ));
+
+      let refreshToken = zohoResult.tokens.refreshToken;
+      if (!refreshToken) {
+        if (existingRows.length > 0) {
+          try {
+            const storedPayload = JSON.parse(decryptKey(existingRows[0]!.encryptedTokens)) as CrmTokenPayload;
+            refreshToken = storedPayload.refreshToken;
+            logger.info({ userId: statePayload.userId, provider }, "Reused stored Zoho refresh_token for re-connect");
+          } catch {
+            // decryptKey failed — fall through to throw below
+          }
+        }
+        if (!refreshToken) {
+          throw new Error("Zoho token exchange returned no refresh_token and no prior connection exists — ensure access_type=offline and prompt=consent");
+        }
+      }
+
+      const finalTokens: CrmTokenPayload = {
+        accessToken:  zohoResult.tokens.accessToken,
+        refreshToken,
+        expiresAt:    zohoResult.tokens.expiresAt,
+      };
+
+      const encTokens = encryptKey(JSON.stringify(finalTokens));
+
+      if (existingRows.length > 0) {
+        await db.update(crmConnectionsTable)
+          .set({
+            encryptedTokens: encTokens,
+            accountName:     zohoResult.accountName,
+            lastError:       null,
+            lastErrorAt:     null,
+            updatedAt:       new Date(),
+          })
+          .where(eq(crmConnectionsTable.id, existingRows[0]!.id));
+      } else {
+        await db.insert(crmConnectionsTable).values({
+          userId:          statePayload.userId,
+          provider,
+          accountId:       zohoResult.accountId,
+          accountName:     zohoResult.accountName,
+          encryptedTokens: encTokens,
+        });
+      }
+
+      logger.info({ userId: statePayload.userId, provider, accountId: zohoResult.accountId }, "CRM connected");
+      const returnOrigin = statePayload.returnOrigin;
+      const base = returnOrigin && isTrustedOrigin(returnOrigin) ? returnOrigin : dashBase;
+      res.redirect(`${base}/app/connections#crm-connected=${provider}`);
+      return;
     } else {
       redirectError(`Unsupported provider: ${provider}`);
       return;

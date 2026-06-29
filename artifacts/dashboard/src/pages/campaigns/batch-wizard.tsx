@@ -6,11 +6,13 @@ import {
   useGetCampaign, useListLeadSources, useCreateLeadSource,
   useListAgentVariables, useCreateCampaignBatch,
   getGetCampaignQueryKey, getListLeadSourcesQueryKey, getListAgentVariablesQueryKey,
+  useListCrmConnections, getListCrmConnectionsQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
 import type {
-  LeadSource, AgentVariable, CampaignBatch,
+  LeadSource, AgentVariable, CampaignBatch, CrmConnection,
 } from "@workspace/api-client-react";
+import { CrmImportDialog } from "@/pages/connections";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -307,16 +309,27 @@ const SOURCE_ICONS: Record<string, React.ReactNode> = {
 };
 
 function Step2({
-  state, setState,
+  state, setState, campaignId,
 }: {
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
+  campaignId: number;
 }) {
   const { data: sources = [], isLoading } = useListLeadSources({
     query: { queryKey: getListLeadSourcesQueryKey() },
   });
+  const { data: crmConnections = [] } = useListCrmConnections({
+    query: { queryKey: getListCrmConnectionsQueryKey() },
+  });
   const [search, setSearch] = useState("");
+  const [importConn, setImportConn] = useState<CrmConnection | null>(null);
   const filtered = sources.filter(s => !search || s.sourceName.toLowerCase().includes(search.toLowerCase()));
+
+  const CRM_TILES = [
+    { id: "hubspot" as const, name: "HubSpot",    icon: <span className="text-orange-400 font-bold text-sm">HS</span> },
+    { id: "zoho"    as const, name: "Zoho CRM",   icon: <span className="text-blue-400 font-bold text-sm">ZO</span> },
+    { id: "sf"      as const, name: "Salesforce", icon: <Globe className="w-4 h-4 text-muted-foreground" />, disabled: true },
+  ] as const;
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -414,45 +427,75 @@ function Step2({
             );
           })}
         </div>
-        {/* CRM tiles — navigate to Connections page to set up and import */}
+
+        {/* CRM tiles — connection-aware */}
         <div className="space-y-2 mt-1">
           <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider">CRM Import</p>
           <div className="grid grid-cols-3 gap-3">
-            {[
-              { id: "hubspot", name: "HubSpot",  icon: <span className="text-orange-400 font-bold text-sm">HS</span> },
-              { id: "zoho",   name: "Zoho CRM", icon: <span className="text-blue-400 font-bold text-sm">ZO</span> },
-              { id: "sf",     name: "Salesforce", icon: <Globe className="w-4 h-4 text-muted-foreground" />, disabled: true },
-            ].map(crm => (
-              <button
-                key={crm.id}
-                type="button"
-                disabled={crm.disabled}
-                onClick={crm.disabled ? undefined : () => { window.location.href = `${BASE}/app/connections#crm-connect=${crm.id}`; }}
-                className={cn(
-                  "p-4 rounded-xl border text-left transition-all space-y-2",
-                  crm.disabled
-                    ? "border-border opacity-40 pointer-events-none"
-                    : "border-border hover:border-primary/50 hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  {crm.icon}
-                  {!crm.disabled && <ExternalLink className="w-3 h-3 text-muted-foreground" />}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{crm.name}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {crm.disabled ? "Coming Soon" : "Connect & import →"}
-                  </p>
-                </div>
-              </button>
-            ))}
+            {CRM_TILES.map(crm => {
+              const conn = "disabled" in crm ? undefined : crmConnections.find(c => c.provider === crm.id);
+              const isConnected = !!conn;
+              const isDisabled  = "disabled" in crm && crm.disabled;
+
+              const handleClick = () => {
+                if (isDisabled) return;
+                if (isConnected && conn) {
+                  setImportConn(conn);
+                } else {
+                  window.location.href = `${BASE}/app/connections#crm-connect=${crm.id}`;
+                }
+              };
+
+              return (
+                <button
+                  key={crm.id}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={handleClick}
+                  className={cn(
+                    "p-4 rounded-xl border text-left transition-all space-y-2",
+                    isDisabled
+                      ? "border-border opacity-40 pointer-events-none"
+                      : isConnected
+                        ? "border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/60 hover:bg-emerald-500/10"
+                        : "border-border hover:border-primary/50 hover:bg-muted/30",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    {crm.icon}
+                    {isConnected
+                      ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <span className="w-1 h-1 rounded-full bg-emerald-500" />Connected
+                        </span>
+                      : !isDisabled && <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    }
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{crm.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {isDisabled ? "Coming Soon" : isConnected ? "Import contacts →" : "Connect & import →"}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Click HubSpot or Zoho CRM to connect your account and import contacts into a campaign from the Connections page.
+            {crmConnections.length > 0
+              ? "Click a connected CRM to import contacts directly into this campaign."
+              : "Click HubSpot or Zoho CRM to connect your account first, then return here to import."}
           </p>
         </div>
       </div>
+
+      {importConn && (
+        <CrmImportDialog
+          connection={importConn}
+          open={!!importConn}
+          onClose={() => setImportConn(null)}
+          defaultCampaignId={campaignId}
+        />
+      )}
     </div>
   );
 }
@@ -1875,7 +1918,7 @@ export default function BatchWizardPage() {
         {/* Step content */}
         <div className="flex-1 overflow-y-auto px-8 py-6">
           {currentStep === 1 && <Step1 state={state} setState={setState} campaignId={campaignId} />}
-          {currentStep === 2 && <Step2 state={state} setState={setState} />}
+          {currentStep === 2 && <Step2 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 3 && <Step3 state={state} setState={setState} />}
           {currentStep === 4 && <Step4 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 5 && <Step5 state={state} setState={setState} campaignId={campaignId} />}

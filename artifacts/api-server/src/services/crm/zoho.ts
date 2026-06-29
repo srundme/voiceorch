@@ -45,6 +45,7 @@ export function buildZohoAuthUrl(state: string): string {
     scope:         ZOHO_SCOPES,
     response_type: "code",
     access_type:   "offline",
+    prompt:        "consent",
     state,
   });
   return `${ZOHO_AUTH_URL}?${params.toString()}`;
@@ -58,7 +59,7 @@ interface ZohoTokenResponse {
   token_type?:   string;
 }
 
-export async function exchangeZohoCode(code: string): Promise<{ tokens: CrmTokenPayload; accountId: string; accountName: string }> {
+export async function exchangeZohoCode(code: string): Promise<{ tokens: Omit<CrmTokenPayload, "refreshToken"> & { refreshToken?: string }; accountId: string; accountName: string }> {
   const body = new URLSearchParams({
     grant_type:    "authorization_code",
     client_id:     getClientId(),
@@ -80,7 +81,9 @@ export async function exchangeZohoCode(code: string): Promise<{ tokens: CrmToken
 
   const data = await resp.json() as ZohoTokenResponse;
   if (!data.access_token) throw new Error("Zoho token exchange returned no access_token");
-  if (!data.refresh_token) throw new Error("Zoho token exchange returned no refresh_token — ensure access_type=offline");
+  if (!data.refresh_token) {
+    logger.warn("Zoho token exchange returned no refresh_token — will reuse stored token if prior connection exists");
+  }
 
   // Fetch org info for account identity
   let accountId = "zoho-org";
