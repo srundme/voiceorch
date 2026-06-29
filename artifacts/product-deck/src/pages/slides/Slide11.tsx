@@ -44,6 +44,7 @@ export default function Slide11() {
               <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.6vh" }}>Later — 2027</div>
               <div style={{ fontSize: "1.2vw", fontWeight: 600, marginBottom: "1.5vh" }}>Enterprise &amp; moat</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "1vh", fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.45 }}>
+                <div>↳ Proprietary STT / LLM / TTS models</div>
                 <div>↳ Custom brand voices (voice cloning)</div>
                 <div>↳ Real-time assist for human handoff</div>
                 <div>↳ Domain-tuned models per vertical</div>
