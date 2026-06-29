@@ -18,15 +18,15 @@ export const fileIndex: FileEntry[] = [
   // ─────────────────────────────────────────────────────────────────────────
   // WORKSPACE ROOT
   // ─────────────────────────────────────────────────────────────────────────
-  { path: "pnpm-workspace.yaml", description: "Workspace package discovery, catalog version pins, and pnpm overrides", chapterSlug: "codebase-tour", tags: ["workspace", "config"] },
-  { path: "tsconfig.base.json", description: "Shared strict TypeScript defaults extended by every package", chapterSlug: "typescript-basics", tags: ["typescript", "config"] },
-  { path: "tsconfig.json", description: "Root solution file for composite lib packages — drives tsc --build order", chapterSlug: "typescript-basics", tags: ["typescript", "config"] },
+  { path: "pnpm-workspace.yaml", description: "Workspace package discovery, catalog version pins, and pnpm overrides", chapterSlug: "the-repo-map", tags: ["workspace", "config"] },
+  { path: "tsconfig.base.json", description: "Shared strict TypeScript defaults extended by every package", chapterSlug: "typescript-types", tags: ["typescript", "config"] },
+  { path: "tsconfig.json", description: "Root solution file for composite lib packages — drives tsc --build order", chapterSlug: "typescript-types", tags: ["typescript", "config"] },
 
   // ─────────────────────────────────────────────────────────────────────────
   // API SERVER — entry point & config
   // ─────────────────────────────────────────────────────────────────────────
-  { path: "artifacts/api-server/src/app.ts", description: "Express app factory — mounts middleware, routes, and error handler", chapterSlug: "express-routing", tags: ["api", "express", "middleware"] },
-  { path: "artifacts/api-server/src/index.ts", description: "Server entry point — binds the port, connects DB, starts background schedulers", chapterSlug: "express-routing", tags: ["api", "startup"] },
+  { path: "artifacts/api-server/src/app.ts", description: "Express app factory — mounts middleware, routes, and error handler", chapterSlug: "express-app", tags: ["api", "express", "middleware"] },
+  { path: "artifacts/api-server/src/index.ts", description: "Server entry point — binds the port, connects DB, starts background schedulers", chapterSlug: "express-app", tags: ["api", "startup"] },
 
   // ─────────────────────────────────────────────────────────────────────────
   // API SERVER — middlewares
@@ -43,7 +43,7 @@ export const fileIndex: FileEntry[] = [
   { path: "artifacts/api-server/src/lib/session.ts", description: "Signs and verifies HS256 JWTs; SESSION_SECRET is the symmetric key", chapterSlug: "google-oauth-sessions", tags: ["auth", "jwt"] },
   { path: "artifacts/api-server/src/lib/app-domain.ts", description: "Derives the public base URL from APP_DOMAIN env var (falls back to REPLIT_DOMAINS)", chapterSlug: "webhooks-deep-dive", tags: ["config", "utility"] },
   { path: "artifacts/api-server/src/lib/crypto.ts", description: "AES-256-GCM encrypt/decrypt for provider API keys at rest", chapterSlug: "calls-and-providers", tags: ["security", "crypto"] },
-  { path: "artifacts/api-server/src/lib/logger.ts", description: "Pino singleton logger used in non-request server code", chapterSlug: "express-routing", tags: ["logging", "utility"] },
+  { path: "artifacts/api-server/src/lib/logger.ts", description: "Pino singleton logger used in non-request server code", chapterSlug: "express-app", tags: ["logging", "utility"] },
   { path: "artifacts/api-server/src/lib/redis.ts", description: "Upstash Redis client (REST-based) used for rate limiting and caching", chapterSlug: "reliability-patterns", tags: ["redis", "infrastructure"] },
   { path: "artifacts/api-server/src/lib/auth-compat.ts", description: "getAuth() shim — reads req.clerkUserId so 20 route files compile unchanged after the Clerk→Google migration", chapterSlug: "google-oauth-sessions", tags: ["auth", "compatibility"] },
   { path: "artifacts/api-server/src/lib/webhook-signature.ts", description: "HMAC-SHA256 signing and verification for callback URLs (cbSig, campaignLeadSig)", chapterSlug: "webhooks-deep-dive", tags: ["security", "webhooks"] },
@@ -56,7 +56,7 @@ export const fileIndex: FileEntry[] = [
   // ─────────────────────────────────────────────────────────────────────────
   // API SERVER — routes
   // ─────────────────────────────────────────────────────────────────────────
-  { path: "artifacts/api-server/src/routes/index.ts", description: "Mounts all route sub-routers onto /api; the single source of URL truth", chapterSlug: "express-routing", tags: ["api", "routing"] },
+  { path: "artifacts/api-server/src/routes/index.ts", description: "Mounts all route sub-routers onto /api; the single source of URL truth", chapterSlug: "express-app", tags: ["api", "routing"] },
   { path: "artifacts/api-server/src/routes/auth.ts", description: "Google OAuth endpoints: /auth/google/connect + /auth/google/callback + /auth/me", chapterSlug: "google-oauth-sessions", tags: ["auth", "oauth"] },
   { path: "artifacts/api-server/src/routes/agents.ts", description: "CRUD for voice agents — create, list, toggle, delete, get by ID", chapterSlug: "agent-builder", tags: ["api", "agents"] },
   { path: "artifacts/api-server/src/routes/calls.ts", description: "Call lifecycle: create, list, end, transcript, call detail; call control WebSocket", chapterSlug: "session-and-pipeline", tags: ["api", "calls", "websocket"] },
@@ -139,7 +139,7 @@ export const fileIndex: FileEntry[] = [
   // ─────────────────────────────────────────────────────────────────────────
   { path: "artifacts/api-server/src/orchestration/adapters/", description: "Directory: STT, LLM, and TTS adapter implementations (one file per provider)", chapterSlug: "stt-adapters", tags: ["adapters"] },
   { path: "artifacts/api-server/src/orchestration/adapters/stt-deepgram.ts", description: "Deepgram STT adapter: Nova-2 model over WebSocket, raw LINEAR16 PCM input", chapterSlug: "stt-adapters", tags: ["stt", "deepgram"] },
-  { path: "artifacts/api-server/src/orchestration/adapters/stt-azure.ts", description: "Azure STT adapter: X-RequestId on every frame, Continuous LID for language switching", chapterSlug: "azure-stt-protocol", tags: ["stt", "azure"] },
+  { path: "artifacts/api-server/src/orchestration/adapters/stt-azure.ts", description: "Azure STT adapter: X-RequestId on every frame, Continuous LID for language switching", chapterSlug: "stt-adapters", tags: ["stt", "azure"] },
   { path: "artifacts/api-server/src/orchestration/adapters/stt-whisper.ts", description: "Whisper STT adapter: batch transcription via OpenAI Whisper API", chapterSlug: "stt-adapters", tags: ["stt", "whisper", "openai"] },
   { path: "artifacts/api-server/src/orchestration/adapters/stt-sarvam.ts", description: "Sarvam STT adapter: saarika:v2.5 / saaras:v3, WAV-wrapped AudioContent JSON format", chapterSlug: "sarvam-deep-dive", tags: ["stt", "sarvam", "india"] },
   { path: "artifacts/api-server/src/orchestration/adapters/llm-openai.ts", description: "OpenAI LLM adapter: GPT-4o, streaming SSE, tool_calls handling", chapterSlug: "llm-adapters", tags: ["llm", "openai"] },
@@ -214,7 +214,7 @@ export const fileIndex: FileEntry[] = [
   // DATABASE — migrations & utilities
   // ─────────────────────────────────────────────────────────────────────────
   { path: "lib/db/src/index.ts", description: "DB client factory — creates and exports the drizzle() connection using DATABASE_URL", chapterSlug: "drizzle-intro", tags: ["database"] },
-  { path: "lib/db/src/migrate.ts", description: "Runs drizzle-kit migrations at server startup via bootstrapMigrationJournal + migrate()", chapterSlug: "schema-changes", tags: ["database", "migrations"] },
+  { path: "lib/db/src/migrate.ts", description: "Runs drizzle-kit migrations at server startup via bootstrapMigrationJournal + migrate()", chapterSlug: "migrations", tags: ["database", "migrations"] },
   { path: "lib/db/src/caller-identity.ts", description: "canonicalizeCallerKey() — normalises phone numbers to the canonical form for memory keying", chapterSlug: "caller-memory", tags: ["database", "telephony", "utility"] },
   { path: "lib/db/src/identity-merge.ts", description: "linkLegacyIdentitiesAtLogin() — merges duplicate user rows on Google sign-in (Clerk→Google migration)", chapterSlug: "google-oauth-sessions", tags: ["database", "auth", "migration"] },
 
