@@ -1,75 +1,119 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" font-family="Inter, 'Helvetica Neue', Arial, sans-serif">
-  <rect x="0" y="0" width="1920" height="1080" fill="#FFFFFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1160" width="1920" height="1160" font-family="Inter, 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="ah" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto-start-reverse">
+      <path d="M2,2 L14,8 L2,14 z" fill="#1C1C1C"/>
+    </marker>
+  </defs>
 
-  <!-- top rule -->
-  <line x1="110" y1="90" x2="1810" y2="90" stroke="#1C1C1C" stroke-width="2"/>
+  <rect x="0" y="0" width="1920" height="1160" fill="#FFFFFF"/>
 
   <!-- header -->
-  <text x="110" y="128" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="2" fill="#1C1C1C">SNAPSERVE.AI</text>
-  <text x="1810" y="128" text-anchor="end" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="17" fill="#888888">04 — System Architecture</text>
+  <line x1="100" y1="70" x2="1820" y2="70" stroke="#1C1C1C" stroke-width="2"/>
+  <text x="100" y="108" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="18" font-weight="700" letter-spacing="2" fill="#1C1C1C">SNAPSERVE.AI</text>
+  <text x="1820" y="108" text-anchor="end" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="15" fill="#888888">VOICE AI ORCHESTRATION PLATFORM</text>
 
-  <!-- watermark -->
-  <text x="1800" y="560" text-anchor="end" font-size="300" font-weight="700" letter-spacing="-15" fill="#F5F5F5">05</text>
+  <text x="100" y="172" font-size="46" font-weight="700" letter-spacing="-1.2" fill="#1C1C1C">How one engine runs every call</text>
+  <text x="100" y="210" font-size="20" fill="#4A4A4A">Every inbound, outbound, and web call flows through SnapServe&#39;s real-time orchestration engine — wired to best-in-class AI</text>
+  <text x="100" y="238" font-size="20" fill="#4A4A4A">models, telephony carriers, and every business system, all on a shared control plane.</text>
 
-  <!-- title -->
-  <text x="110" y="242" font-size="62" font-weight="700" letter-spacing="-1.5" fill="#1C1C1C">One engine connects every channel, model, and</text>
-  <text x="110" y="310" font-size="62" font-weight="700" letter-spacing="-1.5" fill="#1C1C1C">system.</text>
+  <!-- ===================== TOP ROW: CALL FLOW ===================== -->
 
-  <!-- subtitle -->
-  <text x="110" y="364" font-size="23" fill="#4A4A4A">Every call — inbound, outbound, or web — flows through one orchestration core that streams audio to best-in-class AI</text>
-  <text x="110" y="396" font-size="23" fill="#4A4A4A">models and reads and writes every business system in real time.</text>
-
-  <!-- flow row -->
   <!-- 01 Channels -->
-  <rect x="110" y="460" width="340" height="195" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="134" y="496" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#999999">01 · CHANNELS</text>
-  <text x="134" y="534" font-size="22" font-weight="600" fill="#1C1C1C">Where calls begin</text>
-  <text x="134" y="572" font-size="16" fill="#4A4A4A">Inbound · Outbound ·</text>
-  <text x="134" y="596" font-size="16" fill="#4A4A4A">Web &amp; in-app voice</text>
+  <rect x="100" y="300" width="250" height="300" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="120" y="336" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="13" letter-spacing="1" fill="#999999">01 · CHANNELS</text>
+  <rect x="120" y="352" width="210" height="66" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="140" y="382" font-size="17" font-weight="600" fill="#1C1C1C">Inbound calls</text>
+  <text x="140" y="402" font-size="13" fill="#888888">customer dials in</text>
+  <rect x="120" y="432" width="210" height="66" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="140" y="462" font-size="17" font-weight="600" fill="#1C1C1C">Outbound calls</text>
+  <text x="140" y="482" font-size="13" fill="#888888">agent dials out</text>
+  <rect x="120" y="512" width="210" height="66" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="140" y="542" font-size="17" font-weight="600" fill="#1C1C1C">Web &amp; in-app</text>
+  <text x="140" y="562" font-size="13" fill="#888888">browser voice</text>
 
-  <text x="470" y="568" text-anchor="middle" font-size="32" font-weight="300" fill="#BBBBBB">→</text>
+  <line x1="350" y1="450" x2="423" y2="450" stroke="#1C1C1C" stroke-width="2" marker-end="url(#ah)"/>
 
   <!-- 02 Telephony -->
-  <rect x="490" y="460" width="340" height="195" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="514" y="496" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#999999">02 · TELEPHONY</text>
-  <text x="514" y="534" font-size="22" font-weight="600" fill="#1C1C1C">Carrier layer</text>
-  <text x="514" y="572" font-size="16" fill="#4A4A4A">VoBiz · Twilio ·</text>
-  <text x="514" y="596" font-size="16" fill="#4A4A4A">Plivo · Vonage</text>
+  <rect x="430" y="300" width="250" height="300" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="450" y="336" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="13" letter-spacing="1" fill="#999999">02 · TELEPHONY</text>
+  <rect x="450" y="352" width="210" height="52" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="470" y="384" font-size="16" font-weight="600" fill="#1C1C1C">VoBiz</text>
+  <text x="640" y="384" text-anchor="end" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="11" fill="#999999">PRIMARY</text>
+  <rect x="450" y="414" width="210" height="52" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="470" y="446" font-size="16" font-weight="600" fill="#1C1C1C">Twilio</text>
+  <rect x="450" y="476" width="210" height="52" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="470" y="508" font-size="16" font-weight="600" fill="#1C1C1C">Plivo</text>
+  <rect x="450" y="538" width="210" height="52" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="470" y="570" font-size="16" font-weight="600" fill="#1C1C1C">Vonage</text>
 
-  <text x="850" y="568" text-anchor="middle" font-size="32" font-weight="300" fill="#BBBBBB">→</text>
+  <text x="725" y="438" text-anchor="middle" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="11" fill="#888888">live call</text>
+  <line x1="680" y1="450" x2="763" y2="450" stroke="#1C1C1C" stroke-width="2.5" marker-end="url(#ah)"/>
 
-  <!-- Orchestration Engine (dark hero) -->
-  <rect x="870" y="460" width="510" height="195" fill="#1C1C1C"/>
-  <text x="898" y="496" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#9A9A9A">SNAPSERVE</text>
-  <text x="898" y="536" font-size="24" font-weight="700" fill="#FFFFFF">Orchestration Engine</text>
-  <text x="898" y="572" font-size="16" fill="#C8C8C8">Real-time pipeline — endpointing, barge-in,</text>
-  <text x="898" y="596" font-size="16" fill="#C8C8C8">turn-taking, language switching, tool calls.</text>
-  <text x="898" y="620" font-size="16" fill="#C8C8C8">Sub-2s, unlimited concurrency.</text>
+  <!-- ENGINE HUB (dark hero) -->
+  <rect x="770" y="300" width="540" height="300" rx="10" fill="#1C1C1C"/>
+  <text x="798" y="340" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="13" letter-spacing="1" fill="#9A9A9A">SNAPSERVE · CORE</text>
+  <text x="798" y="378" font-size="27" font-weight="700" fill="#FFFFFF">Orchestration Engine</text>
+  <text x="798" y="406" font-size="15" fill="#C8C8C8">Real-time media pipeline · sub-2s · unlimited concurrency</text>
+  <!-- pipeline chips -->
+  <rect x="798" y="438" width="150" height="42" rx="6" fill="none" stroke="#4A4A4A" stroke-width="1"/>
+  <text x="873" y="465" text-anchor="middle" font-size="14" fill="#E0E0E0">Endpointing</text>
+  <rect x="962" y="438" width="150" height="42" rx="6" fill="none" stroke="#4A4A4A" stroke-width="1"/>
+  <text x="1037" y="465" text-anchor="middle" font-size="14" fill="#E0E0E0">Turn-taking</text>
+  <rect x="1126" y="438" width="120" height="42" rx="6" fill="none" stroke="#4A4A4A" stroke-width="1"/>
+  <text x="1186" y="465" text-anchor="middle" font-size="14" fill="#E0E0E0">Barge-in</text>
+  <rect x="798" y="490" width="180" height="42" rx="6" fill="none" stroke="#4A4A4A" stroke-width="1"/>
+  <text x="888" y="517" text-anchor="middle" font-size="14" fill="#E0E0E0">Language switch</text>
+  <rect x="992" y="490" width="130" height="42" rx="6" fill="none" stroke="#4A4A4A" stroke-width="1"/>
+  <text x="1057" y="517" text-anchor="middle" font-size="14" fill="#E0E0E0">Tool calls</text>
+  <text x="798" y="572" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="12" fill="#9A9A9A">One pipeline · every channel · every language</text>
 
-  <text x="1400" y="568" text-anchor="middle" font-size="32" font-weight="300" fill="#BBBBBB">→</text>
+  <!-- engine <-> intelligence -->
+  <line x1="1313" y1="450" x2="1377" y2="450" stroke="#1C1C1C" stroke-width="2.5" marker-start="url(#ah)" marker-end="url(#ah)"/>
 
-  <!-- 03 Intelligence -->
-  <rect x="1420" y="460" width="390" height="195" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="1444" y="496" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#999999">03 · INTELLIGENCE</text>
-  <text x="1444" y="534" font-size="22" font-weight="600" fill="#1C1C1C">STT · LLM · TTS</text>
-  <text x="1444" y="572" font-size="16" fill="#4A4A4A">Today: Sarvam · Gemini ·</text>
-  <text x="1444" y="596" font-size="16" fill="#4A4A4A">Cartesia · Deepgram</text>
+  <!-- 03 Intelligence / AI models -->
+  <rect x="1380" y="300" width="440" height="300" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="1400" y="336" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="13" letter-spacing="1" fill="#999999">03 · AI MODELS</text>
+  <rect x="1400" y="352" width="400" height="58" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="1420" y="387" font-size="18" font-weight="700" fill="#1C1C1C">STT<tspan font-size="14" font-weight="400" fill="#888888">   Speech → Text</tspan></text>
+  <rect x="1400" y="422" width="400" height="58" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="1420" y="457" font-size="18" font-weight="700" fill="#1C1C1C">LLM<tspan font-size="14" font-weight="400" fill="#888888">   Reasoning &amp; dialogue</tspan></text>
+  <rect x="1400" y="492" width="400" height="58" rx="6" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="1420" y="527" font-size="18" font-weight="700" fill="#1C1C1C">TTS<tspan font-size="14" font-weight="400" fill="#888888">   Text → Speech</tspan></text>
+  <text x="1400" y="582" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="12" fill="#888888">Today: Sarvam · Gemini · Cartesia · Deepgram</text>
 
-  <!-- shared control plane -->
-  <rect x="110" y="690" width="1700" height="90" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="140" y="741" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="15" letter-spacing="1" fill="#888888">SHARED CONTROL PLANE</text>
-  <line x1="370" y1="708" x2="370" y2="762" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="400" y="741" font-size="16" fill="#1C1C1C">Caller memory · Billing &amp; wallet · Dashboard &amp; admin · Scheduling &amp; booking · Integrations (CRM, calendar, webhooks) — read and written on every single call.</text>
+  <!-- engine <-> control plane (vertical) -->
+  <line x1="1040" y1="603" x2="1040" y2="717" stroke="#1C1C1C" stroke-width="2.5" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text x="1058" y="667" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="11" fill="#888888">read ⇄ write · every call</text>
 
-  <!-- next: own the stack -->
-  <rect x="110" y="815" width="1700" height="130" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="140" y="868" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#999999">NEXT — OWN THE STACK</text>
-  <line x1="370" y1="838" x2="370" y2="922" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="400" y="868" font-size="17" fill="#1C1C1C">SnapServe is building its own <tspan font-weight="700">STT, LLM, and TTS models</tspan> — India-optimised and fully owned. Owning the model layer turns per-minute</text>
-  <text x="400" y="900" font-size="17" fill="#1C1C1C">provider fees into proprietary IP: higher margin, a deeper moat, and accuracy tuned for Indic voice.</text>
+  <!-- ===================== FOUNDATION: CONTROL PLANE ===================== -->
+  <rect x="100" y="720" width="1720" height="230" rx="10" fill="#FAFAFA" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="130" y="760" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#888888">SHARED CONTROL PLANE · BUSINESS SYSTEMS</text>
+  <text x="130" y="786" font-size="15" fill="#4A4A4A">State that persists across every call — read and written in real time.</text>
 
-  <!-- footer -->
-  <line x1="110" y1="990" x2="1810" y2="990" stroke="#E0E0E0" stroke-width="1"/>
-  <text x="110" y="1026" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1.5" fill="#4A4A4A">SNAPSERVE.AI</text>
-  <text x="1810" y="1026" text-anchor="end" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" fill="#999999">System Architecture</text>
+  <rect x="130" y="812" width="316" height="110" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="152" y="856" font-size="18" font-weight="700" fill="#1C1C1C">Caller memory</text>
+  <text x="152" y="884" font-size="13" fill="#888888">facts · episodes · intent</text>
+
+  <rect x="466" y="812" width="316" height="110" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="488" y="856" font-size="18" font-weight="700" fill="#1C1C1C">Billing &amp; wallet</text>
+  <text x="488" y="884" font-size="13" fill="#888888">metering · credits</text>
+
+  <rect x="802" y="812" width="316" height="110" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="824" y="856" font-size="18" font-weight="700" fill="#1C1C1C">Dashboard &amp; admin</text>
+  <text x="824" y="884" font-size="13" fill="#888888">ops · managed keys</text>
+
+  <rect x="1138" y="812" width="316" height="110" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="1160" y="856" font-size="18" font-weight="700" fill="#1C1C1C">Scheduling &amp; booking</text>
+  <text x="1160" y="884" font-size="13" fill="#888888">calendars · slots</text>
+
+  <rect x="1474" y="812" width="316" height="110" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <text x="1496" y="856" font-size="18" font-weight="700" fill="#1C1C1C">Integrations</text>
+  <text x="1496" y="884" font-size="13" fill="#888888">CRM · calendar · webhooks</text>
+
+  <!-- ===================== NEXT: OWN THE STACK ===================== -->
+  <rect x="100" y="985" width="1720" height="130" rx="10" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="1"/>
+  <rect x="100" y="985" width="8" height="130" fill="#1C1C1C"/>
+  <text x="140" y="1028" font-family="'DM Mono','SFMono-Regular',Menlo,Consolas,monospace" font-size="14" letter-spacing="1" fill="#1C1C1C">NEXT — OWN THE FULL STACK</text>
+  <text x="140" y="1062" font-size="18" fill="#1C1C1C">SnapServe is building its own <tspan font-weight="700">STT, LLM &amp; TTS models</tspan> — India-optimised and fully owned.</text>
+  <text x="140" y="1090" font-size="15" fill="#4A4A4A">Owning the model layer turns per-minute provider fees into proprietary IP: higher margin, a deeper moat, and accuracy tuned for Indic voice.</text>
 </svg>
