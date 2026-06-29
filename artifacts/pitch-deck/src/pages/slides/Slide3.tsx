@@ -52,7 +52,7 @@ export default function Slide3() {
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>03 / 12</div>
+          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>03 / 14</div>
         </div>
       </div>
     </div>
