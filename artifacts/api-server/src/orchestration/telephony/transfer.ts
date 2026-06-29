@@ -13,7 +13,10 @@ export type TransferType = "warm" | "cold";
 
 /**
  * Calls VoBiz REST API to redirect the active call to a new XML URL.
- * POST https://api.vobiz.ai/api/v1/Account/{authId}/Call/{callUuid}/Transfer/
+ * POST https://api.vobiz.ai/api/v1/Account/{auth_id}/Call/{call_uuid}/
+ *
+ * NOTE: The correct endpoint is /Call/{uuid}/ (no /Transfer/ suffix).
+ * VoBiz docs: https://docs.vobiz.ai/call/transfer-call
  */
 export async function transferVobizCall(opts: {
   authId: string;
@@ -21,7 +24,9 @@ export async function transferVobizCall(opts: {
   callUuid: string;
   xmlUrl: string;
 }): Promise<void> {
-  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/Transfer/`;
+  // VoBiz Transfer API: POST /api/v1/Account/{auth_id}/Call/{call_uuid}/
+  // (no /Transfer/ suffix — that path 404s)
+  const url = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/${opts.callUuid}/`;
   // VoBiz uses custom X-Auth-ID / X-Auth-Token headers (same as its dial API),
   // NOT standard HTTP Basic auth.  Sending Basic auth causes an immediate 401.
   const resp = await fetch(url, {
