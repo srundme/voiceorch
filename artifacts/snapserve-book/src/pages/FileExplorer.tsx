@@ -69,7 +69,8 @@ export default function FileExplorer() {
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  // collapsedDirs = set of dirs the user has explicitly closed; all others are open by default
+  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
   const [hoveredFile, setHoveredFile] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"tree" | "flat">("tree");
 
@@ -96,7 +97,7 @@ export default function FileExplorer() {
   };
 
   const toggleDir = (dir: string) => {
-    setExpandedDirs(prev => {
+    setCollapsedDirs(prev => {
       const next = new Set(prev);
       if (next.has(dir)) next.delete(dir);
       else next.add(dir);
@@ -235,7 +236,7 @@ export default function FileExplorer() {
             <div className="space-y-3">
               {sortedDirs.map((dir, di) => {
                 const entries = grouped.get(dir) ?? [];
-                const isExpanded = expandedDirs.has(dir) || hasFilters;
+                const isExpanded = !collapsedDirs.has(dir);
                 return (
                   <motion.div
                     key={dir}

@@ -1,0 +1,373 @@
+# Campaign Lead Outcome & Failure Classification
+
+The current Campaign > Batch > Leads page is not capturing the actual reason why a lead did not progress.
+
+Currently we only show generic values like:
+
+- Failed
+- Busy
+- No Contact
+
+This is insufficient for businesses running outbound campaigns.
+
+A business owner needs to know WHY every lead failed so they can decide whether to retry, schedule callbacks, or remove the lead.
+
+---
+
+# Introduce Failure Classification
+
+Every completed call must be assigned ONE standardized failure reason.
+
+Example categories:
+
+## Customer Related
+
+• No Answer
+• Busy
+• Call Rejected
+• Switched Off
+• Invalid Number
+• Number Does Not Exist
+• Voicemail
+• DND Blocked
+• Wrong Number
+
+---
+
+## Telephony Related
+
+• Carrier Failure
+• SIP Failure
+• Network Error
+• Telephony Timeout
+• Provider Error
+• Call Dropped
+• Failed to Connect
+
+---
+
+## AI Related
+
+• LLM Timeout
+• STT Failure
+• TTS Failure
+• Tool Execution Failed
+• Agent Crash
+• Context Window Exceeded
+
+---
+
+## Platform Related
+
+• Insufficient Wallet Balance
+• Campaign Paused
+• Batch Stopped
+• Rate Limited
+• API Failure
+• Internal Error
+
+---
+
+## User Related
+
+• Requested Callback
+• Requested Human Agent
+• Requested Transfer
+• Asked to Call Later
+• Wrong Timing
+
+---
+
+# Failure Reason Storage
+
+Every Lead record must store:
+
+lead.outcome
+
+lead.failureCategory
+
+lead.failureReason
+
+lead.failureDescription
+
+lead.retryEligible
+
+lead.retryCount
+
+lead.lastFailureAt
+
+lead.nextRetryTime
+
+This should be persisted in the database.
+
+---
+
+# Lead Table
+
+Replace the generic Outcome column.
+
+Current
+
+Outcome
+
+Failed
+
+Improved
+
+Outcome
+
+Failed
+
+Reason
+
+Busy
+
+Category
+
+Customer
+
+Retry
+
+Yes
+
+Attempts
+
+1 / 3
+
+The user should immediately understand why the call failed.
+
+---
+
+# Callback Handling
+
+If during the conversation the user says:
+
+"Call me later."
+
+"Can you call tomorrow?"
+
+"I'm driving."
+
+"I'm busy."
+
+"Call after 6 PM."
+
+"Call next Monday."
+
+The AI should NOT mark the call as Failed.
+
+Instead:
+
+Outcome
+
+Callback Requested
+
+The lead should automatically move into the Callback queue.
+
+---
+
+# Callback Tab
+
+The Callback tab should display:
+
+Lead
+
+Phone Number
+
+Requested Time
+
+Requested Date
+
+Reason
+
+Agent Notes
+
+Created Time
+
+Next Scheduled Call
+
+Status
+
+Pending
+
+Scheduled
+
+Completed
+
+Expired
+
+Cancelled
+
+The Callback tab should become the work queue for follow-up calls.
+
+---
+
+# Automatic Callback Detection
+
+The platform should detect callback intent automatically.
+
+Examples:
+
+"I'll talk later."
+
+"Call me after lunch."
+
+"Can you ring me tomorrow?"
+
+"I'm in a meeting."
+
+"Call after 7."
+
+"Please call next week."
+
+The AI should classify these as:
+
+Outcome
+
+Callback Requested
+
+instead of Failed.
+
+---
+
+# Retry Logic
+
+Not every failure should be retried.
+
+Retry Eligible
+
+Busy
+
+Yes
+
+No Answer
+
+Yes
+
+Carrier Failure
+
+Yes
+
+Telephony Timeout
+
+Yes
+
+Network Failure
+
+Yes
+
+Invalid Number
+
+No
+
+Wrong Number
+
+No
+
+DND
+
+No
+
+Requested Callback
+
+No (handled via callback scheduler)
+
+Low Balance
+
+Retry after wallet recharge
+
+Campaign Paused
+
+Retry after resume
+
+The retry engine should use these classifications.
+
+---
+
+# Campaign Analytics
+
+Add Failure Breakdown.
+
+Example
+
+Failure Breakdown
+
+Busy .................. 42
+
+No Answer ............. 103
+
+Rejected .............. 17
+
+Invalid Number ........ 9
+
+Telephony Error ....... 5
+
+LLM Error ............. 3
+
+Low Wallet ............ 2
+
+Callback Requested .... 38
+
+Users should instantly understand where campaigns are losing leads.
+
+---
+
+# Filters
+
+Add filtering by:
+
+Failure Category
+
+Failure Reason
+
+Retry Eligible
+
+Callback Requested
+
+Provider Failure
+
+Customer Failure
+
+This makes campaign management significantly easier.
+
+---
+
+# Source of Truth
+
+Failure reasons should not be guessed from the final call outcome.
+
+They should be derived from:
+
+Telephony Provider Events
+
+Voice Pipeline Events
+
+Tool Execution Logs
+
+LLM Events
+
+Conversation Analysis
+
+Platform Events
+
+and stored as a normalized failure reason.
+
+---
+
+# Goal
+
+Every lead should clearly answer these questions:
+
+What happened?
+
+Why did it happen?
+
+Can it be retried?
+
+When should it be retried?
+
+Did the customer ask for a callback?
+
+Should it appear in the Callback queue?
+
+The Campaign module should provide enough operational insight that a business owner never has to open the call logs just to understand why a lead failed.
