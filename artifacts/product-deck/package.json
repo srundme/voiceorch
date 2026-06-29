@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/pitch-deck",
+  "name": "@workspace/product-deck",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -26,9 +26,5 @@
     "vite": "catalog:",
     "wouter": "catalog:",
     "zod": "catalog:"
-  },
-  "dependencies": {
-    "framer-motion": "catalog:",
-    "gsap": "^3.15.0"
   }
 }

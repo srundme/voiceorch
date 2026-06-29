@@ -1,6 +1,6 @@
-export default function Slide7() {
+export default function Slide8() {
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
+    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
       <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
         <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
@@ -43,15 +43,15 @@ export default function Slide7() {
           </div>
           <div style={{ flex: 0.7, display: "flex", flexDirection: "column", gap: "2.5vh", borderLeft: "0.15vh solid #E0E0E0", paddingLeft: "3vw" }}>
             <div>
-              <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.8vh" }}>SOM — SnapServe (2026 → 2027)</div>
+              <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "0.8vh" }}>SOM — SnapServe reach (2026 → 2027)</div>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2vh" }}>
-                  <div style={{ fontSize: "0.85vw", color: "#666666" }}>2026 target</div>
-                  <div style={{ fontSize: "1.6vw", fontWeight: 700 }}>$3M ARR</div>
+                  <div style={{ fontSize: "0.85vw", color: "#666666" }}>2026 share</div>
+                  <div style={{ fontSize: "1.6vw", fontWeight: 700 }}>0.6%</div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: "0.85vw", color: "#666666" }}>2027 target</div>
-                  <div style={{ fontSize: "1.6vw", fontWeight: 700 }}>$8M ARR</div>
+                  <div style={{ fontSize: "0.85vw", color: "#666666" }}>2027 share</div>
+                  <div style={{ fontSize: "1.6vw", fontWeight: 700 }}>1.1%</div>
                 </div>
               </div>
             </div>
@@ -73,13 +73,13 @@ export default function Slide7() {
             <div>SnapServe</div>
           </div>
           <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Stage</div>
-            <div>Pre-Seed</div>
+            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
+            <div>Live</div>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>08 / 14</div>
+          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>08 / 11</div>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
-export default function Slide9() {
+export default function Slide10() {
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
+    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
       <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
         <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
@@ -30,7 +30,7 @@ export default function Slide9() {
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#888888", minWidth: "3.5vw", paddingTop: "0.3vh" }}>03</div>
             <div>
               <div style={{ fontSize: "1.3vw", fontWeight: 600, marginBottom: "0.5vh" }}>Caller memory = compound value per customer, not per call</div>
-              <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Every call makes the next call smarter. This drives NRR above 120% as call volume grows — and creates switching costs that are measured in years of accumulated caller context, not just API migration effort.</div>
+              <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Every call makes the next call smarter. This drives retention above 120% net as call volume grows — and creates switching costs that are measured in years of accumulated caller context, not just API migration effort.</div>
             </div>
           </div>
           <div style={{ width: "100%", height: "0.08vh", backgroundColor: "#F0F0F0" }} />
@@ -54,13 +54,13 @@ export default function Slide9() {
             <div>SnapServe</div>
           </div>
           <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Stage</div>
-            <div>Pre-Seed</div>
+            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
+            <div>Live</div>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>10 / 14</div>
+          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>10 / 11</div>
         </div>
       </div>
     </div>

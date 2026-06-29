@@ -12,12 +12,10 @@
  * check" if this file has been hand-edited and needs repair.
  */
 
-import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
 import { slides } from "@/slideLoader";
-
-const OAuthDemoVideo = lazy(() => import("@/components/video/VideoTemplate"));
 
 function getSlideIndex(pathname: string): number {
   const match = pathname.match(/^\/slide(\d+)$/);
@@ -221,7 +219,6 @@ export default function App() {
     if (
       location !== "/" &&
       location !== "/allslides" &&
-      location !== "/video" &&
       getSlideIndex(location) === -1
     ) {
       if (slides.length > 0) {
@@ -250,6 +247,5 @@ export default function App() {
 
   if (location === "/") return <SlideViewer />;
   if (location === "/allslides") return <AllSlides />;
-  if (location === "/video") return <Suspense fallback={<div style={{background:"#0a0a0a",width:"100vw",height:"100vh"}} />}><OAuthDemoVideo /></Suspense>;
   return <SlideEditor />;
 }

@@ -1,0 +1,684 @@
+# Campaign & Batch Analytics Redesign (Enterprise CRM UX)
+
+## Background
+
+After building the Campaign and Batch modules, we've identified a UX limitation.
+
+The current implementation mixes multiple concepts together, making it difficult for users to understand campaign performance at a glance or filter leads efficiently.
+
+Currently we have:
+
+- Status
+- Outcome
+- Disposition
+
+However, these fields are overlapping in meaning.
+
+For example:
+
+Status = Completed
+
+Outcome = No Contact
+
+Failure = Busy
+
+These are actually three different dimensions of the same call.
+
+As campaigns scale to thousands or hundreds of thousands of leads, this design becomes difficult to navigate, filter, export, and analyze.
+
+We need to redesign the Campaign and Batch experience to be enterprise-grade.
+
+---
+
+# Core Principle
+
+Separate every call into independent dimensions instead of one mixed status.
+
+Each lead should answer four different questions:
+
+1. What happened to the call?
+2. What business outcome did the AI achieve?
+3. If it failed, why?
+4. What is the next action?
+
+---
+
+# 1. Execution Status
+
+Represents the lifecycle of the call.
+
+Examples:
+
+- Pending
+- Queued
+- Scheduled
+- Calling
+- Ringing
+- Connected
+- In Progress
+- Completed
+- Interrupted
+- Cancelled
+- Failed
+- Expired
+- Skipped
+
+This should be the primary "Status" column.
+
+---
+
+# 2. Business Outcome
+
+Represents the business result after the conversation.
+
+Examples:
+
+- Booked
+- Interested
+- Callback Requested
+- Transferred
+- Qualified
+- Disqualified
+- No Contact
+- Wrong Number
+- DND
+- Already Purchased
+- Not Interested
+- Spam
+- Voicemail
+
+This should replace the current Outcome implementation.
+
+---
+
+# 3. Failure Reason
+
+Failures should never be mixed into Status or Outcome.
+
+Instead create a dedicated Failure Reason.
+
+Examples:
+
+- Busy
+- No Answer
+- Network Failure
+- Telephony Error
+- LLM Error
+- ASR Error
+- TTS Error
+- Invalid Number
+- Carrier Rejected
+- Low Wallet Balance
+- Daily Limit Reached
+- Outside Business Hours
+- Webhook Failure
+- Timeout
+
+If the call succeeds this field remains empty.
+
+---
+
+# 4. Retry Status
+
+Retry information deserves its own state.
+
+Examples:
+
+- Retry Scheduled
+- Retry Pending
+- Retrying
+- Max Attempts Reached
+- Retry Completed
+
+Attempts column should become richer.
+
+Instead of:
+
+1/2
+
+Display:
+
+Attempt 1 of 2
+
+Hover:
+
+Attempt 1
+Busy
+
+Attempt 2
+Completed
+
+---
+
+# 5. Callback Status
+
+Separate callback from outcome.
+
+Possible values:
+
+- None
+- Requested
+- Scheduled
+- Completed
+- Expired
+
+---
+
+# 6. Lead State
+
+Every lead should have an overall lifecycle.
+
+Examples:
+
+Open
+
+Working
+
+Closed
+
+Archived
+
+Examples:
+
+Booked
+
+↓
+
+Closed
+
+Interested
+
+↓
+
+Working
+
+No Contact
+
+↓
+
+Open
+
+Wrong Number
+
+↓
+
+Closed
+
+---
+
+# Table Redesign
+
+Current
+
+Lead
+
+Status
+
+Outcome
+
+Disposition
+
+Attempts
+
+Booking
+
+Transfer
+
+Callback
+
+Actions
+
+Proposed
+
+Lead
+
+Execution Status
+
+Business Outcome
+
+Failure Reason
+
+Retry Status
+
+Callback Status
+
+Attempts
+
+Last Activity
+
+Booking
+
+Transfer
+
+Actions
+
+---
+
+# Filtering
+
+Instead of one mixed filter, create independent filters.
+
+Execution Status
+
+- Pending
+- Calling
+- Connected
+- Completed
+- Failed
+- Interrupted
+
+Business Outcome
+
+- Booked
+- Interested
+- Callback
+- Transferred
+- Qualified
+- No Contact
+- Wrong Number
+- DND
+
+Failure Reason
+
+- Busy
+- No Answer
+- Network
+- LLM
+- Telephony
+- Timeout
+- Low Balance
+
+Retry Status
+
+- Scheduled
+- Pending
+- Completed
+- Failed
+
+Lead State
+
+- Open
+- Working
+- Closed
+
+---
+
+# Saved Views
+
+Provide enterprise-level quick views.
+
+Examples
+
+Booked Today
+
+Interested Leads
+
+Callback Required
+
+Retry Pending
+
+Failed Calls
+
+Busy Numbers
+
+Transferred Calls
+
+Needs Attention
+
+No Contact
+
+Wrong Numbers
+
+Successful Calls
+
+---
+
+# Lead Journey Timeline
+
+Instead of showing only one call log, show the complete lifecycle of the lead.
+
+Example
+
+Lead Imported
+
+↓
+
+Call #1
+
+Busy
+
+↓
+
+Retry #1
+
+Connected
+
+↓
+
+Interested
+
+↓
+
+Callback Requested
+
+↓
+
+Callback Call
+
+Booked
+
+↓
+
+Calendar Created
+
+↓
+
+SMS Sent
+
+↓
+
+Conversation Summary
+
+This allows users to understand the complete customer journey without jumping across pages.
+
+---
+
+# Campaign Dashboard Redesign
+
+The Campaign page should represent an executive-level dashboard.
+
+Current metrics are useful but incomplete.
+
+Add:
+
+## Lead Overview
+
+Total Imported
+
+Unique Leads
+
+Duplicate Leads
+
+Valid Leads
+
+Invalid Leads
+
+Remaining Leads
+
+Completion %
+
+## Call Performance
+
+Calls Attempted
+
+Connected
+
+Completed
+
+Interrupted
+
+Failed
+
+Average Call Duration
+
+Average Attempts per Lead
+
+Connection Rate
+
+Completion Rate
+
+## Business Outcomes
+
+Booked
+
+Interested
+
+Callbacks
+
+Transfers
+
+Qualified
+
+Disqualified
+
+No Contact
+
+Wrong Number
+
+DND
+
+Conversion Rate
+
+Booking Rate
+
+Transfer Rate
+
+## Failure Analytics
+
+Busy
+
+No Answer
+
+Network Issues
+
+Telephony Issues
+
+LLM Errors
+
+Low Balance
+
+Carrier Rejections
+
+Business Hour Violations
+
+Top Failure Reason
+
+Failure %
+
+## AI Analytics
+
+Average Conversation Length
+
+Average Turns
+
+Average LLM Response Time
+
+Average TTS Latency
+
+Average STT Latency
+
+Tool Success Rate
+
+Tool Failure Rate
+
+Average Booking Time
+
+## Campaign Efficiency
+
+Cost Per Lead
+
+Cost Per Connected Call
+
+Cost Per Booking
+
+Total Campaign Cost
+
+Average Cost Per Minute
+
+Average Retry Count
+
+Campaign ROI (future)
+
+---
+
+# Batch Dashboard
+
+Each Batch should have its own analytics because campaigns may contain many batches.
+
+Show
+
+Imported
+
+Connected
+
+Completed
+
+Booked
+
+Transferred
+
+Callbacks
+
+Retry Pending
+
+Failed
+
+Average Call Time
+
+Completion %
+
+Connection %
+
+Booking %
+
+Failure %
+
+Each Batch should also display its own trends.
+
+---
+
+# Charts
+
+Campaign Overview
+
+- Funnel Chart
+- Lead Conversion Funnel
+
+Performance
+
+- Calls per Hour
+- Calls per Day
+- Success Trend
+- Failure Trend
+
+Business
+
+- Outcome Pie Chart
+- Booking Trend
+- Callback Trend
+
+Failures
+
+- Failure Reason Breakdown
+- Retry Breakdown
+
+Operations
+
+- Agent Utilization
+- Calls by Phone Number
+- Calls by Campaign Source
+
+---
+
+# Export Options
+
+Campaign Export
+
+CSV
+
+Excel
+
+JSON
+
+PDF Summary
+
+Batch Export
+
+CSV
+
+Excel
+
+JSON
+
+Lead Export
+
+Selected Leads
+
+Filtered Leads
+
+Entire Campaign
+
+Entire Batch
+
+Call Export
+
+Call Metadata
+
+Call Logs
+
+Transcripts
+
+Tool Executions
+
+Conversation Summaries
+
+Recording Links
+
+Campaign Summary PDF
+
+Generate a management report containing:
+
+Campaign Details
+
+Lead Statistics
+
+Call Statistics
+
+Conversion Funnel
+
+Outcome Distribution
+
+Failure Analysis
+
+Booking Analysis
+
+Transfer Analysis
+
+Cost Analysis
+
+Top Insights
+
+Recommendations
+
+This report should be downloadable as PDF.
+
+---
+
+# API Support
+
+Every filter available in the UI should also be available through APIs.
+
+Support:
+
+- Filter by Status
+- Filter by Outcome
+- Filter by Failure
+- Filter by Date
+- Filter by Agent
+- Filter by Batch
+- Filter by Campaign
+- Filter by Retry
+- Filter by Callback
+- Filter by Lead State
+
+---
+
+# Why This Change?
+
+The current implementation works for small test campaigns but does not scale for production usage.
+
+By separating Execution Status, Business Outcome, Failure Reason, Retry Status, Callback Status, and Lead State, users can quickly identify operational issues, measure campaign effectiveness, and take action without manually interpreting call records.
+
+This redesign aligns the product with enterprise sales engagement platforms and contact center solutions. It provides clear operational visibility, richer analytics, better filtering, powerful exports, and a scalable data model for future features such as AI insights, SLA monitoring, campaign optimization, and customer journey analytics.
+
+The objective is to make SnapServe AI's Campaign module one of the strongest operational dashboards for AI-powered outbound calling, enabling managers to monitor campaigns in real time while giving agents and administrators actionable insights at both the campaign and batch level.
