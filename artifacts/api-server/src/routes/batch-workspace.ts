@@ -15,7 +15,7 @@ import {
   batchImportRunsTable, leadSourcesTable,
   agentsTable, callRetriesTable, callsTable, scheduledCallbacksTable,
 } from "@workspace/db";
-import { eq, and, sql, desc, isNotNull, inArray, asc } from "drizzle-orm";
+import { eq, and, sql, desc, isNotNull, inArray, asc, or, ilike } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -207,6 +207,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] ?? "50"), 10) || 50));
   const status = String(req.query["status"] ?? "all");
   const outcome = String(req.query["outcome"] ?? "all");
+  const search = String(req.query["search"] ?? "").trim();
 
   const baseWhere = and(
     eq(campaignLeadsTable.campaignId, campaignId),
@@ -229,7 +230,14 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     outcome === "failed"             ? eq(campaignLeadsTable.operationalOutcome, "failed")             :
     undefined;
 
-  const where = and(baseWhere, statusFilter, outcomeFilter)!;
+  const searchFilter = search
+    ? or(
+        ilike(campaignLeadsTable.name, `%${search}%`),
+        ilike(campaignLeadsTable.phone, `%${search}%`),
+      )
+    : undefined;
+
+  const where = and(baseWhere, statusFilter, outcomeFilter, searchFilter)!;
 
   const [{ total }] = await db.select({ total: sql<number>`count(*)::int` })
     .from(campaignLeadsTable).where(where);

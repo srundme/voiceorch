@@ -737,8 +737,15 @@ function LeadsTab({ campaignId }: { campaignId: number }) {
                   return (
                     <tr key={String(lead["id"])} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-2.5">
-                        <p className="text-xs font-medium text-foreground truncate max-w-[120px]">{String(lead["name"] ?? "—")}</p>
-                        <p className="text-xs font-mono text-muted-foreground/60">{String(lead["phone"] ?? "")}</p>
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/40 text-xs font-semibold text-muted-foreground/70 shrink-0">
+                            {(String(lead["name"] ?? "").trim().charAt(0) || String(lead["phone"] ?? "").charAt(0) || "?").toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate max-w-[120px]">{String(lead["name"] ?? "—")}</p>
+                            <p className="text-xs font-mono text-muted-foreground/60">{String(lead["phone"] ?? "")}</p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-2.5">
                         <span className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border", statusCfg.cls)}>
@@ -946,25 +953,32 @@ export default function CampaignDetailPage() {
           {/* ── Overview ────────────────────────────────────────────────────── */}
           <TabsContent value="overview" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              {/* Summary stat tiles */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {/* Summary stat tiles — connected strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
                 {[
-                  { label: "Leads",     value: imported,                  pct: null,                       icon: <Users className="h-4 w-4" />,        accent: "text-blue-500",    tint: "bg-blue-500/10" },
-                  { label: "Called",    value: called,                    pct: calledPct > 0 ? calledPct : null, icon: <PhoneCall className="h-4 w-4" />, accent: "text-sky-500",     tint: "bg-sky-500/10" },
-                  { label: "Connected", value: connected,                 pct: connRate > 0 ? connRate : null,   icon: <Activity className="h-4 w-4" />,  accent: "text-cyan-500",    tint: "bg-cyan-500/10" },
-                  { label: "Booked",    value: booked,                    pct: bookRate > 0 ? bookRate : null,    icon: <Target className="h-4 w-4" />,    accent: "text-emerald-500", tint: "bg-emerald-500/10" },
-                  { label: "Callbacks", value: analytics?.callbacks ?? 0, pct: null,                       icon: <Clock className="h-4 w-4" />,        accent: "text-amber-500",   tint: "bg-amber-500/10" },
-                  { label: "Transfers", value: transferred,               pct: null,                       icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500", tint: "bg-purple-500/10" },
+                  { label: "Leads",     value: imported,          pct: null,                              icon: <Users className="h-4 w-4" />,         accent: "text-blue-500",    tint: "bg-blue-500/10",    badge: "" },
+                  { label: "Called",    value: called,            pct: calledPct > 0 ? calledPct : null,  icon: <PhoneCall className="h-4 w-4" />,      accent: "text-sky-500",     tint: "bg-sky-500/10",     badge: "text-sky-500" },
+                  { label: "Connected", value: connected,         pct: connRate > 0 ? connRate : null,    icon: <Activity className="h-4 w-4" />,       accent: "text-cyan-500",    tint: "bg-cyan-500/10",    badge: "text-emerald-500" },
+                  { label: "Booked",    value: booked,            pct: bookRate > 0 ? bookRate : null,    icon: <Target className="h-4 w-4" />,         accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "text-emerald-500" },
+                  { label: "Callbacks", value: analytics?.callbacks ?? 0, pct: null,                      icon: <Clock className="h-4 w-4" />,          accent: "text-amber-500",   tint: "bg-amber-500/10",   badge: "" },
+                  { label: "Transfers", value: transferred,       pct: null,                              icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500",  tint: "bg-purple-500/10",  badge: "text-purple-500" },
+                  { label: "Success",   value: `${successRate}%`, pct: null,                              icon: <TrendingUp className="h-4 w-4" />,     accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "" },
                 ].map(kpi => (
-                  <div key={kpi.label} className="bg-card border border-border/60 rounded-xl p-4">
-                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center mb-3", kpi.tint, kpi.accent)}>
-                      {kpi.icon}
+                  <div key={kpi.label} className="bg-card px-4 py-3.5 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", kpi.tint, kpi.accent)}>
+                        {kpi.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-lg font-bold text-foreground tabular-nums leading-none">
+                          {typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
+                        </p>
+                        <p className="text-xs text-muted-foreground/50 mt-1 truncate">{kpi.label}</p>
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-bold text-foreground tabular-nums leading-none">{kpi.value.toLocaleString()}</span>
-                      {kpi.pct !== null && <span className="text-xs font-medium text-muted-foreground/50 tabular-nums">{kpi.pct}%</span>}
-                    </div>
-                    <span className="block text-xs text-muted-foreground/50 uppercase tracking-widest mt-1.5">{kpi.label}</span>
+                    {kpi.pct !== null && (
+                      <span className={cn("text-xs font-semibold tabular-nums", kpi.badge || "text-muted-foreground/50")}>{kpi.pct}%</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -980,18 +994,19 @@ export default function CampaignDetailPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                <div className="flex items-center gap-0 overflow-x-auto pb-1">
                   {[
-                    { label: "Imported",    value: imported,    cls: "bg-muted/60" },
-                    { label: "Called",      value: called,      cls: "bg-blue-500/15" },
-                    { label: "Connected",   value: connected,   cls: "bg-blue-500/30" },
-                    { label: "Interested",  value: interested,  cls: "bg-emerald-500/15" },
-                    { label: "Booked",      value: booked,      cls: "bg-emerald-500/30" },
-                    { label: "Transferred", value: transferred, cls: "bg-purple-500/20" },
+                    { label: "Imported",    value: imported,    icon: <Upload className="h-4 w-4" />,         accent: "text-blue-500",    tint: "bg-blue-500/10" },
+                    { label: "Called",      value: called,      icon: <PhoneCall className="h-4 w-4" />,      accent: "text-sky-500",     tint: "bg-sky-500/10" },
+                    { label: "Connected",   value: connected,   icon: <Activity className="h-4 w-4" />,       accent: "text-cyan-500",    tint: "bg-cyan-500/10" },
+                    { label: "Interested",  value: interested,  icon: <Flame className="h-4 w-4" />,          accent: "text-orange-500",  tint: "bg-orange-500/10" },
+                    { label: "Booked",      value: booked,      icon: <CalendarDays className="h-4 w-4" />,   accent: "text-emerald-500", tint: "bg-emerald-500/10" },
+                    { label: "Transferred", value: transferred, icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500",  tint: "bg-purple-500/10" },
                   ].map((stage, i, arr) => (
                     <div key={stage.label} className="flex items-center shrink-0">
-                      <div className={cn("px-4 py-3 rounded-xl text-center min-w-[88px]", stage.cls)}>
-                        <p className="text-base font-bold tabular-nums leading-none">{stage.value.toLocaleString()}</p>
+                      <div className="flex flex-col items-center px-3 min-w-[92px]">
+                        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center mb-2", stage.tint, stage.accent)}>{stage.icon}</div>
+                        <p className="text-lg font-bold tabular-nums leading-none">{stage.value.toLocaleString()}</p>
                         <p className="text-xs text-muted-foreground/60 mt-1">{stage.label}</p>
                       </div>
                       {i < arr.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/20 mx-0.5 shrink-0" />}
@@ -1066,9 +1081,11 @@ export default function CampaignDetailPage() {
                       return (
                         <div key={String(ev.id)} className="flex items-center gap-3 py-2">
                           <div className={cn(
-                            "h-1.5 w-1.5 rounded-full shrink-0",
-                            isGood ? "bg-emerald-500" : isBad ? "bg-red-400" : isInfo ? "bg-blue-400/60" : "bg-muted-foreground/30",
-                          )} />
+                            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold shrink-0",
+                            isGood ? "bg-emerald-500/10 text-emerald-500" : isBad ? "bg-red-500/10 text-red-400" : isInfo ? "bg-blue-500/10 text-blue-400" : "bg-muted/40 text-muted-foreground/70",
+                          )}>
+                            {(label as string).trim().charAt(0).toUpperCase() || "•"}
+                          </div>
                           <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
                             <span className={cn(
                               "text-xs font-medium truncate",
