@@ -113,8 +113,28 @@ async function insertLeadAndSchedule(opts: {
     where: eq(campaignsTable.id, opts.campaignId),
   });
 
-  if (!campaign || !campaign.isActive) {
-    logger.info({ campaignId: opts.campaignId }, "Campaign not active — lead dropped");
+  if (!campaign) {
+    logger.info({ campaignId: opts.campaignId }, "Campaign not found — lead dropped");
+    return;
+  }
+
+  // Find the currently running batch for this campaign (if any) so the lead
+  // shows up in the batch view. Pick the most-recently-started running batch.
+  // NOTE: we resolve this BEFORE the isActive gate so that a running batch
+  // can override a paused/inactive campaign — starting a batch is explicit
+  // intent to accept incoming webhook leads even if isActive is false.
+  const runningBatch = await db.query.campaignBatchesTable.findFirst({
+    where: and(
+      eq(campaignBatchesTable.campaignId, opts.campaignId),
+      eq(campaignBatchesTable.status, "running"),
+    ),
+    orderBy: (t, { desc }) => [desc(t.id)],
+  });
+
+  // Accept if the campaign is active OR if there is a running batch.
+  // A running batch means the operator explicitly started it for lead intake.
+  if (!campaign.isActive && !runningBatch) {
+    logger.info({ campaignId: opts.campaignId }, "Campaign not active and no running batch — lead dropped");
     return;
   }
 
@@ -136,16 +156,6 @@ async function insertLeadAndSchedule(opts: {
       return;
     }
   }
-
-  // Find the currently running batch for this campaign (if any) so the lead
-  // shows up in the batch view. Pick the most-recently-started running batch.
-  const runningBatch = await db.query.campaignBatchesTable.findFirst({
-    where: and(
-      eq(campaignBatchesTable.campaignId, opts.campaignId),
-      eq(campaignBatchesTable.status, "running"),
-    ),
-    orderBy: (t, { desc }) => [desc(t.id)],
-  });
 
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
