@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
-  Search, Phone, Mic, Cpu, Volume2, DollarSign, ArrowRight,
+  Search, Phone, Mic, Cpu, Volume2, DollarSign,
   Filter, Calendar, Headphones, BarChart3, Download, X,
   ChevronDown, ChevronUp, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
-  UserCheck, Users, TrendingUp, Activity, Globe
+  UserCheck, Users, TrendingUp, Activity, Globe, Eye,
+  PhoneOff, PhoneMissed,
 } from "lucide-react";
 import {
   useListCalls,
@@ -31,10 +32,11 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Card, CardContent } from "@/components/ui/card";
+import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
-type CallStatus = "completed" | "failed" | "in_progress" | "pending" | "cancelled" | "transferred" | "booked" | "callback_scheduled" | "voicemail";
+type CallStatus = "completed" | "failed" | "in_progress" | "pending" | "cancelled" | "transferred" | "booked" | "callback_scheduled" | "voicemail" | "busy" | "no_pickup";
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 const formatDuration = (seconds?: number | null) => {
@@ -108,10 +110,10 @@ function StatusBadge({ status }: { status: string }) {
       label: "Transferred",
       icon: <UserCheck className="h-3 w-3" />,
       variant: "default",
-      bg: "bg-amber-500/10",
-      text: "text-amber-600 dark:text-amber-400",
-      border: "border-amber-500/20",
-      dot: "bg-amber-500",
+      bg: "bg-orange-500/10",
+      text: "text-orange-600 dark:text-orange-400",
+      border: "border-orange-500/20",
+      dot: "bg-orange-500",
     },
     booked: {
       label: "Booked",
@@ -140,15 +142,63 @@ function StatusBadge({ status }: { status: string }) {
       border: "border-border",
       dot: "bg-muted-foreground/40",
     },
+    busy: {
+      label: "Busy",
+      icon: <PhoneOff className="h-3 w-3" />,
+      variant: "outline",
+      bg: "bg-amber-500/10",
+      text: "text-amber-600 dark:text-amber-400",
+      border: "border-amber-500/20",
+      dot: "bg-amber-500",
+    },
+    no_pickup: {
+      label: "No Pickup",
+      icon: <PhoneMissed className="h-3 w-3" />,
+      variant: "outline",
+      bg: "bg-muted/50",
+      text: "text-muted-foreground",
+      border: "border-border",
+      dot: "bg-muted-foreground/40",
+    },
   };
 
   const cfg = configs[status] ?? configs.pending;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border min-w-[90px] justify-center ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
       {cfg.label}
     </span>
+  );
+}
+
+/* ── Phone Cell ──────────────────────────────────────────────────────────── */
+function PhoneCell({ number }: { number?: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  if (!number) return <span className="text-muted-foreground/25 text-[10px]">—</span>;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(number).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={handleCopy}
+          className="font-mono text-[11px] text-foreground/70 max-w-[130px] truncate block hover:text-foreground transition-colors text-left"
+        >
+          {number}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {copied ? "Copied!" : "Click to copy"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -185,7 +235,7 @@ export default function CallsList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     {
@@ -312,14 +362,6 @@ export default function CallsList() {
                 Complete history of voice interactions with AI agents
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
-                <Download className="h-3.5 w-3.5" /> Export
-              </Button>
-              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/analytics")}>
-                <BarChart3 className="h-3.5 w-3.5" /> Analytics
-              </Button>
-            </div>
           </div>
 
           {/* Stats Row */}
@@ -353,9 +395,9 @@ export default function CallsList() {
             </div>
           )}
 
-          {/* Filters Bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 max-w-xs min-w-[200px]">
+          {/* Filters Bar — single nowrap row */}
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+            <div className="relative shrink-0 w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
               <Input
                 type="search"
@@ -374,83 +416,105 @@ export default function CallsList() {
               )}
             </div>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px] h-8 text-xs">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="transferred">Transferred</SelectItem>
-                <SelectItem value="booked">Booked</SelectItem>
-                <SelectItem value="callback_scheduled">Callback</SelectItem>
-                <SelectItem value="voicemail">Voicemail</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="shrink-0">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="transferred">Transferred</SelectItem>
+                  <SelectItem value="booked">Booked</SelectItem>
+                  <SelectItem value="callback_scheduled">Callback</SelectItem>
+                  <SelectItem value="voicemail">Voicemail</SelectItem>
+                  <SelectItem value="busy">Busy</SelectItem>
+                  <SelectItem value="no_pickup">No Pickup</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Select value={agentFilter} onValueChange={setAgentFilter}>
-              <SelectTrigger className="w-[160px] h-8 text-xs">
-                <SelectValue placeholder="All agents" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All agents</SelectItem>
-                {agents?.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id.toString()}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="shrink-0">
+              <Select value={agentFilter} onValueChange={setAgentFilter}>
+                <SelectTrigger className="w-[160px] h-8 text-xs">
+                  <SelectValue placeholder="All agents" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All agents</SelectItem>
+                  {agents?.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id.toString()}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" /> Date Range
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80 p-4">
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold">Date Range</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground/60 mb-1 block">From</label>
-                      <Input
-                        type="date"
-                        className="h-8 text-xs"
-                        value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground/60 mb-1 block">To</label>
-                      <Input
-                        type="date"
-                        className="h-8 text-xs"
-                        value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
-                      />
+            <div className="shrink-0">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" /> Date Range
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-4">
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold">Date Range</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground/60 mb-1 block">From</label>
+                        <Input
+                          type="date"
+                          className="h-8 text-xs"
+                          value={dateFrom}
+                          onChange={(e) => setDateFrom(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground/60 mb-1 block">To</label>
+                        <Input
+                          type="date"
+                          className="h-8 text-xs"
+                          value={dateTo}
+                          onChange={(e) => setDateTo(e.target.value)}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="shrink-0">
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
+                <Download className="h-3.5 w-3.5" /> Export
+              </Button>
+            </div>
+
+            <div className="shrink-0">
+              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/analytics")}>
+                <BarChart3 className="h-3.5 w-3.5" /> Analytics
+              </Button>
+            </div>
 
             {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                onClick={clearFilters}
-              >
-                <RefreshCw className="h-3 w-3 mr-1" /> Clear
-              </Button>
+              <div className="shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={clearFilters}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" /> Clear
+                </Button>
+              </div>
             )}
 
-            <div className="ml-auto text-[10px] text-muted-foreground/40">
+            <div className="ml-auto shrink-0 text-[10px] text-muted-foreground/40 pl-2">
               {filteredCalls.length} call{filteredCalls.length !== 1 ? "s" : ""}
             </div>
           </div>
@@ -465,25 +529,29 @@ export default function CallsList() {
                 <TableHead className="w-[130px]">Date & Time</TableHead>
                 <TableHead className="w-[90px]">Call ID</TableHead>
                 <TableHead>Agent</TableHead>
+                <TableHead className="w-[130px]">From</TableHead>
+                <TableHead className="w-[130px]">To</TableHead>
                 <TableHead className="w-[120px]">Call Type</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
                 <TableHead className="w-[80px]">Duration</TableHead>
                 <TableHead className="w-[70px]">Cost</TableHead>
-                <TableHead className="w-[80px] text-right">Actions</TableHead>
+                <TableHead className="w-[48px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {callsLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <TableRow key={i}>
+                  <TableRow key={i} className="h-12">
                     <TableCell><Skeleton className="h-3 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-3 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-3 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-10" /></TableCell>
                     <TableCell><Skeleton className="h-3 w-10" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-7 w-14 ml-auto rounded-lg" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-6 w-6 ml-auto rounded" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredCalls.length > 0 ? (
@@ -491,7 +559,7 @@ export default function CallsList() {
                   const costCents = (call as any).costCents ?? 0;
 
                   return (
-                    <TableRow key={call.id} className="group cursor-default">
+                    <TableRow key={call.id} className="group cursor-default h-12">
                       <TableCell className="whitespace-nowrap">
                         <div className="text-[11px] text-foreground/80 font-medium">
                           {format(parseISO(call.createdAt), "MMM d, yyyy")}
@@ -512,6 +580,12 @@ export default function CallsList() {
                             {call.agentName}
                           </span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <PhoneCell number={call.fromNumber} />
+                      </TableCell>
+                      <TableCell>
+                        <PhoneCell number={call.toNumber} />
                       </TableCell>
                       <TableCell>
                         {(() => {
@@ -548,22 +622,21 @@ export default function CallsList() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Link href={`/app/calls/${call.id}`}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[11px] text-muted-foreground/60 hover:text-foreground gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            View <ArrowRight className="h-3 w-3" />
-                          </Button>
-                        </Link>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setSelectedCallId(call.id)}
+                        >
+                          <Eye className="h-3 w-3 text-muted-foreground/50" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-64 text-center border-0">
+                  <TableCell colSpan={10} className="h-64 text-center border-0">
                     <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
                       <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center">
                         <Phone className="h-6 w-6" />
@@ -596,6 +669,13 @@ export default function CallsList() {
           </Table>
           </div>
         </div>
+
+        {/* Call Detail Drawer */}
+        <CallDetailDrawer
+          open={selectedCallId !== null}
+          callId={selectedCallId}
+          onClose={() => setSelectedCallId(null)}
+        />
       </div>
     </TooltipProvider>
   );
