@@ -247,8 +247,7 @@ export default function CallsList() {
     return Number.isNaN(p) || p < 1 ? 1 : p;
   });
   const [pageInput, setPageInput] = useState("");
-
-  const PAGE_SIZE = 100;
+  const [pageSize, setPageSize] = useState(100);
 
   // Mirror filter/search/pagination state into the URL query string (replace, so
   // we don't spam history) so it can be restored on return.
@@ -354,12 +353,12 @@ export default function CallsList() {
     setCurrentPage(1);
   }, [statusFilter, agentFilter, searchQuery, dateFrom, dateTo, sortBy]);
 
-  // Pagination math (fixed 100 per page)
-  const totalPages = Math.max(1, Math.ceil(filteredCalls.length / PAGE_SIZE));
+  // Pagination math (page size configurable)
+  const totalPages = Math.max(1, Math.ceil(filteredCalls.length / pageSize));
   const safePage = Math.min(Math.max(currentPage, 1), totalPages);
   const pagedCalls = useMemo(
-    () => filteredCalls.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [filteredCalls, safePage]
+    () => filteredCalls.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredCalls, safePage, pageSize]
   );
 
   const goToPage = (page: number) => {
@@ -609,7 +608,20 @@ export default function CallsList() {
               </Button>
             </div>
 
-            <div className="shrink-0 flex items-center gap-1.5">
+            <div className="shrink-0 flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground/60">
+                <span>Per page</span>
+                <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-8 w-[70px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[25, 50, 100, 200].map(s => (
+                      <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 variant="outline"
                 size="icon"

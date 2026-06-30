@@ -32,8 +32,10 @@ import {
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
   Phone, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
-  TrendingUp, DollarSign, Target, MoreVertical,
+  TrendingUp, DollarSign, Target, MoreVertical, Eye,
 } from "lucide-react";
+import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import { TablePagination } from "@/components/table-pagination";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
 
@@ -741,7 +743,8 @@ export default function CampaignDetailPage() {
   }
 
   const [leadsPage, setLeadsPage] = useState(0);
-  const LEADS_PAGE_SIZE = 15;
+  const [leadsPageSize, setLeadsPageSize] = useState(15);
+  const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -749,7 +752,7 @@ export default function CampaignDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 30_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: leadsData, isLoading: leadsLoading } = useListCampaignLeads(campaignId, { limit: LEADS_PAGE_SIZE, offset: leadsPage * LEADS_PAGE_SIZE }, { query: { refetchInterval: 15_000 } as any });
+  const { data: leadsData, isLoading: leadsLoading } = useListCampaignLeads(campaignId, { limit: leadsPageSize, offset: leadsPage * leadsPageSize }, { query: { refetchInterval: 15_000 } as any });
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
@@ -1189,7 +1192,7 @@ export default function CampaignDetailPage() {
           {(() => {
             const leads: CampaignLead[] = leadsData?.leads ?? [];
             const total: number = leadsData?.total ?? 0;
-            const totalPages = Math.ceil(total / LEADS_PAGE_SIZE);
+            const totalPages = Math.max(1, Math.ceil(total / leadsPageSize));
             const statusColors: Record<string, string> = {
               pending:          "text-muted-foreground/60 bg-muted/40",
               queued:           "text-amber-500 bg-amber-500/10",
@@ -1235,13 +1238,13 @@ export default function CampaignDetailPage() {
                             <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60">Status</th>
                             <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 hidden sm:table-cell">Attempts</th>
                             <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 hidden sm:table-cell">Last attempt</th>
-                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground/60">Call</th>
+                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground/60 w-10">View</th>
                           </tr>
                         </thead>
                         <tbody>
                           {leads.map((lead, idx) => (
-                            <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                              <td className="px-3 py-2 text-muted-foreground/40">{leadsPage * LEADS_PAGE_SIZE + idx + 1}</td>
+                            <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors group">
+                              <td className="px-3 py-2 text-muted-foreground/40">{leadsPage * leadsPageSize + idx + 1}</td>
                               <td className="px-3 py-2">
                                 <div className="font-medium text-foreground/80">{lead.name ?? "—"}</div>
                                 <div className="text-muted-foreground/50 font-mono">{lead.phone}</div>
@@ -1258,9 +1261,9 @@ export default function CampaignDetailPage() {
                               <td className="px-3 py-2 text-right">
                                 {lead.callId ? (
                                   <button
-                                    onClick={() => setLocation(`/app/calls/${lead.callId}`)}
-                                    className="text-muted-foreground/50 hover:text-foreground transition-colors inline-flex items-center gap-1">
-                                    <PhoneCall className="h-3 w-3" /> <ArrowRight className="h-2.5 w-2.5" />
+                                    onClick={() => setSelectedCallId(lead.callId!)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-foreground inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted/40">
+                                    <Eye className="h-3.5 w-3.5" />
                                   </button>
                                 ) : <span className="text-muted-foreground/30">—</span>}
                               </td>
@@ -1269,17 +1272,16 @@ export default function CampaignDetailPage() {
                         </tbody>
                       </table>
                     </div>
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-3">
-                        <span className="text-xs text-muted-foreground/50">Page {leadsPage + 1} of {totalPages}</span>
-                        <div className="flex items-center gap-1.5">
-                          <Button size="sm" variant="outline" className="h-7 text-xs px-2"
-                            disabled={leadsPage === 0} onClick={() => setLeadsPage(p => p - 1)}>← Prev</Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs px-2"
-                            disabled={leadsPage >= totalPages - 1} onClick={() => setLeadsPage(p => p + 1)}>Next →</Button>
-                        </div>
-                      </div>
-                    )}
+                    <TablePagination
+                      className="mt-3"
+                      page={leadsPage + 1}
+                      totalPages={totalPages}
+                      pageSize={leadsPageSize}
+                      totalItems={total}
+                      onPageChange={p => setLeadsPage(p - 1)}
+                      onPageSizeChange={s => { setLeadsPageSize(s); setLeadsPage(0); }}
+                      pageSizeOptions={[10, 15, 25, 50]}
+                    />
                   </>
                 )}
               </div>
@@ -1296,6 +1298,12 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      <CallDetailDrawer
+        open={selectedCallId !== null}
+        callId={selectedCallId}
+        onClose={() => setSelectedCallId(null)}
+      />
 
       <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>
         <AlertDialogContent>

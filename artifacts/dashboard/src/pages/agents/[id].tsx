@@ -7,8 +7,10 @@ import {
   Mic, MicOff, PhoneOff, Copy, Check, Loader2, Volume2, PhoneOutgoing, Pencil,
   Brain, Trash2, ChevronDown, ChevronRight, User, Calendar, Archive,
   ArrowRight, MessageSquare, History, GitBranch, Fingerprint, ShieldCheck,
-  ShieldAlert, Clock3, AlertCircle,
+  ShieldAlert, Clock3, AlertCircle, Eye,
 } from "lucide-react";
+import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import { TablePagination } from "@/components/table-pagination";
 import {
   useGetAgent,
   getGetAgentQueryKey,
@@ -483,6 +485,9 @@ export default function AgentDetail() {
   const [, navigate] = useLocation();
   const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
   const [pendingCallNumber, setPendingCallNumber] = useState("");
+  const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
+  const [agentCallPage, setAgentCallPage] = useState(1);
+  const [agentCallPageSize, setAgentCallPageSize] = useState(25);
 
   function handleMakeCall(overrideNumber?: string) {
     const dest = (overrideNumber ?? toNumber).trim();
@@ -744,31 +749,52 @@ export default function AgentDetail() {
                           ))}
                         </TableRow>
                       ))
-                    ) : calls && calls.length > 0 ? (
-                      calls.map((call) => (
-                        <TableRow key={call.id} className="hover:bg-muted/50 transition-colors">
-                          <TableCell className="whitespace-nowrap">
-                            {format(parseISO(call.createdAt), "MMM d, HH:mm")}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(call.status)}</TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium">{call.toNumber}</div>
-                            <div className="text-xs text-muted-foreground">{call.fromNumber}</div>
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">{formatDuration(call.durationSeconds)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Link href={`/app/calls/${call.id}?tab=logs`}>
-                                <Button variant="ghost" size="sm" className="h-8 text-xs">View Logs</Button>
-                              </Link>
-                              <Link href={`/app/calls/${call.id}`}>
-                                <Button variant="ghost" size="sm" className="h-8 text-xs">Details</Button>
-                              </Link>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
+                    ) : calls && calls.length > 0 ? (() => {
+                      const agentTotalPages = Math.max(1, Math.ceil(calls.length / agentCallPageSize));
+                      const agentSafePage = Math.min(Math.max(agentCallPage, 1), agentTotalPages);
+                      const pagedAgentCalls = calls.slice((agentSafePage - 1) * agentCallPageSize, agentSafePage * agentCallPageSize);
+                      return (
+                        <>
+                          {pagedAgentCalls.map((call) => (
+                            <TableRow key={call.id} className="hover:bg-muted/50 transition-colors group">
+                              <TableCell className="whitespace-nowrap">
+                                {format(parseISO(call.createdAt), "MMM d, HH:mm")}
+                              </TableCell>
+                              <TableCell>{getStatusBadge(call.status)}</TableCell>
+                              <TableCell>
+                                <div className="text-sm font-medium">{call.toNumber}</div>
+                                <div className="text-xs text-muted-foreground">{call.fromNumber}</div>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{formatDuration(call.durationSeconds)}</TableCell>
+                              <TableCell className="text-right">
+                                <button
+                                  onClick={() => setSelectedCallId(call.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center h-7 w-7 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                                  title="View call details"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {agentTotalPages > 1 && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="py-2">
+                                <TablePagination
+                                  page={agentSafePage}
+                                  totalPages={agentTotalPages}
+                                  pageSize={agentCallPageSize}
+                                  totalItems={calls.length}
+                                  onPageChange={setAgentCallPage}
+                                  onPageSizeChange={s => { setAgentCallPageSize(s); setAgentCallPage(1); }}
+                                  pageSizeOptions={[10, 25, 50, 100]}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })() : (
                       <TableRow>
                         <TableCell colSpan={5} className="h-48 text-center text-muted-foreground">
                           No calls found for this agent.
@@ -788,6 +814,12 @@ export default function AgentDetail() {
 
         </div>
       </Tabs>
+
+      <CallDetailDrawer
+        open={selectedCallId !== null}
+        callId={selectedCallId}
+        onClose={() => setSelectedCallId(null)}
+      />
     </div>
   );
 }
