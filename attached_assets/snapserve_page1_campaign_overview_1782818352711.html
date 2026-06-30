@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SnapServe – Campaign Overview</title>
+<style>
+  /* ── TOKENS ─────────────────────────────────────────────── */
+  :root {
+    --bg:          #0d0f14;
+    --surface:     #141720;
+    --surface2:    #1a1e2b;
+    --surface3:    #20253a;
+    --border:      #252a3d;
+    --border-light:#2e3450;
+
+    --text-primary:   #e8eaf0;
+    --text-secondary: #8890a8;
+    --text-muted:     #545c78;
+
+    --accent-purple: #7c5cfc;
+    --accent-purple-dim: #3d2d8c;
+    --accent-blue:   #3b82f6;
+    --accent-green:  #22c55e;
+    --accent-orange: #f97316;
+    --accent-red:    #ef4444;
+    --accent-teal:   #14b8a6;
+
+    --tag-draft-bg:  #2a2060;
+    --tag-draft-fg:  #a78bfa;
+    --tag-stop-bg:   #3b1a1a;
+    --tag-stop-fg:   #ef4444;
+
+    --sidebar-w: 192px;
+    --topbar-h:  52px;
+
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --radius-sm: 6px;
+    --radius:    10px;
+    --radius-lg: 14px;
+  }
+
+  /* ── RESET ──────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); font-size: 13px; line-height: 1.5; display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── SIDEBAR ────────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-icon {
+    width: 24px; height: 24px;
+    background: var(--accent-purple);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .logo-text { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+  .logo-badge {
+    font-size: 9px; font-weight: 600;
+    background: var(--surface3); color: var(--text-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 4px; padding: 1px 5px; margin-left: 2px;
+  }
+
+  .sidebar-search {
+    margin: 10px 12px;
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 6px 10px;
+    color: var(--text-muted); font-size: 12px;
+  }
+  .sidebar-search span { flex:1; }
+  .kbd { font-size: 9px; background: var(--surface3); border: 1px solid var(--border-light); border-radius: 3px; padding: 1px 4px; color: var(--text-muted); }
+
+  .nav-section { padding: 8px 12px 2px; font-size: 9px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; border-radius: var(--radius-sm);
+    margin: 1px 8px; color: var(--text-secondary); font-size: 12.5px;
+    cursor: pointer; transition: background .15s;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text-primary); }
+  .nav-item.active { background: var(--accent-purple-dim); color: var(--accent-purple); font-weight: 600; }
+  .nav-icon { width: 15px; height: 15px; opacity: .7; flex-shrink: 0; }
+
+  .sidebar-footer {
+    margin-top: auto; padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .status-dot { width:7px; height:7px; border-radius:50%; background:var(--accent-green); display:inline-block; margin-right:6px; }
+
+  /* ── MAIN ───────────────────────────────────────────────── */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* topbar */
+  .topbar {
+    height: var(--topbar-h);
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 12px;
+    flex-shrink: 0;
+  }
+  .breadcrumb { display:flex; align-items:center; gap:6px; color:var(--text-secondary); font-size:12px; }
+  .breadcrumb a { color:var(--text-secondary); text-decoration:none; }
+  .breadcrumb .sep { color:var(--text-muted); }
+  .breadcrumb .current { color:var(--text-primary); }
+  .topbar-right { margin-left:auto; display:flex; align-items:center; gap:12px; }
+  .topbar-search {
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:5px 10px; font-size:12px; color:var(--text-muted);
+  }
+  .avatar { width:28px; height:28px; border-radius:50%; background:var(--accent-purple); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; }
+  .user-info { font-size:12px; color:var(--text-primary); }
+
+  /* page body */
+  .page-body { flex:1; overflow-y:auto; padding:20px 24px 32px; }
+
+  /* ── PAGE HEADER ─────────────────────────────────────────── */
+  .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
+  .page-title-block {}
+  .page-title { font-size:22px; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .tag-draft {
+    font-size:11px; font-weight:600;
+    background:var(--tag-draft-bg); color:var(--tag-draft-fg);
+    border:1px solid #4a3a8c; border-radius:20px; padding:2px 10px;
+  }
+  .page-meta { display:flex; align-items:center; gap:14px; margin-top:6px; color:var(--text-secondary); font-size:12px; }
+  .page-meta span { display:flex; align-items:center; gap:5px; }
+  .btn-primary {
+    display:flex; align-items:center; gap:6px;
+    background:var(--accent-purple); color:#fff;
+    border:none; border-radius:var(--radius-sm); padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .btn-icon { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:7px 9px; color:var(--text-secondary); cursor:pointer; }
+
+  /* ── STAT TILES ──────────────────────────────────────────── */
+  .stat-tiles { display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:20px; }
+  .stat-tile { background:var(--surface); padding:14px 16px; display:flex; flex-direction:column; gap:4px; }
+  .stat-tile-top { display:flex; align-items:center; gap:8px; }
+  .stat-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .stat-icon.blue { background:rgba(59,130,246,.15); color:var(--accent-blue); }
+  .stat-icon.green { background:rgba(34,197,94,.12); color:var(--accent-green); }
+  .stat-icon.orange { background:rgba(249,115,22,.12); color:var(--accent-orange); }
+  .stat-icon.purple { background:rgba(124,92,252,.12); color:var(--accent-purple); }
+  .stat-icon.teal { background:rgba(20,184,166,.12); color:var(--accent-teal); }
+  .stat-icon.emerald { background:rgba(16,185,129,.12); color:#10b981; }
+  .stat-number { font-size:20px; font-weight:700; }
+  .stat-label { font-size:11px; color:var(--text-secondary); }
+  .stat-badge { font-size:11px; font-weight:600; color:var(--accent-green); margin-top:2px; }
+  .stat-badge.orange { color:var(--accent-orange); }
+  .stat-badge.purple { color:var(--accent-purple); }
+
+  /* ── CALL FUNNEL ─────────────────────────────────────────── */
+  .section-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:18px; }
+  .section-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .section-title { font-size:14px; font-weight:600; }
+  .section-sub { font-size:12px; color:var(--text-secondary); margin-bottom:14px; }
+  .btn-outline { display:flex; align-items:center; gap:5px; background:transparent; border:1px solid var(--border-light); border-radius:var(--radius-sm); padding:6px 12px; color:var(--text-secondary); font-size:12px; cursor:pointer; }
+
+  .funnel-steps { display:flex; align-items:center; gap:0; margin-bottom:14px; }
+  .funnel-step { display:flex; flex-direction:column; align-items:center; flex:1; }
+  .funnel-step-inner { display:flex; align-items:center; gap:6px; }
+  .funnel-step-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+  .funnel-step-icon.blue { background:rgba(59,130,246,.15); color:var(--accent-blue); }
+  .funnel-step-icon.green { background:rgba(34,197,94,.12); color:var(--accent-green); }
+  .funnel-step-icon.orange { background:rgba(249,115,22,.12); color:var(--accent-orange); }
+  .funnel-step-icon.purple { background:rgba(124,92,252,.12); color:var(--accent-purple); }
+  .funnel-step-icon.teal { background:rgba(20,184,166,.12); color:var(--accent-teal); }
+  .funnel-step-icon.indigo { background:rgba(99,102,241,.12); color:#818cf8; }
+  .funnel-num { font-size:18px; font-weight:700; }
+  .funnel-label { font-size:11px; color:var(--text-secondary); margin-top:2px; }
+  .funnel-arrow { color:var(--text-muted); font-size:16px; flex-shrink:0; padding:0 8px; margin-bottom:10px; }
+
+  .progress-bar-wrap { margin-top:4px; }
+  .progress-bar { height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; margin-bottom:6px; }
+  .progress-fill { height:100%; background:var(--accent-purple); border-radius:3px; }
+  .progress-label { display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); }
+  .progress-label .pct { color:var(--text-primary); font-weight:600; }
+
+  /* ── BOTTOM GRID ─────────────────────────────────────────── */
+  .bottom-grid { display:grid; grid-template-columns:1fr 340px; gap:18px; }
+
+  /* batches */
+  .batches-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .batch-row {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:12px 14px;
+    display:flex; align-items:center; gap:12px;
+  }
+  .batch-stopped { display:flex; align-items:center; gap:5px; color:var(--accent-red); font-size:11px; font-weight:600; flex-shrink:0; }
+  .batch-info { flex:1; min-width:0; }
+  .batch-name { font-size:13px; font-weight:600; margin-bottom:2px; }
+  .batch-meta { font-size:11px; color:var(--text-secondary); display:flex; gap:8px; }
+  .batch-progress-wrap { width:160px; }
+  .batch-pct { font-size:11px; font-weight:600; margin-bottom:4px; }
+  .batch-bar { height:4px; background:var(--surface3); border-radius:2px; overflow:hidden; }
+  .batch-bar-fill { height:100%; background:var(--accent-purple); border-radius:2px; }
+  .batch-stats { display:flex; gap:14px; }
+  .batch-stat { font-size:12px; font-weight:600; }
+  .batch-stat span { display:block; font-size:10px; color:var(--text-secondary); font-weight:400; }
+  .batch-stat.green { color:var(--accent-green); }
+  .batch-stat.orange { color:var(--accent-orange); }
+  .batch-arrow { color:var(--text-muted); }
+
+  /* recent activity */
+  .activity-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .activity-sub { font-size:11px; color:var(--text-secondary); margin-top:1px; }
+  .btn-link { background:transparent; border:none; color:var(--accent-purple); font-size:12px; cursor:pointer; display:flex; align-items:center; gap:3px; }
+  .activity-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .activity-row:last-child { border-bottom:none; }
+  .activity-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .activity-dot.red { background:var(--accent-red); }
+  .activity-dot.blue { background:var(--accent-blue); }
+  .activity-icon-sm { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:11px; }
+  .activity-info { flex:1; min-width:0; }
+  .activity-name { font-size:12px; font-weight:600; }
+  .activity-event { font-size:11px; color:var(--text-secondary); margin-top:1px; }
+  .activity-time { font-size:11px; color:var(--text-muted); white-space:nowrap; }
+  .tag-stopped { font-size:10px; font-weight:600; background:var(--tag-stop-bg); color:var(--accent-red); border-radius:4px; padding:1px 6px; display:inline-block; }
+
+  /* SVG ICONS (inline) */
+  svg { display:inline-block; vertical-align:middle; }
+</style>
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">S</div>
+    <span class="logo-text">SnapServe</span>
+    <span class="logo-badge">BETA</span>
+  </div>
+
+  <div class="sidebar-search">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <span>Search...</span>
+    <span class="kbd">⌘K</span>
+  </div>
+
+  <div class="nav-section">Navigation</div>
+
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Command Center
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Agents
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    Agent Knowledge
+  </div>
+  <div class="nav-item active">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    Campaigns
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    Connections
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    Scheduling
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+    Memory / CRM
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    Call Logs
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+    Callbacks
+  </div>
+
+  <div class="nav-section" style="margin-top:10px;">Settings</div>
+  <div class="nav-item">
+    <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+    Settings
+  </div>
+
+  <div class="sidebar-footer">
+    <span class="status-dot"></span>
+    <span style="font-size:11px;color:var(--text-secondary)">All systems operational</span>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Privacy · Terms</div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main class="main">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <nav class="breadcrumb">
+      <a href="#">Campaigns</a>
+      <span class="sep">›</span>
+      <span class="current">test</span>
+    </nav>
+    <div class="topbar-right">
+      <div class="topbar-search">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Search
+        <span class="kbd">⌘K</span>
+      </div>
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="color:var(--text-secondary)"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <div class="avatar">K</div>
+      <span class="user-info">Krithika D ▾</span>
+    </div>
+  </header>
+
+  <div class="page-body">
+
+    <!-- PAGE HEADER -->
+    <div class="page-header">
+      <div class="page-title-block">
+        <div class="page-title">
+          test campaign
+          <span class="tag-draft">Draft</span>
+        </div>
+        <div class="page-meta">
+          <span>
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Agent #51
+          </span>
+          <span>
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+            +917971442381
+          </span>
+          <span>
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            csv
+          </span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn-primary">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Create Batch
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <button class="btn-icon">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- STAT TILES -->
+    <div class="stat-tiles">
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-icon blue">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div>
+            <div class="stat-number">2</div>
+            <div class="stat-label">Total Leads</div>
+          </div>
+        </div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-icon blue">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+          </div>
+          <div>
+            <div class="stat-number">2</div>
+            <div class="stat-label">Called</div>
+          </div>
+        </div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-icon green">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+          </div>
+          <div>
+            <div class="stat-number">2</div>
+            <div class="stat-label">Connected</div>
+          </div>
+        </div>
+        <div class="stat-badge">100%</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-icon orange">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <div>
+            <div class="stat-number">0</div>
+            <div class="stat-label">Booked</div>
+          </div>
+        </div>
+        <div class="stat-badge orange">0%</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-icon purple">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </div>
+          <div>
+            <div class="stat-number">1</div>
+            <div class="stat-label">Transfers</div>
+          </div>
+        </div>
+        <div class="stat-badge purple">50%</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile-top">
+          <div class="stat-icon emerald">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          </div>
+          <div>
+            <div class="stat-number" style="font-size:18px">50%</div>
+            <div class="stat-label">Success</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALL FUNNEL -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <div>
+          <div class="section-title">Call Funnel</div>
+          <div class="section-sub">Track your call journey at a glance</div>
+        </div>
+        <button class="btn-outline">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          View Analytics
+        </button>
+      </div>
+
+      <div class="funnel-steps">
+        <div class="funnel-step">
+          <div class="funnel-step-inner">
+            <div class="funnel-step-icon blue">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div>
+              <div class="funnel-num">2</div>
+              <div class="funnel-label">Imported</div>
+            </div>
+          </div>
+        </div>
+        <div class="funnel-arrow">→</div>
+        <div class="funnel-step">
+          <div class="funnel-step-inner">
+            <div class="funnel-step-icon blue">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+            </div>
+            <div>
+              <div class="funnel-num">2</div>
+              <div class="funnel-label">Called</div>
+            </div>
+          </div>
+        </div>
+        <div class="funnel-arrow">→</div>
+        <div class="funnel-step">
+          <div class="funnel-step-inner">
+            <div class="funnel-step-icon green">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+            </div>
+            <div>
+              <div class="funnel-num">2</div>
+              <div class="funnel-label">Connected</div>
+            </div>
+          </div>
+        </div>
+        <div class="funnel-arrow">→</div>
+        <div class="funnel-step">
+          <div class="funnel-step-inner">
+            <div class="funnel-step-icon orange">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div>
+              <div class="funnel-num">1</div>
+              <div class="funnel-label">Interested</div>
+            </div>
+          </div>
+        </div>
+        <div class="funnel-arrow">→</div>
+        <div class="funnel-step">
+          <div class="funnel-step-inner">
+            <div class="funnel-step-icon indigo">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div>
+              <div class="funnel-num">0</div>
+              <div class="funnel-label">Booked</div>
+            </div>
+          </div>
+        </div>
+        <div class="funnel-arrow">→</div>
+        <div class="funnel-step">
+          <div class="funnel-step-inner">
+            <div class="funnel-step-icon purple">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            </div>
+            <div>
+              <div class="funnel-num">1</div>
+              <div class="funnel-label">Transferred</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="progress-bar-wrap">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:100%"></div>
+        </div>
+        <div class="progress-label">
+          <span>2 of 2 called</span>
+          <span class="pct">100% completion</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM GRID -->
+    <div class="bottom-grid">
+
+      <!-- BATCHES -->
+      <div class="section-card" style="margin-bottom:0">
+        <div class="batches-header">
+          <div>
+            <div class="section-title">Batches</div>
+            <div class="section-sub" style="margin:2px 0 0">Manage and monitor your batches</div>
+          </div>
+          <button class="btn-outline">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Batch
+          </button>
+        </div>
+
+        <div class="batch-row">
+          <div class="batch-stopped">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            Stopped
+          </div>
+          <div class="batch-info">
+            <div class="batch-name">test campaign</div>
+            <div class="batch-meta">
+              <span>Call Transfer</span>
+              <span>• 2 leads</span>
+              <span>• 26 minutes ago</span>
+            </div>
+          </div>
+          <div class="batch-progress-wrap">
+            <div class="batch-pct">100% called (2 / 2)</div>
+            <div class="batch-bar"><div class="batch-bar-fill" style="width:100%"></div></div>
+          </div>
+          <div class="batch-stats">
+            <div class="batch-stat green">2 <span>Connected</span></div>
+            <div class="batch-stat orange">1 <span>Interested</span></div>
+          </div>
+          <div class="batch-arrow">›</div>
+        </div>
+      </div>
+
+      <!-- RECENT ACTIVITY -->
+      <div class="section-card" style="margin-bottom:0">
+        <div class="activity-header">
+          <div>
+            <div class="section-title">Recent Activity</div>
+            <div class="activity-sub">Latest updates and events</div>
+          </div>
+          <button class="btn-link">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            View All Activity →
+          </button>
+        </div>
+
+        <div class="activity-row">
+          <div class="activity-dot red"></div>
+          <div class="activity-info">
+            <div class="activity-name">test campaign <span class="tag-stopped">Batch Stopped</span></div>
+          </div>
+          <div class="activity-time">26 minutes ago</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon-sm" style="background:rgba(59,130,246,.15);color:var(--accent-blue)">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+          </div>
+          <div class="activity-info">
+            <div class="activity-name">gopi</div>
+            <div class="activity-event">Operational Outcome Set</div>
+          </div>
+          <div class="activity-time">27 minutes ago</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon-sm" style="background:rgba(59,130,246,.15);color:var(--accent-blue)">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+          </div>
+          <div class="activity-info">
+            <div class="activity-name">ben</div>
+            <div class="activity-event">Operational Outcome Set</div>
+          </div>
+          <div class="activity-time">28 minutes ago</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon-sm" style="background:rgba(59,130,246,.15);color:var(--accent-blue)">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+          </div>
+          <div class="activity-info">
+            <div class="activity-name">ben</div>
+            <div class="activity-event">Call Started</div>
+          </div>
+          <div class="activity-time">30 minutes ago</div>
+        </div>
+        <div class="activity-row">
+          <div class="activity-icon-sm" style="background:rgba(59,130,246,.15);color:var(--accent-blue)">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.93 5.93l.51-.51a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg>
+          </div>
+          <div class="activity-info">
+            <div class="activity-name">gopi</div>
+            <div class="activity-event">Call Started</div>
+          </div>
+          <div class="activity-time">32 minutes ago</div>
+        </div>
+      </div>
+
+    </div><!-- /bottom-grid -->
+  </div><!-- /page-body -->
+</main>
+</body>
+</html>
