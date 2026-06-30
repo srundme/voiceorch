@@ -66,7 +66,8 @@ type SourceType = "csv" | "meta_form" | "webhook";
 interface WizardState {
   batchName: string;
   batchDescription: string;
-  sourceMode: "existing" | "new";
+  sourceMode: "existing" | "new" | "crm";
+  crmBatchId: number | null;
   selectedSource: LeadSource | null;
   newSourceType: SourceType;
   createdSource: LeadSource | null;
@@ -93,6 +94,7 @@ const INITIAL_STATE: WizardState = {
   batchName: "",
   batchDescription: "",
   sourceMode: "new",
+  crmBatchId: null,
   selectedSource: null,
   newSourceType: "csv",
   createdSource: null,
@@ -309,11 +311,12 @@ const SOURCE_ICONS: Record<string, React.ReactNode> = {
 };
 
 function Step2({
-  state, setState, campaignId,
+  state, setState, campaignId, onCrmImported,
 }: {
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
   campaignId: number;
+  onCrmImported?: (batchId: number, leadsCreated: number) => void;
 }) {
   const { data: sources = [], isLoading } = useListLeadSources({
     query: { queryKey: getListLeadSourcesQueryKey() },
@@ -494,6 +497,11 @@ function Step2({
           open={!!importConn}
           onClose={() => setImportConn(null)}
           defaultCampaignId={campaignId}
+          onImported={(batchId, leadsCreated) => {
+            setState({ sourceMode: "crm", crmBatchId: batchId });
+            setImportConn(null);
+            onCrmImported?.(batchId, leadsCreated);
+          }}
         />
       )}
     </div>
@@ -757,6 +765,24 @@ function MetaFormStep({ toast }: { toast: ReturnType<typeof useToast>["toast"] }
   );
 }
 
+// ── CRM passthrough banner ─────────────────────────────────────────────────────
+
+function CrmPassthroughBanner({ title }: { title: string }) {
+  return (
+    <div className="space-y-4 max-w-xl">
+      <div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
+      <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        <p className="text-sm text-emerald-300">
+          Leads already imported via CRM — no additional source config needed. Click <strong>Next</strong> to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Step 3: Source Configuration ──────────────────────────────────────────────
 
 function Step3({
@@ -770,6 +796,10 @@ function Step3({
   const createSource = useCreateLeadSource();
   const [sourceName, setSourceName] = useState("");
   const [copied, setCopied] = useState(false);
+
+  if (state.sourceMode === "crm") {
+    return <CrmPassthroughBanner title="Source Configuration" />;
+  }
 
   const effectiveType: SourceType =
     state.sourceMode === "existing"
@@ -984,6 +1014,10 @@ function Step4({
     query: { queryKey: getListAgentVariablesQueryKey(agentId), enabled: agentId > 0 },
   });
 
+  if (state.sourceMode === "crm") {
+    return <CrmPassthroughBanner title="Variable Mapping" />;
+  }
+
   const effectiveType: SourceType =
     state.sourceMode === "existing"
       ? (state.selectedSource?.sourceType as SourceType) ?? "csv"
@@ -1148,6 +1182,11 @@ function Step5({
   campaignId: number;
 }) {
   const { getToken } = useAuth();
+
+  if (state.sourceMode === "crm") {
+    return <CrmPassthroughBanner title="Validation" />;
+  }
+
   const effectiveType: SourceType =
     state.sourceMode === "existing"
       ? (state.selectedSource?.sourceType as SourceType) ?? "csv"
@@ -1295,6 +1334,10 @@ function Step6({
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
 }) {
+  if (state.sourceMode === "crm") {
+    return <CrmPassthroughBanner title="Duplicate Handling" />;
+  }
+
   const policies: Array<{ value: DuplicatePolicy; label: string; desc: string }> = [
     { value: "ignore",             label: "Ignore",             desc: "Create the lead anyway but flag it as a duplicate. Agent still calls." },
     { value: "skip",               label: "Skip",               desc: "Silently discard duplicates. No error report entry." },
@@ -1557,10 +1600,66 @@ function Step8({
   onLaunchSuccess: (batch: CampaignBatch) => void;
 }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const { data: campaign } = useGetCampaign(campaignId, {
     query: { queryKey: getGetCampaignQueryKey(campaignId) },
   });
   const createBatch = useCreateCampaignBatch();
+
+  // CRM branch: batch already created — just navigate to the campaign
+  if (state.sourceMode === "crm" && state.crmBatchId != null) {
+    return (
+      <div className="space-y-5 max-w-2xl">
+        <div>
+          <h2 className="text-lg font-semibold">Review & Launch</h2>
+          <p className="text-sm text-muted-foreground mt-1">Your CRM import is complete. The batch has already been created.</p>
+        </div>
+
+        <div className="space-y-3">
+          <SummarySection title="Campaign">
+            <DetailRow label="Name"  value={campaign?.name ?? "—"} />
+            <DetailRow icon={<User className="w-3.5 h-3.5" />}  label="Agent" value={campaign?.agentId ? `#${campaign.agentId}` : "—"} />
+            <DetailRow icon={<Phone className="w-3.5 h-3.5" />} label="Phone" value={campaign?.fromNumber ?? "—"} />
+          </SummarySection>
+
+          <SummarySection title="Batch">
+            <DetailRow label="Name" value={state.batchName} />
+            {state.batchDescription && <DetailRow label="Description" value={state.batchDescription} />}
+          </SummarySection>
+
+          <SummarySection title="Lead Source">
+            <DetailRow label="Type"   value="CRM Import" />
+            <DetailRow
+              icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+              label="Status"
+              value="Leads imported from CRM"
+            />
+          </SummarySection>
+
+          <SummarySection title="Execution">
+            <DetailRow label="Max Attempts"    value={String(state.maxAttempts)} />
+            <DetailRow label="Retry Delay"     value={`${state.retryDelayMinutes}m`} />
+            {state.timezone && <DetailRow icon={<Globe className="w-3.5 h-3.5" />} label="Timezone" value={state.timezone} />}
+            <DetailRow
+              icon={<Play className="w-3.5 h-3.5 text-emerald-400" />}
+              label="Auto-start"
+              value={state.autoStart ? "Yes — starts immediately" : "No — stays in Draft"}
+            />
+          </SummarySection>
+        </div>
+
+        <div className="pt-2">
+          <Button
+            size="lg"
+            onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/${state.crmBatchId}`)}
+            className="w-full gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />Go to Batch
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const effectiveType: SourceType =
     state.sourceMode === "existing"
@@ -1844,8 +1943,12 @@ export default function BatchWizardPage() {
   function canAdvance(): boolean {
     switch (currentStep) {
       case 1: return state.batchName.trim().length > 0;
-      case 2: return !!(state.sourceMode === "existing" ? state.selectedSource : state.newSourceType);
+      case 2: {
+        if (state.sourceMode === "crm") return true;
+        return !!(state.sourceMode === "existing" ? state.selectedSource : state.newSourceType);
+      }
       case 3: {
+        if (state.sourceMode === "crm") return true;
         const t: SourceType =
           state.sourceMode === "existing"
             ? (state.selectedSource?.sourceType as SourceType) ?? "csv"
@@ -1855,6 +1958,7 @@ export default function BatchWizardPage() {
         return true;
       }
       case 4: {
+        if (state.sourceMode === "crm") return true;
         const t: SourceType =
           state.sourceMode === "existing"
             ? (state.selectedSource?.sourceType as SourceType) ?? "csv"
@@ -1862,6 +1966,8 @@ export default function BatchWizardPage() {
         if (t !== "csv") return true;
         return !!state.fieldMapping["phone"];
       }
+      case 5: return state.sourceMode === "crm" ? true : true;
+      case 6: return true;
       default: return true;
     }
   }
@@ -1918,7 +2024,17 @@ export default function BatchWizardPage() {
         {/* Step content */}
         <div className="flex-1 overflow-y-auto px-8 py-6">
           {currentStep === 1 && <Step1 state={state} setState={setState} campaignId={campaignId} />}
-          {currentStep === 2 && <Step2 state={state} setState={setState} campaignId={campaignId} />}
+          {currentStep === 2 && (
+            <Step2
+              state={state}
+              setState={setState}
+              campaignId={campaignId}
+              onCrmImported={() => {
+                setCompleted(prev => new Set([...prev, 2, 3, 4, 5, 6]));
+                setCurrentStep(7);
+              }}
+            />
+          )}
           {currentStep === 3 && <Step3 state={state} setState={setState} />}
           {currentStep === 4 && <Step4 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 5 && <Step5 state={state} setState={setState} campaignId={campaignId} />}

@@ -808,11 +808,13 @@ export function CrmImportDialog({
   open,
   onClose,
   defaultCampaignId,
+  onImported,
 }: {
   connection: CrmConnection;
   open: boolean;
   onClose: () => void;
   defaultCampaignId?: number;
+  onImported?: (batchId: number, leadsCreated: number) => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -905,6 +907,7 @@ export function CrmImportDialog({
           result.dncBlocked      ? `${result.dncBlocked} DNC blocked` : null,
         ].filter(Boolean).join(" · ") || undefined,
       });
+      onImported?.(result.batchId, result.leadsCreated);
       onClose();
     } catch (err) {
       toast({ title: "Import failed", description: String(err), variant: "destructive" });
@@ -1151,7 +1154,6 @@ function CrmConnectorSection() {
   const qc = useQueryClient();
   const { data: connections = [], isLoading } = useListCrmConnections();
   const deleteMut = useDeleteCrmConnection();
-  const [importConn, setImportConn] = useState<CrmConnection | null>(null);
 
   const handleConnect = (provider: "hubspot" | "zoho") => {
     const token = localStorage.getItem("voiceorch:session") ?? "";
@@ -1236,14 +1238,6 @@ function CrmConnectorSection() {
                       <div key={conn.id} className="flex items-center gap-1.5">
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => setImportConn(conn)}
-                          className="h-7 px-2.5 text-xs border-border"
-                        >
-                          Import contacts
-                        </Button>
-                        <Button
-                          size="sm"
                           variant="ghost"
                           onClick={() => handleDisconnect(conn)}
                           className="h-7 px-2 text-muted-foreground hover:text-red-400"
@@ -1270,13 +1264,6 @@ function CrmConnectorSection() {
         </div>
       )}
 
-      {importConn && (
-        <CrmImportDialog
-          connection={importConn}
-          open={!!importConn}
-          onClose={() => setImportConn(null)}
-        />
-      )}
     </section>
   );
 }
