@@ -24,6 +24,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Copy, Check, Phone, Megaphone, ChevronRight, X,
@@ -117,7 +120,6 @@ function CampaignRow({
   onDelete: (c: Campaign) => void;
 }) {
   const [, navigate] = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
   const calledPct = campaign.totalLeads > 0
     ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100)
     : 0;
@@ -171,34 +173,31 @@ function CampaignRow({
         >
           Open <ChevronRight className="h-3 w-3" />
         </Button>
-        <button
-          className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
-          onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
-        >
-          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[130px]">
+            <DropdownMenuItem
+              className="text-xs"
+              onClick={e => { e.stopPropagation(); onEdit(campaign); }}
+            >
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+              onClick={e => { e.stopPropagation(); onDelete(campaign); }}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-
-      {/* Dropdown */}
-      {menuOpen && (
-        <div
-          className="absolute z-20 right-12 top-8 bg-card border border-border rounded-xl shadow-xl py-1 min-w-[130px]"
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
-            onClick={() => { setMenuOpen(false); onEdit(campaign); }}
-          >
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
-          </button>
-          <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 transition-colors"
-            onClick={() => { setMenuOpen(false); onDelete(campaign); }}
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Delete
-          </button>
-        </div>
-      )}
     </div>
   );
 }
