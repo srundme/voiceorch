@@ -786,16 +786,20 @@ function CrmPassthroughBanner({ title }: { title: string }) {
 // ── Step 3: Source Configuration ──────────────────────────────────────────────
 
 function Step3({
-  state, setState,
+  state, setState, campaignId,
 }: {
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
+  campaignId: number;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const createSource = useCreateLeadSource();
   const [sourceName, setSourceName] = useState("");
   const [copied, setCopied] = useState(false);
+  const { data: campaign } = useGetCampaign(campaignId, {
+    query: { queryKey: getGetCampaignQueryKey(campaignId) },
+  });
 
   if (state.sourceMode === "crm") {
     return <CrmPassthroughBanner title="Source Configuration" />;
@@ -968,11 +972,11 @@ function Step3({
               <Label className="text-xs">Endpoint URL</Label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs bg-muted/50 border border-border px-3 py-2 rounded-lg font-mono truncate">
-                  {`${window.location.origin}${BASE}/api/webhooks/leads/${src.id}`}
+                  {`${window.location.origin}${BASE}/api/webhooks/lead/${campaign?.webhookToken ?? ""}`}
                 </code>
                 <button
                   type="button"
-                  onClick={() => copy(`${window.location.origin}${BASE}/api/webhooks/leads/${src.id}`)}
+                  onClick={() => copy(`${window.location.origin}${BASE}/api/webhooks/lead/${campaign?.webhookToken ?? ""}`)}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -2044,7 +2048,7 @@ export default function BatchWizardPage() {
               }}
             />
           )}
-          {currentStep === 3 && <Step3 state={state} setState={setState} />}
+          {currentStep === 3 && <Step3 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 4 && <Step4 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 5 && <Step5 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 6 && <Step6 state={state} setState={setState} />}
