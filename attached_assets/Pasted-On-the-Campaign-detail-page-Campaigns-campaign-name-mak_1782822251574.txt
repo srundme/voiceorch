@@ -1,0 +1,26 @@
+On the Campaign detail page (Campaigns → [campaign name]), make the following structural changes:
+1. Remove the "Overview" / "Leads" tab navigation entirely
+
+Delete the tab bar currently showing "Overview" and "Leads" below the campaign title/header.
+The page should no longer be tab-based — just render the stat cards board, Batches, and Recent Activity directly on a single view (no tab switching).
+If the "Leads" tab content/view is used elsewhere or linked from another part of the app, don't delete that underlying component/route — just remove its tab entry point from this page.
+
+2. Remove the entire "Call Funnel" section
+
+Delete the "Call Funnel" card completely — heading, subtitle, the 6-stage funnel icons (Imported/Called/Connected/Interested/Booked/Transferred), the progress bar, and the "X called / X remaining" footer text.
+
+3. Keep "View Analytics" but reposition it
+
+Move the "View Analytics" button (currently top-right inside the Call Funnel card, next to "63% conn.") to sit directly above the stat cards board (the 7-metric row: Leads, Called, Connected, Booked, Callbacks, Transfers, Success), right-aligned in its own row.
+The "63% conn." label next to it can be dropped since it was tied to the funnel context — keep just the "View Analytics" button on its own, unless there's a clean equivalent top-level metric to pair it with; if unsure, just keep the button alone.
+Button styling/behavior (click action, route it opens) stays exactly the same — only its position changes.
+
+4. Resulting page order (top to bottom)
+
+Breadcrumb + title + status badge + agent/phone/csv metadata + "Create Batch" button (unchanged)
+"View Analytics" button row (new position)
+Stat cards board (7 metrics, unchanged)
+Batches section (unchanged)
+Recent Activity section (unchanged)
+
+Do not change any backend logic, data fetching, or calculations — this is purely a layout/structural change. Confirm no broken imports or dead references remain after removing the tab navigation and Call Funnel component.
