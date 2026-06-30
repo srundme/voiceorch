@@ -6,6 +6,8 @@ export interface CrmTokenPayload {
   accessToken: string;
   refreshToken: string;
   expiresAt: string; // ISO timestamp
+  accountsServer?: string; // e.g. "https://accounts.zoho.in" — Zoho regional auth server
+  apiDomain?: string;      // e.g. "https://www.zohoapis.in"  — Zoho regional API base
 }
 
 export const crmConnectionsTable = pgTable("crm_connections", {

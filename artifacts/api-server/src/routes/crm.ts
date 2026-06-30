@@ -45,7 +45,7 @@ import {
 } from "../services/crm/hubspot.js";
 import {
   isZohoConfigured, buildZohoAuthUrl, exchangeZohoCode,
-  listZohoContacts, listZohoViews,
+  listZohoContacts, listZohoViews, zohoAccountsServerFromLocation,
 } from "../services/crm/zoho.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG } from "../services/phone-normalization.js";
 import { isOnDnc } from "../lib/dnc-check.js";
@@ -268,7 +268,13 @@ router.get("/crm/callback/:provider", async (req, res): Promise<void> => {
     if (provider === "hubspot") {
       result = await exchangeHubSpotCode(code);
     } else if (provider === "zoho") {
-      const zohoResult = await exchangeZohoCode(code);
+      // Zoho appends `location` to the callback URL indicating the datacenter
+      // (e.g. "in", "eu", "au", "jp", "cn", "com"). The token exchange and all
+      // subsequent API calls MUST use the matching regional server.
+      const locationParam = req.query["location"] as string | undefined;
+      const accountsServer = zohoAccountsServerFromLocation(locationParam);
+
+      const zohoResult = await exchangeZohoCode(code, accountsServer);
 
       // Upsert connection by userId + provider + accountId
       const existingRows = await db.select({ id: crmConnectionsTable.id, encryptedTokens: crmConnectionsTable.encryptedTokens })
@@ -296,9 +302,11 @@ router.get("/crm/callback/:provider", async (req, res): Promise<void> => {
       }
 
       const finalTokens: CrmTokenPayload = {
-        accessToken:  zohoResult.tokens.accessToken,
+        accessToken:    zohoResult.tokens.accessToken,
         refreshToken,
-        expiresAt:    zohoResult.tokens.expiresAt,
+        expiresAt:      zohoResult.tokens.expiresAt,
+        accountsServer: zohoResult.tokens.accountsServer,
+        apiDomain:      zohoResult.tokens.apiDomain,
       };
 
       const encTokens = encryptKey(JSON.stringify(finalTokens));
