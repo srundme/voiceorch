@@ -1603,8 +1603,28 @@ const CRM_PROVIDERS: Array<{
 function CrmConnectorSection() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data: connections = [], isLoading } = useListCrmConnections();
+  const { data: connections = [], isLoading, refetch } = useListCrmConnections();
   const deleteMut = useDeleteCrmConnection();
+
+  // After OAuth redirect back to /app/connections#crm-connected=<provider>,
+  // the query cache is stale (page never unmounted). Detect the hash and force
+  // a fresh fetch so the newly-connected account appears immediately.
+  useEffect(() => {
+    const hash = window.location.hash;
+    const connected = hash.match(/crm-connected=(\w+)/)?.[1];
+    const error     = hash.match(/crm-error=([^&]*)/)?.[1];
+
+    if (connected) {
+      qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() }).then(() => refetch());
+      toast({ title: `${connected.charAt(0).toUpperCase() + connected.slice(1)} CRM connected` });
+      // Clear the hash so refreshing the page doesn't re-trigger
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    } else if (error) {
+      toast({ title: "CRM connection failed", description: decodeURIComponent(error), variant: "destructive" });
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleConnect = (provider: "hubspot" | "zoho") => {
     const token = localStorage.getItem("voiceorch:session") ?? "";
