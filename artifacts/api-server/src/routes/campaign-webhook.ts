@@ -270,11 +270,17 @@ async function insertLeadAndSchedule(opts: {
     const inHours  = isWithinBusinessHours(campaign, agentTimezone);
 
     if (isPaused) {
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "queued" })
+        .where(eq(campaignLeadsTable.id, lead!.id));
       logger.info(
         { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id },
         "Lead queued — campaign is paused; will dial when resumed",
       );
     } else if (!inHours) {
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "queued" })
+        .where(eq(campaignLeadsTable.id, lead!.id));
       logger.info(
         { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id,
           businessHoursStart: campaign.businessHoursStart, businessHoursEnd: campaign.businessHoursEnd, tz: agentTimezone },

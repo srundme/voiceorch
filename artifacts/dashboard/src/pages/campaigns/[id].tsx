@@ -1138,10 +1138,50 @@ export default function CampaignDetailPage() {
             )}
           </div>
           ) : (
-          <div className="py-8 text-center border border-dashed border-border rounded-xl">
-            <Zap className="h-7 w-7 text-emerald-500/30 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground/50">Instant trigger — no batches needed</p>
-            <p className="text-xs text-muted-foreground/30 mt-0.5">Leads dial automatically as they arrive via the webhook URL above.</p>
+          <div>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Daily Batches</h3>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">Auto-created per day as leads arrive via the webhook</p>
+              </div>
+            </div>
+            {batchLoading ? (
+              <div className="grid grid-cols-1 gap-3">
+                {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
+              </div>
+            ) : !batches?.length ? (
+              <div className="py-10 text-center border border-dashed border-border rounded-xl">
+                <Zap className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground/50">No leads yet</p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5">A batch is auto-created the moment the first lead arrives today.</p>
+              </div>
+            ) : (() => {
+              // Group batches by their date label (extracted from "Live — Jun 30" names)
+              const groups: { dateLabel: string; items: CampaignBatch[] }[] = [];
+              const seen = new Map<string, CampaignBatch[]>();
+              [...batches].sort((a, b) => b.id - a.id).forEach(batch => {
+                const match = batch.name.match(/Live — (.+)/);
+                const label = match ? match[1]! : batch.name;
+                if (!seen.has(label)) { seen.set(label, []); groups.push({ dateLabel: label, items: seen.get(label)! }); }
+                seen.get(label)!.push(batch);
+              });
+              return (
+                <div className="space-y-4">
+                  {groups.map(({ dateLabel, items }) => (
+                    <div key={dateLabel}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Calendar className="h-3 w-3 text-muted-foreground/40" />
+                        <span className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{dateLabel}</span>
+                        <div className="flex-1 h-px bg-border/40" />
+                      </div>
+                      <div className="grid grid-cols-1 gap-3">
+                        {items.map((batch, i) => <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           )}
 
