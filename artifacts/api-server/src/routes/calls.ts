@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, isNull, inArray } from "drizzle-orm";
-import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
+import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import {
   InitiateCallBody,
@@ -519,11 +519,20 @@ router.get("/calls", requireAuth, async (req, res): Promise<void> => {
     : ownership;
 
   const calls = await db
-    .select()
+    .select({
+      call: callsTable,
+      campaignId: callExecutionsTable.campaignId,
+    })
     .from(callsTable)
+    .leftJoin(callExecutionsTable, eq(callExecutionsTable.callId, callsTable.id))
     .where(where)
     .orderBy(desc(callsTable.createdAt));
-  const enriched = await Promise.all(calls.map(enrichCall));
+  const enriched = await Promise.all(
+    calls.map(async (row) => ({
+      ...(await enrichCall(row.call)),
+      campaignId: row.campaignId ?? null,
+    })),
+  );
   res.json(ListCallsResponse.parse(enriched));
 });
 

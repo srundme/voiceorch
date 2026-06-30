@@ -979,7 +979,8 @@ export const ListCallsResponseItem = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -1026,7 +1027,8 @@ export const GetCallResponse = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 
 
@@ -1070,7 +1072,8 @@ export const UpdateCallResponse = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 
 
@@ -1168,7 +1171,8 @@ export const TransferCallResponse = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 
 
@@ -1210,7 +1214,8 @@ export const EndCallResponse = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 
 
@@ -1249,7 +1254,8 @@ export const UpdateCallDispositionResponse = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 
 
@@ -1358,7 +1364,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "callSummary": zod.string().nullish().describe('AI-generated 3-line post-call summary'),
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
-  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)')
+  "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 

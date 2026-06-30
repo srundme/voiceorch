@@ -1224,6 +1224,11 @@ export interface Call {
      * @nullable
      */
   tokensSaved?: number | null;
+  /**
+     * ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual/direct/web calls.
+     * @nullable
+     */
+  campaignId?: number | null;
 }
 
 export interface CallEndPayload {

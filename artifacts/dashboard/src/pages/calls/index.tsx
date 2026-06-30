@@ -7,7 +7,7 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
   UserCheck, Users, TrendingUp, Activity, Globe, Eye,
-  PhoneOff, PhoneMissed,
+  PhoneOff, PhoneMissed, Megaphone,
 } from "lucide-react";
 import {
   useListCalls,
@@ -235,6 +235,7 @@ export default function CallsList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [sortBy, setSortBy] = useState<string>("newest");
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
@@ -282,8 +283,33 @@ export default function CallsList() {
       result = result.filter((c) => new Date(c.createdAt) <= to);
     }
 
+    const time = (c: (typeof result)[number]) => new Date(c.createdAt).getTime();
+    const cost = (c: (typeof result)[number]) => c.costCents ?? 0;
+    const dur = (c: (typeof result)[number]) => c.durationSeconds ?? 0;
+    switch (sortBy) {
+      case "oldest":
+        result.sort((a, b) => time(a) - time(b));
+        break;
+      case "cost_high":
+        result.sort((a, b) => cost(b) - cost(a));
+        break;
+      case "cost_low":
+        result.sort((a, b) => cost(a) - cost(b));
+        break;
+      case "duration_high":
+        result.sort((a, b) => dur(b) - dur(a));
+        break;
+      case "duration_low":
+        result.sort((a, b) => dur(a) - dur(b));
+        break;
+      case "newest":
+      default:
+        result.sort((a, b) => time(b) - time(a));
+        break;
+    }
+
     return result;
-  }, [calls, searchQuery, dateFrom, dateTo]);
+  }, [calls, searchQuery, dateFrom, dateTo, sortBy]);
 
   // Compute stats
   const stats = useMemo(() => {
@@ -490,6 +516,22 @@ export default function CallsList() {
             </div>
 
             <div className="shrink-0">
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[170px] h-8 text-xs">
+                  <SelectValue placeholder="Sort" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest to Oldest</SelectItem>
+                  <SelectItem value="oldest">Oldest to Newest</SelectItem>
+                  <SelectItem value="cost_high">Cost: High to Low</SelectItem>
+                  <SelectItem value="cost_low">Cost: Low to High</SelectItem>
+                  <SelectItem value="duration_high">Duration: High to Low</SelectItem>
+                  <SelectItem value="duration_low">Duration: Low to High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="shrink-0">
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
@@ -590,10 +632,13 @@ export default function CallsList() {
                       <TableCell>
                         {(() => {
                           const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
+                          const isCampaign = !isWeb && (call as any).campaignId != null;
+                          const icon = isWeb ? <Globe className="h-3 w-3" /> : isCampaign ? <Megaphone className="h-3 w-3" /> : <Phone className="h-3 w-3" />;
+                          const label = isWeb ? "Web Call" : isCampaign ? "Campaign" : "Live Call";
                           return (
                             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
-                              {isWeb ? <Globe className="h-3 w-3" /> : <Phone className="h-3 w-3" />}
-                              {isWeb ? "Web Call" : "Live Call"}
+                              {icon}
+                              {label}
                             </span>
                           );
                         })()}

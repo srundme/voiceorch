@@ -7522,6 +7522,9 @@ components:
         tokensSaved:
           type: ["integer", "null"]
           description: Estimated number of input tokens saved by token optimization (sliding window + summarization)
+        campaignId:
+          type: ["integer", "null"]
+          description: ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual/direct/web calls.
 
     CallEndPayload:
       type: object
