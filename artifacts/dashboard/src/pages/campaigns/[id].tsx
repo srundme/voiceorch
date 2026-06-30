@@ -21,6 +21,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
@@ -31,7 +34,7 @@ import {
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
   Phone, Eye, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, CalendarDays, ArrowRightLeft, Radio, Ban,
-  TrendingUp, DollarSign, Target, Flame,
+  TrendingUp, DollarSign, Target, Flame, MoreVertical,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
@@ -567,8 +570,11 @@ function BatchKpiCard({ batch, index, campaignId }: {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{batch.name || `Batch ${index + 1}`}</p>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <StatusBadge status={batch.status} />
+            <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-muted/50 text-muted-foreground/70 border border-border/60">
+              {batch.leadSource}
+            </span>
             {kpis?.agentName && (
               <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
                 <Users className="h-2.5 w-2.5" />{kpis.agentName}
@@ -803,6 +809,7 @@ export default function CampaignDetailPage() {
   const deleteBatch = useDeleteCampaignBatch();
   const update = useUpdateCampaign();
   const [activeTab, setActiveTab] = useState("overview");
+  const activityScrollRef = useRef<HTMLDivElement>(null);
 
   async function handleStatusChange(status: "active" | "paused" | "draft") {
     try {
@@ -842,6 +849,7 @@ export default function CampaignDetailPage() {
   const connRate    = analytics?.connectionRate ?? 0;
   const bookRate    = analytics?.bookingRate    ?? 0;
   const successRate = analytics?.successRate    ?? 0;
+  const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -885,29 +893,35 @@ export default function CampaignDetailPage() {
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 pt-5 pb-0 border-b border-border shrink-0">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 text-xs mb-2 min-w-0">
+          <Link href="/app/campaigns" className="text-muted-foreground/50 hover:text-foreground transition-colors shrink-0">
+            Campaigns
+          </Link>
+          <ChevronRight className="h-3 w-3 text-muted-foreground/30 shrink-0" />
+          <span className="text-foreground/70 font-medium truncate">{campaign.name}</span>
+        </div>
         {/* Title row */}
         <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link href="/app/campaigns">
-              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
-                <StatusBadge status={campaign.status} />
-              </div>
-              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
-                  <Users className="h-3 w-3" /> Agent #{campaign.agentId ?? "—"}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
+              <StatusBadge status={campaign.status} />
+            </div>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
+                <Users className="h-3 w-3" /> Agent #{campaign.agentId ?? "—"}
+              </span>
+              {campaign.fromNumber && (
+                <span className="text-xs text-muted-foreground/50 font-mono flex items-center gap-1">
+                  <Phone className="h-3 w-3" /> {campaign.fromNumber}
                 </span>
-                {campaign.fromNumber && (
-                  <span className="text-xs text-muted-foreground/50 font-mono flex items-center gap-1">
-                    <Phone className="h-3 w-3" /> {campaign.fromNumber}
-                  </span>
-                )}
-              </div>
+              )}
+              {hasCsvSource && (
+                <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
+                  <FileText className="h-3 w-3" /> csv
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -915,26 +929,32 @@ export default function CampaignDetailPage() {
               onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
               <Plus className="h-3.5 w-3.5" /> Create Batch
             </Button>
-            {campaign.status === "active" && (
-              <Button size="sm" variant="outline"
-                className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-                onClick={() => void handleStatusChange("paused")}>
-                <PauseCircle className="h-3.5 w-3.5" /> Pause
-              </Button>
-            )}
-            {campaign.status === "paused" && (
-              <Button size="sm" variant="outline"
-                className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
-                onClick={() => void handleStatusChange("active")}>
-                <PlayCircle className="h-3.5 w-3.5" /> Resume
-              </Button>
-            )}
             {(campaign.status === "active" || campaign.status === "paused") && (
-              <Button size="sm" variant="outline"
-                className="h-8 text-xs gap-1.5 text-red-500 border-red-500/20 hover:bg-red-500/10"
-                onClick={() => void handleStatusChange("draft")}>
-                <XCircle className="h-3.5 w-3.5" /> Stop
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="outline" className="h-8 w-8">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  {campaign.status === "active" && (
+                    <DropdownMenuItem className="text-amber-600 gap-2"
+                      onClick={() => void handleStatusChange("paused")}>
+                      <PauseCircle className="h-4 w-4" /> Pause
+                    </DropdownMenuItem>
+                  )}
+                  {campaign.status === "paused" && (
+                    <DropdownMenuItem className="text-emerald-600 gap-2"
+                      onClick={() => void handleStatusChange("active")}>
+                      <PlayCircle className="h-4 w-4" /> Resume
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem className="text-red-500 gap-2"
+                    onClick={() => void handleStatusChange("draft")}>
+                    <XCircle className="h-4 w-4" /> Stop
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -985,14 +1005,19 @@ export default function CampaignDetailPage() {
 
               {/* Call Funnel */}
               <div className="bg-card border border-border/60 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-sm font-semibold text-foreground">Call Funnel</h3>
-                  {analytics && (
-                    <div className="flex items-center gap-3">
-                      {connRate > 0 && <span className="text-xs text-sky-500 font-medium">{connRate}% conn.</span>}
-                      {bookRate > 0  && <span className="text-xs text-emerald-500 font-medium">{bookRate}% booked</span>}
-                    </div>
-                  )}
+                <div className="flex items-start justify-between gap-3 mb-5">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Call Funnel</h3>
+                    <p className="text-xs text-muted-foreground/50 mt-0.5">Track your call journey at a glance</p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {analytics && connRate > 0 && <span className="text-xs text-sky-500 font-medium">{connRate}% conn.</span>}
+                    {analytics && bookRate > 0  && <span className="text-xs text-emerald-500 font-medium">{bookRate}% booked</span>}
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                      onClick={() => setLocation("/app/analytics")}>
+                      <BarChart3 className="h-3 w-3" /> View Analytics
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-0 overflow-x-auto pb-1">
                   {[
@@ -1026,82 +1051,105 @@ export default function CampaignDetailPage() {
                 )}
               </div>
 
-              {/* Batch cards */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-foreground">Batches</h3>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                    onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                    <Plus className="h-3 w-3" /> New Batch
-                  </Button>
-                </div>
-                {batchLoading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
-                  </div>
-                ) : !batches?.length ? (
-                  <div className="py-10 text-center border border-dashed border-border rounded-xl">
-                    <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground/50">No batches yet</p>
-                    <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
-                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+              {/* Batches + Recent Activity — two-column on large screens */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+                {/* Batches */}
+                <div className="lg:col-span-2">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Batches</h3>
+                      <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 shrink-0"
                       onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                      <Plus className="h-3 w-3" /> Create First Batch
+                      <Plus className="h-3 w-3" /> New Batch
                     </Button>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {batches.map((batch, i) => (
-                      <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Activity Feed */}
-              {(activityData?.events?.length ?? 0) > 0 && (
-                <div className="bg-card border border-border rounded-xl p-5">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-                    <Activity className="h-3.5 w-3.5" /> Recent Activity
-                  </h3>
-                  <div className="space-y-0 divide-y divide-border/40">
-                    {activityData!.events.slice(0, 20).map((ev: {
-                      id: number | string; leadId: number | null; leadName: string | null; leadPhone: string | null;
-                      eventType: string; data: Record<string, unknown> | null; createdAt: string;
-                      batchName?: string | null;
-                    }) => {
-                      const isBatchEv = ev.eventType.startsWith("batch_");
-                      const label = isBatchEv
-                        ? (ev.batchName || (ev.data as Record<string,unknown> | null)?.batchName as string | null || "Batch")
-                        : (ev.leadName || ev.leadPhone || `Lead #${ev.leadId}`);
-                      const evTypeLabel = ev.eventType.replace(/_/g, " ");
-                      const isGood = ["booking_created","transfer_completed","interest_confirmed","batch_completed"].includes(ev.eventType);
-                      const isBad  = ["call_failed","dnc_flagged","opted_out","batch_stopped"].includes(ev.eventType);
-                      const isInfo = isBatchEv && !isGood && !isBad;
-                      return (
-                        <div key={String(ev.id)} className="flex items-center gap-3 py-2">
-                          <div className={cn(
-                            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold shrink-0",
-                            isGood ? "bg-emerald-500/10 text-emerald-500" : isBad ? "bg-red-500/10 text-red-400" : isInfo ? "bg-blue-500/10 text-blue-400" : "bg-muted/40 text-muted-foreground/70",
-                          )}>
-                            {(label as string).trim().charAt(0).toUpperCase() || "•"}
-                          </div>
-                          <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
-                            <span className={cn(
-                              "text-xs font-medium truncate",
-                              isBatchEv ? "text-muted-foreground/60" : "text-foreground/80",
-                            )}>{label as string}</span>
-                            <span className="text-xs text-muted-foreground/40 capitalize shrink-0">{evTypeLabel}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground/30 shrink-0 whitespace-nowrap">
-                            {formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true })}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {batchLoading ? (
+                    <div className="grid grid-cols-1 gap-3">
+                      {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
+                    </div>
+                  ) : !batches?.length ? (
+                    <div className="py-10 text-center border border-dashed border-border rounded-xl">
+                      <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground/50">No batches yet</p>
+                      <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
+                      <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                        onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                        <Plus className="h-3 w-3" /> Create First Batch
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {batches.map((batch, i) => (
+                        <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Recent Activity */}
+                <div className="lg:col-span-1 bg-card border border-border rounded-xl p-5 flex flex-col">
+                  <div className="flex items-start justify-between gap-2 mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Activity className="h-3.5 w-3.5" /> Recent Activity
+                      </h3>
+                      <p className="text-xs text-muted-foreground/50 mt-0.5">Latest updates and events</p>
+                    </div>
+                    {(activityData?.events?.length ?? 0) > 0 && (
+                      <button type="button"
+                        onClick={() => activityScrollRef.current?.scrollTo({ top: activityScrollRef.current.scrollHeight, behavior: "smooth" })}
+                        className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
+                        View All Activity →
+                      </button>
+                    )}
+                  </div>
+                  {(activityData?.events?.length ?? 0) === 0 ? (
+                    <div className="py-8 text-center">
+                      <Activity className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+                      <p className="text-xs text-muted-foreground/40">No activity yet</p>
+                    </div>
+                  ) : (
+                    <div ref={activityScrollRef} className="divide-y divide-border/40 overflow-y-auto max-h-[420px] -mr-2 pr-2">
+                      {activityData!.events.slice(0, 50).map((ev: {
+                        id: number | string; leadId: number | null; leadName: string | null; leadPhone: string | null;
+                        eventType: string; data: Record<string, unknown> | null; createdAt: string;
+                        batchName?: string | null;
+                      }) => {
+                        const isBatchEv = ev.eventType.startsWith("batch_");
+                        const label = isBatchEv
+                          ? (ev.batchName || (ev.data as Record<string,unknown> | null)?.batchName as string | null || "Batch")
+                          : (ev.leadName || ev.leadPhone || `Lead #${ev.leadId}`);
+                        const evTypeLabel = ev.eventType.replace(/_/g, " ");
+                        const isGood = ["booking_created","transfer_completed","interest_confirmed","batch_completed"].includes(ev.eventType);
+                        const isBad  = ["call_failed","dnc_flagged","opted_out","batch_stopped"].includes(ev.eventType);
+                        const isInfo = isBatchEv && !isGood && !isBad;
+                        return (
+                          <div key={String(ev.id)} className="flex items-center gap-3 py-2.5">
+                            <div className={cn(
+                              "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold shrink-0",
+                              isGood ? "bg-emerald-500/10 text-emerald-500" : isBad ? "bg-red-500/10 text-red-400" : isInfo ? "bg-blue-500/10 text-blue-400" : "bg-muted/40 text-muted-foreground/70",
+                            )}>
+                              {(label as string).trim().charAt(0).toUpperCase() || "•"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn(
+                                "text-xs font-medium truncate",
+                                isBatchEv ? "text-muted-foreground/70" : "text-foreground/80",
+                              )}>{label as string}</p>
+                              <p className="text-xs text-muted-foreground/40 capitalize truncate">{evTypeLabel}</p>
+                            </div>
+                            <span className="text-xs text-muted-foreground/30 shrink-0 whitespace-nowrap">
+                              {formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Webhook */}
               <div className="bg-card border border-border rounded-xl p-4">
