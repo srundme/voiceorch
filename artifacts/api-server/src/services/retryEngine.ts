@@ -9,6 +9,7 @@ import { db, callRetriesTable, campaignLeadsTable, campaignsTable, leadTimelineT
 import { and, eq, lte } from "drizzle-orm";
 import { withDbRetry } from "../orchestration/db-retry.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { isCampaignDialable } from "./campaign-dialable.js";
 import { logger } from "../lib/logger.js";
 
 export async function processRetries(): Promise<void> {
@@ -38,7 +39,7 @@ export async function processRetries(): Promise<void> {
       const [campaign] = await db.select().from(campaignsTable)
         .where(eq(campaignsTable.id, retry.campaignId));
 
-      if (!campaign || !campaign.isActive) {
+      if (!campaign || !isCampaignDialable(campaign)) {
         await db.update(callRetriesTable)
           .set({ status: "cancelled" })
           .where(eq(callRetriesTable.id, retry.id));

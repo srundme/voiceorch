@@ -3,6 +3,7 @@ import { eq, and, lte, isNull, or, sql, inArray, lt } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { scheduleRetry, processRetries } from "./retryEngine.js";
+import { isCampaignDialable } from "./campaign-dialable.js";
 import { logger } from "../lib/logger.js";
 
 let started = false;
@@ -69,7 +70,7 @@ async function pollScheduledBatches(): Promise<void> {
     for (const batch of dueDraft) {
       const [campaign] = await db.select().from(campaignsTable)
         .where(eq(campaignsTable.id, batch.campaignId));
-      if (!campaign || !campaign.isActive) continue;
+      if (!campaign || !isCampaignDialable(campaign)) continue;
 
       // Mark batch as running
       await db.update(campaignBatchesTable)
@@ -92,7 +93,7 @@ async function pollScheduledBatches(): Promise<void> {
     for (const batch of runningBatches) {
       const [campaign] = await db.select().from(campaignsTable)
         .where(eq(campaignsTable.id, batch.campaignId));
-      if (!campaign || !campaign.isActive) continue;
+      if (!campaign || !isCampaignDialable(campaign)) continue;
 
       await refillCampaignConcurrency(campaign.id);
 
@@ -165,7 +166,10 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
   try {
     const [campaign] = await db.select().from(campaignsTable)
       .where(eq(campaignsTable.id, campaignId));
-    if (!campaign || !campaign.isActive) return;
+    if (!campaign || !isCampaignDialable(campaign)) {
+      logger.debug({ campaignId, status: campaign?.status ?? null }, "Rolling refill skipped — campaign not dialable");
+      return;
+    }
 
     const limit = campaign.concurrentCallLimit ?? 20;
     const currentlyActive = await countCallingLeads(campaign.id);
@@ -262,6 +266,8 @@ async function sweepStuckCallingLeads(): Promise<void> {
 
     if (stuck.length === 0) return;
 
+    const affectedCampaigns = new Set<number>();
+
     for (const lead of stuck) {
       try {
         await db.update(campaignLeadsTable)
@@ -292,13 +298,20 @@ async function sweepStuckCallingLeads(): Promise<void> {
           });
         }
 
+        affectedCampaigns.add(lead.campaignId);
         logger.warn({ leadId: lead.id, campaignId: lead.campaignId, lastAttemptAt: lead.lastAttemptAt }, "Stuck calling lead auto-failed by sweep");
       } catch (leadErr) {
         logger.error({ err: leadErr, leadId: lead.id }, "sweepStuckCallingLeads: error processing lead");
       }
     }
 
-    logger.info({ count: stuck.length }, "sweepStuckCallingLeads: processed stuck leads");
+    // Freed the stuck slots — immediately top each affected campaign back up so
+    // rolling concurrency resumes now instead of waiting for the next poll tick.
+    for (const campaignId of affectedCampaigns) {
+      await refillCampaignConcurrency(campaignId);
+    }
+
+    logger.info({ count: stuck.length, campaigns: affectedCampaigns.size }, "sweepStuckCallingLeads: processed stuck leads");
   } catch (err) {
     logger.error({ err }, "sweepStuckCallingLeads error");
   }

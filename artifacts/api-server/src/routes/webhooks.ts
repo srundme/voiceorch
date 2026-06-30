@@ -75,15 +75,54 @@ async function handleNoAnswerStatus(opts: {
   }
 }
 
+/** Normalize a raw provider status: lowercase, trim, collapse spaces/underscores to "-". */
+function normalizeRawStatus(raw: string): string {
+  return (raw ?? "").toLowerCase().trim().replace(/[\s_]+/g, "-");
+}
+
+/**
+ * Statuses that mean the call is still progressing or has connected. These are
+ * NOT non-connected terminal events: a connected call is moved to its terminal
+ * state by endSession() (which owns its lifecycle), and an in-progress call has
+ * not freed its slot yet. Marking either here would clobber a live/connected
+ * call and corrupt the concurrency count, so they are explicitly ignored.
+ */
+const NON_TERMINAL_OR_CONNECTED_STATUSES = new Set<string>([
+  "", "queued", "initiated", "trying", "early", "early-media", "ringing",
+  "in-progress", "inprogress", "answered", "answer", "connected", "started",
+  "live", "completed", "complete", "hangup", "normal-clearing",
+]);
+
+const NO_PICKUP_STATUSES = new Set<string>([
+  "no-answer", "noanswer", "not-reachable", "unreachable", "no-pickup",
+  "timeout", "timed-out", "timeout-on-answer", "temporarily-unavailable",
+  "subscriber-absent", "originator-cancel", "allotted-timeout",
+]);
+
+const FAILED_STATUSES = new Set<string>([
+  "failed", "fail", "canceled", "cancelled", "cancel", "congestion",
+  "rejected", "declined", "call-rejected", "unallocated", "unallocated-number",
+  "error", "invalid", "invalid-number", "no-route-destination",
+  "no-route-to-destination", "machine", "voicemail", "blocked", "forbidden",
+]);
+
 /**
  * Map a raw telephony call status to the campaign lead callStatus value.
- * Returns null if the status is not a terminal non-connected state.
+ *  - a terminal non-connected status → "no_pickup" | "busy" | "failed"
+ *  - a still-progressing / connected status → "ignore" (owned by endSession)
+ *  - anything unrecognized → null (caller decides based on the lead's state)
+ *
+ * Providers (Twilio/Plivo/VoBiz) emit overlapping but inconsistent vocabularies,
+ * so the families above are broadened and the unknown case is surfaced rather
+ * than silently swallowed — an unmapped terminal status used to leave the lead
+ * stuck in "calling", inflating the active count and starving rolling refill.
  */
-function mapRawStatusToLeadStatus(raw: string): "no_pickup" | "busy" | "failed" | null {
-  const s = raw.toLowerCase();
-  if (s === "busy") return "busy";
-  if (s === "no-answer" || s === "no_answer" || s === "noanswer" || s === "not-reachable") return "no_pickup";
-  if (s === "failed" || s === "canceled") return "failed";
+function mapRawStatusToLeadStatus(raw: string): "no_pickup" | "busy" | "failed" | "ignore" | null {
+  const s = normalizeRawStatus(raw);
+  if (NON_TERMINAL_OR_CONNECTED_STATUSES.has(s)) return "ignore";
+  if (s === "busy" || s === "busy-here" || s === "user-busy" || s === "user-busy-here") return "busy";
+  if (NO_PICKUP_STATUSES.has(s)) return "no_pickup";
+  if (FAILED_STATUSES.has(s)) return "failed";
   return null;
 }
 
@@ -98,9 +137,11 @@ async function handleCampaignLeadTerminalStatus(opts: {
 }): Promise<void> {
   const { campaignLeadId, rawCallStatus } = opts;
 
-  const leadStatus = mapRawStatusToLeadStatus(rawCallStatus);
-  if (!leadStatus) {
-    logger.info({ campaignLeadId, rawCallStatus }, "Campaign lead terminal status: not a non-connected terminal status — skipping");
+  const mapped = mapRawStatusToLeadStatus(rawCallStatus);
+
+  // Still progressing or connected — owned by endSession(), never mark here.
+  if (mapped === "ignore") {
+    logger.debug({ campaignLeadId, rawCallStatus }, "Campaign lead terminal status: still in progress / connected — skipping");
     return;
   }
 
@@ -114,6 +155,22 @@ async function handleCampaignLeadTerminalStatus(opts: {
   if (lead.callStatus !== "calling" && lead.callStatus !== "connected") {
     logger.info({ campaignLeadId, callStatus: lead.callStatus }, "Campaign lead terminal status: lead not in active state — skipping");
     return;
+  }
+
+  // Resolve the unknown case. An unrecognized status that arrives while the lead
+  // is still 'calling' (never connected) is treated as a non-connected failure
+  // so the slot is freed and rolling refill is not starved. If the lead has
+  // 'connected', endSession() owns its terminal transition — leave it alone.
+  let leadStatus: "no_pickup" | "busy" | "failed";
+  if (mapped === null) {
+    if (lead.callStatus === "connected") {
+      logger.info({ campaignLeadId, rawCallStatus }, "Campaign lead terminal status: unknown status on a connected lead — deferring to endSession");
+      return;
+    }
+    leadStatus = "failed";
+    logger.warn({ campaignLeadId, rawCallStatus }, "Campaign lead terminal status: unknown provider status on calling lead — treating as failed to free slot");
+  } else {
+    leadStatus = mapped;
   }
 
   await db.update(campaignLeadsTable)
