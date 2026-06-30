@@ -347,7 +347,7 @@ export async function createSession(params: {
     // P1-C: Webhook HMAC secret
     webhookSecret: (agentCfg["webhookSecret"] as string | undefined) ?? null,
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
-    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 150,
+    vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 350,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
     bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined) ?? 1200,
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
@@ -559,8 +559,11 @@ export async function createSession(params: {
     }
     sections.push(
       `=== RESUME DIRECTIVE ===\n` +
-      `The caller was disconnected mid-call. Open with a brief acknowledgement (e.g. "We got disconnected — let me pick up from where we left off"). ` +
-      `Then continue directly from the first pending step above. ` +
+      `The caller was disconnected mid-call. Open warmly and acknowledge the drop naturally ` +
+      `(e.g. "Hi again — sorry, it seems our call got cut off. Can you hear me now?" or "Apologies, looks like we lost the connection — are you there?"). ` +
+      `Wait for the caller to confirm they are back before continuing. ` +
+      `Once they confirm, naturally resume the conversation from where it left off — ` +
+      `do NOT use the phrase "pick up from where we left off", just smoothly continue. ` +
       `NEVER re-ask for information already listed in Customer facts. ` +
       `NEVER repeat steps already marked as completed. ` +
       `NEVER re-execute tools listed in TOOL STATE.`

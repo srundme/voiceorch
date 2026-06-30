@@ -1150,14 +1150,14 @@ function VoiceTab({ form }: { form: any }) {
           )} />
           <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
             <FormItem>
-              <div className="flex justify-between"><FormLabel className="text-xs">VAD Silence Threshold</FormLabel>
-                <span className="text-xs font-mono">{field.value ?? 250}ms</span></div>
+              <div className="flex justify-between"><FormLabel className="text-xs">Thinking Pause Tolerance</FormLabel>
+                <span className="text-xs font-mono">{field.value ?? 350}ms</span></div>
               <FormControl>
-                <input type="range" min={50} max={2000} step={50} value={field.value ?? 250}
+                <input type="range" min={50} max={2000} step={50} value={field.value ?? 350}
                   onChange={e => field.onChange(parseInt(e.target.value))}
                   className="w-full h-1.5 accent-primary cursor-pointer" />
               </FormControl>
-              <FormDescription className="text-[10px]">Silence duration before end-of-utterance is detected</FormDescription>
+              <FormDescription className="text-[10px]">How long the caller can pause mid-thought before the agent responds. Increase if the agent interrupts while the caller is still thinking (e.g. "ahhh…" pauses).</FormDescription>
             </FormItem>
           )} />
         </div>
@@ -1167,7 +1167,7 @@ function VoiceTab({ form }: { form: any }) {
             <FormItem className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2">
               <div><FormLabel className="text-sm">Backchanneling</FormLabel>
                 <FormDescription className="text-[10px]">Agent says "mm-hmm", "I see" while listening</FormDescription></div>
-              <FormControl><Switch checked={field.value ?? true} onCheckedChange={field.onChange} /></FormControl>
+              <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} /></FormControl>
             </FormItem>
           )} />
 

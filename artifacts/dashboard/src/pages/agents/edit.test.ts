@@ -28,7 +28,7 @@ const BASE: AgentFormValues = {
   webhookSecret: "",
   noiseCancellationEnabled: false,
   promptVariables: [],
-  vadSilenceMs: 250,
+  vadSilenceMs: 350,
   bargeInEnabled: true,
   bargeInEnergyThreshold: 1200,
   bargeInMinFrames: 4,
@@ -122,8 +122,8 @@ describe("buildUpdateAgentPayload", () => {
     expect((payload.agentConfig as any)?.vadSilenceMs).toBe(500);
   });
 
-  it("default vadSilenceMs=250 — not included in agentConfig", () => {
-    const data: AgentFormValues = { ...BASE, vadSilenceMs: 250 };
+  it("default vadSilenceMs=350 — not included in agentConfig", () => {
+    const data: AgentFormValues = { ...BASE, vadSilenceMs: 350 };
     const payload = buildUpdateAgentPayload(data);
     expect((payload.agentConfig as any)?.vadSilenceMs).toBeUndefined();
   });

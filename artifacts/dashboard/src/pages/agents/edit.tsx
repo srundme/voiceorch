@@ -77,7 +77,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   const agentConfig: Record<string, unknown> = {};
   if (webhookSecret) agentConfig["webhookSecret"] = webhookSecret;
   if (promptVariables?.length) agentConfig["promptVariables"] = promptVariables;
-  if (vadSilenceMs != null && vadSilenceMs !== 250) agentConfig["vadSilenceMs"] = vadSilenceMs;
+  if (vadSilenceMs != null && vadSilenceMs !== 350) agentConfig["vadSilenceMs"] = vadSilenceMs;
   if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
   if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
@@ -516,7 +516,7 @@ export default function AgentEdit() {
       silenceTimeoutSeconds:   agent.silenceTimeoutSeconds ?? 30,
       language:                agent.language ?? "en-US",
       asrLanguage:             agent.asrLanguage ?? "",
-      backchannelingEnabled:    agent.backchannelingEnabled ?? true,
+      backchannelingEnabled:    agent.backchannelingEnabled ?? false,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
       webhookSecret:            ((agent as any).agentConfig?.webhookSecret as string | undefined) ?? "",
@@ -524,7 +524,7 @@ export default function AgentEdit() {
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
       promptVariables:          (((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"]),
-      vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 250,
+      vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 350,
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
       bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
