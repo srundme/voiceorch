@@ -362,6 +362,11 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
   }
 }
 
+function stripThinkTags(raw: string): string {
+  // Qwen 3 / reasoning models wrap internal monologue in <think>...</think> — strip it
+  return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
 async function callLLM(
   messages: Array<{ role: string; content: string }>,
   key: string,
@@ -369,19 +374,25 @@ async function callLLM(
   baseUrl: string,
 ): Promise<string | null> {
   try {
+    const isGroq = baseUrl.includes("groq.com");
+    const body: Record<string, unknown> = {
+      model,
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+      max_tokens: 1024,
+      temperature: 0.65,
+    };
+    // Disable Qwen 3 chain-of-thought thinking on Groq — keeps responses clean
+    if (isGroq) body["reasoning_effort"] = null;
+
     const r = await fetch(baseUrl, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-        max_tokens: 1024,
-        temperature: 0.65,
-      }),
+      body: JSON.stringify(body),
     });
     if (!r.ok) return null;
     const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    return data.choices?.[0]?.message?.content ?? null;
+    const raw = data.choices?.[0]?.message?.content ?? null;
+    return raw ? stripThinkTags(raw) : null;
   } catch (err) {
     logger.warn({ err, model }, "assistant: LLM call error");
     return null;
