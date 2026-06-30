@@ -1188,13 +1188,13 @@ export default function AgentEdit() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <FormField control={form.control} name="vadSilenceMs" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>VAD Silence Window (ms)</FormLabel>
+                    <FormLabel>Thinking Pause Tolerance (ms)</FormLabel>
                     <FormControl>
                       <Input type="number" min={50} max={2000} step={50}
-                        value={field.value ?? 250}
+                        value={field.value ?? 350}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
-                    <FormDescription className="text-[11px]">Silence before STT flushes. Default: 2000 ms</FormDescription>
+                    <FormDescription className="text-[11px]">How long the caller can pause mid-thought before the agent responds. Default: 350 ms. Increase to 500–700 ms if the agent interrupts during "ahhh…" thinking pauses.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
