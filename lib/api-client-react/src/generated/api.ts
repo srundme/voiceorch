@@ -214,6 +214,7 @@ import type {
   ListCampaignLiveQueueLeadsParams,
   ListCampaignTransfersParams,
   ListCrmContactsParams,
+  ListCrmListsParams,
   ListEventTypesParams,
   ListMetaCampaignLeads200,
   ListMetaCampaignLeadsParams,
@@ -309,7 +310,9 @@ import type {
   WalletTransaction,
   WebhookEndpoint,
   WebhookEndpointInput,
-  WebhookEndpointUpdate
+  WebhookEndpointUpdate,
+  ZohoWebhookBody,
+  ZohoWebhookParams
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -20133,20 +20136,29 @@ export function useCrmOAuthCallback<TData = Awaited<ReturnType<typeof crmOAuthCa
 
 
 
-export const getListCrmListsUrl = (id: number,) => {
+export const getListCrmListsUrl = (id: number,
+    params?: ListCrmListsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/crm/connections/${id}/lists`
+  return stringifiedParams.length > 0 ? `/api/crm/connections/${id}/lists?${stringifiedParams}` : `/api/crm/connections/${id}/lists`
 }
 
 /**
  * @summary List contact lists (HubSpot) or views (Zoho) for a CRM connection
  */
-export const listCrmLists = async (id: number, options?: RequestInit): Promise<CrmListsPage> => {
+export const listCrmLists = async (id: number,
+    params?: ListCrmListsParams, options?: RequestInit): Promise<CrmListsPage> => {
 
-  return customFetch<CrmListsPage>(getListCrmListsUrl(id),
+  return customFetch<CrmListsPage>(getListCrmListsUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -20159,23 +20171,25 @@ export const listCrmLists = async (id: number, options?: RequestInit): Promise<C
 
 
 
-export const getListCrmListsQueryKey = (id: number,) => {
+export const getListCrmListsQueryKey = (id: number,
+    params?: ListCrmListsParams,) => {
     return [
-    `/api/crm/connections/${id}/lists`
+    `/api/crm/connections/${id}/lists`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListCrmListsQueryOptions = <TData = Awaited<ReturnType<typeof listCrmLists>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListCrmListsQueryOptions = <TData = Awaited<ReturnType<typeof listCrmLists>>, TError = ErrorType<void>>(id: number,
+    params?: ListCrmListsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListCrmListsQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getListCrmListsQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCrmLists>>> = ({ signal }) => listCrmLists(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCrmLists>>> = ({ signal }) => listCrmLists(id,params, { signal, ...requestOptions });
 
 
 
@@ -20193,11 +20207,12 @@ export type ListCrmListsQueryError = ErrorType<void>
  */
 
 export function useListCrmLists<TData = Awaited<ReturnType<typeof listCrmLists>>, TError = ErrorType<void>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ id: number,
+    params?: ListCrmListsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCrmLists>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListCrmListsQueryOptions(id,options)
+  const queryOptions = getListCrmListsQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -20298,6 +20313,88 @@ export function useListCrmContacts<TData = Awaited<ReturnType<typeof listCrmCont
 
 
 
+
+export const getZohoWebhookUrl = (connectionId: number,
+    params?: ZohoWebhookParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/crm/webhook/zoho/${connectionId}?${stringifiedParams}` : `/api/crm/webhook/zoho/${connectionId}`
+}
+
+/**
+ * Unauthenticated endpoint. Validate using the X-Zoho-Webhook-Secret header (or ?secret= query param) matching the connection's configured webhookSecret. Acks immediately with 200 and processes the lead asynchronously.
+ * @summary Public Zoho webhook — receives new-lead events for immediate auto-dial
+ */
+export const zohoWebhook = async (connectionId: number,
+    zohoWebhookBody: ZohoWebhookBody,
+    params?: ZohoWebhookParams, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getZohoWebhookUrl(connectionId,params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      zohoWebhookBody,)
+  }
+);}
+
+
+
+
+export const getZohoWebhookMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof zohoWebhook>>, TError,{connectionId: number;data: BodyType<ZohoWebhookBody>;params?: ZohoWebhookParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof zohoWebhook>>, TError,{connectionId: number;data: BodyType<ZohoWebhookBody>;params?: ZohoWebhookParams}, TContext> => {
+
+const mutationKey = ['zohoWebhook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof zohoWebhook>>, {connectionId: number;data: BodyType<ZohoWebhookBody>;params?: ZohoWebhookParams}> = (props) => {
+          const {connectionId,data,params} = props ?? {};
+
+          return  zohoWebhook(connectionId,data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ZohoWebhookMutationResult = NonNullable<Awaited<ReturnType<typeof zohoWebhook>>>
+    export type ZohoWebhookMutationBody = BodyType<ZohoWebhookBody>
+    export type ZohoWebhookMutationError = ErrorType<void>
+
+    /**
+ * @summary Public Zoho webhook — receives new-lead events for immediate auto-dial
+ */
+export const useZohoWebhook = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof zohoWebhook>>, TError,{connectionId: number;data: BodyType<ZohoWebhookBody>;params?: ZohoWebhookParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof zohoWebhook>>,
+        TError,
+        {connectionId: number;data: BodyType<ZohoWebhookBody>;params?: ZohoWebhookParams},
+        TContext
+      > => {
+      return useMutation(getZohoWebhookMutationOptions(options));
+    }
 
 export const getImportCrmContactsUrl = (id: number,) => {
 

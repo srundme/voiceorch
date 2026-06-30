@@ -2,7 +2,7 @@
  * CRM Connector routes
  * ──────────────────────────────────────────────────────────────────────────
  * OAuth connect + callback (HubSpot and Zoho), connection management,
- * contact browsing, and import into campaign batches.
+ * contact/lead browsing, and import into campaign batches.
  *
  * Push (call-outcome writeback) is triggered from calls.ts at call-end.
  *
@@ -11,20 +11,22 @@
  * Tokens encrypted at rest via encryptKey / decryptKey (AES-256-GCM).
  *
  * Public routes (no auth):
- *   GET /crm/callback/hubspot
- *   GET /crm/callback/zoho
+ *   GET  /crm/callback/hubspot
+ *   GET  /crm/callback/zoho
+ *   POST /crm/webhook/zoho/:connectionId
  *
  * Authenticated routes:
  *   GET    /crm/connections
  *   PATCH  /crm/connections/:id
  *   DELETE /crm/connections/:id
  *   GET    /crm/connect/:provider
+ *   GET    /crm/connections/:id/lists
  *   GET    /crm/connections/:id/contacts
  *   POST   /crm/connections/:id/import
  */
 
 import { Router, type IRouter } from "express";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import {
   db,
@@ -45,13 +47,15 @@ import {
 } from "../services/crm/hubspot.js";
 import {
   isZohoConfigured, buildZohoAuthUrl, exchangeZohoCode,
-  listZohoContacts, listZohoViews, zohoAccountsServerFromLocation,
+  listZohoContacts, listZohoLeads, listZohoViews, listZohoLeadViews,
+  zohoAccountsServerFromLocation,
 } from "../services/crm/zoho.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG } from "../services/phone-normalization.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { checkDuplicate, type DuplicatePolicy } from "../services/duplicate-detection.js";
 import { sql } from "drizzle-orm";
 import type { CrmTokenPayload } from "@workspace/db";
+import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 
 const router: IRouter = Router();
 
@@ -144,15 +148,18 @@ function verifyCrmOAuthState(raw: string | undefined): CrmOAuthStatePayload | nu
 
 function serializeConnection(conn: typeof crmConnectionsTable.$inferSelect) {
   return {
-    id:          conn.id,
-    provider:    conn.provider,
-    accountId:   conn.accountId,
-    accountName: conn.accountName ?? null,
-    fieldMapping: (conn.fieldMapping ?? {}) as Record<string, string>,
-    lastSyncAt:  conn.lastSyncAt?.toISOString() ?? null,
-    lastErrorAt: conn.lastErrorAt?.toISOString() ?? null,
-    lastError:   conn.lastError ?? null,
-    createdAt:   conn.createdAt.toISOString(),
+    id:                 conn.id,
+    provider:           conn.provider,
+    accountId:          conn.accountId,
+    accountName:        conn.accountName ?? null,
+    fieldMapping:       (conn.fieldMapping ?? {}) as Record<string, string>,
+    webhookCampaignId:  conn.webhookCampaignId ?? null,
+    webhookAgentId:     conn.webhookAgentId ?? null,
+    hasWebhookSecret:   !!(conn.webhookSecret),
+    lastSyncAt:         conn.lastSyncAt?.toISOString() ?? null,
+    lastErrorAt:        conn.lastErrorAt?.toISOString() ?? null,
+    lastError:          conn.lastError ?? null,
+    createdAt:          conn.createdAt.toISOString(),
   };
 }
 
@@ -171,7 +178,13 @@ router.get("/crm/connections", requireAuth, async (req, res): Promise<void> => {
 router.patch("/crm/connections/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id = Number(req.params["id"]);
-  const body = req.body as { fieldMapping?: Record<string, string> };
+  const body = req.body as {
+    fieldMapping?:       Record<string, string>;
+    webhookCampaignId?:  number | null;
+    webhookAgentId?:     number | null;
+    regenerateSecret?:   boolean;
+    clearSecret?:        boolean;
+  };
 
   const [conn] = await db.select().from(crmConnectionsTable)
     .where(and(eq(crmConnectionsTable.id, id), eq(crmConnectionsTable.userId, userId)));
@@ -182,12 +195,54 @@ router.patch("/crm/connections/:id", requireAuth, async (req, res): Promise<void
   };
   if (body.fieldMapping !== undefined) updates.fieldMapping = body.fieldMapping;
 
+  // Validate campaign ownership before linking — prevents cross-tenant assignment
+  if (body.webhookCampaignId !== undefined) {
+    if (body.webhookCampaignId != null) {
+      const [campaign] = await db.select({ id: campaignsTable.id })
+        .from(campaignsTable)
+        .where(and(eq(campaignsTable.id, body.webhookCampaignId), eq(campaignsTable.userId, userId)));
+      if (!campaign) {
+        res.status(404).json({ error: "Campaign not found" });
+        return;
+      }
+    }
+    updates.webhookCampaignId = body.webhookCampaignId ?? null;
+  }
+
+  // Validate agent ownership before linking
+  if (body.webhookAgentId !== undefined) {
+    if (body.webhookAgentId != null) {
+      const { agentsTable } = await import("@workspace/db");
+      const [agent] = await db.select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(and(eq(agentsTable.id, body.webhookAgentId), eq(agentsTable.userId, userId)));
+      if (!agent) {
+        res.status(404).json({ error: "Agent not found" });
+        return;
+      }
+    }
+    updates.webhookAgentId = body.webhookAgentId ?? null;
+  }
+
+  if (body.regenerateSecret) {
+    updates.webhookSecret = randomBytes(24).toString("hex");
+  }
+  if (body.clearSecret) {
+    updates.webhookSecret = null;
+  }
+
   const [updated] = await db.update(crmConnectionsTable)
     .set(updates)
     .where(eq(crmConnectionsTable.id, id))
     .returning();
 
-  res.json(serializeConnection(updated!));
+  const result = serializeConnection(updated!);
+  // Return the plain secret only when we just generated it
+  if (body.regenerateSecret && updated!.webhookSecret) {
+    res.json({ ...result, webhookSecret: updated!.webhookSecret });
+    return;
+  }
+  res.json(result);
 });
 
 /* ── DELETE /crm/connections/:id ─────────────────────────────────────────── */
@@ -388,6 +443,7 @@ router.get("/crm/callback/:provider", async (req, res): Promise<void> => {
 router.get("/crm/connections/:id/lists", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).clerkUserId as string;
   const id     = Number(req.params["id"]);
+  const module = (req.query["module"] as string | undefined) === "leads" ? "leads" : "contacts";
 
   const [conn] = await db.select().from(crmConnectionsTable)
     .where(and(eq(crmConnectionsTable.id, id), eq(crmConnectionsTable.userId, userId)));
@@ -400,7 +456,9 @@ router.get("/crm/connections/:id/lists", requireAuth, async (req, res): Promise<
     if (conn.provider === "hubspot") {
       lists = await listHubSpotContactLists(id);
     } else if (conn.provider === "zoho") {
-      const views = await listZohoViews(id);
+      const views = module === "leads"
+        ? await listZohoLeadViews(id)
+        : await listZohoViews(id);
       lists = views.map(v => ({ id: v.id, name: v.name, type: v.type }));
     } else {
       res.status(400).json({ error: `Unsupported provider: ${conn.provider}` }); return;
@@ -422,6 +480,7 @@ router.get("/crm/connections/:id/contacts", requireAuth, async (req, res): Promi
   const after  = req.query["after"]  as string | undefined;
   const listId = req.query["listId"] as string | undefined; // HubSpot list ID or Zoho view ID
   const limit  = req.query["limit"]  ? Number(req.query["limit"]) : 50;
+  const module = (req.query["module"] as string | undefined) === "leads" ? "leads" : "contacts";
 
   const [conn] = await db.select().from(crmConnectionsTable)
     .where(and(eq(crmConnectionsTable.id, id), eq(crmConnectionsTable.userId, userId)));
@@ -434,7 +493,11 @@ router.get("/crm/connections/:id/contacts", requireAuth, async (req, res): Promi
     if (conn.provider === "hubspot") {
       page = await listHubSpotContacts(id, { query, after, limit, listId });
     } else if (conn.provider === "zoho") {
-      page = await listZohoContacts(id, { query, after, limit, viewId: listId });
+      if (module === "leads") {
+        page = await listZohoLeads(id, { query, after, limit, viewId: listId });
+      } else {
+        page = await listZohoContacts(id, { query, after, limit, viewId: listId });
+      }
     } else {
       res.status(400).json({ error: `Unsupported provider: ${conn.provider}` });
       return;
@@ -610,5 +673,228 @@ router.post("/crm/connections/:id/import", requireAuth, async (req, res): Promis
     dncBlocked,
   });
 });
+
+/* ── POST /crm/webhook/zoho/:connectionId (public — no session auth) ─────── */
+//
+// Zoho fires this when a new Lead arrives (via Automation → Webhooks or a
+// Zoho Function). Payload: { "leads": [ { ... } ] }
+//
+// Security: the request must include the connection's webhookSecret in either:
+//   - Header:  X-Zoho-Webhook-Secret: <secret>
+//   - Query:   ?secret=<secret>
+//
+// Verified with timingSafeEqual. If no secret is configured the endpoint
+// accepts the request but logs a warning — allows gradual rollout.
+
+router.post("/crm/webhook/zoho/:connectionId", async (req, res): Promise<void> => {
+  const connectionId = Number(req.params["connectionId"]);
+  if (isNaN(connectionId)) { res.status(400).json({ error: "Invalid connectionId" }); return; }
+
+  const [conn] = await db.select().from(crmConnectionsTable)
+    .where(eq(crmConnectionsTable.id, connectionId));
+
+  if (!conn || conn.provider !== "zoho") {
+    // Always 200 — don't leak whether the connection ID is valid
+    logger.warn({ connectionId }, "Zoho webhook for unknown/wrong-provider connection");
+    res.sendStatus(200);
+    return;
+  }
+
+  // Secret verification — required; connections without a secret reject all requests
+  if (!conn.webhookSecret) {
+    logger.warn({ connectionId }, "Zoho webhook rejected — no secret configured on connection");
+    res.status(403).json({ error: "Webhook secret not configured — generate a secret in the Connections page first" });
+    return;
+  }
+
+  const providedSecret =
+    (req.headers["x-zoho-webhook-secret"] as string | undefined) ??
+    (req.query["secret"] as string | undefined);
+
+  if (!providedSecret) {
+    logger.warn({ connectionId }, "Zoho webhook missing secret — rejected");
+    res.status(401).json({ error: "Missing webhook secret" });
+    return;
+  }
+
+  let valid = false;
+  try {
+    const a = Buffer.from(conn.webhookSecret);
+    const b = Buffer.from(providedSecret);
+    valid = a.length === b.length && timingSafeEqual(a, b);
+  } catch {
+    valid = false;
+  }
+
+  if (!valid) {
+    logger.warn({ connectionId }, "Zoho webhook secret mismatch — rejected");
+    res.status(401).json({ error: "Invalid webhook secret" });
+    return;
+  }
+
+  // Ack quickly; process fire-and-forget
+  res.sendStatus(200);
+
+  if (!conn.webhookCampaignId) {
+    logger.info({ connectionId }, "Zoho webhook received but no campaign configured — lead dropped");
+    return;
+  }
+
+  const body = req.body as Record<string, unknown>;
+  const leads = Array.isArray(body["leads"]) ? (body["leads"] as Array<Record<string, unknown>>) : [];
+
+  if (leads.length === 0) {
+    logger.info({ connectionId }, "Zoho webhook payload has no leads array — nothing to process");
+    return;
+  }
+
+  // Enforce tenant ownership — campaign must belong to the same user as the connection
+  const [campaign] = await db.select().from(campaignsTable)
+    .where(and(eq(campaignsTable.id, conn.webhookCampaignId), eq(campaignsTable.userId, conn.userId)));
+
+  if (!campaign) {
+    logger.warn({ connectionId, campaignId: conn.webhookCampaignId }, "Zoho webhook — campaign not found or belongs to different tenant");
+    return;
+  }
+
+  for (const lead of leads) {
+    void processZohoWebhookLead(lead, conn, campaign).catch((err: unknown) => {
+      logger.error({ err, connectionId }, "Failed to process Zoho webhook lead");
+    });
+  }
+});
+
+async function processZohoWebhookLead(
+  raw: Record<string, unknown>,
+  conn: typeof crmConnectionsTable.$inferSelect,
+  campaign: typeof campaignsTable.$inferSelect,
+): Promise<void> {
+  const leadId = String(raw["id"] ?? raw["ID"] ?? "").trim();
+  const rawPhone = String(
+    raw["Phone"] ?? raw["phone"] ?? raw["Mobile"] ?? raw["mobile"] ?? ""
+  ).trim();
+
+  if (!rawPhone) {
+    logger.info({ connectionId: conn.id }, "Zoho webhook lead missing phone — skipped");
+    return;
+  }
+
+  const normResult = normalizePhoneService(rawPhone, INDIA_PHONE_CONFIG);
+  if (!normResult.valid || !normResult.normalized) {
+    logger.info({ rawPhone, connectionId: conn.id }, "Zoho webhook lead invalid phone — skipped");
+    return;
+  }
+  const normalized = normResult.normalized;
+
+  // DNC check
+  if (await isOnDnc(campaign.userId, normalized)) {
+    logger.info({ phone: normalized, connectionId: conn.id }, "Zoho webhook lead blocked by DNC");
+    return;
+  }
+
+  // Deduplication — externalLeadId first (when Zoho record ID is present)
+  if (leadId) {
+    const existing = await db.query.campaignLeadsTable.findFirst({
+      where: (t, { eq: deq }) => deq(t.externalLeadId, `zoho_lead_${leadId}`),
+    });
+    if (existing) {
+      logger.info({ leadId, connectionId: conn.id }, "Zoho webhook lead already exists by externalLeadId — skipped");
+      return;
+    }
+  }
+
+  // Phone-level campaign-scoped deduplication (same policy the batch import uses)
+  const dupResult = await checkDuplicate(db, {
+    normalizedPhone: normalized,
+    campaignId:      campaign.id,
+    policy:          "skip",
+  });
+  if (dupResult.action === "skip" || dupResult.action === "reject") {
+    logger.info({ phone: normalized, campaignId: campaign.id, connectionId: conn.id }, "Zoho webhook lead phone already in campaign — skipped");
+    return;
+  }
+
+  // Flatten raw fields
+  const flatData: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v != null && typeof v !== "object") flatData[k] = String(v);
+  }
+
+  const name = [raw["First_Name"], raw["Last_Name"]].filter(Boolean).join(" ").trim() || null;
+  const email = String(raw["Email"] ?? "").trim() || null;
+
+  // Find or create today's live batch — same pattern as campaign-webhook
+  const { getOrCreateLiveBatch, isWithinBusinessHours } = await import("./campaign-webhook.js");
+
+  // Resolve agent ID — prefer per-connection override, fall back to campaign's agent
+  const effectiveAgentId = conn.webhookAgentId ?? campaign.agentId;
+
+  let agentTimezone = campaign.timezone ?? "Asia/Kolkata";
+  if (effectiveAgentId) {
+    const agent = await db.query.agentsTable.findFirst({
+      where: (t, { eq: aeq }) => aeq(t.id, effectiveAgentId),
+      columns: { agentConfig: true },
+    });
+    const tz = (agent?.agentConfig as Record<string, unknown> | null)?.["timezone"];
+    if (typeof tz === "string" && tz.length > 0) agentTimezone = tz;
+  }
+
+  const targetBatch = await getOrCreateLiveBatch(campaign.id, agentTimezone);
+
+  const [lead] = await db.insert(campaignLeadsTable).values({
+    campaignId:      campaign.id,
+    batchId:         targetBatch?.id ?? null,
+    phone:           rawPhone,
+    normalizedPhone: normalized,
+    name,
+    email,
+    leadData:        {
+      ...flatData,
+      __crm_connection_id: String(conn.id),
+      __crm_provider:      "zoho",
+      __crm_module:        "leads",
+      // Store the effective agent ID so the call uses the right agent
+      ...(conn.webhookAgentId ? { __webhook_agent_id: String(conn.webhookAgentId) } : {}),
+    },
+    source:          "zoho_webhook",
+    externalLeadId:  leadId ? `zoho_lead_${leadId}` : null,
+    callStatus:      "pending",
+  }).returning();
+
+  await db.insert(leadTimelineTable).values({
+    leadId:     lead!.id,
+    campaignId: campaign.id,
+    eventType:  "imported",
+    data:       { source: "zoho_webhook", connectionId: conn.id, batchId: targetBatch?.id ?? null },
+  });
+
+  await db.update(campaignsTable)
+    .set({ totalLeads: sql`${campaignsTable.totalLeads} + 1` })
+    .where(eq(campaignsTable.id, campaign.id));
+
+  if (targetBatch) {
+    await db.update(campaignBatchesTable)
+      .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
+      .where(eq(campaignBatchesTable.id, targetBatch.id));
+
+    const isPaused = campaign.status === "paused";
+    const inHours  = isWithinBusinessHours(campaign, agentTimezone);
+
+    // Build effective campaign object with optional agent override
+    const effectiveCampaign = conn.webhookAgentId
+      ? { ...campaign, agentId: conn.webhookAgentId }
+      : campaign;
+
+    if (!isPaused && inHours) {
+      scheduleCampaignCall(lead!, effectiveCampaign);
+      logger.info({ leadId: lead!.id, connectionId: conn.id, agentId: effectiveCampaign.agentId }, "Zoho webhook lead dispatched for immediate dial");
+    } else {
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "queued" })
+        .where(eq(campaignLeadsTable.id, lead!.id));
+      logger.info({ leadId: lead!.id, connectionId: conn.id, isPaused, inHours }, "Zoho webhook lead queued");
+    }
+  }
+}
 
 export default router;

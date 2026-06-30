@@ -1,5 +1,5 @@
 /**
- * Zoho CRM service — OAuth, contacts, and call-outcome writeback
+ * Zoho CRM service — OAuth, contacts, leads, and call-outcome writeback
  */
 
 import { encryptKey, decryptKey } from "../../lib/crypto.js";
@@ -15,6 +15,7 @@ const ZOHO_DEFAULT_API_BASE  = "https://www.zohoapis.com";
 const ZOHO_SCOPES = [
   "ZohoCRM.modules.contacts.READ",
   "ZohoCRM.modules.contacts.WRITE",
+  "ZohoCRM.modules.leads.READ",
   "ZohoCRM.modules.Notes.WRITE",
 ].join(",");
 
@@ -291,6 +292,20 @@ export async function listZohoViews(connectionId: number): Promise<ZohoCrmView[]
   return (data.views ?? []).map(v => ({ id: v.id, name: v.name, type: v.type }));
 }
 
+/**
+ * Fetch Zoho CRM lead views so the user can filter
+ * the lead browser to a specific view before importing.
+ */
+export async function listZohoLeadViews(connectionId: number): Promise<ZohoCrmView[]> {
+  const { accessToken, apiDomain } = await getZohoAccessToken(connectionId);
+  const resp = await fetch(`${apiDomain}/crm/v2/Leads/views`, {
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+  });
+  if (!resp.ok) throw new Error(`Zoho lead views fetch failed: ${resp.status}`);
+  const data = await resp.json() as { views: Array<{ id: string; name: string; type?: string }> };
+  return (data.views ?? []).map(v => ({ id: v.id, name: v.name, type: v.type }));
+}
+
 export async function listZohoContacts(
   connectionId: number,
   opts: { query?: string; after?: string; limit?: number; viewId?: string } = {},
@@ -346,6 +361,65 @@ export async function listZohoContacts(
   };
 }
 
+/**
+ * Fetch Zoho CRM Leads — mirrors listZohoContacts but targets /Leads.
+ * Lead-specific fields: Lead_Source, Lead_Status, Phone, Mobile,
+ * First_Name, Last_Name, Email, Company.
+ */
+export async function listZohoLeads(
+  connectionId: number,
+  opts: { query?: string; after?: string; limit?: number; viewId?: string } = {},
+): Promise<ContactsPage> {
+  const { accessToken, apiDomain } = await getZohoAccessToken(connectionId);
+  const limit = opts.limit ?? 50;
+  const apiBase = `${apiDomain}/crm/v2`;
+
+  const fields = "id,Phone,Mobile,First_Name,Last_Name,Email,Company,Lead_Source,Lead_Status";
+  const params = new URLSearchParams({
+    fields,
+    per_page: String(Math.min(limit, 200)),
+  });
+  if (opts.after) params.set("page_token", opts.after);
+  if (opts.viewId) params.set("cvid", opts.viewId);
+
+  let url: string;
+
+  if (opts.query?.trim()) {
+    url = `${apiBase}/Leads/search?${new URLSearchParams({
+      criteria: `(Last_Name:contains:${opts.query.trim()})`,
+      fields,
+      per_page: String(Math.min(limit, 200)),
+      ...(opts.after ? { page_token: opts.after } : {}),
+    }).toString()}`;
+  } else {
+    url = `${apiBase}/Leads?${params.toString()}`;
+  }
+
+  const resp = await fetch(url, {
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+  });
+
+  if (resp.status === 204) {
+    return { contacts: [], nextCursor: null, total: 0 };
+  }
+
+  if (!resp.ok) throw new Error(`Zoho leads list failed: ${resp.status}`);
+
+  const data = await resp.json() as {
+    data: Array<Record<string, unknown>>;
+    info?: { count?: number; more_records?: boolean; page_token?: string };
+  };
+
+  const contacts = (data.data ?? []).map(mapZohoLead);
+  const info = data.info;
+
+  return {
+    contacts,
+    nextCursor: info?.more_records ? (info.page_token ?? null) : null,
+    total:      info?.count ?? null,
+  };
+}
+
 function mapZohoContact(raw: Record<string, unknown>): CrmContactResult {
   const phone = String(raw["Phone"] ?? raw["Mobile"] ?? "").trim();
   const name = String(raw["Full_Name"] ?? [raw["First_Name"], raw["Last_Name"]].filter(Boolean).join(" ") ?? "").trim() || null;
@@ -359,6 +433,23 @@ function mapZohoContact(raw: Record<string, unknown>): CrmContactResult {
     name,
     email:     String(raw["Email"] ?? "").trim() || null,
     company:   String(raw["Account_Name"] ?? "").trim() || null,
+    rawFields: flatProps,
+  };
+}
+
+function mapZohoLead(raw: Record<string, unknown>): CrmContactResult {
+  const phone = String(raw["Phone"] ?? raw["Mobile"] ?? "").trim();
+  const name = [raw["First_Name"], raw["Last_Name"]].filter(Boolean).join(" ").trim() || null;
+  const flatProps: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v != null && typeof v !== "object") flatProps[k] = String(v);
+  }
+  return {
+    id:        String(raw["id"] ?? ""),
+    phone,
+    name,
+    email:     String(raw["Email"] ?? "").trim() || null,
+    company:   String(raw["Company"] ?? "").trim() || null,
     rawFields: flatProps,
   };
 }

@@ -6058,6 +6058,14 @@ paths:
           required: true
           schema:
             type: integer
+        - name: module
+          in: query
+          required: false
+          description: "Zoho only: which module to list views for (default: contacts)"
+          schema:
+            type: string
+            enum: [contacts, leads]
+            default: contacts
       responses:
         "200":
           description: Lists / views
@@ -6101,6 +6109,14 @@ paths:
           description: Filter contacts to a specific list (HubSpot) or view (Zoho)
           schema:
             type: string
+        - name: module
+          in: query
+          required: false
+          description: "Zoho only: which module to browse (default: contacts)"
+          schema:
+            type: string
+            enum: [contacts, leads]
+            default: contacts
       responses:
         "200":
           description: Contacts page
@@ -6112,6 +6128,44 @@ paths:
           description: Invalid connection
         "404":
           description: Connection not found
+
+  /crm/webhook/zoho/{connectionId}:
+    post:
+      operationId: zohoWebhook
+      tags: [crm]
+      summary: Public Zoho webhook — receives new-lead events for immediate auto-dial
+      description: >-
+        Unauthenticated endpoint. Validate using the X-Zoho-Webhook-Secret header
+        (or ?secret= query param) matching the connection's configured webhookSecret.
+        Acks immediately with 200 and processes the lead asynchronously.
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: secret
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                leads:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        "200":
+          description: Acknowledged
+        "401":
+          description: Invalid or missing webhook secret
 
   /crm/connections/{id}/import:
     post:
@@ -11335,24 +11389,36 @@ components:
         fieldMapping:
           type: object
           additionalProperties: { type: string }
+        webhookCampaignId:
+          type: ["integer", "null"]
+        webhookAgentId:
+          type: ["integer", "null"]
+        regenerateSecret:
+          type: boolean
+        clearSecret:
+          type: boolean
 
     CrmConnection:
       type: object
       required: [id, provider, accountId, accountName, createdAt]
       properties:
-        id:            { type: integer }
+        id:                  { type: integer }
         provider:
           type: string
           enum: [hubspot, zoho]
-        accountId:     { type: string }
-        accountName:   { type: ["string", "null"] }
+        accountId:           { type: string }
+        accountName:         { type: ["string", "null"] }
         fieldMapping:
           type: object
           additionalProperties: { type: string }
-        lastSyncAt:    { type: ["string", "null"], format: date-time }
-        lastErrorAt:   { type: ["string", "null"], format: date-time }
-        lastError:     { type: ["string", "null"] }
-        createdAt:     { type: string, format: date-time }
+        webhookCampaignId:   { type: ["integer", "null"] }
+        webhookAgentId:      { type: ["integer", "null"] }
+        hasWebhookSecret:    { type: boolean }
+        webhookSecret:       { type: ["string", "null"] }
+        lastSyncAt:          { type: ["string", "null"], format: date-time }
+        lastErrorAt:         { type: ["string", "null"], format: date-time }
+        lastError:           { type: ["string", "null"] }
+        createdAt:           { type: string, format: date-time }
 
     CrmContact:
       type: object

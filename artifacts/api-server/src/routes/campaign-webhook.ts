@@ -112,7 +112,7 @@ function verifyHmacSignature(
  * scheduler closed it after it finished), it is re-opened to "running" so
  * new same-day leads keep flowing.
  */
-async function getOrCreateLiveBatch(
+export async function getOrCreateLiveBatch(
   campaignId: number,
   timezone = "Asia/Kolkata",
 ): Promise<typeof campaignBatchesTable.$inferSelect | null> {

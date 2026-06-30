@@ -4623,6 +4623,12 @@ export type CrmConnectionUpdateFieldMapping = {[key: string]: string};
 
 export interface CrmConnectionUpdate {
   fieldMapping?: CrmConnectionUpdateFieldMapping;
+  /** @nullable */
+  webhookCampaignId?: number | null;
+  /** @nullable */
+  webhookAgentId?: number | null;
+  regenerateSecret?: boolean;
+  clearSecret?: boolean;
 }
 
 export type CrmConnectionProvider = typeof CrmConnectionProvider[keyof typeof CrmConnectionProvider];
@@ -4642,6 +4648,13 @@ export interface CrmConnection {
   /** @nullable */
   accountName: string | null;
   fieldMapping?: CrmConnectionFieldMapping;
+  /** @nullable */
+  webhookCampaignId?: number | null;
+  /** @nullable */
+  webhookAgentId?: number | null;
+  hasWebhookSecret?: boolean;
+  /** @nullable */
+  webhookSecret?: string | null;
   /** @nullable */
   lastSyncAt?: string | null;
   /** @nullable */
@@ -5374,6 +5387,21 @@ state?: string;
 error?: string;
 };
 
+export type ListCrmListsParams = {
+/**
+ * Zoho only: which module to list views for (default: contacts)
+ */
+module?: ListCrmListsModule;
+};
+
+export type ListCrmListsModule = typeof ListCrmListsModule[keyof typeof ListCrmListsModule];
+
+
+export const ListCrmListsModule = {
+  contacts: 'contacts',
+  leads: 'leads',
+} as const;
+
 export type ListCrmContactsParams = {
 query?: string;
 after?: string;
@@ -5382,6 +5410,28 @@ limit?: number;
  * Filter contacts to a specific list (HubSpot) or view (Zoho)
  */
 listId?: string;
+/**
+ * Zoho only: which module to browse (default: contacts)
+ */
+module?: ListCrmContactsModule;
+};
+
+export type ListCrmContactsModule = typeof ListCrmContactsModule[keyof typeof ListCrmContactsModule];
+
+
+export const ListCrmContactsModule = {
+  contacts: 'contacts',
+  leads: 'leads',
+} as const;
+
+export type ZohoWebhookParams = {
+secret?: string;
+};
+
+export type ZohoWebhookBodyLeadsItem = { [key: string]: unknown };
+
+export type ZohoWebhookBody = {
+  leads?: ZohoWebhookBodyLeadsItem[];
 };
 
 export type GetBookProgressParams = {

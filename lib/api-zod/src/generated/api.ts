@@ -6294,6 +6294,10 @@ export const ListCrmConnectionsResponseItem = zod.object({
   "accountId": zod.string(),
   "accountName": zod.string().nullable(),
   "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
+  "webhookCampaignId": zod.number().nullish(),
+  "webhookAgentId": zod.number().nullish(),
+  "hasWebhookSecret": zod.boolean().optional(),
+  "webhookSecret": zod.string().nullish(),
   "lastSyncAt": zod.coerce.date().nullish(),
   "lastErrorAt": zod.coerce.date().nullish(),
   "lastError": zod.string().nullish(),
@@ -6310,7 +6314,11 @@ export const UpdateCrmConnectionParams = zod.object({
 })
 
 export const UpdateCrmConnectionBody = zod.object({
-  "fieldMapping": zod.record(zod.string(), zod.string()).optional()
+  "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
+  "webhookCampaignId": zod.number().nullish(),
+  "webhookAgentId": zod.number().nullish(),
+  "regenerateSecret": zod.boolean().optional(),
+  "clearSecret": zod.boolean().optional()
 })
 
 export const UpdateCrmConnectionResponse = zod.object({
@@ -6319,6 +6327,10 @@ export const UpdateCrmConnectionResponse = zod.object({
   "accountId": zod.string(),
   "accountName": zod.string().nullable(),
   "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
+  "webhookCampaignId": zod.number().nullish(),
+  "webhookAgentId": zod.number().nullish(),
+  "hasWebhookSecret": zod.boolean().optional(),
+  "webhookSecret": zod.string().nullish(),
   "lastSyncAt": zod.coerce.date().nullish(),
   "lastErrorAt": zod.coerce.date().nullish(),
   "lastError": zod.string().nullish(),
@@ -6367,6 +6379,12 @@ export const ListCrmListsParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const listCrmListsQueryModuleDefault = `contacts`;
+
+export const ListCrmListsQueryParams = zod.object({
+  "module": zod.enum(['contacts', 'leads']).default(listCrmListsQueryModuleDefault).describe('Zoho only: which module to list views for (default: contacts)')
+})
+
 export const ListCrmListsResponse = zod.object({
   "lists": zod.array(zod.object({
   "id": zod.string(),
@@ -6385,12 +6403,14 @@ export const ListCrmContactsParams = zod.object({
 })
 
 export const listCrmContactsQueryLimitDefault = 50;
+export const listCrmContactsQueryModuleDefault = `contacts`;
 
 export const ListCrmContactsQueryParams = zod.object({
   "query": zod.coerce.string().optional(),
   "after": zod.coerce.string().optional(),
   "limit": zod.coerce.number().default(listCrmContactsQueryLimitDefault),
-  "listId": zod.coerce.string().optional().describe('Filter contacts to a specific list (HubSpot) or view (Zoho)')
+  "listId": zod.coerce.string().optional().describe('Filter contacts to a specific list (HubSpot) or view (Zoho)'),
+  "module": zod.enum(['contacts', 'leads']).default(listCrmContactsQueryModuleDefault).describe('Zoho only: which module to browse (default: contacts)')
 })
 
 export const ListCrmContactsResponse = zod.object({
@@ -6404,6 +6424,23 @@ export const ListCrmContactsResponse = zod.object({
 })),
   "nextCursor": zod.string().nullish(),
   "total": zod.number().nullish()
+})
+
+
+/**
+ * Unauthenticated endpoint. Validate using the X-Zoho-Webhook-Secret header (or ?secret= query param) matching the connection's configured webhookSecret. Acks immediately with 200 and processes the lead asynchronously.
+ * @summary Public Zoho webhook — receives new-lead events for immediate auto-dial
+ */
+export const ZohoWebhookParams = zod.object({
+  "connectionId": zod.coerce.number()
+})
+
+export const ZohoWebhookQueryParams = zod.object({
+  "secret": zod.coerce.string().optional()
+})
+
+export const ZohoWebhookBody = zod.object({
+  "leads": zod.array(zod.record(zod.string(), zod.unknown())).optional()
 })
 
 
