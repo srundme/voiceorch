@@ -863,16 +863,6 @@ export default function CampaignsPage() {
               <h2 className="text-sm font-semibold text-foreground">Campaigns</h2>
               <p className="text-xs text-muted-foreground/40 mt-0.5">Manage and monitor your campaigns</p>
             </div>
-            {!isLoading && (campaigns?.length ?? 0) > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1.5"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="h-3 w-3" /> New
-              </Button>
-            )}
           </div>
 
 

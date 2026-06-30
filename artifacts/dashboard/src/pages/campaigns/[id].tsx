@@ -739,7 +739,7 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+            <Button size="sm" className="h-8 text-xs gap-1.5"
               onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
               <Plus className="h-3.5 w-3.5" /> Create Batch
             </Button>
@@ -846,10 +846,6 @@ export default function CampaignDetailPage() {
                 <h3 className="text-sm font-semibold text-foreground">Batches</h3>
                 <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
               </div>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 shrink-0"
-                onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                <Plus className="h-3 w-3" /> New Batch
-              </Button>
             </div>
             {batchLoading ? (
               <div className="grid grid-cols-1 gap-3">
