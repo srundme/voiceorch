@@ -158,6 +158,25 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
       socket.destroy();
       return;
     }
+    // Balance gate — must match the REST POST /calls check
+    try {
+      const walletRows = await db
+        .select({ walletBalanceCents: usersTable.walletBalanceCents })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, payload.sub));
+      const walletUser = walletRows[0];
+      if (walletUser && walletUser.walletBalanceCents <= 0) {
+        logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — insufficient balance");
+        socket.write("HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: 63\r\n\r\n{\"error\":\"Insufficient balance. Please top up your wallet.\"}");
+        socket.destroy();
+        return;
+      }
+    } catch (err) {
+      logger.error({ err, agentId }, "Webcall upgrade — wallet balance check failed");
+      socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     webcallUserId = payload.sub;
   }
 

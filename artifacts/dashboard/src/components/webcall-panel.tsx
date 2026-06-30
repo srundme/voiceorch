@@ -116,6 +116,17 @@ export function WebcallPanel({ agentId, agentName, compact, onClose }: { agentId
       const token = localStorage.getItem("voiceorch:session");
       if (!token) throw new Error("You need to be signed in to start a test call.");
 
+      // Preflight: check wallet balance before acquiring mic / opening the socket.
+      const walletResp = await fetch("/api/wallet/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (walletResp.ok) {
+        const walletData = await walletResp.json() as { balanceCents?: number };
+        if (typeof walletData.balanceCents === "number" && walletData.balanceCents <= 0) {
+          throw new Error("Insufficient balance. Please top up your wallet to start calls.");
+        }
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
       });
