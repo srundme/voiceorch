@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SnapServe – AI Voice Agent Platform</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:     #6C63FF;
+      --brand-dark:#4F46E5;
+      --accent:    #10B981;
+      --dark:      #0F0F1A;
+      --dark2:     #16162A;
+      --dark3:     #1E1E35;
+      --border:    #2A2A45;
+      --text:      #E2E8F0;
+      --muted:     #94A3B8;
+      --white:     #FFFFFF;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #fff;
+      color: #1a1a2e;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    /* ── PAGE BREAKS ── */
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+    }
+
+    @media print {
+      body { margin: 0; }
+      .page { margin: 0; page-break-after: always; }
+      .no-print { display: none !important; }
+    }
+
+    /* ── COVER PAGE ── */
+    .cover {
+      background: linear-gradient(135deg, #0F0F1A 0%, #1E1E35 50%, #0F0F1A 100%);
+      color: var(--white);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px;
+      min-height: 297mm;
+    }
+    .cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 18px; color: #fff;
+    }
+    .logo-name { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo-tag { font-size: 10px; color: var(--muted); font-weight: 400; letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
+    .cover-badge {
+      background: rgba(108,99,255,0.2);
+      border: 1px solid rgba(108,99,255,0.4);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 11px;
+      color: #a5b4fc;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+    .cover-center { text-align: center; padding: 60px 0 40px; }
+    .cover-eyebrow {
+      font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+      color: var(--accent); font-weight: 600; margin-bottom: 20px;
+    }
+    .cover-title {
+      font-size: 52px; font-weight: 900; line-height: 1.08;
+      letter-spacing: -2px; margin-bottom: 24px;
+    }
+    .cover-title span { color: var(--brand); }
+    .cover-subtitle {
+      font-size: 18px; color: #94a3b8; font-weight: 400;
+      max-width: 540px; margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .cover-pills { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .pill {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 8px 18px;
+      font-size: 12px; font-weight: 500; color: #cbd5e1;
+    }
+    .cover-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: rgba(255,255,255,0.08);
+      border-radius: 16px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .stat-cell {
+      background: rgba(15,15,26,0.8);
+      padding: 24px; text-align: center;
+    }
+    .stat-num {
+      font-size: 32px; font-weight: 900; color: var(--white);
+      letter-spacing: -1px; line-height: 1;
+    }
+    .stat-num span { color: var(--brand); }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 6px; font-weight: 400; }
+    .cover-bottom { display: flex; justify-content: space-between; align-items: center; padding-top: 32px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .cover-date { font-size: 11px; color: var(--muted); }
+
+    /* ── INNER PAGES COMMON ── */
+    .inner { padding: 48px; min-height: 297mm; display: flex; flex-direction: column; }
+    .inner-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 36px; padding-bottom: 16px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .inner-logo { display: flex; align-items: center; gap: 8px; }
+    .inner-logo .logo-icon { width: 28px; height: 28px; font-size: 12px; border-radius: 7px; }
+    .inner-logo-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+    .page-num { font-size: 11px; color: #94a3b8; }
+
+    .section-eyebrow {
+      font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--brand); font-weight: 700; margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 26px; font-weight: 800; color: #0f172a;
+      letter-spacing: -0.5px; margin-bottom: 12px; line-height: 1.2;
+    }
+    .section-subtitle {
+      font-size: 14px; color: #64748b; line-height: 1.7;
+      max-width: 600px; margin-bottom: 28px;
+    }
+
+    /* ── FEATURE CARDS ── */
+    .feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .feature-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 20px;
+    }
+    .feature-card.accent { background: linear-gradient(135deg, #f0f4ff, #faf5ff); border-color: #c7d2fe; }
+    .feature-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; margin-bottom: 12px;
+    }
+    .feature-icon.purple { background: #ede9fe; }
+    .feature-icon.green  { background: #d1fae5; }
+    .feature-icon.blue   { background: #dbeafe; }
+    .feature-icon.orange { background: #ffedd5; }
+    .feature-icon.pink   { background: #fce7f3; }
+    .feature-icon.teal   { background: #ccfbf1; }
+    .feature-name { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+    .feature-desc { font-size: 12px; color: #64748b; line-height: 1.6; }
+
+    /* ── HOW IT WORKS ── */
+    .flow-steps { display: flex; flex-direction: column; gap: 0; }
+    .flow-step { display: flex; gap: 20px; position: relative; }
+    .flow-step:not(:last-child) .step-line {
+      position: absolute; left: 19px; top: 40px;
+      width: 2px; height: calc(100% + 0px);
+      background: linear-gradient(to bottom, #6C63FF, #e2e8f0);
+    }
+    .step-left { flex-shrink: 0; }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      color: #fff; font-weight: 800; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 1;
+    }
+    .step-content { padding: 8px 0 32px; }
+    .step-title { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    .step-desc { font-size: 12px; color: #64748b; line-height: 1.6; }
+
+    /* ── PRICING ── */
+    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .pricing-card {
+      border-radius: 16px; padding: 28px; position: relative; overflow: hidden;
+    }
+    .pricing-card.managed {
+      background: #f8fafc; border: 2px solid #e2e8f0;
+    }
+    .pricing-card.byop {
+      background: linear-gradient(135deg, #1e1e35, #16162a);
+      border: 2px solid #6C63FF; color: #fff;
+    }
+    .pricing-card.popular::before {
+      content: 'MOST POPULAR';
+      position: absolute; top: 16px; right: -28px;
+      background: var(--accent); color: #fff;
+      font-size: 9px; font-weight: 700; letter-spacing: 1px;
+      padding: 4px 36px; transform: rotate(45deg);
+    }
+    .plan-name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .plan-name.managed { color: #6C63FF; }
+    .plan-name.byop { color: #10B981; }
+    .plan-price { font-size: 36px; font-weight: 900; letter-spacing: -1px; line-height: 1; margin-bottom: 4px; }
+    .plan-price.managed { color: #0f172a; }
+    .plan-price.byop { color: #fff; }
+    .plan-period { font-size: 13px; color: #94a3b8; margin-bottom: 20px; }
+    .plan-desc { font-size: 12px; line-height: 1.7; margin-bottom: 20px; }
+    .plan-desc.managed { color: #64748b; }
+    .plan-desc.byop { color: #94a3b8; }
+    .plan-features { list-style: none; }
+    .plan-features li {
+      font-size: 12px; padding: 5px 0;
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .plan-features li::before { content: '✓'; font-weight: 700; flex-shrink: 0; }
+    .plan-features.managed li::before { color: #10B981; }
+    .plan-features.byop li { color: #cbd5e1; }
+    .plan-features.byop li::before { color: #10B981; }
+
+    /* ── PROVIDERS ── */
+    .providers-section { margin-bottom: 28px; }
+    .provider-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: #94a3b8; margin-bottom: 10px;
+    }
+    .provider-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .provider-chip {
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+      border-radius: 8px; padding: 6px 14px;
+      font-size: 12px; font-weight: 600; color: #374151;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .chip-dot.asr { background: #6C63FF; }
+    .chip-dot.llm { background: #10B981; }
+    .chip-dot.tts { background: #F59E0B; }
+    .chip-dot.tel { background: #EF4444; }
+
+    /* ── USE CASES ── */
+    .usecase-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .usecase-card {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 20px;
+      text-align: center;
+    }
+    .usecase-emoji { font-size: 28px; margin-bottom: 10px; display: block; }
+    .usecase-title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+    .usecase-desc { font-size: 11px; color: #64748b; line-height: 1.6; }
+
+    /* ── COMPARISON TABLE ── */
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .compare-table th {
+      background: #f8fafc; padding: 12px 16px;
+      text-align: left; font-weight: 700; color: #374151;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .compare-table th.highlight { background: #ede9fe; color: #6C63FF; }
+    .compare-table td { padding: 11px 16px; border-bottom: 1px solid #f1f5f9; color: #374151; }
+    .compare-table td.highlight { background: #fafaff; font-weight: 600; color: #6C63FF; }
+    .compare-table tr:hover td { background: #f8fafc; }
+    .tick { color: #10B981; font-weight: 700; }
+    .cross { color: #EF4444; }
+    .partial { color: #F59E0B; }
+
+    /* ── DARK BAND ── */
+    .dark-band {
+      background: linear-gradient(135deg, #0F0F1A 0%, #1E1E35 100%);
+      color: #fff; border-radius: 16px; padding: 32px;
+      margin-top: auto;
+    }
+    .dark-band-title { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+    .dark-band-sub { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.6; }
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .contact-item { }
+    .contact-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; font-weight: 600; }
+    .contact-value { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+
+    /* ── ARCHITECTURE BOX ── */
+    .arch-box {
+      background: #0F0F1A; border-radius: 12px; padding: 28px;
+      color: #e2e8f0;
+    }
+    .arch-flow {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    .arch-node {
+      background: #1E1E35; border: 1px solid #2A2A45;
+      border-radius: 10px; padding: 10px 16px;
+      font-size: 12px; font-weight: 600; color: #e2e8f0;
+      text-align: center; min-width: 90px;
+    }
+    .arch-node.highlight { border-color: #6C63FF; background: #1a1a3a; color: #a5b4fc; }
+    .arch-arrow { color: #4F46E5; font-size: 18px; font-weight: 700; }
+    .arch-labels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .arch-label-item { text-align: center; }
+    .arch-label-title { font-size: 10px; font-weight: 700; color: #6C63FF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .arch-label-vals { font-size: 10px; color: #64748b; line-height: 1.8; }
+
+    /* ── TESTIMONIAL / QUOTE ── */
+    .quote-box {
+      background: linear-gradient(135deg, #f0f4ff, #fdf2ff);
+      border-left: 4px solid #6C63FF;
+      border-radius: 0 12px 12px 0; padding: 20px 24px; margin: 20px 0;
+    }
+    .quote-text { font-size: 14px; font-style: italic; color: #374151; line-height: 1.7; margin-bottom: 10px; }
+    .quote-author { font-size: 12px; font-weight: 700; color: #6C63FF; }
+
+    /* ── FOOTER ── */
+    .page-footer {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-top: 16px; margin-top: auto;
+      border-top: 1px solid #e2e8f0;
+      font-size: 10px; color: #94a3b8;
+    }
+
+    /* ── PRINT BUTTON ── */
+    .print-btn {
+      position: fixed; bottom: 32px; right: 32px;
+      background: linear-gradient(135deg, #6C63FF, #4F46E5);
+      color: #fff; border: none; border-radius: 50px;
+      padding: 14px 28px; font-size: 14px; font-weight: 700;
+      cursor: pointer; box-shadow: 0 8px 24px rgba(108,99,255,0.4);
+      z-index: 1000; display: flex; align-items: center; gap: 8px;
+    }
+    .print-btn:hover { transform: translateY(-2px); transition: 0.2s; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     PAGE 1 — COVER
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-top">
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <div>
+          <div class="logo-name">SnapServe</div>
+          <div class="logo-tag">AI Voice Platform</div>
+        </div>
+      </div>
+      <div class="cover-badge">Product Brochure · 2026</div>
+    </div>
+
+    <div class="cover-center">
+      <div class="cover-eyebrow">Enterprise AI Voice Agents</div>
+      <h1 class="cover-title">
+        Your Business,<br/>
+        <span>Speaking Smarter.</span>
+      </h1>
+      <p class="cover-subtitle">
+        SnapServe is an AI voice agent orchestration platform that lets you deploy
+        intelligent, multilingual voice agents in minutes — no engineering team required.
+      </p>
+      <div class="cover-pills">
+        <div class="pill">🎙️ Multilingual STT</div>
+        <div class="pill">🧠 LLM Orchestration</div>
+        <div class="pill">📞 Any Telephony</div>
+        <div class="pill">🧬 Caller Memory</div>
+        <div class="pill">📅 Smart Scheduling</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="cover-stats">
+        <div class="stat-cell">
+          <div class="stat-num">$0.05<span>/min</span></div>
+          <div class="stat-label">Fully Managed — all-in</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num">4<span>+</span></div>
+          <div class="stat-label">Telephony Providers</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num">10<span>+</span></div>
+          <div class="stat-label">AI Provider Integrations</div>
+        </div>
+      </div>
+      <div class="cover-bottom">
+        <div class="cover-date">Confidential · For Client Use Only · 2026</div>
+        <div style="color:#6C63FF;font-size:12px;font-weight:600;">snapserve.ai</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 2 — WHAT IS SNAPSERVE
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="inner">
+    <div class="inner-header">
+      <div class="inner-logo">
+        <div class="logo-icon">S</div>
+        <div class="inner-logo-name">SnapServe</div>
+      </div>
+      <div class="page-num">Page 2 of 7</div>
+    </div>
+
+    <div class="section-eyebrow">Overview</div>
+    <div class="section-title">What is SnapServe?</div>
+    <div class="section-subtitle">
+      SnapServe is an AI voice agent orchestration platform. It sits between your telephony provider and AI models —
+      handling everything from speech recognition to response generation to text-to-speech — so your agents can
+      have natural, intelligent conversations over any phone call.
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card accent">
+        <div class="feature-icon purple">🎙️</div>
+        <div class="feature-name">Automatic Speech Recognition</div>
+        <div class="feature-desc">Real-time transcription of caller speech using best-in-class ASR providers. Supports Hindi, Tamil, Telugu, Malayalam, English, and more.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon green">🧠</div>
+        <div class="feature-name">LLM Conversation Engine</div>
+        <div class="feature-desc">Your agent's intelligence — powered by OpenAI, Anthropic, DeepSeek, Mistral or Cohere. Custom system prompts, tools, and personas per agent.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon blue">🔊</div>
+        <div class="feature-name">Text-to-Speech</div>
+        <div class="feature-desc">Natural-sounding voice output via ElevenLabs, OpenAI, AWS Polly, Azure, Cartesia, or Deepgram. Choose the voice that fits your brand.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon orange">📞</div>
+        <div class="feature-name">Telephony Integration</div>
+        <div class="feature-desc">Works with Twilio, Plivo, VoBiz, and Vonage. Handles inbound calls, outbound campaigns, warm transfers, and IVR flows.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon pink">🧬</div>
+        <div class="feature-name">Caller Memory</div>
+        <div class="feature-desc">Remembers facts, preferences, and history across every call. Your agent greets returning callers by name and never asks the same question twice.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon teal">📅</div>
+        <div class="feature-name">Smart Scheduling</div>
+        <div class="feature-desc">Built-in booking engine with Google Calendar sync, availability windows, slot management, and automatic email/webhook notifications.</div>
+      </div>
+    </div>
+
+    <div class="quote-box" style="margin-top:24px;">
+      <div class="quote-text">"Deploy your first AI voice agent in under 10 minutes. No engineering team. No complex integrations. Just configure, connect, and go live."</div>
+      <div class="quote-author">— SnapServe Platform Promise</div>
+    </div>
+
+    <div class="page-footer">
+      <span>SnapServe · Confidential</span>
+      <span>snapserve.ai</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 3 — HOW IT WORKS
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="inner">
+    <div class="inner-header">
+      <div class="inner-logo">
+        <div class="logo-icon">S</div>
+        <div class="inner-logo-name">SnapServe</div>
+      </div>
+      <div class="page-num">Page 3 of 7</div>
+    </div>
+
+    <div class="section-eyebrow">Architecture</div>
+    <div class="section-title">How It Works</div>
+    <div class="section-subtitle">
+      Every call flows through SnapServe's orchestration pipeline in real time — from the first ring to the final goodbye.
+    </div>
+
+    <div class="arch-box" style="margin-bottom: 28px;">
+      <div class="arch-flow">
+        <div class="arch-node">📞 Caller</div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">Telephony<br/><small style="color:#64748b;font-size:10px;">Twilio / Plivo / VoBiz</small></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node highlight">⚡ SnapServe<br/><small style="font-size:10px;">Orchestration Core</small></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">ASR<br/><small style="color:#64748b;font-size:10px;">Speech → Text</small></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">LLM<br/><small style="color:#64748b;font-size:10px;">AI Brain</small></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">TTS<br/><small style="color:#64748b;font-size:10px;">Text → Voice</small></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">📞 Caller</div>
+      </div>
+      <div class="arch-labels">
+        <div class="arch-label-item">
+          <div class="arch-label-title">STT Providers</div>
+          <div class="arch-label-vals">Deepgram<br/>Azure<br/>Whisper<br/>Sarvam</div>
+        </div>
+        <div class="arch-label-item">
+          <div class="arch-label-title">LLM Providers</div>
+          <div class="arch-label-vals">OpenAI<br/>Anthropic<br/>DeepSeek<br/>Mistral · Cohere</div>
+        </div>
+        <div class="arch-label-item">
+          <div class="arch-label-title">TTS Providers</div>
+          <div class="arch-label-vals">ElevenLabs<br/>OpenAI<br/>AWS Polly<br/>Azure · Cartesia</div>
+        </div>
+        <div class="arch-label-item">
+          <div class="arch-label-title">Telephony</div>
+          <div class="arch-label-vals">Twilio<br/>Plivo<br/>VoBiz<br/>Vonage</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="step-left">
+          <div class="step-num">1</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Call Arrives</div>
+          <div class="step-desc">A caller dials in (or your campaign dials out). The telephony provider routes the call to SnapServe and opens a real-time audio stream.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-left">
+          <div class="step-num">2</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Speech is Transcribed</div>
+          <div class="step-desc">The caller's voice is streamed to your chosen ASR provider. Transcription is returned in under 500ms with support for Indic and multilingual speech.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-left">
+          <div class="step-num">3</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">AI Generates a Response</div>
+          <div class="step-desc">The transcript is sent to the LLM with your agent's persona, system prompt, caller memory, and any business tools. The AI decides what to say — or what action to take (book appointment, transfer, look up data).</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-left">
+          <div class="step-num">4</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Voice is Synthesised</div>
+          <div class="step-desc">The AI response is converted to natural-sounding speech by your TTS provider and streamed back to the caller in real time. Barge-in detection lets callers interrupt naturally.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-left">
+          <div class="step-num">5</div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Memory & Analytics Updated</div>
+          <div class="step-desc">After the call, SnapServe automatically summarises the conversation, updates the caller's memory profile, logs outcomes, and triggers any configured webhooks or CRM updates.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-footer">
+      <span>SnapServe · Confidential</span>
+      <span>snapserve.ai</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 4 — USE CASES
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="inner">
+    <div class="inner-header">
+      <div class="inner-logo">
+        <div class="logo-icon">S</div>
+        <div class="inner-logo-name">SnapServe</div>
+      </div>
+      <div class="page-num">Page 4 of 7</div>
+    </div>
+
+    <div class="section-eyebrow">Applications</div>
+    <div class="section-title">Who Uses SnapServe?</div>
+    <div class="section-subtitle">
+      From financial services to healthcare, SnapServe powers voice agents across every industry that needs to talk to customers at scale.
+    </div>
+
+    <div class="usecase-grid" style="margin-bottom:24px;">
+      <div class="usecase-card">
+        <span class="usecase-emoji">🏦</span>
+        <div class="usecase-title">Banking & Finance</div>
+        <div class="usecase-desc">Loan follow-up, EMI reminders, KYC collection, balance enquiry, payment confirmations via AI voice.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">🏥</span>
+        <div class="usecase-title">Healthcare</div>
+        <div class="usecase-desc">Appointment booking, prescription reminders, lab result notifications, patient follow-up calls.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">🛒</span>
+        <div class="usecase-title">E-Commerce</div>
+        <div class="usecase-desc">Order status updates, delivery confirmations, return initiations, post-purchase satisfaction calls.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">🏢</span>
+        <div class="usecase-title">Real Estate</div>
+        <div class="usecase-desc">Lead qualification, site visit scheduling, property inquiry handling, follow-up automation.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">📡</span>
+        <div class="usecase-title">Telecom & Utilities</div>
+        <div class="usecase-desc">Outage notifications, bill payment reminders, service renewal calls, complaint triage.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">🎓</span>
+        <div class="usecase-title">EdTech</div>
+        <div class="usecase-desc">Admission follow-up, class reminders, parent communication, student support lines.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">🚗</span>
+        <div class="usecase-title">Automotive</div>
+        <div class="usecase-desc">Test drive scheduling, service reminders, lead follow-up from dealership inquiries.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">🛡️</span>
+        <div class="usecase-title">Insurance</div>
+        <div class="usecase-desc">Policy renewal reminders, claim status updates, premium collection, customer onboarding calls.</div>
+      </div>
+      <div class="usecase-card">
+        <span class="usecase-emoji">📊</span>
+        <div class="usecase-title">Sales & Collections</div>
+        <div class="usecase-desc">Outbound campaign dialing, lead scoring by conversation outcome, warm transfer to human agents.</div>
+      </div>
+    </div>
+
+    <div class="dark-band">
+      <div class="dark-band-title">🌏 Built for Multilingual India</div>
+      <div class="dark-band-sub">
+        SnapServe is purpose-built for the Indian market. Your agents can speak and understand Hindi, Tamil, Telugu,
+        Malayalam, Kannada, Marathi, Bengali, and English — switching languages mid-call based on caller preference.
+        No code changes. No separate deployments.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="pill" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px;">🇮🇳 Hindi</div>
+        <div class="pill" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px;">தமிழ் Tamil</div>
+        <div class="pill" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px;">తెలుగు Telugu</div>
+        <div class="pill" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px;">മലയാളം Malayalam</div>
+        <div class="pill" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px;">English</div>
+        <div class="pill" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15);color:#cbd5e1;font-size:11px;">+ more</div>
+      </div>
+    </div>
+
+    <div class="page-footer">
+      <span>SnapServe · Confidential</span>
+      <span>snapserve.ai</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 5 — PRICING
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="inner">
+    <div class="inner-header">
+      <div class="inner-logo">
+        <div class="logo-icon">S</div>
+        <div class="inner-logo-name">SnapServe</div>
+      </div>
+      <div class="page-num">Page 5 of 7</div>
+    </div>
+
+    <div class="section-eyebrow">Pricing</div>
+    <div class="section-title">Simple, Transparent Pricing</div>
+    <div class="section-subtitle">
+      Two plans. No hidden fees. No per-seat charges. Pay only for what your agents actually use.
+    </div>
+
+    <div class="pricing-grid" style="margin-bottom:28px;">
+      <div class="pricing-card managed">
+        <div class="plan-name managed">Managed Plan</div>
+        <div class="plan-price managed">$0.05</div>
+        <div class="plan-period">per minute · all-inclusive</div>
+        <div class="plan-desc managed">
+          We supply all AI provider keys — ASR, LLM, and TTS. You just configure your agents and go live. Zero setup friction.
+        </div>
+        <ul class="plan-features managed">
+          <li>All AI providers included</li>
+          <li>No API keys to manage</li>
+          <li>Instant activation</li>
+          <li>Full platform features</li>
+          <li>Caller memory & analytics</li>
+          <li>Scheduling & campaigns</li>
+          <li>$5 free credits on sign-up</li>
+        </ul>
+      </div>
+
+      <div class="pricing-card byop popular">
+        <div class="plan-name byop">BYOP Plan</div>
+        <div class="plan-price byop">$0.035</div>
+        <div class="plan-period" style="color:#64748b;">per minute · orchestration only</div>
+        <div class="plan-desc byop">
+          Bring your own API keys for ASR, LLM, and TTS. Pay SnapServe only for orchestration. You pay your providers directly at their rates.
+        </div>
+        <ul class="plan-features byop">
+          <li>Use your own provider keys</li>
+          <li>Lower per-minute cost</li>
+          <li>Choose any supported provider</li>
+          <li>Full platform features</li>
+          <li>Caller memory & analytics</li>
+          <li>Scheduling & campaigns</li>
+          <li>Best for high-volume deployments</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:12px;">💡 Which plan is right for you?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:12px;color:#374151;">
+        <div>
+          <div style="font-weight:600;margin-bottom:6px;color:#6C63FF;">Choose Managed if…</div>
+          <div style="line-height:1.8;">
+            • You're just getting started<br/>
+            • You don't want to manage API keys<br/>
+            • You have low to medium call volume<br/>
+            • You want the fastest go-live
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:600;margin-bottom:6px;color:#10B981;">Choose BYOP if…</div>
+          <div style="line-height:1.8;">
+            • You run high call volumes (1000+ min/day)<br/>
+            • You have existing provider contracts<br/>
+            • You want to optimise per-minute cost<br/>
+            • You need a specific provider's voice/model
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:linear-gradient(135deg,#ede9fe,#f0fdf4);border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;">🎁 Free Trial</div>
+      <div style="font-size:12px;color:#64748b;line-height:1.7;">
+        Every new account receives <strong>$5 of free call credits</strong> — approximately 100 minutes of AI voice calls.
+        No credit card required to start. Upgrade or top up your wallet at any time.
+      </div>
+    </div>
+
+    <div class="page-footer">
+      <span>SnapServe · Confidential</span>
+      <span>snapserve.ai</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 6 — PROVIDERS & COMPARISON
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="inner">
+    <div class="inner-header">
+      <div class="inner-logo">
+        <div class="logo-icon">S</div>
+        <div class="inner-logo-name">SnapServe</div>
+      </div>
+      <div class="page-num">Page 6 of 7</div>
+    </div>
+
+    <div class="section-eyebrow">Integrations</div>
+    <div class="section-title">Supported Providers</div>
+    <div class="section-subtitle" style="margin-bottom:20px;">
+      SnapServe works with every major AI and telephony provider. Mix and match to build the perfect voice stack for your use case.
+    </div>
+
+    <div class="providers-section">
+      <div class="provider-label">🎙️ Speech-to-Text (ASR)</div>
+      <div class="provider-chips">
+        <div class="provider-chip"><div class="chip-dot asr"></div>Deepgram</div>
+        <div class="provider-chip"><div class="chip-dot asr"></div>Azure Speech</div>
+        <div class="provider-chip"><div class="chip-dot asr"></div>OpenAI Whisper</div>
+        <div class="provider-chip"><div class="chip-dot asr"></div>Sarvam AI</div>
+      </div>
+    </div>
+
+    <div class="providers-section">
+      <div class="provider-label">🧠 Large Language Models (LLM)</div>
+      <div class="provider-chips">
+        <div class="provider-chip"><div class="chip-dot llm"></div>OpenAI GPT-4o</div>
+        <div class="provider-chip"><div class="chip-dot llm"></div>Anthropic Claude</div>
+        <div class="provider-chip"><div class="chip-dot llm"></div>DeepSeek</div>
+        <div class="provider-chip"><div class="chip-dot llm"></div>Mistral</div>
+        <div class="provider-chip"><div class="chip-dot llm"></div>Cohere</div>
+        <div class="provider-chip"><div class="chip-dot llm"></div>Groq (Managed)</div>
+      </div>
+    </div>
+
+    <div class="providers-section">
+      <div class="provider-label">🔊 Text-to-Speech (TTS)</div>
+      <div class="provider-chips">
+        <div class="provider-chip"><div class="chip-dot tts"></div>ElevenLabs</div>
+        <div class="provider-chip"><div class="chip-dot tts"></div>OpenAI TTS</div>
+        <div class="provider-chip"><div class="chip-dot tts"></div>AWS Polly</div>
+        <div class="provider-chip"><div class="chip-dot tts"></div>Azure Neural</div>
+        <div class="provider-chip"><div class="chip-dot tts"></div>Cartesia</div>
+        <div class="provider-chip"><div class="chip-dot tts"></div>Deepgram Aura</div>
+      </div>
+    </div>
+
+    <div class="providers-section" style="margin-bottom:24px;">
+      <div class="provider-label">📞 Telephony</div>
+      <div class="provider-chips">
+        <div class="provider-chip"><div class="chip-dot tel"></div>Twilio</div>
+        <div class="provider-chip"><div class="chip-dot tel"></div>Plivo</div>
+        <div class="provider-chip"><div class="chip-dot tel"></div>VoBiz</div>
+        <div class="provider-chip"><div class="chip-dot tel"></div>Vonage</div>
+      </div>
+    </div>
+
+    <div class="section-eyebrow">Comparison</div>
+    <div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:16px;">SnapServe vs. Alternatives</div>
+
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th class="highlight">SnapServe</th>
+          <th>Vapi</th>
+          <th>Bolna</th>
+          <th>Custom Build</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Multilingual Indic support</td>
+          <td class="highlight"><span class="tick">✓</span> Full</td>
+          <td><span class="partial">~</span> Limited</td>
+          <td><span class="tick">✓</span></td>
+          <td><span class="partial">~</span> DIY</td>
+        </tr>
+        <tr>
+          <td>Caller memory across calls</td>
+          <td class="highlight"><span class="tick">✓</span> Built-in</td>
+          <td><span class="cross">✗</span></td>
+          <td><span class="cross">✗</span></td>
+          <td><span class="partial">~</span> DIY</td>
+        </tr>
+        <tr>
+          <td>Campaign dialing</td>
+          <td class="highlight"><span class="tick">✓</span> Built-in</td>
+          <td><span class="partial">~</span> Basic</td>
+          <td><span class="cross">✗</span></td>
+          <td><span class="partial">~</span> DIY</td>
+        </tr>
+        <tr>
+          <td>Scheduling / Booking</td>
+          <td class="highlight"><span class="tick">✓</span> Full engine</td>
+          <td><span class="cross">✗</span></td>
+          <td><span class="cross">✗</span></td>
+          <td><span class="partial">~</span> DIY</td>
+        </tr>
+        <tr>
+          <td>BYOP provider keys</td>
+          <td class="highlight"><span class="tick">✓</span> Any provider</td>
+          <td><span class="tick">✓</span></td>
+          <td><span class="tick">✓</span></td>
+          <td><span class="tick">✓</span></td>
+        </tr>
+        <tr>
+          <td>Web-call (browser)</td>
+          <td class="highlight"><span class="tick">✓</span></td>
+          <td><span class="tick">✓</span></td>
+          <td><span class="cross">✗</span></td>
+          <td><span class="partial">~</span> DIY</td>
+        </tr>
+        <tr>
+          <td>Setup time</td>
+          <td class="highlight"><span class="tick">✓</span> &lt; 10 min</td>
+          <td>&lt; 10 min</td>
+          <td>Hours</td>
+          <td>Weeks</td>
+        </tr>
+        <tr>
+          <td>India-first pricing</td>
+          <td class="highlight"><span class="tick">✓</span> $0.05/min</td>
+          <td>$0.05+/min</td>
+          <td>Variable</td>
+          <td>High infra cost</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="page-footer">
+      <span>SnapServe · Confidential</span>
+      <span>snapserve.ai</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 7 — GET STARTED / CONTACT
+══════════════════════════════════════════════ -->
+<div class="page">
+  <div class="inner">
+    <div class="inner-header">
+      <div class="inner-logo">
+        <div class="logo-icon">S</div>
+        <div class="inner-logo-name">SnapServe</div>
+      </div>
+      <div class="page-num">Page 7 of 7</div>
+    </div>
+
+    <div class="section-eyebrow">Key Features</div>
+    <div class="section-title">Everything You Need, Out of the Box</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:28px;">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div style="font-size:18px;margin-bottom:8px;">🧬</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Caller Memory</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.6;">Persistent facts, preferences and history per caller, per agent. Never ask the same question twice.</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div style="font-size:18px;margin-bottom:8px;">📊</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Analytics Dashboard</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.6;">Real-time call volume, success rates, duration trends, cost per call, and outcome breakdowns.</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div style="font-size:18px;margin-bottom:8px;">📣</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Outbound Campaigns</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.6;">Upload a lead list, set concurrency, and let your agent dial. Retry logic, pacing, and outcome tracking built-in.</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div style="font-size:18px;margin-bottom:8px;">🔗</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Webhooks & CRM</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.6;">Push call events, transcripts, and outcomes to any CRM or webhook endpoint in real time.</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div style="font-size:18px;margin-bottom:8px;">🔀</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Warm Transfers</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.6;">Agent hands off to a human with a live spoken briefing — the operator hears context before the caller is connected.</div>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div style="font-size:18px;margin-bottom:8px;">🌐</div>
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:4px;">Web Call</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.6;">Embed a browser-based call widget on your website. Visitors can talk to your AI agent directly — no phone needed.</div>
+      </div>
+    </div>
+
+    <div style="background:linear-gradient(135deg,#0F0F1A,#1E1E35);border-radius:16px;padding:36px;color:#fff;text-align:center;margin-bottom:24px;">
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6C63FF;font-weight:700;margin-bottom:12px;">Get Started Today</div>
+      <div style="font-size:24px;font-weight:900;margin-bottom:12px;letter-spacing:-0.5px;">Ready to Deploy Your First<br/>AI Voice Agent?</div>
+      <div style="font-size:13px;color:#94a3b8;line-height:1.7;max-width:480px;margin:0 auto 28px;">
+        Sign up in under 2 minutes. No credit card required. Get $5 free credits and have your first agent live in under 10 minutes.
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <div style="background:linear-gradient(135deg,#6C63FF,#4F46E5);border-radius:8px;padding:12px 28px;font-size:13px;font-weight:700;color:#fff;">🚀 Start Free Trial</div>
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:12px 28px;font-size:13px;font-weight:600;color:#cbd5e1;">📞 Book a Demo</div>
+      </div>
+    </div>
+
+    <div class="contact-grid">
+      <div class="contact-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div class="contact-label">Platform</div>
+        <div class="contact-value">snapserve.ai</div>
+      </div>
+      <div class="contact-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div class="contact-label">Support</div>
+        <div class="contact-value">support@snapserve.ai</div>
+      </div>
+      <div class="contact-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div class="contact-label">Sales Enquiry</div>
+        <div class="contact-value">sales@snapserve.ai</div>
+      </div>
+      <div class="contact-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">
+        <div class="contact-label">Documentation</div>
+        <div class="contact-value">docs.snapserve.ai</div>
+      </div>
+    </div>
+
+    <div class="page-footer" style="margin-top:20px;">
+      <span>© 2026 SnapServe. All rights reserved. Confidential.</span>
+      <span>snapserve.ai</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- Print Button -->
+<button class="print-btn no-print" onclick="window.print()">
+  🖨️ Download / Print PDF
+</button>
+
+</body>
+</html>
