@@ -16,6 +16,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   PhoneMissed, PhoneCall, Clock, Calendar, RefreshCw, X, AlertTriangle, Eye,
+  ChevronDown, ChevronUp, Zap, WifiOff, Info,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
@@ -88,6 +89,104 @@ function formatScheduled(at: string | null) {
   return isPast(d)
     ? `${format(d, "MMM d, h:mm a")} (overdue)`
     : format(d, "MMM d, h:mm a");
+}
+
+// ── Callbacks guide ───────────────────────────────────────────────────────────
+
+const GUIDE_LS_KEY = "voiceorch:callbacks-guide-collapsed";
+
+const GUIDE_ENTRIES = [
+  {
+    icon: <PhoneCall className="w-5 h-5 text-blue-400 flex-none mt-0.5" />,
+    title: "Callback",
+    color: "border-blue-500/20 bg-blue-500/5",
+    trigger: "A caller explicitly asked to be called back later during any call (inbound or outbound).",
+    source: "Any call type — inbound, manual outbound, or campaign.",
+  },
+  {
+    icon: <Zap className="w-5 h-5 text-orange-400 flex-none mt-0.5" />,
+    title: "Auto-Redial",
+    color: "border-orange-500/20 bg-orange-500/5",
+    trigger: "An outbound call went unanswered or hit a busy signal, so the system will retry automatically.",
+    source: "Manual outbound calls only — campaign no-answers are retried inside the campaign itself.",
+  },
+  {
+    icon: <WifiOff className="w-5 h-5 text-amber-400 flex-none mt-0.5" />,
+    title: "Network Drop",
+    color: "border-amber-500/20 bg-amber-500/5",
+    trigger: "An active call disconnected unexpectedly mid-conversation (not a normal hang-up).",
+    source: "Inbound and manual outbound calls only — campaign drops are retried inside the campaign.",
+  },
+] as const;
+
+function CallbacksGuide() {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(GUIDE_LS_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggle() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(GUIDE_LS_KEY, String(next));
+    } catch {
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden mb-2">
+      <button
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-muted-foreground flex-none" />
+          <span className="text-sm font-medium text-foreground">How this page works</span>
+        </div>
+        {collapsed
+          ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-none" />
+          : <ChevronUp className="w-4 h-4 text-muted-foreground flex-none" />
+        }
+      </button>
+
+      {!collapsed && (
+        <div className="px-4 pb-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            This page tracks three types of follow-up calls that the platform schedules automatically.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {GUIDE_ENTRIES.map(({ icon, title, color, trigger, source }) => (
+              <div key={title} className={`rounded-md border p-3 space-y-1.5 ${color}`}>
+                <div className="flex items-start gap-2">
+                  {icon}
+                  <span className="text-sm font-semibold text-foreground">{title}</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{trigger}</p>
+                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                  <span className="font-medium text-muted-foreground">Source:</span> {source}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 px-3 py-2 flex items-start gap-2">
+            <Info className="w-3.5 h-3.5 text-muted-foreground flex-none mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-medium text-foreground">Campaign retries are not shown here.</span>{" "}
+              When a campaign call goes unanswered or drops, the campaign's own retry schedule handles it.
+              Those retries appear inside the campaign detail view, keeping this page focused on
+              non-campaign follow-ups.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Stats banner ─────────────────────────────────────────────────────────────
@@ -386,6 +485,9 @@ export default function CallbacksPage() {
           Manage scheduled callbacks requested by callers, and automatic redial retries for missed calls.
         </p>
       </div>
+
+      {/* Guide */}
+      <CallbacksGuide />
 
       {/* Stats */}
       <StatsBanner stats={stats} />
