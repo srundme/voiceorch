@@ -3,10 +3,10 @@ import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
-  useGetBatchWorkspaceKpis, useListCampaignLeads,
-  getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getListCampaignLeadsQueryKey,
+  useGetBatchWorkspaceKpis,
+  getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
 } from "@workspace/api-client-react";
-import type { CampaignBatch, CampaignLead } from "@workspace/api-client-react";
+import type { CampaignBatch } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -742,8 +742,6 @@ export default function CampaignDetailPage() {
     }
   }
 
-  const [leadsPage, setLeadsPage] = useState(0);
-  const [leadsPageSize, setLeadsPageSize] = useState(15);
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
@@ -751,8 +749,6 @@ export default function CampaignDetailPage() {
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 30_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 30_000 } as any });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: leadsData, isLoading: leadsLoading } = useListCampaignLeads(campaignId, { limit: leadsPageSize, offset: leadsPage * leadsPageSize }, { query: { refetchInterval: 15_000 } as any });
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
@@ -879,7 +875,11 @@ export default function CampaignDetailPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
-              <StatusBadge status={campaign.status} />
+              <StatusBadge status={
+                campaign.status === "draft" && batches?.some(b => b.status === "running")
+                  ? "active"
+                  : campaign.status
+              } />
             </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
@@ -1007,8 +1007,8 @@ export default function CampaignDetailPage() {
             );
           })()}
 
-          {/* Webhook Intake URL — always visible, campaign-level */}
-          {campaign.webhookToken && (
+          {/* Webhook Intake URL — only for webhook/Meta intake campaigns */}
+          {campaign.webhookToken && (campaign as any).leadSource !== "csv" && (
             <WebhookIntakeCard webhookUrl={webhookUrl} />
           )}
 
@@ -1188,114 +1188,16 @@ export default function CampaignDetailPage() {
           </div>
           )}
 
-          {/* Leads table — all campaigns */}
-          {(() => {
-            const leads: CampaignLead[] = leadsData?.leads ?? [];
-            const total: number = leadsData?.total ?? 0;
-            const totalPages = Math.max(1, Math.ceil(total / leadsPageSize));
-            const statusColors: Record<string, string> = {
-              pending:          "text-muted-foreground/60 bg-muted/40",
-              queued:           "text-amber-500 bg-amber-500/10",
-              calling:          "text-blue-500 bg-blue-500/10",
-              connected:        "text-emerald-500 bg-emerald-500/10",
-              completed:        "text-emerald-600 bg-emerald-600/10",
-              no_pickup:        "text-orange-500 bg-orange-500/10",
-              busy:             "text-orange-400 bg-orange-400/10",
-              voicemail:        "text-purple-500 bg-purple-500/10",
-              failed:           "text-red-500 bg-red-500/10",
-              exhausted:        "text-red-600 bg-red-600/10",
-              transferred:      "text-teal-500 bg-teal-500/10",
-              booked:           "text-emerald-700 bg-emerald-700/10",
-              callback_pending: "text-violet-500 bg-violet-500/10",
-              dnc_blocked:      "text-red-400 bg-red-400/10",
-            };
-            return (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">Leads</h3>
-                    <p className="text-xs text-muted-foreground/50 mt-0.5">{total} total imported</p>
-                  </div>
-                </div>
-                {leadsLoading ? (
-                  <div className="space-y-2">
-                    {[1,2,3].map(i => <div key={i} className="h-10 bg-muted rounded-lg animate-pulse" />)}
-                  </div>
-                ) : leads.length === 0 ? (
-                  <div className="py-8 text-center border border-dashed border-border rounded-xl">
-                    <Users className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground/50">No leads yet</p>
-                    <p className="text-xs text-muted-foreground/30 mt-0.5">Leads will appear here as they arrive.</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="rounded-xl border border-border overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/30">
-                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 w-8">#</th>
-                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60">Name / Phone</th>
-                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60">Status</th>
-                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 hidden sm:table-cell">Attempts</th>
-                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 hidden sm:table-cell">Last attempt</th>
-                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground/60 w-10">View</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {leads.map((lead, idx) => (
-                            <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors group">
-                              <td className="px-3 py-2 text-muted-foreground/40">{leadsPage * leadsPageSize + idx + 1}</td>
-                              <td className="px-3 py-2">
-                                <div className="font-medium text-foreground/80">{lead.name ?? "—"}</div>
-                                <div className="text-muted-foreground/50 font-mono">{lead.phone}</div>
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide", statusColors[lead.callStatus] ?? "text-muted-foreground bg-muted/40")}>
-                                  {lead.callStatus.replace(/_/g, " ")}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-muted-foreground/60 hidden sm:table-cell">{lead.callAttempts}</td>
-                              <td className="px-3 py-2 text-muted-foreground/50 hidden sm:table-cell">
-                                {lead.lastAttemptAt ? formatDistanceToNow(new Date(lead.lastAttemptAt), { addSuffix: true }) : "—"}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                {lead.callId ? (
-                                  <button
-                                    onClick={() => setSelectedCallId(lead.callId!)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-foreground inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted/40">
-                                    <Eye className="h-3.5 w-3.5" />
-                                  </button>
-                                ) : <span className="text-muted-foreground/30">—</span>}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <TablePagination
-                      className="mt-3"
-                      page={leadsPage + 1}
-                      totalPages={totalPages}
-                      pageSize={leadsPageSize}
-                      totalItems={total}
-                      onPageChange={p => setLeadsPage(p - 1)}
-                      onPageSizeChange={s => { setLeadsPageSize(s); setLeadsPage(0); }}
-                      pageSizeOptions={[10, 15, 25, 50]}
-                    />
-                  </>
-                )}
+          {/* Webhook — only for non-CSV intake */}
+          {(campaign as any).leadSource !== "csv" && (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
+              <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
+                <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
+                <CopyButton text={webhookUrl} />
               </div>
-            );
-          })()}
-
-          {/* Webhook */}
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
-            <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
-              <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
-              <CopyButton text={webhookUrl} />
             </div>
-          </div>
+          )}
         </div>
       </div>
 

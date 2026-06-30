@@ -5,7 +5,8 @@
  * Keeps existing controls (Start / Pause / Stop / Redial) intact.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { TablePagination } from "@/components/table-pagination";
 import { useRoute, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -122,12 +123,13 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
   const retry = useRetryCampaignLead();
 
   const [page,        setPage]        = useState(0);
+  const [limit,       setLimit]       = useState(25);
   const [status,      setStatus]      = useState("all");
   const [outcome,     setOutcome]     = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [search,      setSearch]      = useState("");
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const LIMIT = 50;
+  const LIMIT = limit;
 
   // Debounce the search input so we don't fire a query on every keystroke.
   useEffect(() => {
@@ -381,16 +383,17 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
       </div>
 
       {/* Pagination */}
-      {total > LIMIT && (
-        <div className="flex items-center justify-between px-5 py-2 border-t border-border/30 text-xs text-muted-foreground/50">
-          <span>{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total.toLocaleString()}</span>
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" className="h-6 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
-            <span className="px-2">{page + 1}/{totalPages}</span>
-            <Button size="sm" variant="ghost" className="h-6 text-xs" disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
-          </div>
-        </div>
-      )}
+      <div className="px-5 py-3 border-t border-border/30">
+        <TablePagination
+          page={page + 1}
+          totalPages={totalPages}
+          pageSize={limit}
+          totalItems={total}
+          onPageChange={p => setPage(p - 1)}
+          onPageSizeChange={s => { setLimit(s); setPage(0); }}
+          pageSizeOptions={[10, 25, 50, 100]}
+        />
+      </div>
 
       {/* Call Detail Drawer */}
       <CallDetailDrawer
