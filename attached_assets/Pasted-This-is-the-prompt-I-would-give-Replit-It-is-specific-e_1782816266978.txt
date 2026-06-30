@@ -1,0 +1,349 @@
+This is the prompt I would give Replit. It is specific enough that it won't accidentally change your backend or break the work you've already done.
+
+
+
+---
+
+
+
+## Campaign & Batch UI Redesign (Frontend Only)
+
+
+
+Redesign the **Campaign** and **Batch** pages to match the modern layout and hierarchy of the provided reference designs while keeping the existing SnapServe dark theme (black background, current colors, typography, buttons, cards, spacing, and branding).
+
+
+
+**This is a UI/UX redesign only. Do NOT modify any backend logic, API endpoints, business logic, scheduler, retry logic, concurrency logic, database schema, routing, or existing functionality.**
+
+
+
+The following functionality must remain exactly as it currently works:
+
+
+
+* Campaign execution
+
+* Batch execution
+
+* Concurrency logic
+
+* Retry logic
+
+* Max attempts
+
+* Redial
+
+* Pause / Resume / Stop
+
+* Call outcomes
+
+* Lead status updates
+
+* Analytics calculations
+
+* Filters
+
+* Search
+
+* Existing APIs
+
+* Existing permissions
+
+* Existing URLs
+
+
+
+Only redesign the interface.
+
+
+
+---
+
+
+
+## Campaign Page
+
+
+
+Simplify the campaign page.
+
+
+
+Remove unnecessary tabs:
+
+
+
+* Operations
+
+* Analytics
+
+* Settings
+
+
+
+Keep only:
+
+
+
+* Overview
+
+
+
+
+
+The campaign page should become a clean campaign dashboard instead of having multiple management tabs.
+
+
+
+The Overview should contain:
+
+
+
+* Campaign summary cards
+
+* Call Funnel
+
+* Batch cards
+
+* Recent Activity
+
+
+
+The Leads tab should show all campaign leads with the existing functionality.
+
+
+
+Remove any duplicated information.
+
+
+
+---
+
+
+
+## Batch Page
+
+
+
+Simplify the Batch page.
+
+
+
+Remove these tabs completely:
+
+
+
+* Overview
+
+* Activity
+
+* Sources
+
+
+
+The batch should directly open into the Leads page.
+
+
+
+The Leads table becomes the primary page.
+
+
+
+Keep every existing feature inside the Leads table:
+
+
+
+* Status filters
+
+* Outcome filters
+
+* Search
+
+* Attempts
+
+* Eye/View action
+
+* External link
+
+* Pagination
+
+* Retry status
+
+* Call status
+
+
+
+Do not remove any functionality.
+
+
+
+---
+
+
+
+## Design Style
+
+
+
+Use the uploaded reference UI only as the layout inspiration.
+
+
+
+Keep SnapServe's existing visual identity:
+
+
+
+* Existing dark theme
+
+* Existing black background
+
+* Existing colors
+
+* Existing fonts
+
+* Existing button styles
+
+* Existing badges
+
+* Existing icons where possible
+
+
+
+Do **not** copy the reference colors.
+
+
+
+Only copy:
+
+
+
+* Layout hierarchy
+
+* Card arrangement
+
+* Spacing
+
+* Visual density
+
+* Simplicity
+
+* Information grouping
+
+
+
+The end result should feel like a premium SnapServe product—not a Lead.io clone.
+
+
+
+---
+
+
+
+## Improve Visual Hierarchy
+
+
+
+Reduce clutter.
+
+
+
+Increase whitespace.
+
+
+
+Use fewer borders.
+
+
+
+Group related information into clean cards.
+
+
+
+Remove unnecessary visual noise.
+
+
+
+Use consistent spacing throughout.
+
+
+
+The page should immediately show the important information without overwhelming the user.
+
+
+
+---
+
+
+
+## Preserve Existing Components
+
+
+
+Reuse the existing React components wherever possible.
+
+
+
+Only rearrange and restyle them.
+
+
+
+Do not rewrite working business components.
+
+
+
+Avoid unnecessary refactoring.
+
+
+
+---
+
+
+
+## Do NOT Break Existing Work
+
+
+
+Several campaign features were recently implemented and must continue working exactly as they do now, including:
+
+
+
+* Rolling concurrency
+
+* Retry scheduling
+
+* Maximum attempts
+
+* Attempt counters
+
+* Callback handling
+
+* Campaign progress
+
+* Call status updates
+
+* Lead actions
+
+* Redial
+
+* Call logs integration
+
+
+
+This redesign must not affect any of these features.
+
+
+
+---
+
+
+
+## Goal
+
+
+
+The final UI should feel like a modern SaaS dashboard.
+
+
+
+It should look cleaner, simpler, and more premium while preserving 100% of the current functionality and backend behavior.
