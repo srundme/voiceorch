@@ -3,17 +3,14 @@ import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
-  useListCampaignLeads,
   useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
 } from "@workspace/api-client-react";
 import type { CampaignBatch } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -32,12 +29,12 @@ import {
   ChevronRight, Calendar, Trash2, Users, Clock, AlertCircle,
   CheckCircle2, X, BarChart3, PhoneCall, ArrowRight, Hash,
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
-  Phone, Eye, Globe, Building2, Zap, ListFilter, Plus,
-  PhoneIncoming, CalendarDays, ArrowRightLeft, Radio, Ban,
-  TrendingUp, DollarSign, Target, Flame, MoreVertical,
+  Phone, Globe, Building2, Zap, ListFilter, Plus,
+  PhoneIncoming, ArrowRightLeft, Radio, Ban,
+  TrendingUp, DollarSign, Target, MoreVertical,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
+import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -618,184 +615,6 @@ function BatchKpiCard({ batch, index, campaignId }: {
   );
 }
 
-// ── Leads mini-table ─────────────────────────────────────────────────────────
-
-function LeadsTab({ campaignId }: { campaignId: number }) {
-  const [page, setPage] = useState(0);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const PAGE_SIZE = 30;
-
-  // API call unchanged — status filter only (outcome is visual-reference only).
-  const { data, isLoading } = useListCampaignLeads(campaignId, {
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
-    ...(statusFilter !== "all" ? { status: statusFilter } : {}),
-  });
-
-  const raw = data as { leads?: unknown[]; total?: number } | unknown[] | undefined;
-  const items = Array.isArray(raw)
-    ? (raw as Record<string, unknown>[])
-    : ((raw as { leads?: Record<string, unknown>[] })?.leads ?? []);
-  const total = Array.isArray(raw)
-    ? items.length
-    : ((raw as { total?: number })?.total ?? 0);
-
-  const STATUS_OPTS = [
-    { key: "all",       label: "All"       },
-    { key: "pending",   label: "Pending"   },
-    { key: "calling",   label: "Calling"   },
-    { key: "completed", label: "Completed" },
-    { key: "failed",    label: "Failed"    },
-    { key: "skipped",   label: "Skipped"   },
-  ];
-  // Visual-reference outcome chips — no filter state, purely presentational grouping.
-  const OUTCOME_CHIPS = [
-    { key: "booking_created",    label: "Booked",      color: "text-emerald-500"        },
-    { key: "transfer_completed", label: "Transferred", color: "text-purple-500"         },
-    { key: "callback_requested", label: "Callback",    color: "text-amber-500"          },
-    { key: "interest_confirmed", label: "Interested",  color: "text-orange-500"         },
-    { key: "no_contact",         label: "No Contact",  color: "text-muted-foreground/60"},
-    { key: "failed",             label: "Failed",      color: "text-red-500"            },
-  ];
-
-  return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      {/* Filter bar — STATUS (functional) + OUTCOME (visual reference grouping) */}
-      <div className="px-5 py-3 border-b border-border">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {/* STATUS — functional filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Status</span>
-            <div className="flex items-center gap-0.5 flex-wrap">
-              {STATUS_OPTS.map(s => (
-                <button key={s.key} onClick={() => { setStatusFilter(s.key); setPage(0); }}
-                  className={cn("text-xs font-medium px-2.5 py-1 rounded transition-colors",
-                    statusFilter === s.key ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted/40"
-                  )}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="h-4 w-px bg-border/50 shrink-0" />
-          {/* OUTCOME — visual reference (no onClick, no new state) */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider shrink-0">Outcome</span>
-            <div className="flex items-center gap-1 flex-wrap">
-              {OUTCOME_CHIPS.map(o => (
-                <span key={o.key} className={cn("text-xs font-medium px-2 py-0.5 rounded select-none", o.color)}>
-                  {o.label}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="ml-auto flex items-center gap-2 shrink-0">
-            {statusFilter !== "all" && (
-              <button onClick={() => { setStatusFilter("all"); setPage(0); }}
-                className="text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
-                Clear filter
-              </button>
-            )}
-            <span className="text-xs text-muted-foreground/40">{isLoading ? "…" : total} leads</span>
-          </div>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="divide-y divide-border/40">{[...Array(4)].map((_, i) => (
-          <div key={i} className="flex gap-3 px-5 py-3 animate-pulse">
-            <Skeleton className="h-4 w-16 rounded" /><Skeleton className="h-4 w-28 rounded" /><Skeleton className="h-4 w-24 rounded ml-auto" />
-          </div>
-        ))}</div>
-      ) : items.length === 0 ? (
-        <div className="py-12 text-center">
-          <Users className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground/40">No leads match the current filter</p>
-          {statusFilter !== "all" && (
-            <button onClick={() => { setStatusFilter("all"); setPage(0); }}
-              className="mt-3 text-xs text-muted-foreground/60 underline-offset-2 hover:text-foreground hover:underline transition-colors">
-              Clear filter
-            </button>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/20 border-b border-border/60">
-                  {/* Lead → Status → Outcome → Attempts → Last Activity → Actions */}
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest">Lead</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest">Status</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest hidden sm:table-cell">Outcome</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest">Attempts</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground/40 uppercase tracking-widest hidden md:table-cell">Last Activity</th>
-                  <th className="px-4 py-2.5 w-10" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {items.map(lead => {
-                  const callStatus = String(lead["callStatus"] ?? "");
-                  const oc = String(lead["operationalOutcome"] ?? "");
-                  const la = lead["lastAttemptAt"] ? String(lead["lastAttemptAt"]) : null;
-                  const statusCfg = callStatusCfg(callStatus);
-                  const ocCfg = outcomeCfg(oc);
-                  return (
-                    <tr key={String(lead["id"])} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/40 text-xs font-semibold text-muted-foreground/70 shrink-0">
-                            {(String(lead["name"] ?? "").trim().charAt(0) || String(lead["phone"] ?? "").charAt(0) || "?").toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-foreground truncate max-w-[120px]">{String(lead["name"] ?? "—")}</p>
-                            <p className="text-xs font-mono text-muted-foreground/60">{String(lead["phone"] ?? "")}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border", statusCfg.cls)}>
-                          {statusCfg.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 hidden sm:table-cell">
-                        <span className={cn("text-xs font-medium", ocCfg.color)}>
-                          {oc ? ocCfg.label : "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{String(lead["callAttempts"] ?? 0)}</td>
-                      <td className="px-4 py-2.5 hidden md:table-cell">
-                        <span className="text-xs text-muted-foreground/60">
-                          {la ? formatDistanceToNow(new Date(la), { addSuffix: true }) : "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <a href={`${BASE}/app/campaigns/${campaignId}/leads/${String(lead["id"])}`}
-                          className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted transition-colors">
-                          <Eye className="h-3.5 w-3.5 text-muted-foreground/40" />
-                        </a>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {total > PAGE_SIZE && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-border/60 bg-muted/10">
-              <p className="text-xs text-muted-foreground/40">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}</p>
-              <div className="flex gap-1.5">
-                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>Next</Button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -808,7 +627,6 @@ export default function CampaignDetailPage() {
   const [deletingBatch, setDeletingBatch] = useState<CampaignBatch | null>(null);
   const deleteBatch = useDeleteCampaignBatch();
   const update = useUpdateCampaign();
-  const [activeTab, setActiveTab] = useState("overview");
 
   async function handleStatusChange(status: "active" | "paused" | "draft") {
     try {
@@ -838,7 +656,6 @@ export default function CampaignDetailPage() {
   const imported    = analytics?.imported    ?? campaign?.totalLeads  ?? 0;
   const called      = analytics?.called      ?? campaign?.calledLeads ?? 0;
   const connected   = analytics?.connected   ?? 0;
-  const interested  = analytics?.interested  ?? 0;
   const booked      = analytics?.booked      ?? 0;
   const transferred = analytics?.transferred ?? 0;
   const failed      = analytics?.failed      ?? 0;
@@ -956,152 +773,90 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="h-auto bg-transparent p-0 gap-1 border-0 -mb-px overflow-x-auto flex-nowrap mt-3">
-            {(["overview", "leads"] as const).map(tab => (
-              <TabsTrigger key={tab} value={tab}
-                className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:border-b-[3px] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        {/* Content */}
+        <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
+          {/* View Analytics */}
+          <div className="flex items-center justify-end">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+              onClick={() => setLocation("/app/analytics")}>
+              <BarChart3 className="h-3 w-3" /> View Analytics
+            </Button>
+          </div>
 
-          {/* ── Overview ────────────────────────────────────────────────────── */}
-          <TabsContent value="overview" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              {/* Summary stat tiles — connected strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
-                {[
-                  { label: "Leads",     value: imported,          pct: null,                              icon: <Users className="h-4 w-4" />,         accent: "text-blue-500",    tint: "bg-blue-500/10",    badge: "" },
-                  { label: "Called",    value: called,            pct: calledPct > 0 ? calledPct : null,  icon: <PhoneCall className="h-4 w-4" />,      accent: "text-sky-500",     tint: "bg-sky-500/10",     badge: "text-sky-500" },
-                  { label: "Connected", value: connected,         pct: connRate > 0 ? connRate : null,    icon: <Activity className="h-4 w-4" />,       accent: "text-cyan-500",    tint: "bg-cyan-500/10",    badge: "text-emerald-500" },
-                  { label: "Booked",    value: booked,            pct: bookRate > 0 ? bookRate : null,    icon: <Target className="h-4 w-4" />,         accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "text-emerald-500" },
-                  { label: "Callbacks", value: analytics?.callbacks ?? 0, pct: null,                      icon: <Clock className="h-4 w-4" />,          accent: "text-amber-500",   tint: "bg-amber-500/10",   badge: "" },
-                  { label: "Transfers", value: transferred,       pct: null,                              icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500",  tint: "bg-purple-500/10",  badge: "text-purple-500" },
-                  { label: "Success",   value: `${successRate}%`, pct: null,                              icon: <TrendingUp className="h-4 w-4" />,     accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "" },
-                ].map(kpi => (
-                  <div key={kpi.label} className="bg-card px-4 py-3.5 flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", kpi.tint, kpi.accent)}>
-                        {kpi.icon}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-lg font-bold text-foreground tabular-nums leading-none">
-                          {typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
-                        </p>
-                        <p className="text-xs text-muted-foreground/50 mt-1 truncate">{kpi.label}</p>
-                      </div>
-                    </div>
-                    {kpi.pct !== null && (
-                      <span className={cn("text-xs font-semibold tabular-nums", kpi.badge || "text-muted-foreground/50")}>{kpi.pct}%</span>
-                    )}
+          {/* Summary stat tiles — connected strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
+            {[
+              { label: "Leads",     value: imported,          pct: null,                              icon: <Users className="h-4 w-4" />,         accent: "text-blue-500",    tint: "bg-blue-500/10",    badge: "" },
+              { label: "Called",    value: called,            pct: calledPct > 0 ? calledPct : null,  icon: <PhoneCall className="h-4 w-4" />,      accent: "text-sky-500",     tint: "bg-sky-500/10",     badge: "text-sky-500" },
+              { label: "Connected", value: connected,         pct: connRate > 0 ? connRate : null,    icon: <Activity className="h-4 w-4" />,       accent: "text-cyan-500",    tint: "bg-cyan-500/10",    badge: "text-emerald-500" },
+              { label: "Booked",    value: booked,            pct: bookRate > 0 ? bookRate : null,    icon: <Target className="h-4 w-4" />,         accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "text-emerald-500" },
+              { label: "Callbacks", value: analytics?.callbacks ?? 0, pct: null,                      icon: <Clock className="h-4 w-4" />,          accent: "text-amber-500",   tint: "bg-amber-500/10",   badge: "" },
+              { label: "Transfers", value: transferred,       pct: null,                              icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500",  tint: "bg-purple-500/10",  badge: "text-purple-500" },
+              { label: "Success",   value: `${successRate}%`, pct: null,                              icon: <TrendingUp className="h-4 w-4" />,     accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "" },
+            ].map(kpi => (
+              <div key={kpi.label} className="bg-card px-4 py-3.5 flex flex-col gap-1.5">
+                <div className="flex items-center gap-2.5">
+                  <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", kpi.tint, kpi.accent)}>
+                    {kpi.icon}
                   </div>
+                  <div className="min-w-0">
+                    <p className="text-lg font-bold text-foreground tabular-nums leading-none">
+                      {typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
+                    </p>
+                    <p className="text-xs text-muted-foreground/50 mt-1 truncate">{kpi.label}</p>
+                  </div>
+                </div>
+                {kpi.pct !== null && (
+                  <span className={cn("text-xs font-semibold tabular-nums", kpi.badge || "text-muted-foreground/50")}>{kpi.pct}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Batches */}
+          <div>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Batches</h3>
+                <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 shrink-0"
+                onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                <Plus className="h-3 w-3" /> New Batch
+              </Button>
+            </div>
+            {batchLoading ? (
+              <div className="grid grid-cols-1 gap-3">
+                {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
+              </div>
+            ) : !batches?.length ? (
+              <div className="py-10 text-center border border-dashed border-border rounded-xl">
+                <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground/50">No batches yet</p>
+                <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
+                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
+                  onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                  <Plus className="h-3 w-3" /> Create First Batch
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {batches.map((batch, i) => (
+                  <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
                 ))}
               </div>
+            )}
+          </div>
 
-              {/* Call Funnel */}
-              <div className="bg-card border border-border/60 rounded-xl p-5">
-                <div className="flex items-start justify-between gap-3 mb-5">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">Call Funnel</h3>
-                    <p className="text-xs text-muted-foreground/50 mt-0.5">Track your call journey at a glance</p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {analytics && connRate > 0 && <span className="text-xs text-sky-500 font-medium">{connRate}% conn.</span>}
-                    {analytics && bookRate > 0  && <span className="text-xs text-emerald-500 font-medium">{bookRate}% booked</span>}
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                      onClick={() => setLocation("/app/analytics")}>
-                      <BarChart3 className="h-3 w-3" /> View Analytics
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-0 overflow-x-auto pb-1">
-                  {[
-                    { label: "Imported",    value: imported,    icon: <Upload className="h-4 w-4" />,         accent: "text-blue-500",    tint: "bg-blue-500/10" },
-                    { label: "Called",      value: called,      icon: <PhoneCall className="h-4 w-4" />,      accent: "text-sky-500",     tint: "bg-sky-500/10" },
-                    { label: "Connected",   value: connected,   icon: <Activity className="h-4 w-4" />,       accent: "text-cyan-500",    tint: "bg-cyan-500/10" },
-                    { label: "Interested",  value: interested,  icon: <Flame className="h-4 w-4" />,          accent: "text-orange-500",  tint: "bg-orange-500/10" },
-                    { label: "Booked",      value: booked,      icon: <CalendarDays className="h-4 w-4" />,   accent: "text-emerald-500", tint: "bg-emerald-500/10" },
-                    { label: "Transferred", value: transferred, icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500",  tint: "bg-purple-500/10" },
-                  ].map((stage, i, arr) => (
-                    <div key={stage.label} className="flex items-center shrink-0">
-                      <div className="flex flex-col items-center px-3 min-w-[92px]">
-                        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center mb-2", stage.tint, stage.accent)}>{stage.icon}</div>
-                        <p className="text-lg font-bold tabular-nums leading-none">{stage.value.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">{stage.label}</p>
-                      </div>
-                      {i < arr.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/20 mx-0.5 shrink-0" />}
-                    </div>
-                  ))}
-                </div>
-                {imported > 0 && (
-                  <div className="mt-5">
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary/40 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
-                    </div>
-                    <div className="flex justify-between mt-1.5 text-xs text-muted-foreground/40">
-                      <span>{called.toLocaleString()} called</span>
-                      <span>{(imported - called).toLocaleString()} remaining</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Batches */}
-              <div>
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">Batches</h3>
-                    <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
-                  </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 shrink-0"
-                    onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                    <Plus className="h-3 w-3" /> New Batch
-                  </Button>
-                </div>
-                {batchLoading ? (
-                  <div className="grid grid-cols-1 gap-3">
-                    {[1, 2].map(i => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}
-                  </div>
-                ) : !batches?.length ? (
-                  <div className="py-10 text-center border border-dashed border-border rounded-xl">
-                    <Layers className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground/50">No batches yet</p>
-                    <p className="text-xs text-muted-foreground/30 mt-0.5 mb-4">Create a batch to start calling leads</p>
-                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs"
-                      onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                      <Plus className="h-3 w-3" /> Create First Batch
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-3">
-                    {batches.map((batch, i) => (
-                      <BatchKpiCard key={batch.id} batch={batch} index={i} campaignId={campaignId} />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Webhook */}
-              <div className="bg-card border border-border rounded-xl p-4">
-                <p className="text-xs text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
-                <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
-                  <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
-                  <CopyButton text={webhookUrl} />
-                </div>
-              </div>
+          {/* Webhook */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
+            <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
+              <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
+              <CopyButton text={webhookUrl} />
             </div>
-          </TabsContent>
-
-          {/* ── Leads ───────────────────────────────────────────────────────── */}
-          <TabsContent value="leads" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              <LeadsTab campaignId={campaignId} />
-            </div>
-          </TabsContent>
-
-        </Tabs>
+          </div>
+        </div>
       </div>
 
       <AlertDialog open={!!deletingBatch} onOpenChange={v => { if (!v) setDeletingBatch(null); }}>
