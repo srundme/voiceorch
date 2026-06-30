@@ -10,9 +10,9 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar, Download,
+  Upload, Archive, Info, AlertCircle, Calendar,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -21,7 +21,7 @@ import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
-  useListCalls, getListCallsQueryKey, useListCalendars, customFetch,
+  useListCalendars, customFetch,
   useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
   useArchiveAgentVersion, useDeleteAgentVersion,
@@ -78,7 +78,7 @@ const DASH_API   = `${_DASH_BASE}/api`;
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 
-type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "logs" | "versions";
+type TabId = "overview" | "prompt" | "voice" | "tools" | "analysis" | "voicemail" | "advanced" | "versions";
 
 interface TabDef { id: TabId; label: string; icon: React.ReactNode }
 
@@ -90,7 +90,6 @@ const TABS: TabDef[] = [
   { id: "analysis",    label: "Analysis",    icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { id: "voicemail",   label: "Voicemail",   icon: <VoicemailIcon className="h-3.5 w-3.5" /> },
   { id: "advanced",    label: "Advanced",    icon: <SlidersHorizontal className="h-3.5 w-3.5" /> },
-  { id: "logs",        label: "Logs",        icon: <List className="h-3.5 w-3.5" /> },
   { id: "versions",    label: "Versions",    icon: <History className="h-3.5 w-3.5" /> },
 ];
 
@@ -2752,321 +2751,6 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
   );
 }
 
-/* ── Logs tab ───────────────────────────────────────────────────────────────── */
-
-const STATUS_LABELS: Record<string, string> = {
-  completed: "Completed", failed: "Failed", in_progress: "In Progress",
-  pending: "Pending", cancelled: "Cancelled", transferred: "Transferred",
-  booked: "Booked", callback_scheduled: "Callback", voicemail: "Voicemail",
-};
-
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  completed:         { bg: "bg-emerald-500/10", text: "text-emerald-400" },
-  failed:            { bg: "bg-red-500/10",     text: "text-red-400" },
-  in_progress:       { bg: "bg-blue-500/10",    text: "text-blue-400" },
-  pending:           { bg: "bg-zinc-500/10",    text: "text-zinc-400" },
-  cancelled:         { bg: "bg-zinc-500/10",    text: "text-zinc-400" },
-  transferred:       { bg: "bg-amber-500/10",   text: "text-amber-400" },
-  booked:            { bg: "bg-teal-500/10",    text: "text-teal-400" },
-  callback_scheduled:{ bg: "bg-orange-500/10",  text: "text-orange-400" },
-  voicemail:         { bg: "bg-purple-500/10",  text: "text-purple-400" },
-};
-
-const fmtDur = (s?: number | null) => {
-  if (!s) return "—";
-  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-};
-
-const csvEscape = (v: string) =>
-  /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-
-/** A browser "Live Test" (Webcall) call — labelled via metadata.transport at
- *  creation; falls back to the synthetic caller-id prefix for older rows. */
-const isWebCall = (call: { metadata?: string | null; fromNumber?: string | null }): boolean => {
-  if (call.metadata) {
-    try {
-      const md = JSON.parse(call.metadata) as { transport?: string };
-      if (md.transport === "webcall") return true;
-    } catch { /* not JSON — fall through */ }
-  }
-  return (call.fromNumber ?? "").startsWith("webcall-user-");
-};
-
-function LogsTab({ agentId }: { agentId: number }) {
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [search,       setSearch]       = useState("");
-  const [startDate,    setStartDate]    = useState("");
-  const [endDate,      setEndDate]      = useState("");
-  const [dateOpen,     setDateOpen]     = useState(false);
-  const [page,         setPage]         = useState(1);
-  const PAGE_SIZE = 25;
-
-  const { data: calls = [], isLoading } = useListCalls(
-    { agentId },
-    { query: { queryKey: getListCallsQueryKey({ agentId }) } }
-  );
-
-  const filtered = useMemo(() => {
-    let r = [...calls];
-    if (statusFilter !== "all") r = r.filter(c => c.status === statusFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      r = r.filter(c =>
-        String(c.id).includes(q) ||
-        c.toNumber?.toLowerCase().includes(q) ||
-        c.fromNumber?.toLowerCase().includes(q)
-      );
-    }
-    if (startDate) {
-      const startMs = new Date(`${startDate}T00:00:00`).getTime();
-      r = r.filter(c => parseISO(c.createdAt).getTime() >= startMs);
-    }
-    if (endDate) {
-      const endMs = new Date(`${endDate}T23:59:59.999`).getTime();
-      r = r.filter(c => parseISO(c.createdAt).getTime() <= endMs);
-    }
-    return r;
-  }, [calls, statusFilter, search, startDate, endDate]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd   = Math.min(page * PAGE_SIZE, filtered.length);
-
-  const dateLabel = startDate || endDate
-    ? `${startDate ? format(parseISO(startDate), "MMM d, yyyy") : "…"} – ${endDate ? format(parseISO(endDate), "MMM d, yyyy") : "…"}`
-    : "Date Range";
-
-  const handleExport = () => {
-    const header = ["Call Type", "Call ID", "Phone Number", "Status", "Start Time", "Duration", "Cost"];
-    const rows = filtered.map(c => {
-      const costCents = c.costCents;
-      return [
-        "Live Call",
-        `#${c.id}`,
-        c.toNumber || c.fromNumber || "",
-        STATUS_LABELS[c.status] ?? c.status,
-        format(parseISO(c.createdAt), "MMM d, yyyy h:mm a"),
-        fmtDur(c.durationSeconds),
-        costCents != null ? `$${(costCents / 100).toFixed(3)}` : "",
-      ];
-    });
-    const csv = [header, ...rows].map(r => r.map(v => csvEscape(String(v))).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `agent-${agentId}-call-logs.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 px-6 py-3 border-b border-border shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
-          <Input
-            className="h-9 pl-9 w-full text-xs bg-background/50"
-            placeholder="Search by Call ID or Phone Number…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-          />
-        </div>
-
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="h-9 text-xs w-40 bg-background/50">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent position="popper">
-            <SelectItem value="all" className="text-xs">All Statuses</SelectItem>
-            <SelectItem value="completed" className="text-xs">Completed</SelectItem>
-            <SelectItem value="failed" className="text-xs">Failed</SelectItem>
-            <SelectItem value="in_progress" className="text-xs">In Progress</SelectItem>
-            <SelectItem value="pending" className="text-xs">Pending</SelectItem>
-            <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
-            <SelectItem value="transferred" className="text-xs">Transferred</SelectItem>
-            <SelectItem value="booked" className="text-xs">Booked</SelectItem>
-            <SelectItem value="voicemail" className="text-xs">Voicemail</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Popover open={dateOpen} onOpenChange={setDateOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "h-9 text-xs gap-2 bg-background/50 font-normal justify-start min-w-[180px]",
-                !(startDate || endDate) && "text-muted-foreground"
-              )}
-            >
-              <Calendar className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{dateLabel}</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 p-3 space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground">Start date</Label>
-              <Input
-                type="date"
-                className="h-8 text-xs bg-background/50"
-                value={startDate}
-                max={endDate || undefined}
-                onChange={e => { setStartDate(e.target.value); setPage(1); }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground">End date</Label>
-              <Input
-                type="date"
-                className="h-8 text-xs bg-background/50"
-                value={endDate}
-                min={startDate || undefined}
-                onChange={e => { setEndDate(e.target.value); setPage(1); }}
-              />
-            </div>
-            {(startDate || endDate) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-full text-xs"
-                onClick={() => { setStartDate(""); setEndDate(""); setPage(1); }}
-              >
-                Clear dates
-              </Button>
-            )}
-          </PopoverContent>
-        </Popover>
-
-        <Button
-          variant="outline"
-          className="h-9 text-xs gap-2 bg-background/50 ml-auto"
-          onClick={handleExport}
-          disabled={filtered.length === 0}
-        >
-          <Download className="h-3.5 w-3.5" /> Export
-        </Button>
-      </div>
-
-      {/* Table */}
-      <div className="relative flex-1 overflow-auto min-h-0">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent border-b border-border">
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pl-6 w-[140px]">Call Type</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[90px]">Call ID</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[170px]">Phone Number</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[140px]">Status</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11">
-                <span className="inline-flex items-center gap-1">Start Time <ChevronDown className="h-3 w-3" /></span>
-              </TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 w-[110px]">Duration</TableHead>
-              <TableHead className="text-[11px] font-medium text-muted-foreground/60 h-11 pr-6 w-[110px] text-right">Cost</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <TableRow key={i} className="border-b border-border/40">
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <TableCell
-                      key={j}
-                      className={cn("py-3.5", j === 0 && "pl-6", j === 6 && "pr-6")}
-                    >
-                      <Skeleton className={cn("h-3", j === 6 ? "h-3 w-12 ml-auto" : "w-16")} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : pageItems.length > 0 ? (
-              pageItems.map(call => {
-                const isWeb = isWebCall(call);
-                const costCents = call.costCents;
-                const sc = STATUS_COLORS[call.status] ?? { bg: "bg-zinc-500/10", text: "text-zinc-400" };
-                return (
-                  <TableRow key={call.id} className="hover:bg-muted/20 border-b border-border/40 cursor-default">
-                    <TableCell className="py-3.5 pl-6">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground/80">
-                        {isWeb
-                          ? <Globe className="h-3.5 w-3.5 text-muted-foreground/50" />
-                          : <Phone className="h-3.5 w-3.5 text-muted-foreground/50" />}
-                        {isWeb ? "Web Call" : "Live Call"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="py-3.5 font-mono text-xs text-muted-foreground/50">
-                      #{call.id}
-                    </TableCell>
-                    <TableCell className="py-3.5 font-mono text-xs text-foreground/80">
-                      {isWeb
-                        ? <span className="text-muted-foreground/25">—</span>
-                        : (call.toNumber || call.fromNumber || <span className="text-muted-foreground/25">—</span>)}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground/70">
-                        <span className={cn("h-1.5 w-1.5 rounded-full", sc.text.replace("text-", "bg-"))} />
-                        {STATUS_LABELS[call.status] ?? call.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="py-3.5 text-xs text-muted-foreground/60 whitespace-nowrap">
-                      {format(parseISO(call.createdAt), "MMM d, yyyy h:mm a")}
-                    </TableCell>
-                    <TableCell className="py-3.5 font-mono text-xs text-muted-foreground/60">
-                      {fmtDur(call.durationSeconds)}
-                    </TableCell>
-                    <TableCell className="py-3.5 pr-6 font-mono text-xs text-foreground/70 text-right">
-                      {costCents != null ? `$${(costCents / 100).toFixed(3)}` : "—"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="h-64">
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-                    <div className="h-12 w-12 rounded-full bg-muted/20 flex items-center justify-center">
-                      <Phone className="h-5 w-5 text-muted-foreground/20" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground/50">No call logs available</p>
-                      <p className="text-xs text-muted-foreground/30 mt-0.5">There are no items to display at this time.</p>
-                    </div>
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Pagination footer */}
-      <div className="shrink-0 flex items-center justify-between px-6 py-3 border-t border-border text-xs text-muted-foreground/50">
-        <div>
-          {rangeStart}–{rangeEnd} of {filtered.length}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-7 px-2.5 rounded-md border border-border hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
-          >‹</button>
-          <span className="px-3">Page {page} of {totalPages}</span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            className="h-7 px-2.5 rounded-md border border-border hover:bg-muted/30 disabled:opacity-30 disabled:cursor-not-allowed"
-          >›</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Version status badge ────────────────────────────────────────────────────── */
-
 function VersionStatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; className: string }> = {
     production: { label: "Production",  className: "bg-green-500/15 text-green-400 border-green-500/30" },
@@ -4911,11 +4595,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       </div>
 
       {/* Tab content */}
-      {activeTab === "logs" ? (
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <LogsTab agentId={agent.id} />
-        </div>
-      ) : activeTab === "versions" ? (
+      {activeTab === "versions" ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           <VersionsTab agentId={agent.id} />
         </div>
