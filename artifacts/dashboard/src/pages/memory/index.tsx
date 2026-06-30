@@ -91,6 +91,22 @@ function initials(name: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
+/* Deterministic accent palette — gives avatars stable, varied accent color. */
+const AVATAR_ACCENTS = [
+  "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+  "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  "bg-rose-500/10 text-rose-500 border-rose-500/20",
+  "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+];
+
+function accentFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_ACCENTS[h % AVATAR_ACCENTS.length]!;
+}
+
 function humanize(key: string): string {
   return key
     .replace(/[_-]+/g, " ")
@@ -114,16 +130,16 @@ function callDirection(call: Call): Direction {
 /* ─── Deterministic fact icon mapping (icons stay, colors are neutral) ────── */
 type FactIcon = typeof FileText;
 
-const FACT_KEYWORDS: Array<{ test: RegExp; Icon: FactIcon }> = [
-  { test: /(location|address|city|area|region|place)/i, Icon: MapPin },
-  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, Icon: DollarSign },
-  { test: /(follow|reminder|next step|action)/i, Icon: Bell },
-  { test: /(time|schedule|when|date|appointment|preference)/i, Icon: Clock },
-  { test: /(concern|question|issue|problem|objection)/i, Icon: HelpCircle },
-  { test: /(interest|policy|product|plan|service|offer)/i, Icon: FileText },
-  { test: /(name|contact|person|customer|client|caller)/i, Icon: User },
-  { test: /(email|phone|number|mobile)/i, Icon: Hash },
-  { test: /(note|comment|message|detail|summary)/i, Icon: MessageSquare },
+const FACT_KEYWORDS: Array<{ test: RegExp; Icon: FactIcon; accent: string }> = [
+  { test: /(location|address|city|area|region|place)/i, Icon: MapPin, accent: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, Icon: DollarSign, accent: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
+  { test: /(follow|reminder|next step|action)/i, Icon: Bell, accent: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  { test: /(time|schedule|when|date|appointment|preference)/i, Icon: Clock, accent: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+  { test: /(concern|question|issue|problem|objection)/i, Icon: HelpCircle, accent: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
+  { test: /(interest|policy|product|plan|service|offer)/i, Icon: FileText, accent: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  { test: /(name|contact|person|customer|client|caller)/i, Icon: User, accent: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },
+  { test: /(email|phone|number|mobile)/i, Icon: Hash, accent: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+  { test: /(note|comment|message|detail|summary)/i, Icon: MessageSquare, accent: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
 ];
 
 function factIcon(key: string): FactIcon {
@@ -133,12 +149,19 @@ function factIcon(key: string): FactIcon {
   return Tag;
 }
 
+function factAccent(key: string): string {
+  for (const { test, accent } of FACT_KEYWORDS) {
+    if (test.test(key)) return accent;
+  }
+  return "bg-indigo-500/10 text-indigo-500 border-indigo-500/20";
+}
+
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
 function AgentAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
   const dims = size === "lg" ? "w-12 h-12 text-[15px]" : size === "sm" ? "w-8 h-8 text-[11px]" : "w-10 h-10 text-[13px]";
   return (
-    <div className={`${dims} rounded-xl bg-muted/50 border border-border/60 flex items-center justify-center shrink-0`}>
-      <span className="font-semibold text-muted-foreground tracking-tight">{initials(name)}</span>
+    <div className={`${dims} rounded-xl border flex items-center justify-center shrink-0 ${accentFor(name)}`}>
+      <span className="font-semibold tracking-tight">{initials(name)}</span>
     </div>
   );
 }
@@ -201,6 +224,7 @@ function AgentRow({
 /* ─── Section card (consistent premium container) ────────────────────────── */
 function SectionCard({
   icon: Icon, title, count, action, children, bodyClassName = "p-4",
+  accent = "bg-muted/40 text-muted-foreground/70 border-transparent",
 }: {
   icon: FactIcon;
   title: string;
@@ -208,13 +232,14 @@ function SectionCard({
   action?: React.ReactNode;
   children: React.ReactNode;
   bodyClassName?: string;
+  accent?: string;
 }) {
   return (
     <section className="rounded-xl border border-border/50 bg-card overflow-hidden">
       <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-muted/40 flex items-center justify-center shrink-0">
-            <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />
+          <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${accent}`}>
+            <Icon className="w-3.5 h-3.5" />
           </div>
           <h3 className="text-[13px] font-semibold text-foreground truncate">{title}</h3>
           {count != null && (
@@ -251,6 +276,7 @@ function FactCard({
   onDeleted?: () => void;
 }) {
   const Icon = factIcon(fact.key);
+  const accent = factAccent(fact.key);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const deleteFact = useDeleteCallerFact();
@@ -278,7 +304,7 @@ function FactCard({
 
   return (
     <div className="group rounded-xl border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors p-3.5 flex items-start gap-3 relative">
-      <div className="w-8 h-8 rounded-lg bg-muted/50 border border-border/50 flex items-center justify-center shrink-0 text-muted-foreground/70">
+      <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${accent}`}>
         <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0 flex-1 pr-6">
@@ -419,14 +445,14 @@ function TimelineFeed({
 
 /* ─── Call History ───────────────────────────────────────────────────────── */
 function DirectionBadge({ direction }: { direction: Direction }) {
-  const cfg: Record<Direction, { label: string; icon: React.ReactNode }> = {
-    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" /> },
-    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" /> },
-    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" /> },
+  const cfg: Record<Direction, { label: string; icon: React.ReactNode; cls: string }> = {
+    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" />, cls: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
+    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" />, cls: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
+    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" />,        cls: "text-purple-500 bg-purple-500/10 border-purple-500/20" },
   };
   const c = cfg[direction];
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
+    <span className={`inline-flex items-center gap-1 text-[10px] font-medium rounded-md border px-1.5 py-0.5 ${c.cls}`}>
       {c.icon}{c.label}
     </span>
   );
@@ -574,10 +600,11 @@ function CallerAvatar({ contact, size = "md" }: { contact: CallerContact; size?:
   const dims = size === "lg" ? "w-11 h-11 rounded-2xl" : "w-9 h-9 rounded-xl";
   const iconDim = size === "lg" ? "w-5 h-5" : "w-4 h-4";
   const txt = size === "lg" ? "text-[13px]" : "text-[11px]";
+  const accent = accentFor(contact.name || contact.phoneNumber);
   if (isWebCaller(contact.phoneNumber)) {
     return (
-      <div className={`${dims} bg-muted/50 border border-border/60 flex items-center justify-center shrink-0`}>
-        <Globe className={`${iconDim} text-muted-foreground`} />
+      <div className={`${dims} border flex items-center justify-center shrink-0 ${accent}`}>
+        <Globe className={iconDim} />
       </div>
     );
   }
@@ -585,8 +612,8 @@ function CallerAvatar({ contact, size = "md" }: { contact: CallerContact; size?:
     ? initials(contact.name)
     : contact.phoneNumber.slice(-2).toUpperCase();
   return (
-    <div className={`${dims} bg-muted/50 border border-border/60 flex items-center justify-center shrink-0`}>
-      <span className={`${txt} font-semibold text-muted-foreground`}>{label}</span>
+    <div className={`${dims} border flex items-center justify-center shrink-0 ${accent}`}>
+      <span className={`${txt} font-semibold`}>{label}</span>
     </div>
   );
 }
@@ -801,14 +828,19 @@ function CallerDetailView({
         {/* Per-caller stat band — clean spaced cells, hierarchy via type weight */}
         <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total Calls", value: String(contact.callCount) },
-            { label: "Facts",       value: String(contact.factCount) },
-            { label: "Episodes",    value: String(contact.archiveCount) },
-            { label: "Last Active", value: timeAgo(contact.lastCalledAt) },
+            { label: "Total Calls", value: String(contact.callCount),    icon: <Phone className="h-4 w-4 text-blue-500" />,    accent: "text-blue-500" },
+            { label: "Facts",       value: String(contact.factCount),    icon: <FileText className="h-4 w-4 text-purple-500" />, accent: "text-purple-500" },
+            { label: "Episodes",    value: String(contact.archiveCount), icon: <Layers className="h-4 w-4 text-amber-500" />,  accent: "text-amber-500" },
+            { label: "Last Active", value: timeAgo(contact.lastCalledAt),icon: <Clock className="h-4 w-4 text-emerald-500" />, accent: "text-foreground" },
           ].map(s => (
-            <div key={s.label} className="rounded-xl border border-border/50 bg-card px-4 py-3 min-w-0">
-              <p className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">{s.label}</p>
-              <p className="text-[20px] font-semibold text-foreground tabular-nums leading-none mt-2 truncate">{s.value}</p>
+            <div key={s.label} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 min-w-0">
+              <div className="h-8 w-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
+                {s.icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-widest leading-none mb-1.5">{s.label}</p>
+                <p className={`text-lg font-semibold tabular-nums leading-none truncate ${s.accent}`}>{s.value}</p>
+              </div>
             </div>
           ))}
         </div>
@@ -827,7 +859,7 @@ function CallerDetailView({
             <TabsTrigger
               key={t.value}
               value={t.value}
-              className="relative rounded-none border-b-2 border-transparent bg-transparent px-3 pb-3 pt-3 text-[13px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              className="relative rounded-none border-b-2 border-transparent bg-transparent px-3 pb-3 pt-3 text-[13px] font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
             >
               {t.label}
             </TabsTrigger>
@@ -843,7 +875,7 @@ function CallerDetailView({
             <>
               {/* Overview: Memory Summary up top, then previews that deep-link into the tabs */}
               <TabsContent value="overview" className="mt-0 space-y-5">
-                <SectionCard icon={Brain} title="Memory Summary">
+                <SectionCard icon={Brain} title="Memory Summary" accent="bg-purple-500/10 text-purple-500 border-purple-500/20">
                   {contact.summary ? (
                     <p className="text-[13px] text-muted-foreground leading-relaxed">{contact.summary}</p>
                   ) : (
@@ -857,6 +889,7 @@ function CallerDetailView({
                   icon={FileText}
                   title="What the agent knows"
                   count={facts.length}
+                  accent="bg-blue-500/10 text-blue-500 border-blue-500/20"
                   action={facts.length > previewFacts.length
                     ? <ViewAllLink label="View all" onClick={() => setTab("facts")} />
                     : undefined}
@@ -877,6 +910,7 @@ function CallerDetailView({
                   icon={Layers}
                   title="Recent episodes"
                   count={episodes.length}
+                  accent="bg-amber-500/10 text-amber-500 border-amber-500/20"
                   action={displayEpisodes.length > previewEpisodes.length
                     ? <ViewAllLink label="View all" onClick={() => setTab("episodes")} />
                     : undefined}
@@ -892,6 +926,7 @@ function CallerDetailView({
                   icon={Phone}
                   title="Call history"
                   count={callerCalls.length}
+                  accent="bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                   action={callerCalls.length > previewCalls.length
                     ? <ViewAllLink label="View all" onClick={() => setTab("calls")} />
                     : undefined}
@@ -912,11 +947,11 @@ function CallerDetailView({
               {/* Facts */}
               <TabsContent value="facts" className="mt-0">
                 {facts.length === 0 ? (
-                  <SectionCard icon={FileText} title="What the agent knows">
+                  <SectionCard icon={FileText} title="What the agent knows" accent="bg-blue-500/10 text-blue-500 border-blue-500/20">
                     <p className="text-[12.5px] text-muted-foreground py-6 text-center">No facts extracted for this caller yet.</p>
                   </SectionCard>
                 ) : (
-                  <SectionCard icon={FileText} title="What the agent knows" count={facts.length}>
+                  <SectionCard icon={FileText} title="What the agent knows" count={facts.length} accent="bg-blue-500/10 text-blue-500 border-blue-500/20">
                     <FactsGrid
                       facts={facts.map(f => ({ ...f, phoneNumber: contact.phoneNumber }))}
                       agentId={agentId}
@@ -929,7 +964,7 @@ function CallerDetailView({
 
               {/* Episodes */}
               <TabsContent value="episodes" className="mt-0">
-                <SectionCard icon={Layers} title="Conversation episodes" count={displayEpisodes.length || undefined}>
+                <SectionCard icon={Layers} title="Conversation episodes" count={displayEpisodes.length || undefined} accent="bg-amber-500/10 text-amber-500 border-amber-500/20">
                   {displayEpisodes.length === 0 ? (
                     <p className="text-[12.5px] text-muted-foreground py-6 text-center">No conversation episodes recorded for this caller yet.</p>
                   ) : (
@@ -940,14 +975,14 @@ function CallerDetailView({
 
               {/* Timeline */}
               <TabsContent value="timeline" className="mt-0">
-                <SectionCard icon={Clock} title="Activity timeline">
+                <SectionCard icon={Clock} title="Activity timeline" accent="bg-purple-500/10 text-purple-500 border-purple-500/20">
                   <TimelineFeed facts={facts} episodes={displayEpisodes} />
                 </SectionCard>
               </TabsContent>
 
               {/* Call History */}
               <TabsContent value="calls" className="mt-0">
-                <SectionCard icon={Phone} title="Call history" count={callerCalls.length || undefined} bodyClassName="p-2">
+                <SectionCard icon={Phone} title="Call history" count={callerCalls.length || undefined} bodyClassName="p-2" accent="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
                   {callsLoading ? (
                     <div className="space-y-2 p-2">
                       {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
@@ -1084,18 +1119,18 @@ export default function MemoryPage() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
       {/* Header */}
-      <div className="px-6 pt-6 pb-5 border-b border-border/40 shrink-0">
+      <div className="px-6 pt-6 pb-5 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-muted/40 border border-border/50 flex items-center justify-center shrink-0">
-            <Brain className="h-5 w-5 text-muted-foreground" />
+          <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
+            <Brain className="h-5 w-5 text-purple-500" />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50 mb-1">
-              Customer Intelligence
-            </p>
             <h1 className="text-xl font-semibold tracking-tight text-foreground leading-none">
-              Memory / CRM
+              Customer Intelligence
             </h1>
+            <p className="text-xs text-muted-foreground/60 mt-1.5">
+              Memory / CRM
+            </p>
           </div>
         </div>
       </div>
