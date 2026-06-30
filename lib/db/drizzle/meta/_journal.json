@@ -225,6 +225,13 @@
       "when": 1784200000000,
       "tag": "0031_concurrent_limit_default_15",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784300000000,
+      "tag": "0032_callback_triggered_call_id",
+      "breakpoints": true
     }
   ]
 }
