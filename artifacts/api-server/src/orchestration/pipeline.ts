@@ -5,7 +5,7 @@ import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
-import { makeThinkFilter, stripReasoningBlocks } from "./reasoningFilter.js";
+import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
@@ -1405,13 +1405,16 @@ export class OrchestrationPipeline {
           );
           greeting = fallback;
         }
-        // Strip <think> reasoning blocks and any <emotion>/<break> markup tags
-        // that some models emit — TTS must receive plain text only.
-        greeting = stripReasoningBlocks(greeting)
-          .replace(/<\/?emotion[^>]*>/gi, "")
-          .replace(/<break[^>]*\/?>/gi, "")
-          .replace(/[^\S\r\n]{2,}/g, " ")
-          .trim();
+        // Strip <think> reasoning blocks, JSON message wrappers, and any
+        // <emotion>/<break> markup tags that some models emit — TTS must
+        // receive plain text only.
+        greeting = stripJsonMessageWrapper(
+          stripReasoningBlocks(greeting)
+            .replace(/<\/?emotion[^>]*>/gi, "")
+            .replace(/<break[^>]*\/?>/gi, "")
+            .replace(/[^\S\r\n]{2,}/g, " ")
+            .trim(),
+        );
       }
 
       if (!greeting.trim() || this.closed) return;
@@ -3476,7 +3479,7 @@ export class OrchestrationPipeline {
     // they don't appear in the transcript UI or pollute conversation history.
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
-    const cleanResponse = stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim();
+    const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
@@ -4008,7 +4011,7 @@ export class OrchestrationPipeline {
 
     // Compute the fully-cleaned response BEFORE the final flush so the spoken
     // tail and the stored history are derived from the exact same text.
-    const cleanResponse = stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim();
+    const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
 
     // Final flush: prefer the fullReply-derived remainder over the possibly-
     // truncated pendingText, and enqueue any non-empty trailing text — a length

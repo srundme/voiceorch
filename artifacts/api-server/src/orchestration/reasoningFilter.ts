@@ -143,3 +143,34 @@ export function stripReasoningBlocks(text: string): string {
 }
 
 export const __test = { findEarliestTag, maxPartialTagSuffix, MAX_TAG_LEN };
+
+// ── JSON message-wrapper stripping ───────────────────────────────────────────
+
+/**
+ * Some LLM system prompts instruct the model to respond in JSON:
+ *   {"message": "Hi Karthi! Welcome to VoiceOrch."}
+ *
+ * Strip the wrapper and return only the inner text so TTS and the transcript
+ * receive plain speech, not a JSON literal. Only strips when the ENTIRE
+ * trimmed string is a single {"message":"..."} object — never mutates
+ * ordinary text that happens to contain JSON fragments.
+ */
+export function stripJsonMessageWrapper(text: string): string {
+  const t = text.trim();
+  // Match: optional whitespace, {"message":"<content>"}, optional whitespace
+  // Content may contain JSON escape sequences (\n, \t, \", \\, etc.)
+  const m = t.match(/^\{\s*"message"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}$/s);
+  if (!m) return text;
+  try {
+    // Let JSON.parse handle all escape sequences correctly
+    return JSON.parse(`"${m[1]!}"`) as string;
+  } catch {
+    // Fallback manual unescape for the common cases
+    return m[1]!
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+}
