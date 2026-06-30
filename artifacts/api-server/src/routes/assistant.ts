@@ -112,6 +112,9 @@ For voice agents, the system prompt must be:
 7. Scope boundaries: "If asked about anything outside [topic], say 'I can only help with X'"
 8. End conditions: "End the call when customer confirms their appointment OR says goodbye"
 
+⚠️ CRITICAL RULE FOR SYSTEM PROMPT REWRITES:
+When proposing a new systemPrompt value you MUST write the COMPLETE, FULL replacement text — never a stub, never a placeholder, never "..." or "[rest of prompt]". The proposed_value must preserve EVERY task, step, language rule, tone, and behavior from the original prompt — just written more concisely. Removing filler words is good. Dropping entire task flows or steps is forbidden. If the user's prompt has 10 instructions, the rewrite must still have all 10 instructions. You have the full original systemPrompt in the agent data — use it.
+
 ## PLATFORM PAGES
 /app/command-center — Home dashboard with stats
 /app/agents — Create and manage voice agents
@@ -253,7 +256,7 @@ async function executeTool(cmd: string, args: Record<string, unknown>, clerkUser
         firstSpeaker: agent.firstSpeaker ?? "assistant",
         greetingMessage: agent.greetingMessage,
         systemPromptLength: (agent.systemPrompt ?? "").length,
-        systemPromptPreview: (agent.systemPrompt ?? "").slice(0, 200),
+        systemPrompt: agent.systemPrompt ?? "",
         vadSilenceMs: config.vadSilenceMs ?? 350,
         bargeInEnabled: config.bargeInEnabled ?? false,
         backchannelingEnabled: agent.backchannelingEnabled ?? false,
