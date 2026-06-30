@@ -10,6 +10,9 @@ export type CampaignFieldMappings = {
 
 export type BatchLeadSource = "csv" | "meta" | "webhook";
 
+export type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
+export type CampaignTriggerMode = "instant" | "batch";
+
 export type DuplicatePolicy = "ignore" | "skip" | "reject_with_report";
 
 // ── Operational Outcome (system-generated, immutable) ─────────────────────────
@@ -45,6 +48,8 @@ export const campaignsTable = pgTable("campaigns", {
   hmacSecret:           text("hmac_secret"),
   lastWebhookAt:        timestamp("last_webhook_at", { withTimezone: true }),
   lastWebhookStatus:    text("last_webhook_status"),
+  leadSource:           text("lead_source").notNull().default("csv"),
+  triggerMode:          text("trigger_mode").notNull().default("batch"),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

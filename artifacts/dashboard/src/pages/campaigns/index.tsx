@@ -35,6 +35,7 @@ import {
   Pencil, Trash2, Users, CalendarDays,
   CheckCircle2, PlayCircle, PauseCircle, XCircle,
   Target, Layers, ArrowRight,
+  Globe, Zap, Upload, Instagram,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -130,16 +131,38 @@ function CampaignRow({
       className="group flex items-center gap-4 px-5 py-4 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0 relative"
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
-      {/* Icon */}
-      <div className="h-9 w-9 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
-        <Megaphone className="h-4 w-4 text-muted-foreground/40" />
-      </div>
+      {/* Icon — reflects lead source */}
+      {(() => {
+        const src = (campaign as unknown as Record<string, unknown>)["leadSource"] as string ?? "csv";
+        const iconMap: Record<string, React.ReactNode> = {
+          webhook:   <Globe className="h-4 w-4 text-blue-500" />,
+          meta_ads:  <Instagram className="h-4 w-4 text-purple-500" />,
+          csv:       <Upload className="h-4 w-4 text-muted-foreground/40" />,
+          crm:       <Layers className="h-4 w-4 text-amber-500" />,
+        };
+        return (
+          <div className="h-9 w-9 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
+            {iconMap[src] ?? <Megaphone className="h-4 w-4 text-muted-foreground/40" />}
+          </div>
+        );
+      })()}
 
       {/* Name + description */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
           <CampaignStatusBadge status={campaign.status} />
+          {(() => {
+            const src = (campaign as unknown as Record<string, unknown>)["leadSource"] as string ?? "csv";
+            const trig = (campaign as unknown as Record<string, unknown>)["triggerMode"] as string ?? "batch";
+            const srcOpt = SOURCE_OPTIONS.find(o => o.value === src);
+            return srcOpt ? (
+              <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground/60 border border-border/60">
+                {srcOpt.label}
+                {trig === "instant" && <Zap className="h-2 w-2 text-emerald-500" />}
+              </span>
+            ) : null;
+          })()}
         </div>
         {campaign.description ? (
           <p className="text-xs text-muted-foreground/50 truncate mt-0.5">{campaign.description}</p>
@@ -205,12 +228,56 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "agent", "phone", "settings", "review"] as const;
+const WIZARD_STEPS = ["info", "source", "agent", "phone", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
+  info: "Details", source: "Source", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
 };
+
+type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
+type CampaignTriggerMode = "instant" | "batch";
+
+const SOURCE_OPTIONS: {
+  value: CampaignLeadSource;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  defaultTrigger: CampaignTriggerMode;
+}[] = [
+  {
+    value: "webhook",
+    label: "Website / Form",
+    description: "Leads from your website enquiry forms. Each submission triggers an immediate call.",
+    icon: <Globe className="h-5 w-5" />,
+    defaultTrigger: "instant",
+  },
+  {
+    value: "meta_ads",
+    label: "Meta Ads",
+    description: "Instagram and Facebook Lead Ads. New leads are called automatically as they arrive.",
+    icon: <Instagram className="h-5 w-5" />,
+    defaultTrigger: "instant",
+  },
+  {
+    value: "csv",
+    label: "CSV / Bulk Upload",
+    description: "Upload a spreadsheet of leads. Calls are organised into batches you manage manually.",
+    icon: <Upload className="h-5 w-5" />,
+    defaultTrigger: "batch",
+  },
+  {
+    value: "crm",
+    label: "CRM",
+    description: "Import leads from your CRM. Calls are organised into batches you manage manually.",
+    icon: <Layers className="h-5 w-5" />,
+    defaultTrigger: "batch",
+  },
+];
+
+function sourceLabel(s: CampaignLeadSource): string {
+  return SOURCE_OPTIONS.find(o => o.value === s)?.label ?? s;
+}
 
 function CampaignWizard({
   open,
@@ -235,6 +302,8 @@ function CampaignWizard({
   const [step, setStep] = useState<WizardStep>("info");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+  const [leadSource, setLeadSource] = useState<CampaignLeadSource>("webhook");
+  const [triggerMode, setTriggerMode] = useState<CampaignTriggerMode>("instant");
   const [agentId, setAgentId] = useState<number | null>(null);
   const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [concurrentCallLimit, setConcurrentCallLimit] = useState<number | null>(null);
@@ -253,8 +322,9 @@ function CampaignWizard({
   );
 
   function reset() {
-    setStep("info"); setName(""); setDesc(""); setAgentId(null);
-    setFromNumber(null); setConcurrentCallLimit(null);
+    setStep("info"); setName(""); setDesc("");
+    setLeadSource("webhook"); setTriggerMode("instant");
+    setAgentId(null); setFromNumber(null); setConcurrentCallLimit(null);
     setConsentBasisType(""); setConsentSource(""); setConsentDateRange("");
     setConsentProofRef(""); setConsentNotes("");
   }
@@ -279,6 +349,7 @@ function CampaignWizard({
 
   function canNext(): boolean {
     if (step === "info") return name.trim().length > 0;
+    if (step === "source") return !!leadSource;
     if (step === "agent") return agentId !== null;
     if (step === "phone") return fromNumber !== null;
     return true;
@@ -307,7 +378,7 @@ function CampaignWizard({
       : undefined;
     try {
       await create.mutateAsync({
-        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit: effectiveConcurrency, consentBasis },
+        data: { name: name.trim(), description: desc.trim() || undefined, agentId, fromNumber: fromNumber ?? undefined, concurrentCallLimit: effectiveConcurrency, consentBasis, leadSource, triggerMode } as Parameters<typeof create.mutateAsync>[0]["data"],
       });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign created", description: name.trim() });
@@ -359,6 +430,58 @@ function CampaignWizard({
               <div className="space-y-1.5">
                 <Label className="text-xs">Description <span className="text-muted-foreground/40">(optional)</span></Label>
                 <Input placeholder="Short description of this campaign…" value={desc} onChange={e => setDesc(e.target.value)} className="h-9 text-xs" />
+              </div>
+            </div>
+          )}
+
+          {step === "source" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Lead Source</h3>
+                <p className="text-xs text-muted-foreground/60">Where will leads come from? This determines how calls are triggered.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {SOURCE_OPTIONS.map(opt => {
+                  const isSelected = leadSource === opt.value;
+                  return (
+                    <button key={opt.value} type="button"
+                      onClick={() => { setLeadSource(opt.value); setTriggerMode(opt.defaultTrigger); }}
+                      className={cn(
+                        "text-left p-4 rounded-xl border transition-all",
+                        isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" :
+                        "border-border bg-card hover:bg-muted/30 hover:border-foreground/20"
+                      )}
+                    >
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
+                          isSelected ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
+                        )}>
+                          {opt.icon}
+                        </div>
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                          <p className="text-xs text-muted-foreground/60 mt-0.5 leading-relaxed">{opt.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        {opt.defaultTrigger === "instant" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                            <Zap className="h-2.5 w-2.5" /> Instant dial
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                            <Layers className="h-2.5 w-2.5" /> Batch-wise
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600">
+                          <CheckCircle2 className="h-3 w-3" /> Selected
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -505,6 +628,8 @@ function CampaignWizard({
                 {[
                   { label: "Campaign Name", value: name, mono: false },
                   { label: "Description",   value: desc || "—", mono: false },
+                  { label: "Lead Source",   value: sourceLabel(leadSource), mono: false },
+                  { label: "Trigger",       value: triggerMode === "instant" ? "Instant — auto-dial on arrival" : "Batch-wise — manual batch management", mono: false },
                   { label: "Agent",         value: selectedAgent?.name ?? "—", mono: false },
                   { label: "From Number",   value: fromNumber ?? "—", mono: true },
                   { label: "Concurrent Calls", value: String(effectiveConcurrency), mono: true },

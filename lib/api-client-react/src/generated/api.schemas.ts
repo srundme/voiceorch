@@ -1903,6 +1903,30 @@ export const CampaignStatus = {
  */
 export type CampaignFieldMappings = {[key: string]: string};
 
+/**
+ * Primary lead source for this campaign
+ */
+export type CampaignLeadSource = typeof CampaignLeadSource[keyof typeof CampaignLeadSource];
+
+
+export const CampaignLeadSource = {
+  csv: 'csv',
+  webhook: 'webhook',
+  meta_ads: 'meta_ads',
+  crm: 'crm',
+} as const;
+
+/**
+ * How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.
+ */
+export type CampaignTriggerMode = typeof CampaignTriggerMode[keyof typeof CampaignTriggerMode];
+
+
+export const CampaignTriggerMode = {
+  instant: 'instant',
+  batch: 'batch',
+} as const;
+
 export interface Campaign {
   id: number;
   name: string;
@@ -1921,9 +1945,31 @@ export interface Campaign {
   /** Maximum concurrent calls allowed for this campaign */
   concurrentCallLimit: number;
   isActive: boolean;
+  /** Primary lead source for this campaign */
+  leadSource: CampaignLeadSource;
+  /** How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually. */
+  triggerMode: CampaignTriggerMode;
   createdAt: string;
   updatedAt: string;
 }
+
+export type CampaignCreateLeadSource = typeof CampaignCreateLeadSource[keyof typeof CampaignCreateLeadSource];
+
+
+export const CampaignCreateLeadSource = {
+  csv: 'csv',
+  webhook: 'webhook',
+  meta_ads: 'meta_ads',
+  crm: 'crm',
+} as const;
+
+export type CampaignCreateTriggerMode = typeof CampaignCreateTriggerMode[keyof typeof CampaignCreateTriggerMode];
+
+
+export const CampaignCreateTriggerMode = {
+  instant: 'instant',
+  batch: 'batch',
+} as const;
 
 /**
  * Maps lead source field names to roles. Defaults to {phone:'phone'} if omitted.
@@ -1959,6 +2005,8 @@ export interface CampaignCreate {
   name: string;
   description?: string;
   agentId: number;
+  leadSource?: CampaignCreateLeadSource;
+  triggerMode?: CampaignCreateTriggerMode;
   /** Maps lead source field names to roles. Defaults to {phone:'phone'} if omitted. */
   fieldMappings?: CampaignCreateFieldMappings;
   fromNumber?: string;
@@ -2001,6 +2049,24 @@ export const CampaignUpdateStatus = {
   paused: 'paused',
 } as const;
 
+export type CampaignUpdateLeadSource = typeof CampaignUpdateLeadSource[keyof typeof CampaignUpdateLeadSource];
+
+
+export const CampaignUpdateLeadSource = {
+  csv: 'csv',
+  webhook: 'webhook',
+  meta_ads: 'meta_ads',
+  crm: 'crm',
+} as const;
+
+export type CampaignUpdateTriggerMode = typeof CampaignUpdateTriggerMode[keyof typeof CampaignUpdateTriggerMode];
+
+
+export const CampaignUpdateTriggerMode = {
+  instant: 'instant',
+  batch: 'batch',
+} as const;
+
 /**
  * Maps lead source field names to roles.
  */
@@ -2011,6 +2077,8 @@ export interface CampaignUpdate {
   description?: string;
   agentId?: number;
   status?: CampaignUpdateStatus;
+  leadSource?: CampaignUpdateLeadSource;
+  triggerMode?: CampaignUpdateTriggerMode;
   /** Maps lead source field names to roles. */
   fieldMappings?: CampaignUpdateFieldMappings;
   fromNumber?: string;

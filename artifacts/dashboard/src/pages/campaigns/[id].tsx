@@ -782,10 +782,12 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button size="sm" className="h-8 text-xs gap-1.5"
-              onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-              <Plus className="h-3.5 w-3.5" /> Create Batch
-            </Button>
+            {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" && (
+              <Button size="sm" className="h-8 text-xs gap-1.5"
+                onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                <Plus className="h-3.5 w-3.5" /> Create Batch
+              </Button>
+            )}
             {(campaign.status === "active" || campaign.status === "paused") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

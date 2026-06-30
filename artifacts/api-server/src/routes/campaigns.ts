@@ -91,8 +91,10 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     retryDelayMinutes:     row.retryDelayMinutes,
     totalLeads:            row.totalLeads,
     calledLeads:           row.calledLeads,
-    concurrentCallLimit: row.concurrentCallLimit,
+    concurrentCallLimit:   row.concurrentCallLimit,
     isActive:              row.isActive,
+    leadSource:            row.leadSource ?? "csv",
+    triggerMode:           row.triggerMode ?? "batch",
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };
@@ -201,6 +203,8 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     callDelaySeconds:    parsed.data.callDelaySeconds,
     maxAttempts:         parsed.data.maxAttempts,
     retryDelayMinutes:   parsed.data.retryDelayMinutes,
+    leadSource:          (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv",
+    triggerMode:         (parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch",
     webhookToken:        randomUUID(),
   }).returning();
 
