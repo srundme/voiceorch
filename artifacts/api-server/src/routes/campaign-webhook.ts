@@ -18,7 +18,7 @@
 
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { db, campaignsTable, campaignLeadsTable, campaignBatchesTable, leadTimelineTable } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, campaignBatchesTable, leadTimelineTable, agentsTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -114,11 +114,12 @@ function verifyHmacSignature(
  */
 async function getOrCreateLiveBatch(
   campaignId: number,
+  timezone = "Asia/Kolkata",
 ): Promise<typeof campaignBatchesTable.$inferSelect | null> {
   const now       = new Date();
-  // Use IST (Asia/Kolkata) so day boundaries match Indian calendar dates,
-  // not UTC which rolls over 5h30m earlier.
-  const batchName = `Live — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}`;
+  // Use the agent's configured IANA timezone so daily batch boundaries match
+  // the agent's local calendar date, not UTC.
+  const batchName = `Live — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: timezone })}`;
 
   // Check for an existing auto-batch created today for this campaign
   const existing = await db.query.campaignBatchesTable.findFirst({
@@ -214,9 +215,21 @@ async function insertLeadAndSchedule(opts: {
   // create (or reuse) today's "Live — {date}" batch so the call fires immediately.
   // CSV leads always arrive pre-assigned to a manually created batch — unchanged.
   const isWebhookSource = opts.source === "webhook" || opts.source === "instagram_ads";
+
+  // Resolve the agent's IANA timezone for date-boundary decisions.
+  let agentTimezone = "Asia/Kolkata";
+  if (campaign.agentId) {
+    const agent = await db.query.agentsTable.findFirst({
+      where: eq(agentsTable.id, campaign.agentId),
+      columns: { agentConfig: true },
+    });
+    const tz = (agent?.agentConfig as Record<string, unknown> | null)?.["timezone"];
+    if (typeof tz === "string" && tz.length > 0) agentTimezone = tz;
+  }
+
   const targetBatch =
     runningBatch ??
-    (isWebhookSource ? await getOrCreateLiveBatch(opts.campaignId) : null);
+    (isWebhookSource ? await getOrCreateLiveBatch(opts.campaignId, agentTimezone) : null);
 
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
