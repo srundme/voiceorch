@@ -3,10 +3,10 @@ import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
-  useGetBatchWorkspaceKpis,
-  getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
+  useGetBatchWorkspaceKpis, useListCampaignLeads,
+  getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getListCampaignLeadsQueryKey,
 } from "@workspace/api-client-react";
-import type { CampaignBatch } from "@workspace/api-client-react";
+import type { CampaignBatch, CampaignLead } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -740,11 +740,16 @@ export default function CampaignDetailPage() {
     }
   }
 
+  const [leadsPage, setLeadsPage] = useState(0);
+  const LEADS_PAGE_SIZE = 15;
+
   const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 30_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 30_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: leadsData, isLoading: leadsLoading } = useListCampaignLeads(campaignId, { limit: LEADS_PAGE_SIZE, offset: leadsPage * LEADS_PAGE_SIZE }, { query: { refetchInterval: 15_000 } as any });
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
@@ -894,6 +899,14 @@ export default function CampaignDetailPage() {
               <Button size="sm" className="h-8 text-xs gap-1.5"
                 onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
                 <Plus className="h-3.5 w-3.5" /> Create Batch
+              </Button>
+            )}
+            {/* Instant trigger: Activate button for draft campaigns */}
+            {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant"
+              && campaign.status === "draft" && (
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => void handleStatusChange("active")}>
+                <Zap className="h-3.5 w-3.5" /> Activate
               </Button>
             )}
             {/* Instant trigger campaigns get inline Pause / Resume / Stop buttons */}
@@ -1131,6 +1144,107 @@ export default function CampaignDetailPage() {
             <p className="text-xs text-muted-foreground/30 mt-0.5">Leads dial automatically as they arrive via the webhook URL above.</p>
           </div>
           )}
+
+          {/* Leads table — all campaigns */}
+          {(() => {
+            const leads: CampaignLead[] = leadsData?.leads ?? [];
+            const total: number = leadsData?.total ?? 0;
+            const totalPages = Math.ceil(total / LEADS_PAGE_SIZE);
+            const statusColors: Record<string, string> = {
+              pending:          "text-muted-foreground/60 bg-muted/40",
+              queued:           "text-amber-500 bg-amber-500/10",
+              calling:          "text-blue-500 bg-blue-500/10",
+              connected:        "text-emerald-500 bg-emerald-500/10",
+              completed:        "text-emerald-600 bg-emerald-600/10",
+              no_pickup:        "text-orange-500 bg-orange-500/10",
+              busy:             "text-orange-400 bg-orange-400/10",
+              voicemail:        "text-purple-500 bg-purple-500/10",
+              failed:           "text-red-500 bg-red-500/10",
+              exhausted:        "text-red-600 bg-red-600/10",
+              transferred:      "text-teal-500 bg-teal-500/10",
+              booked:           "text-emerald-700 bg-emerald-700/10",
+              callback_pending: "text-violet-500 bg-violet-500/10",
+              dnc_blocked:      "text-red-400 bg-red-400/10",
+            };
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Leads</h3>
+                    <p className="text-xs text-muted-foreground/50 mt-0.5">{total} total imported</p>
+                  </div>
+                </div>
+                {leadsLoading ? (
+                  <div className="space-y-2">
+                    {[1,2,3].map(i => <div key={i} className="h-10 bg-muted rounded-lg animate-pulse" />)}
+                  </div>
+                ) : leads.length === 0 ? (
+                  <div className="py-8 text-center border border-dashed border-border rounded-xl">
+                    <Users className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground/50">No leads yet</p>
+                    <p className="text-xs text-muted-foreground/30 mt-0.5">Leads will appear here as they arrive.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-xl border border-border overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/30">
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 w-8">#</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60">Name / Phone</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60">Status</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 hidden sm:table-cell">Attempts</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground/60 hidden sm:table-cell">Last attempt</th>
+                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground/60">Call</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {leads.map((lead, idx) => (
+                            <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                              <td className="px-3 py-2 text-muted-foreground/40">{leadsPage * LEADS_PAGE_SIZE + idx + 1}</td>
+                              <td className="px-3 py-2">
+                                <div className="font-medium text-foreground/80">{lead.name ?? "—"}</div>
+                                <div className="text-muted-foreground/50 font-mono">{lead.phone}</div>
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide", statusColors[lead.callStatus] ?? "text-muted-foreground bg-muted/40")}>
+                                  {lead.callStatus.replace(/_/g, " ")}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground/60 hidden sm:table-cell">{lead.callAttempts}</td>
+                              <td className="px-3 py-2 text-muted-foreground/50 hidden sm:table-cell">
+                                {lead.lastAttemptAt ? formatDistanceToNow(new Date(lead.lastAttemptAt), { addSuffix: true }) : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {lead.callId ? (
+                                  <button
+                                    onClick={() => setLocation(`/app/calls/${lead.callId}`)}
+                                    className="text-muted-foreground/50 hover:text-foreground transition-colors inline-flex items-center gap-1">
+                                    <PhoneCall className="h-3 w-3" /> <ArrowRight className="h-2.5 w-2.5" />
+                                  </button>
+                                ) : <span className="text-muted-foreground/30">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-3">
+                        <span className="text-xs text-muted-foreground/50">Page {leadsPage + 1} of {totalPages}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Button size="sm" variant="outline" className="h-7 text-xs px-2"
+                            disabled={leadsPage === 0} onClick={() => setLeadsPage(p => p - 1)}>← Prev</Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs px-2"
+                            disabled={leadsPage >= totalPages - 1} onClick={() => setLeadsPage(p => p + 1)}>Next →</Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Webhook */}
           <div className="bg-card border border-border rounded-xl p-4">
