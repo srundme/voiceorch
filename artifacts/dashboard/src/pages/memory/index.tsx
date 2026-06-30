@@ -613,11 +613,6 @@ function CallerListRow({
               Web
             </span>
           )}
-          {contact.lastCallDropped && (
-            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-amber-400 border-amber-500/30 bg-amber-500/10 shrink-0">
-              Dropped
-            </span>
-          )}
         </div>
         {callerSubLabel(contact) && (
           <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5">{callerSubLabel(contact)}</p>
@@ -775,11 +770,6 @@ function CallerDetailView({
               {web && (
                 <span className="text-[10px] font-medium rounded-md px-1.5 py-0.5 text-muted-foreground bg-elevated border border-border/60">
                   Web
-                </span>
-              )}
-              {contact.lastCallDropped && (
-                <span className="text-[10px] font-medium rounded-md px-1.5 py-0.5 text-amber-400 bg-amber-500/10 border border-amber-500/20">
-                  Last call dropped
                 </span>
               )}
             </div>
