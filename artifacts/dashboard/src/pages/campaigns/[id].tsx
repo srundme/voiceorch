@@ -9,6 +9,7 @@ import {
 import type { CampaignBatch } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -739,13 +740,15 @@ export default function CampaignDetailPage() {
       {/* Header */}
       <div className="px-6 pt-5 pb-0 border-b border-border shrink-0">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 text-xs mb-2 min-w-0">
-          <Link href="/app/campaigns" className="text-muted-foreground/50 hover:text-foreground transition-colors shrink-0">
-            Campaigns
-          </Link>
-          <ChevronRight className="h-3 w-3 text-muted-foreground/30 shrink-0" />
-          <span className="text-foreground/70 font-medium truncate">{campaign.name}</span>
-        </div>
+        <DetailNav
+          className="mb-2"
+          backTo="/app/campaigns"
+          backLabel="Back to Campaigns"
+          crumbs={[
+            { label: "Campaigns", href: "/app/campaigns" },
+            { label: campaign.name },
+          ]}
+        />
         {/* Title row */}
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="min-w-0">

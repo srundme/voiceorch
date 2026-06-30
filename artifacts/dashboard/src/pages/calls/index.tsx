@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import { format, parseISO } from "date-fns";
 import {
   Search, Phone, Mic, Cpu, Volume2, DollarSign,
@@ -230,17 +231,41 @@ function MiniStat({ label, value, icon, trend }: { label: string; value: string;
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function CallsList() {
   const [, navigate] = useLocation();
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [agentFilter, setAgentFilter] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [sortBy, setSortBy] = useState<string>("newest");
+
+  // Initialize filters/search/pagination from the URL so returning here via the
+  // shared Back control (which uses history.back) restores the prior view.
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [statusFilter, setStatusFilter] = useState<string>(() => initialParams.get("status") ?? "all");
+  const [agentFilter, setAgentFilter] = useState<string>(() => initialParams.get("agent") ?? "all");
+  const [searchQuery, setSearchQuery] = useState(() => initialParams.get("q") ?? "");
+  const [dateFrom, setDateFrom] = useState(() => initialParams.get("from") ?? "");
+  const [dateTo, setDateTo] = useState(() => initialParams.get("to") ?? "");
+  const [sortBy, setSortBy] = useState<string>(() => initialParams.get("sort") ?? "newest");
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const p = parseInt(initialParams.get("page") ?? "1", 10);
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  });
   const [pageInput, setPageInput] = useState("");
 
   const PAGE_SIZE = 100;
+
+  // Mirror filter/search/pagination state into the URL query string (replace, so
+  // we don't spam history) so it can be restored on return.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (agentFilter !== "all") params.set("agent", agentFilter);
+    if (searchQuery.trim()) params.set("q", searchQuery);
+    if (dateFrom) params.set("from", dateFrom);
+    if (dateTo) params.set("to", dateTo);
+    if (sortBy !== "newest") params.set("sort", sortBy);
+    if (currentPage > 1) params.set("page", String(currentPage));
+    const qs = params.toString();
+    const next = qs ? `/app/calls?${qs}` : "/app/calls";
+    const current = `/app/calls${window.location.search}`;
+    if (next !== current) navigate(next, { replace: true });
+  }, [statusFilter, agentFilter, searchQuery, dateFrom, dateTo, sortBy, currentPage, navigate]);
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     {
@@ -260,6 +285,9 @@ export default function CallsList() {
   const { data: agents } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() },
   });
+
+  // Restore the table scroll position when returning to this list.
+  const callsScrollRef = useScrollRestoration<HTMLDivElement>("calls-list", !callsLoading);
 
   // Client-side search filter
   const filteredCalls = useMemo(() => {
@@ -315,8 +343,14 @@ export default function CallsList() {
     return result;
   }, [calls, searchQuery, dateFrom, dateTo, sortBy]);
 
-  // Reset to page 1 whenever any filter/search/sort changes
+  // Reset to page 1 whenever any filter/search/sort changes — but NOT on the
+  // initial mount, so a page restored from the URL survives.
+  const filtersInitialized = useRef(false);
   useEffect(() => {
+    if (!filtersInitialized.current) {
+      filtersInitialized.current = true;
+      return;
+    }
     setCurrentPage(1);
   }, [statusFilter, agentFilter, searchQuery, dateFrom, dateTo, sortBy]);
 
@@ -644,7 +678,7 @@ export default function CallsList() {
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto px-6">
+        <div ref={callsScrollRef} className="flex-1 overflow-auto px-6">
           <div className="overflow-x-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10">

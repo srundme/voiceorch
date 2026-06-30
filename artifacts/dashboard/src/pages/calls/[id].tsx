@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
-  ArrowLeft, Download, FileText, AlertTriangle, Info, Bot, User,
+  Download, FileText, AlertTriangle, Info, Bot, User,
   Receipt, Sparkles, ClipboardList, Pencil, Check, X, Zap,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Phone, Calendar, Clock, TrendingUp,
   BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, ArrowUpRight, UserCheck,
@@ -22,6 +22,7 @@ import {
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1006,11 +1007,9 @@ export function CallDetailContent({
         </div>
         <p className="text-sm font-medium text-foreground/40">Call not found</p>
         <p className="text-xs text-muted-foreground/30 mt-1">The call may have been deleted or you may not have access</p>
-        <Link href="/app/calls">
-          <Button variant="outline" size="sm" className="mt-4 gap-1.5">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Calls
-          </Button>
-        </Link>
+        <div className="mt-4">
+          <DetailNav backTo="/app/calls" backLabel="Back to Calls" />
+        </div>
       </div>
     );
   }
@@ -1081,13 +1080,10 @@ export function CallDetailContent({
         <div className="flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3">
             {!drawerMode ? (
-              <Link href="/app/calls">
-                <Button variant="outline" size="icon" className="h-8 w-8">
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </Link>
+              <DetailNav backTo="/app/calls" backLabel="Back to Calls" />
             ) : (
               <div className="flex items-center gap-1">
+                <DetailNav backLabel="Close" onBack={onClose} preferOnBack className="mr-1" />
                 <Button
                   variant="outline"
                   size="icon"
@@ -1139,16 +1135,6 @@ export function CallDetailContent({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {drawerMode && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent transition-colors"
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
             {call.recordingUrl ? (
               <button
                 type="button"

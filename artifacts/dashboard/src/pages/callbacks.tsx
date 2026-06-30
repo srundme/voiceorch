@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { format, formatDistanceToNow, isPast } from "date-fns";
@@ -450,11 +451,24 @@ function CallbackList({
 export default function CallbacksPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [tab, setTab] = useState("pending");
-  const [reasonFilter, setReasonFilter] = useState("all");
+  const [, navigate] = useLocation();
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [tab, setTab] = useState(() => initialParams.get("tab") ?? "pending");
+  const [reasonFilter, setReasonFilter] = useState(() => initialParams.get("reason") ?? "all");
   const [toCancel, setToCancel] = useState<CallbackItem | null>(null);
   const [toReschedule, setToReschedule] = useState<CallbackItem | null>(null);
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
+
+  // Mirror tab + filter into the URL so returning to this page restores them.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (tab !== "pending") params.set("tab", tab);
+    if (reasonFilter !== "all") params.set("reason", reasonFilter);
+    const qs = params.toString();
+    const next = qs ? `/app/callbacks?${qs}` : "/app/callbacks";
+    const current = `/app/callbacks${window.location.search}`;
+    if (next !== current) navigate(next, { replace: true });
+  }, [tab, reasonFilter, navigate]);
 
   const { data: stats } = useQuery<CallbackStats>({
     queryKey: ["callbacks", "stats"],

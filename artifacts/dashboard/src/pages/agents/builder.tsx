@@ -35,6 +35,7 @@ import { agentFormSchema } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -4529,6 +4530,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-3">
+          <DetailNav backTo="/app/agents" backLabel="Back to Agents" />
           <div className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
           <input
             className="text-base font-semibold bg-transparent outline-none border-b border-transparent hover:border-muted-foreground/30 focus:border-primary transition-colors min-w-0 max-w-[220px] truncate cursor-text"

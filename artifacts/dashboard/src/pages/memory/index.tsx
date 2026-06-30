@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
-import { Link } from "wouter";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Link, useLocation } from "wouter";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import {
   Brain, Search, Phone, FileText, Layers, Clock, MoreVertical, Plus,
   Loader2, ChevronRight, Pencil,
@@ -9,6 +10,8 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
+import { canGoBackInApp } from "@/lib/nav-history";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -647,6 +650,7 @@ function CallerListColumn({
   onSelect: (phone: string) => void;
 }) {
   const [search, setSearch] = useState("");
+  const listScrollRef = useScrollRestoration<HTMLDivElement>("memory-callers", !isLoading);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -675,7 +679,7 @@ function CallerListColumn({
         </p>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-2.5 pb-2.5 space-y-1">
+      <div ref={listScrollRef} className="flex-1 min-h-0 overflow-y-auto px-2.5 pb-2.5 space-y-1">
         {isLoading ? (
           Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)
         ) : filtered.length === 0 ? (
@@ -702,10 +706,11 @@ function CallerListColumn({
 
 /* ─── Caller detail (dominant column) ────────────────────────────────────── */
 function CallerDetailView({
-  agentId, contact,
+  agentId, contact, onBack,
 }: {
   agentId: number;
   contact: CallerContact;
+  onBack: () => void;
 }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("overview");
@@ -768,6 +773,7 @@ function CallerDetailView({
     <div className="flex flex-col h-full min-h-0">
       {/* caller header — the primary focus of the page */}
       <div className="px-6 pt-6 pb-5 shrink-0">
+        <DetailNav className="mb-4" backTo="/app/memory" backLabel="Back" onBack={onBack} preferOnBack />
         <div className="flex items-start gap-4">
           <CallerAvatar contact={contact} size="lg" />
           <div className="flex-1 min-w-0">
@@ -998,8 +1004,17 @@ export default function MemoryPage() {
   const [selectedId, setSelectedId]     = useState<number | null>(deepLink.agentId);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(deepLink.caller);
   const [noteAgentId, setNoteAgentId]   = useState<number | null>(null);
+  // When the user explicitly backs out of a caller, suppress the auto-select
+  // until they pick another caller so the empty detail state can show.
+  const autoSelectSuppressed = useRef(false);
 
+  const [, navigate] = useLocation();
   const { toast } = useToast();
+
+  const selectCaller = (phone: string) => {
+    autoSelectSuppressed.current = false;
+    setSelectedPhone(phone);
+  };
 
   const { data: summaryData, isLoading, isError, error } =
     useListAgentMemorySummaries({ query: { queryKey: getListAgentMemorySummariesQueryKey() } });
@@ -1048,9 +1063,21 @@ export default function MemoryPage() {
   // Auto-select the first caller so the detail pane is always the focal point.
   useEffect(() => {
     if (callersLoading) return;
+    if (autoSelectSuppressed.current) return;
     if (selectedContact) return;
     if (callers.length > 0) setSelectedPhone(callers[0]!.phoneNumber);
   }, [callersLoading, selectedContact, callers]);
+
+  // Mirror the agent + caller selection into the URL so returning restores it.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selected?.agentId != null) params.set("agentId", String(selected.agentId));
+    if (selectedPhone) params.set("caller", selectedPhone);
+    const qs = params.toString();
+    const next = qs ? `/app/memory?${qs}` : "/app/memory";
+    const current = `/app/memory${window.location.search}`;
+    if (next !== current) navigate(next, { replace: true });
+  }, [selected?.agentId, selectedPhone, navigate]);
 
   const noteAgent = noteAgentId != null ? summaries.find(s => s.agentId === noteAgentId) : undefined;
 
@@ -1120,7 +1147,7 @@ export default function MemoryPage() {
                         key={agent.agentId}
                         agent={agent}
                         selected={selected?.agentId === agent.agentId}
-                        onClick={() => { setSelectedId(agent.agentId); setSelectedPhone(null); }}
+                        onClick={() => { autoSelectSuppressed.current = false; setSelectedId(agent.agentId); setSelectedPhone(null); }}
                         onNote={() => setNoteAgentId(agent.agentId)}
                       />
                     ))
@@ -1135,7 +1162,7 @@ export default function MemoryPage() {
                     callers={callers}
                     isLoading={callersLoading}
                     selectedPhone={selectedPhone}
-                    onSelect={setSelectedPhone}
+                    onSelect={selectCaller}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-[12.5px] text-muted-foreground px-4 text-center">
@@ -1151,6 +1178,7 @@ export default function MemoryPage() {
                     key={`${selected.agentId}:${selectedContact.phoneNumber}`}
                     agentId={selected.agentId}
                     contact={selectedContact}
+                    onBack={() => { autoSelectSuppressed.current = true; setSelectedPhone(null); }}
                   />
                 ) : callersLoading ? (
                   <div className="p-6 space-y-4">

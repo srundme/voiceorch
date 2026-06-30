@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeSync } from "@/components/theme-sync";
 
 import { Layout } from "@/components/layout";
+import { recordInAppNavigation } from "@/lib/nav-history";
 import { SnapServeLoader } from "@/components/logo";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import AgentBuilder from "@/pages/agents/builder";
@@ -814,6 +815,21 @@ function ProtectedApp() {
   );
 }
 
+function NavHistoryTracker() {
+  const [location] = useLocation();
+  const firstRender = useRef(true);
+  useEffect(() => {
+    // Skip the initial mount (the landing page itself isn't a navigation);
+    // every subsequent location change is an in-app navigation.
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    recordInAppNavigation();
+  }, [location]);
+  return null;
+}
+
 function Router() {
   // Google Cloud Console OAuth app settings — enter these exact URLs:
   //   Homepage URL:       https://<production-domain>/
@@ -823,6 +839,7 @@ function Router() {
       <QueryClientProvider client={queryClient}>
         <AuthTokenSync />
         <QueryClientCacheInvalidator />
+        <NavHistoryTracker />
         <ThemeSync />
         <Switch>
           <Route path="/" component={HomeRedirect} />

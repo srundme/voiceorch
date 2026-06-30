@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "wouter";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, IndianRupee } from "lucide-react";
 import { 
   useListAgents, 
@@ -36,7 +37,8 @@ import { getIrdaiBlock, getIrdaiBlockedError } from "@/lib/irdai-block";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 
 export default function AgentsList() {
-  const [search, setSearch] = useState("");
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [search, setSearch] = useState(() => initialParams.get("q") ?? "");
   const [outboundAgent, setOutboundAgent] = useState<{ id: number; name: string } | null>(null);
   const [toNumber, setToNumber] = useState("");
   const queryClient = useQueryClient();
@@ -45,9 +47,22 @@ export default function AgentsList() {
   const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
   const [pendingCallNumber, setPendingCallNumber] = useState("");
 
+  // Mirror the search into the URL so returning to this list restores it.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search);
+    const qs = params.toString();
+    const next = qs ? `/app/agents?${qs}` : "/app/agents";
+    const current = `/app/agents${window.location.search}`;
+    if (next !== current) navigate(next, { replace: true });
+  }, [search, navigate]);
+
   const { data: agents, isLoading } = useListAgents({
     query: { queryKey: getListAgentsQueryKey() }
   });
+
+  // Restore the list scroll position when returning.
+  const listScrollRef = useScrollRestoration<HTMLDivElement>("agents-list", !isLoading);
   const rateMap = useMinuteRatesMap();
   const userProviderNames = useUserProviderNames();
   
@@ -201,7 +216,7 @@ export default function AgentsList() {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div ref={listScrollRef} className="flex-1 overflow-auto">
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (

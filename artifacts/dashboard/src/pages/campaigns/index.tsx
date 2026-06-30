@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import {
   useListCampaigns, useCreateCampaign, useUpdateCampaign, useDeleteCampaign,
   getListCampaignsQueryKey,
@@ -800,6 +801,9 @@ export default function CampaignsPage() {
   const totalCampaigns = campaigns?.length ?? 0;
   const runningCampaigns = campaigns?.filter(c => c.status === "active").length ?? 0;
 
+  // Restore the list scroll position when returning from a campaign detail.
+  const listScrollRef = useScrollRestoration<HTMLDivElement>("campaigns-list", !isLoading);
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -854,7 +858,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto px-6 py-5">
+      <div ref={listScrollRef} className="flex-1 overflow-auto px-6 py-5">
         {/* Campaigns List */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
           {/* Section header */}

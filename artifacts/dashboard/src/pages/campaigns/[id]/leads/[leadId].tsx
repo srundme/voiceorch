@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUpdateLeadCallback, useRetryCampaignLead } from "@workspace/api-client-react";
 import type { UpdateLeadCallbackBodyStatus } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -985,25 +986,19 @@ export default function LeadCrmWorkspacePage() {
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="px-6 pt-4 pb-4 border-b border-border/40 shrink-0">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 mb-3">
-          <Link href="/app/campaigns">
-            <span className="hover:text-foreground transition-colors">Campaigns</span>
-          </Link>
-          <ChevronRight className="h-2.5 w-2.5" />
-          <Link href={`/app/campaigns/${campaignId}`}>
-            <span className="hover:text-foreground transition-colors">{campaign.name}</span>
-          </Link>
-          {ws?.batch && (
-            <>
-              <ChevronRight className="h-2.5 w-2.5" />
-              <Link href={`/app/campaigns/${campaignId}/batches/${ws.batch.id}`}>
-                <span className="hover:text-foreground transition-colors">{ws.batch.name}</span>
-              </Link>
-            </>
-          )}
-          <ChevronRight className="h-2.5 w-2.5" />
-          <span className="text-foreground">{lead.name ?? lead.phone}</span>
-        </div>
+        <DetailNav
+          className="mb-3"
+          backTo={ws?.batch ? `/app/campaigns/${campaignId}/batches/${ws.batch.id}` : `/app/campaigns/${campaignId}`}
+          backLabel="Back"
+          crumbs={[
+            { label: "Campaigns", href: "/app/campaigns" },
+            { label: campaign.name, href: `/app/campaigns/${campaignId}` },
+            ...(ws?.batch
+              ? [{ label: ws.batch.name, href: `/app/campaigns/${campaignId}/batches/${ws.batch.id}` }]
+              : []),
+            { label: lead.name ?? lead.phone },
+          ]}
+        />
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3.5">

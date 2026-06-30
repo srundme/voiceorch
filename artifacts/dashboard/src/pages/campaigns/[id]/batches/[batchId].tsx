@@ -15,6 +15,7 @@ import {
   getListBatchLeadsQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
@@ -503,24 +504,18 @@ export default function BatchWorkspacePage() {
       <div className="px-6 pt-5 pb-3 border-b border-border/40 shrink-0">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <Link href={`/app/campaigns/${campaignId}`}>
-              <Button variant="outline" size="icon" className="h-8 w-8">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
             <div>
               {/* Breadcrumb */}
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground/50 mb-0.5">
-                <Link href="/app/campaigns">
-                  <span className="hover:text-foreground transition-colors">Campaigns</span>
-                </Link>
-                <ChevronRight className="h-2.5 w-2.5" />
-                <Link href={`/app/campaigns/${campaignId}`}>
-                  <span className="hover:text-foreground transition-colors">{header?.campaign.name ?? "…"}</span>
-                </Link>
-                <ChevronRight className="h-2.5 w-2.5" />
-                <span className="text-foreground">{header?.batch.name ?? "Batch"}</span>
-              </div>
+              <DetailNav
+                className="mb-0.5"
+                backTo={`/app/campaigns/${campaignId}`}
+                backLabel="Back to Campaign"
+                crumbs={[
+                  { label: "Campaigns", href: "/app/campaigns" },
+                  { label: header?.campaign.name ?? "…", href: `/app/campaigns/${campaignId}` },
+                  { label: header?.batch.name ?? "Batch" },
+                ]}
+              />
 
               {/* Title + status */}
               <div className="flex items-center gap-2.5 flex-wrap">

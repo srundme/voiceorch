@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -28,7 +29,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import {
-  ArrowLeft, Copy, Check, Clock, Calendar, Settings, Zap, AlertTriangle,
+  Copy, Check, Clock, Calendar, Settings, Zap, AlertTriangle,
   Link2, Layers, ExternalLink, Trash2, Plus, Loader2, CheckCircle2, Video,
 } from "lucide-react";
 
@@ -280,12 +281,15 @@ export default function EventTypeDetailPage() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
       <div className="border-b bg-background px-4 py-2.5 flex items-center gap-3 shrink-0">
-        <Link href={`${BASE}/app/scheduling/event-types`}>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </Button>
-        </Link>
-        <h1 className="font-semibold text-sm text-foreground truncate flex-1">{et.name}</h1>
+        <DetailNav
+          backTo={`${BASE}/app/scheduling/event-types`}
+          backLabel="Back to Event Types"
+          crumbs={[
+            { label: "Event Types", href: `${BASE}/app/scheduling/event-types` },
+            { label: et.name },
+          ]}
+        />
+        <div className="flex-1" />
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Switch
             checked={form.isActive}

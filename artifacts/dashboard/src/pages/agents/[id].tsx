@@ -17,6 +17,7 @@ import {
   useInitiateOutboundCall,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { DetailNav } from "@/components/detail-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -602,11 +603,7 @@ export default function AgentDetail() {
       />
 
       <div className="flex items-center gap-4">
-        <Link href="/agents">
-          <Button variant="outline" size="icon" className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+        <DetailNav backTo="/app/agents" backLabel="Back to Agents" />
         <div className="flex items-center gap-3 flex-1">
           <h2 className="text-3xl font-bold tracking-tight">{agent.name}</h2>
           {agent.status === "active"   && <Badge className="bg-zinc-500 hover:bg-zinc-600">Active</Badge>}
