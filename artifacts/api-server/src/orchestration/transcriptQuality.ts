@@ -9,8 +9,24 @@
 // ── P0-A: Garbled transcript detection ──────────────────────────────────────
 
 /**
+ * Words that almost never end a complete thought. When an utterance has
+ * ≤ MAX_TRUNCATION_WORDS words AND the last token is one of these, the STT
+ * almost certainly cut the caller off mid-sentence.
+ *
+ * Includes English + common Hindi/Hinglish equivalents found on Indian calls.
+ * Deliberately conservative — only words where an utterance-final position
+ * is nearly always a truncation signal, not an ambiguous one.
+ */
+const TRUNCATION_DANGLER_RE =
+  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|yet|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan)\s*[,.]?\s*$/i;
+
+/** Max word count to consider for truncation-dangling check. */
+const MAX_TRUNCATION_WORDS = 6;
+
+/**
  * Heuristic quality check on a raw STT transcript.
- * Catches noise, very short non-meaningful outputs, and heavy repetition.
+ * Catches noise, very short non-meaningful outputs, heavy repetition, and
+ * mid-sentence truncations (VAD cut the caller off before they finished).
  * Does NOT cover every bad case — just the most common ones that would
  * cause the LLM to produce a confused/hallucinated reply.
  */
@@ -42,6 +58,16 @@ export function checkTranscriptQuality(text: string): { isGarbled: boolean; reas
   }
   if (chars.length > 6 && dups / chars.length > 0.65) {
     return { isGarbled: true, reason: "high-repetition" };
+  }
+
+  // Mid-sentence truncation: short utterance that ends on a dangling word.
+  // e.g. "Amakan concerned about" / "No no, I'm just" / "I was thinking and"
+  // VAD fired before the caller finished the thought — ask them to repeat.
+  // Only applied to short utterances (≤ MAX_TRUNCATION_WORDS) to avoid
+  // false-positives on longer sentences that happen to end on these words.
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount <= MAX_TRUNCATION_WORDS && TRUNCATION_DANGLER_RE.test(t)) {
+    return { isGarbled: true, reason: "truncated-dangling" };
   }
 
   return { isGarbled: false, reason: "" };
