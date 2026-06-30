@@ -1,0 +1,22 @@
+Batch Detail Page — Dynamic Stats, Dynamic Outcome Tabs & Action Cleanup
+1. Make all summary stat cards dynamic (Total, Connected, Callbacks, Incoming, Bookings, Transfers, Failed, Success):
+
+These currently appear static/stale. They must update in real time (or near-real-time via polling/websocket, whichever the existing infra supports) as the campaign runs — e.g. as leads are dialed, Total/Connected/Failed/etc. counts should increase live, not just on page reload.
+Success % calculation: Success = Completed calls / Total calls attempted, expressed as a percentage. E.g. 100 calls made, 100 completed → 100% success. 100 calls made, 50 completed → 50% success. Use "Completed" status (as shown in the table's Status column) as the numerator, not booked/connected — confirm this matches existing backend logic before changing the formula; if the formula is already correct and only the display is frozen, then this is purely a live-refresh fix, not a calculation change.
+
+2. Status tab row — no changes. Keep All / Pending / Completed / Failed / Calling exactly as-is.
+3. Outcome tab row — make dynamic based on agent dispositions:
+
+Remove the hardcoded outcome filters: Interested, No Contact, Failed.
+Keep "All Outcomes" as the default first tab.
+After "All Outcomes," dynamically render one tab per disposition configured by the user for the agent assigned to this campaign (e.g. Disposition 1, Disposition 2, Disposition 3 — however many exist, pulled from that agent's disposition config).
+Keep "Booked," "Transferred," and "Callback" as fixed tabs (these appear to be system-level outcomes, not user-defined dispositions) — place them after the dynamic disposition tabs, matching existing order: All Outcomes → [dynamic dispositions] → Booked → Transferred → Callback.
+Confirm with me the exact ordering/grouping if the agent has zero dispositions configured (e.g. should it just show All Outcomes → Booked → Transferred → Callback with no dynamic tabs).
+
+4. Logs table "Outcome" column — no change for now, leave as-is. Do not remove.
+5. Actions column in the logs table:
+
+Remove the second icon (the external-link/navigation icon) next to the eye icon. It currently does nothing — keep only the eye (view) icon.
+Verify the navigation icon's onClick handler isn't tied to other functionality elsewhere before deleting it; if it's a shared component, just hide/remove it from this table's render, not the component itself.
+
+General: This is primarily a live-data and filter-logic change, not a backend rewrite — confirm whether real-time updates need new polling/websocket wiring or if the data layer already supports it and this is a frontend refresh-trigger fix.

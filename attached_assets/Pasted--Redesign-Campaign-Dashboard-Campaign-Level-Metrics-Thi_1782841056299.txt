@@ -1,0 +1,69 @@
+### Redesign Campaign Dashboard — Campaign-Level Metrics
+
+This is a **UI/UX update only**. Do not modify backend logic, APIs, calculations, database schema, routing, or any existing campaign/batch functionality. Only update the display layer.
+
+### Batch Page
+
+* No changes.
+* Keep the existing Batch page cards exactly as they are:
+
+  * Total
+  * Connected
+  * Callbacks
+  * Incoming
+  * Bookings
+  * Transfers
+  * Failed
+  * Success
+* The current Batch page metrics correctly represent a single batch and should remain unchanged.
+
+### Campaign Page
+
+Redesign the Campaign summary cards to use the **same UI style, dimensions, spacing, borders, and horizontal layout** as the Batch page cards for a consistent experience across the portal.
+
+However, replace the metrics with campaign-level information instead of batch execution metrics.
+
+Display these cards:
+
+* Total Batches
+* Total Leads Imported
+* Active Batches
+* Completed Batches
+* Campaign Created
+* Campaign Health
+* Overall Progress
+
+### Campaign Health
+
+Instead of a percentage, display a status such as:
+
+* Healthy
+* Needs Attention
+* Stalled
+
+Use existing campaign data (running batches, stopped batches, failures, inactivity, etc.) to determine the status. If additional backend logic would be required, confirm with me before implementing.
+
+### Overall Progress
+
+Show overall campaign completion based on existing batch data (for example, leads processed vs. total imported), if this information is already available.
+
+### Success Display
+
+Do not display **"0% Success"** while the campaign is running or before any successful conversions exist.
+
+Instead:
+
+* While the campaign is running with no successful conversions, display **"Tracking..."**.
+* Once at least one successful conversion exists, display the actual success percentage.
+
+### Data Source
+
+Use existing aggregation and campaign/batch data already available. Do not create new APIs or backend endpoints. If any required data is unavailable through existing sources, stop and confirm with me before adding backend work.
+
+### Design Requirements
+
+* Match the Batch page card design exactly, including card height, width, spacing, borders, typography, and the existing SnapServe dark theme.
+* Only the card titles and displayed values should differ.
+* Keep the rest of the Campaign page functionality unchanged.
+
+The Campaign page should represent **overall campaign performance**, while the Batch page should continue to represent **individual batch execution**, avoiding duplicated information and providing a cleaner, more intuitive user experience.
