@@ -1,0 +1,29 @@
+Make two changes to the global Call Logs page (Navigation → Call Logs).
+1. Call Type label for campaign-originated calls
+Currently every call shows "Live Call" as the Call Type badge, even calls that were placed by a campaign (outbound dialer). Update the Call Type column logic so that:
+
+If the call originated from a campaign (i.e., it has a campaign/source ID, or was placed by the outbound campaign dialer rather than a manual/web-triggered call), display the badge as "Campaign" instead of "Live Call".
+Keep "Live Call" for calls that are genuinely manual/direct calls, not tied to a campaign.
+Keep "Web Call" untouched for web-based calls.
+Use whatever existing field already distinguishes these (e.g., source, campaign_id, call_origin) — don't invent a new data model if one already exists upstream. If no such field currently exists, add one and tag it correctly at call-creation time so this is accurate going forward.
+Style the "Campaign" badge consistently with the existing "Live Call" / "Web Call" badges (same shape, icon convention, sizing).
+
+2. Add a Sort dropdown next to the existing filters
+Add a new "Sort" dropdown in the filter row, next to "All statuses" / "All agents" / "Date Range" (before Export/Analytics).
+Sort options:
+
+Newest to Oldest
+Oldest to Newest
+Cost: High to Low
+Cost: Low to High
+Duration: High to Low
+Duration: Low to High
+
+Behavior:
+
+Selecting an option re-sorts the current call list client-side or via API param (match whatever pattern the existing status/agent filters use).
+Sort should work in combination with the existing search, status filter, agent filter, and date range — i.e., it sorts whatever the currently filtered result set is, not the full unfiltered dataset.
+Persist the selected sort option visually in the dropdown (show selected label) until changed.
+Don't change the table's column layout, the stat cards (Total Calls, Completed, Failed, In Progress, Avg Duration), or any other existing functionality.
+
+After implementing, verify Export still respects the active sort and filters, and that pagination (if any) doesn't reset to page 1 unexpectedly on sort change.
