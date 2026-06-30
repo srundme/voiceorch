@@ -1,31 +1,19 @@
 export const ASR_PROVIDERS = [
-  { value: "deepgram",  label: "Deepgram" },
-  { value: "assemblyai",label: "AssemblyAI" },
-  { value: "whisper",   label: "Whisper (OpenAI)" },
-  { value: "azure",     label: "Azure Speech" },
   { value: "sarvam",    label: "Sarvam" },
-  { value: "cartesia",  label: "Cartesia" },
+  { value: "azure",     label: "Azure Speech" },
 ];
 
 export const LLM_PROVIDERS = [
   { value: "openai",    label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
   { value: "google",    label: "Google Gemini" },
   { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
-  { value: "ultravox",  label: "Ultravox (Fixie.ai)" },
   { value: "sarvam",    label: "Sarvam" },
-  { value: "deepseek",  label: "DeepSeek" },
-  { value: "mistral",   label: "Mistral" },
 ];
 
 export const TTS_PROVIDERS = [
-  { value: "cartesia", label: "Cartesia (Sonic)" },
   { value: "sarvam",   label: "Sarvam (Bulbul) — Indian languages" },
-  { value: "elevenlabs", label: "ElevenLabs" },
-  { value: "openai",   label: "OpenAI TTS" },
-  { value: "azure",    label: "Azure TTS" },
-  { value: "deepgram", label: "Deepgram Aura" },
+  { value: "cartesia", label: "Cartesia (Sonic)" },
 ];
 
 export const TELEPHONY_PROVIDERS = [
@@ -36,15 +24,11 @@ export const TELEPHONY_PROVIDERS = [
 ];
 
 export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
-  azure:      [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
-  assemblyai: [{ value: "best", label: "Best (default)" }, { value: "nano", label: "Nano (fast)" }],
+  azure:  [{ value: "en-US-standard", label: "Auto (base model from language)" }, { value: "en-US-enhanced", label: "Auto — enhanced (base model from language)" }, { value: "en-IN-standard", label: "Auto — Indic (base model from language)" }],
   sarvam: [
-    { value: "saaras:v3",   label: "Saaras v3 — real-time streaming (recommended)" },
+    { value: "saaras:v3",    label: "Saaras v3 — real-time streaming (recommended)" },
     { value: "saarika:v2.5", label: "Saarika v2.5 — real-time streaming (legacy)" },
   ],
-  cartesia: [{ value: "sonic-english", label: "Sonic English" }, { value: "sonic-multilingual", label: "Sonic Multilingual" }],
-  deepgram:  [{ value: "nova-2-general", label: "Nova 2 General" }, { value: "nova-2-phonecall", label: "Nova 2 Phone Call" }],
-  whisper:   [{ value: "whisper-1", label: "Whisper v1" }],
 };
 
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
@@ -58,17 +42,10 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "gpt-4-turbo",   label: "GPT-4 Turbo (legacy)" },
     { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo (legacy)" },
   ],
-  anthropic: [{ value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }, { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" }, { value: "claude-3-opus-20240229", label: "Claude 3 Opus" }],
   google:    [{ value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (fastest)" }, { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (recommended)" }, { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (most capable)" }, { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }],
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
-  deepseek:  [{ value: "deepseek-chat", label: "DeepSeek Chat" }, { value: "deepseek-reasoner", label: "DeepSeek Reasoner" }],
-  mistral:   [{ value: "mistral-large-latest", label: "Mistral Large" }, { value: "mistral-small-latest", label: "Mistral Small" }],
-  ultravox:  [
-    { value: "ultravox-v0.6-gemma3-27b",      label: "Ultravox v0.6 Gemma3 27B (best quality, multilingual)" },
-    { value: "ultravox-v0.4_1-llama-3_1-8b",  label: "Ultravox v0.4 Llama 3.1 8B (fast, lighter)" },
-  ],
 };
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {

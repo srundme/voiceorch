@@ -178,6 +178,18 @@ export default function WalletPage() {
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto space-y-6">
 
+          {/* Beta notice — payments temporarily paused */}
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-300">Payments paused during beta</p>
+              <p className="text-xs text-amber-400/80 mt-0.5">
+                We're finalising our payment gateway. Top-ups and auto-pay will be available at official launch in ~20 days.
+                Your existing balance and free credits remain active in the meantime.
+              </p>
+            </div>
+          </div>
+
           {/* Balance Card */}
           <div className={`rounded-xl border p-6 ${balanceLow ? "border-border bg-zinc-500/5" : "border-border bg-card"}`}>
             <div className="flex items-start justify-between">
@@ -247,14 +259,11 @@ export default function WalletPage() {
               <Button
                 className="w-full bg-primary hover:opacity-90 text-primary-foreground font-semibold"
                 onClick={handleTopup}
-                disabled={loading}
+                disabled={true}
+                title="Payments paused during beta"
               >
-                {loading ? (
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Plus className="w-4 h-4 mr-2" />
-                )}
-                Add {centsToUsd(effectiveAmount * 100)} via Razorpay
+                <Plus className="w-4 h-4 mr-2" />
+                Add Funds — Available at Launch
               </Button>
             </div>
 
@@ -270,10 +279,8 @@ export default function WalletPage() {
                     </span>
                   )}
                 </div>
-                <button onClick={handleToggleAutopay} className="text-muted-foreground hover:text-foreground transition-colors">
-                  {wallet?.autoPayEnabled
-                    ? <ToggleRight className="w-6 h-6 text-foreground" />
-                    : <ToggleLeft  className="w-6 h-6" />}
+                <button disabled className="text-muted-foreground opacity-40 cursor-not-allowed">
+                  <ToggleLeft className="w-6 h-6" />
                 </button>
               </div>
 
@@ -311,28 +318,16 @@ export default function WalletPage() {
                 </div>
               </div>
 
-              {/* Mandate setup / status */}
-              {!mandateActive ? (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleSetupMandate}
-                  disabled={mandateLoading}
-                >
-                  {mandateLoading ? (
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="w-4 h-4 mr-2" />
-                  )}
-                  Set up Auto-pay Mandate
-                </Button>
-              ) : (
-                <div className={`text-xs px-3 py-2 rounded-lg ${wallet?.autoPayEnabled ? "bg-muted text-foreground border border-border" : "bg-muted text-muted-foreground"}`}>
-                  {wallet?.autoPayEnabled
-                    ? `Auto-pay ON — will charge ${centsToUsd(wallet.autoPayAmountCents)} when balance < ${centsToUsd(wallet.autoPayThresholdCents)}`
-                    : "Mandate saved — enable the toggle to activate auto-pay"}
-                </div>
-              )}
+              {/* Mandate setup — disabled during beta */}
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={true}
+                title="Available at launch"
+              >
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                Auto-pay — Available at Launch
+              </Button>
             </div>
           </div>
 

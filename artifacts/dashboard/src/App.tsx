@@ -59,8 +59,33 @@ import TestSimulatorPage from "@/pages/test-simulator";
 import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
+
 import ImpersonatePage from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+
+function BetaComingSoon({ title }: { title: string }) {
+  const launch = new Date("2026-07-20T00:00:00");
+  const now = new Date();
+  const daysLeft = Math.max(0, Math.ceil((launch.getTime() - now.getTime()) / 86400000));
+  return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-6 p-8">
+      <div className="text-center space-y-3">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-2">
+          <span className="text-3xl font-bold text-primary">{daysLeft}</span>
+        </div>
+        <h2 className="text-xl font-semibold text-foreground">{daysLeft} day{daysLeft !== 1 ? "s" : ""} to official launch</h2>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          <span className="font-medium text-foreground">{title}</span> will be available when SnapServe officially launches on July 20, 2026.
+          You're on the beta — thank you for helping shape the product.
+        </p>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg px-4 py-2">
+        <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+        Trial Beta — {daysLeft} days remaining
+      </div>
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -754,7 +779,7 @@ function AppRoutes() {
         <Route path="/app/scheduling/availability" component={SchedulingAvailabilityPage} />
         <Route path="/app/scheduling/conferencing" component={SchedulingConferencingPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
-        <Route path="/app/settings" component={Settings} />
+        <Route path="/app/settings" component={() => <BetaComingSoon title="Settings" />} />
         <Route path="/app/usage" component={UsagePage} />
         <Route path="/app/kyc" component={KycPage} />
         <Route path="/app/api-keys" component={ApiKeysPage} />
@@ -808,9 +833,9 @@ function Router() {
           <Route path="/book/cancel" component={CancelBookingPage} />
           <Route path="/book/reschedule" component={RescheduleBookingPage} />
           <Route path="/book/:slug" component={PublicBookingPage} />
-          <Route path="/docs" component={DocsPage} />
-          <Route path="/docs/api-reference/:op" component={DocsPage} />
-          <Route path="/docs/:section" component={DocsPage} />
+          <Route path="/docs" component={() => <BetaComingSoon title="API Documentation" />} />
+          <Route path="/docs/api-reference/:op" component={() => <BetaComingSoon title="API Documentation" />} />
+          <Route path="/docs/:section" component={() => <BetaComingSoon title="API Documentation" />} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route path="/terms" component={TermsPage} />
           <Route component={NotFound} />

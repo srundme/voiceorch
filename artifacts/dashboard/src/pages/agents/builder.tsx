@@ -4615,7 +4615,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
-      name: "", description: "", asrProvider: "deepgram", asrModel: "",
+      name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
       llmProvider: "openai", llmModel: "", ttsProvider: "cartesia",
       ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 300,
