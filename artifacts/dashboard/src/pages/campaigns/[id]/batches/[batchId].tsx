@@ -19,14 +19,13 @@ import { DetailNav } from "@/components/detail-nav";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
-  TrendingUp, Bell, PhoneIncoming, ExternalLink,
+  TrendingUp, Bell, PhoneIncoming,
   Eye, Database, RefreshCw,
   User, Search, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
-import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
@@ -60,7 +59,7 @@ type BatchHeader = {
     scheduledStartAt: string | null;
     maxAttempts: number; retryDelayMinutes: number;
   };
-  campaign: { id: number; name: string; agentName: string | null; fromNumber: string | null };
+  campaign: { id: number; name: string; agentId: number | null; agentName: string | null; fromNumber: string | null };
   source: { name: string; type: string } | null;
 };
 
@@ -117,8 +116,7 @@ function KpiCard({ icon, label, value, color }: {
 
 // ── Leads Tab ─────────────────────────────────────────────────────────────────
 
-function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; batchId: number; maxAttempts: number }) {
-  const [, navigate] = useLocation();
+function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: number; batchId: number; maxAttempts: number; agentId: number | null }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const retry = useRetryCampaignLead();
@@ -169,14 +167,30 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
     { key: "calling",   label: "Calling"   },
   ];
 
+  // Dynamic disposition tabs — derived from the campaign agent's configured
+  // disposition taxonomy. Each tab's filter key is the disposition value stored
+  // on the lead. Falls back gracefully (404 = no config) to no dynamic tabs.
+  const { data: dispConfig } = useQuery<{ taxonomy: Record<string, string[]> } | null>({
+    queryKey: ["batch-ws-dispositions", agentId],
+    enabled: agentId != null,
+    queryFn: async () => {
+      try {
+        return await apiFetch<{ taxonomy: Record<string, string[]> }>(`${BASE}/api/disposition/config/${agentId}`);
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const dispositionTabs = Object.keys(dispConfig?.taxonomy ?? {}).map(key => ({ key, label: key }));
+
   const OUTCOME_FILTERS = [
-    { key: "all",              label: "All Outcomes"   },
-    { key: "booking_created",  label: "Booked"         },
-    { key: "transfer_completed", label: "Transferred"  },
-    { key: "callback_requested", label: "Callback"     },
-    { key: "interest_confirmed", label: "Interested"   },
-    { key: "no_contact",       label: "No Contact"     },
-    { key: "failed",           label: "Failed"         },
+    { key: "all", label: "All Outcomes" },
+    ...dispositionTabs,
+    { key: "booking_created",    label: "Booked"      },
+    { key: "transfer_completed", label: "Transferred" },
+    { key: "callback_requested", label: "Callback"    },
   ];
 
   return (
@@ -350,10 +364,6 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
                             <Eye className="h-3 w-3 text-muted-foreground/50" />
                           </Button>
                         )}
-                        <Button size="icon" variant="ghost" className="h-6 w-6"
-                          title="Open Lead" onClick={() => navigate(`/app/campaigns/${campaignId}/leads/${lead.id}`)}>
-                          <ExternalLink className="h-3 w-3 text-muted-foreground/50" />
-                        </Button>
                         {lead.callStatus === "failed" && (
                           <Button size="icon" variant="ghost" className="h-6 w-6"
                             title="Retry" onClick={() => void handleRetry(lead.id)}>
@@ -585,7 +595,7 @@ export default function BatchWorkspacePage() {
 
       {/* ── Leads ───────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">
-        <LeadsTab campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} />
+        <LeadsTab campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} agentId={header?.campaign.agentId ?? null} />
       </div>
 
     </div>

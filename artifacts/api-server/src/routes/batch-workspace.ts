@@ -221,14 +221,14 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     status === "calling"   ? eq(campaignLeadsTable.callStatus, "calling")   :
     undefined;
 
+  // Fixed system outcomes filter on operationalOutcome; any other non-"all"
+  // value is a dynamic disposition and filters on the lead disposition column.
   const outcomeFilter =
+    outcome === "all"                ? undefined :
     outcome === "booking_created"    ? eq(campaignLeadsTable.operationalOutcome, "booking_created")    :
     outcome === "transfer_completed" ? eq(campaignLeadsTable.operationalOutcome, "transfer_completed") :
     outcome === "callback_requested" ? eq(campaignLeadsTable.operationalOutcome, "callback_requested") :
-    outcome === "interest_confirmed" ? eq(campaignLeadsTable.operationalOutcome, "interest_confirmed") :
-    outcome === "no_contact"         ? eq(campaignLeadsTable.operationalOutcome, "no_contact")         :
-    outcome === "failed"             ? eq(campaignLeadsTable.operationalOutcome, "failed")             :
-    undefined;
+    eq(campaignLeadsTable.disposition, outcome);
 
   const searchFilter = search
     ? or(
@@ -524,6 +524,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/header", async (req, res):
     campaign: {
       id:         campaignId,
       name:       campaign?.name ?? "",
+      agentId:    campaign?.agentId ?? null,
       agentName,
       fromNumber: campaign?.fromNumber ?? null,
     },
