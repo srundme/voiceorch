@@ -1974,11 +1974,20 @@ export default function BatchWizardPage() {
 
   function goNext() {
     if (!canAdvance()) return;
+    if (state.sourceMode === "crm" && currentStep >= 2 && currentStep <= 6) {
+      setCompleted(prev => new Set([...prev, 2, 3, 4, 5, 6]));
+      setCurrentStep(7);
+      return;
+    }
     setCompleted(prev => new Set([...prev, currentStep]));
     setCurrentStep(s => Math.min(s + 1, 8));
   }
 
   function goBack() {
+    if (state.sourceMode === "crm" && currentStep >= 3 && currentStep <= 7) {
+      setCurrentStep(2);
+      return;
+    }
     setCurrentStep(s => Math.max(s - 1, 1));
   }
 
