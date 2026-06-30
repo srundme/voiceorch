@@ -783,6 +783,32 @@ export default function CampaignDetailPage() {
             </Button>
           </div>
 
+          {/* Queued leads banner — shown when webhook leads arrived with no running batch */}
+          {(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const queued: number = (campaign as any).queuedLeadsCount ?? 0;
+            if (queued === 0) return null;
+            return (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/8">
+                <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
+                  <Clock className="h-4 w-4 text-amber-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {queued} lead{queued !== 1 ? "s" : ""} waiting in queue
+                  </p>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5">
+                    These arrived from your webhook while no batch was running. Start a batch to begin dialing them.
+                  </p>
+                </div>
+                <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
+                  onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                  <Zap className="h-3.5 w-3.5" /> Start batch
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* Summary stat tiles — connected strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
             {[

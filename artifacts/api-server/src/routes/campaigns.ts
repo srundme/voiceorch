@@ -6,7 +6,7 @@ import {
   UpdateCampaignBody,
 } from "@workspace/api-zod";
 import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
-import { eq, and, count, desc, inArray } from "drizzle-orm";
+import { eq, and, count, desc, inArray, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
 
@@ -233,7 +233,18 @@ router.get("/campaigns/:id", async (req, res): Promise<void> => {
     .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)));
 
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(toCampaign(row));
+
+  // Count queued leads (arrived via webhook while no batch was running)
+  const [queuedRow] = await db.select({ c: count() })
+    .from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.campaignId, id),
+      isNull(campaignLeadsTable.batchId),
+      eq(campaignLeadsTable.callStatus, "pending"),
+    ));
+  const queuedLeadsCount = Number(queuedRow?.c ?? 0);
+
+  res.json({ ...toCampaign(row), queuedLeadsCount });
 });
 
 // ── PATCH /campaigns/:id ───────────────────────────────────────────────────

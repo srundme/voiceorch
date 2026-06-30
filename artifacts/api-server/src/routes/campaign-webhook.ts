@@ -118,11 +118,12 @@ async function insertLeadAndSchedule(opts: {
     return;
   }
 
-  // Find the currently running batch for this campaign (if any) so the lead
-  // shows up in the batch view. Pick the most-recently-started running batch.
-  // NOTE: we resolve this BEFORE the isActive gate so that a running batch
-  // can override a paused/inactive campaign — starting a batch is explicit
-  // intent to accept incoming webhook leads even if isActive is false.
+  // Find the currently running batch for this campaign (if any).
+  // Leads are ALWAYS captured (never dropped due to campaign pause/inactive status)
+  // because forms and Meta ads keep firing 24/7 regardless of campaign state.
+  // If a batch is running → assign to it and dial immediately.
+  // If no batch is running → store in the campaign queue (batchId=null); the lead
+  // will be picked up automatically when the user starts the next batch.
   const runningBatch = await db.query.campaignBatchesTable.findFirst({
     where: and(
       eq(campaignBatchesTable.campaignId, opts.campaignId),
@@ -130,13 +131,6 @@ async function insertLeadAndSchedule(opts: {
     ),
     orderBy: (t, { desc }) => [desc(t.id)],
   });
-
-  // Accept if the campaign is active OR if there is a running batch.
-  // A running batch means the operator explicitly started it for lead intake.
-  if (!campaign.isActive && !runningBatch) {
-    logger.info({ campaignId: opts.campaignId }, "Campaign not active and no running batch — lead dropped");
-    return;
-  }
 
   const normalized = normalizePhone(opts.phone);
 
@@ -186,9 +180,17 @@ async function insertLeadAndSchedule(opts: {
     await db.update(campaignBatchesTable)
       .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
       .where(eq(campaignBatchesTable.id, runningBatch.id));
-  }
 
-  scheduleCampaignCall(lead!, campaign);
+    // Dial immediately — batch is already running
+    scheduleCampaignCall(lead!, campaign);
+  } else {
+    // No running batch: lead is queued (batchId=null).
+    // It will be auto-assigned to the next batch the user starts.
+    logger.info(
+      { campaignId: opts.campaignId, leadId: lead!.id },
+      "Webhook lead queued — no running batch; will dial when next batch starts",
+    );
+  }
 }
 
 /** Mark last webhook event on the campaign row (fire-and-forget, best-effort). */

@@ -5,7 +5,7 @@ import {
   leadTimelineTable, batchImportRunsTable, agentsTable,
   type CampaignFieldMappings,
 } from "@workspace/db";
-import { eq, and, count, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG } from "../services/phone-normalization.js";
@@ -85,7 +85,34 @@ async function requireBatch(batchId: number, campaignId: number): Promise<BatchR
   return row ?? null;
 }
 
+/**
+ * Auto-assign any queued leads (batchId = null, callStatus = 'pending') for this
+ * campaign into the given batch.  Called every time a batch transitions to
+ * "running" so leads that arrived while no batch was active are immediately
+ * picked up.  Returns the number of leads reassigned.
+ */
+async function assignQueuedLeads(batchId: number, campaignId: number): Promise<number> {
+  const result = await db.execute<{ id: number }>(sql`
+    UPDATE campaign_leads
+    SET batch_id = ${batchId}
+    WHERE campaign_id = ${campaignId}
+      AND batch_id IS NULL
+      AND call_status = 'pending'
+    RETURNING id
+  `);
+  const count = result.rows.length;
+  if (count > 0) {
+    await db.update(campaignBatchesTable)
+      .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + ${count}` })
+      .where(eq(campaignBatchesTable.id, batchId));
+  }
+  return count;
+}
+
 async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<void> {
+  // Pull in any leads that arrived while no batch was running
+  await assignQueuedLeads(batch.id, campaign.id);
+
   const limit = campaign.concurrentCallLimit ?? 20;
   const [{ active }] = await db.select({ active: count() })
     .from(campaignLeadsTable)
