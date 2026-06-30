@@ -1,0 +1,38 @@
+Redesign the Campaign detail page UI (Campaigns → [campaign name]) to match the new visual layout below — UI/structure only, no backend, data-fetching, or functional logic changes. All existing data bindings, API calls, routes, and functionality must continue to work exactly as before; only restyle and rearrange how that same data is presented.
+1. Top header/breadcrumb
+
+Add a proper breadcrumb above the title: "Campaigns › [campaign name]" as clickable breadcrumb links, replacing the current back-arrow icon.
+Keep title, status badge (Draft/Running/etc), Agent #, phone number, and add a "csv" export/source indicator inline under the title if a CSV source exists for the campaign.
+Move action buttons ("Create Batch" and an overflow "⋮" menu) to top right, consistent with existing button styling already used elsewhere in the app.
+
+2. Stat cards row
+
+Restyle the 6 stat cards (Leads/Total Leads, Called, Connected, Booked, Callbacks/Transfers, Success) to include a small colored icon box to the left of each number (matching icon-in-rounded-square style), instead of plain icon + number side by side as currently shown.
+Keep the same 6 metrics, same data, same percentage subtext styling (e.g., green "100%", colored success %).
+
+3. Call Funnel section
+
+Add a subtitle under "Call Funnel" heading: "Track your call journey at a glance".
+Add a "View Analytics" button top-right of this section (style consistent with existing secondary buttons in the app).
+Restyle each funnel stage (Imported, Called, Connected, Interested, Booked, Transferred) as icon-in-colored-box + number + label stacked, with arrow connectors between each stage instead of the current plain horizontal layout.
+Keep the progress bar and "X of Y called" / "X% completion" labels below, same data as currently shown.
+
+4. Batches section
+
+Add a subtitle: "Manage and monitor your batches".
+Restyle each batch row/card to show: status icon + status label (e.g., a stop icon for "Stopped", consistent status iconography already used elsewhere in the app) next to the batch name, with call-type tag (e.g., "Call Transfer"), lead count, and last-updated time on the same line.
+Show "100% called (X / Y)" progress bar inline within the batch card, plus Connected/Interested counts to the right with a chevron to expand/view details — match existing batch card data, just restructured visually.
+Keep "+ New Batch" button top-right of this section.
+
+5. Recent Activity
+
+Move "Recent Activity" out of the full-width stacked list (currently below Batches) into a separate card positioned to the right of the Batches section, forming a two-column layout (Batches on left, Recent Activity on right) on larger screens.
+Add subtitle "Latest updates and events" and a "View All Activity →" link top-right of this card.
+Restyle each activity entry to show a small relevant icon, name + outcome/event label stacked, with timestamp right-aligned (matching the new compact list style), instead of the current flat single-line rows.
+Keep all existing activity data/events as-is, just restyle the row presentation and limit visible rows in this card (rely on "View All Activity" for the rest, if that view exists; otherwise keep this card scrollable internally).
+
+General
+
+Match the app's existing dark theme, spacing, border radius, and color tokens already used elsewhere (sidebar, Call Logs page, etc.) — don't introduce new colors or components inconsistent with the current design system.
+Responsive behavior should degrade gracefully (Batches/Recent Activity stack vertically on smaller viewports).
+Do not change any underlying logic, calculations, API endpoints, or data models — this is a presentation-layer change only.
