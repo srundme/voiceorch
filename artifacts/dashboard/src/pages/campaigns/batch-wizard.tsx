@@ -119,13 +119,12 @@ const INITIAL_STATE: WizardState = {
 
 const STEP_DEFS = [
   { num: 1, label: "Batch Info" },
-  { num: 2, label: "Lead Source" },
-  { num: 3, label: "Source Config" },
-  { num: 4, label: "Variable Mapping" },
-  { num: 5, label: "Validation" },
-  { num: 6, label: "Duplicate Policy" },
-  { num: 7, label: "Execution Rules" },
-  { num: 8, label: "Review & Launch" },
+  { num: 2, label: "Source Config" },
+  { num: 3, label: "Variable Mapping" },
+  { num: 4, label: "Validation" },
+  { num: 5, label: "Duplicate Policy" },
+  { num: 6, label: "Execution Rules" },
+  { num: 7, label: "Review & Launch" },
 ] as const;
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
@@ -297,44 +296,6 @@ function Step1({
         )}
       </div>
 
-      {/* Lead source selector — campaign-level decision, set once per batch */}
-      <div className="space-y-3">
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">How will leads arrive?</p>
-          <p className="text-[11px] text-muted-foreground mt-1">This is set at the campaign level — all batches share the same intake method.</p>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {([
-            { type: "webhook"   as const, label: "Webhook / API",  desc: "POST from any CRM or form",    icon: <Webhook className="w-5 h-5 text-violet-400" />   },
-            { type: "csv"       as const, label: "CSV Upload",     desc: "Upload a spreadsheet",         icon: <FileText className="w-5 h-5 text-blue-400" />     },
-            { type: "meta_form" as const, label: "Meta Form",      desc: "Facebook Lead Ads",            icon: <Building2 className="w-5 h-5 text-orange-400" />  },
-          ]).map(({ type, label, desc, icon }) => {
-            const isSelected = state.newSourceType === type && state.sourceMode === "new";
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setState({ newSourceType: type, sourceMode: "new", selectedSource: null })}
-                className={cn(
-                  "flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all",
-                  isSelected
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/40 hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-center justify-between w-full">
-                  {icon}
-                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-primary" />}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
@@ -825,17 +786,22 @@ function CrmPassthroughBanner({ title }: { title: string }) {
 // ── Step 3: Source Configuration ──────────────────────────────────────────────
 
 function Step3({
-  state, setState, campaignId,
+  state, setState, campaignId, onCrmImported,
 }: {
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
   campaignId: number;
+  onCrmImported?: (batchId: number, leadsCreated: number) => void;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
+  const [importConn, setImportConn] = useState<CrmConnection | null>(null);
   const { data: campaign } = useGetCampaign(campaignId, {
     query: { queryKey: getGetCampaignQueryKey(campaignId) },
+  });
+  const { data: crmConnections = [] } = useListCrmConnections({
+    query: { queryKey: getListCrmConnectionsQueryKey() },
   });
 
   if (state.sourceMode === "crm") {
@@ -867,6 +833,71 @@ function Step3({
       setTimeout(() => setCopied(false), 1500);
     });
   }
+
+  // CRM tiles ─────────────────────────────────────────────────────────────────
+  const CRM_TILES_DEF = [
+    { id: "hubspot" as const, name: "HubSpot",    icon: <span className="text-orange-400 font-bold text-sm">HS</span> },
+    { id: "zoho"    as const, name: "Zoho CRM",   icon: <span className="text-blue-400 font-bold text-sm">ZO</span> },
+    { id: "sf"      as const, name: "Salesforce", icon: <Globe className="w-4 h-4 text-muted-foreground" />, disabled: true },
+  ] as const;
+
+  const crmSection = (
+    <div className="space-y-2 pt-2 border-t border-border">
+      <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider pt-2">Or import from CRM</p>
+      <div className="grid grid-cols-3 gap-3">
+        {CRM_TILES_DEF.map(crm => {
+          const conn = "disabled" in crm && crm.disabled ? undefined : crmConnections.find(c => c.provider === crm.id);
+          const isConnected = !!conn;
+          const isDisabled  = "disabled" in crm && crm.disabled;
+          const handleClick = () => {
+            if (isDisabled) return;
+            if (isConnected && conn) {
+              setImportConn(conn);
+            } else {
+              window.location.href = `${BASE}/app/connections#crm-connect=${crm.id}`;
+            }
+          };
+          return (
+            <button
+              key={crm.id}
+              type="button"
+              disabled={isDisabled}
+              onClick={handleClick}
+              className={cn(
+                "p-4 rounded-xl border text-left transition-all space-y-2",
+                isDisabled
+                  ? "border-border opacity-40 pointer-events-none"
+                  : isConnected
+                    ? "border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/60 hover:bg-emerald-500/10"
+                    : "border-border hover:border-primary/50 hover:bg-muted/30",
+              )}
+            >
+              <div className="flex items-center justify-between">
+                {crm.icon}
+                {isConnected
+                  ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500" />Connected
+                    </span>
+                  : !isDisabled && <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                }
+              </div>
+              <div>
+                <p className="text-sm font-medium">{crm.name}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {isDisabled ? "Coming Soon" : isConnected ? "Import contacts →" : "Connect & import →"}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        {crmConnections.length > 0
+          ? "Click a connected CRM to import contacts directly. You'll skip to Execution Rules after import."
+          : "Connect HubSpot or Zoho CRM first, then return here to import contacts."}
+      </p>
+    </div>
+  );
 
   // CSV ────────────────────────────────────────────────────────────────────────
   if (effectiveType === "csv") {
@@ -948,6 +979,22 @@ function Step3({
             </div>
           </div>
         )}
+
+        {crmSection}
+
+        {importConn && (
+          <CrmImportDialog
+            connection={importConn}
+            open={!!importConn}
+            onClose={() => setImportConn(null)}
+            defaultCampaignId={campaignId}
+            onImported={(batchId, leadsCreated) => {
+              setState({ sourceMode: "crm", crmBatchId: batchId });
+              setImportConn(null);
+              onCrmImported?.(batchId, leadsCreated);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -995,12 +1042,46 @@ function Step3({
 }`}</pre>
           </div>
         </div>
+
+        {crmSection}
+
+        {importConn && (
+          <CrmImportDialog
+            connection={importConn}
+            open={!!importConn}
+            onClose={() => setImportConn(null)}
+            defaultCampaignId={campaignId}
+            onImported={(batchId, leadsCreated) => {
+              setState({ sourceMode: "crm", crmBatchId: batchId });
+              setImportConn(null);
+              onCrmImported?.(batchId, leadsCreated);
+            }}
+          />
+        )}
       </div>
     );
   }
 
   // Meta form ──────────────────────────────────────────────────────────────────
-  return <MetaFormStep toast={toast} />;
+  return (
+    <div className="space-y-5 max-w-xl">
+      <MetaFormStep toast={toast} />
+      {crmSection}
+      {importConn && (
+        <CrmImportDialog
+          connection={importConn}
+          open={!!importConn}
+          onClose={() => setImportConn(null)}
+          defaultCampaignId={campaignId}
+          onImported={(batchId, leadsCreated) => {
+            setState({ sourceMode: "crm", crmBatchId: batchId });
+            setImportConn(null);
+            onCrmImported?.(batchId, leadsCreated);
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 // ── Step 4: Variable Mapping ───────────────────────────────────────────────────
@@ -1048,7 +1129,7 @@ function Step4({
           <p className="text-sm text-muted-foreground">
             {effectiveType !== "csv"
               ? "Variable mapping runs per-lead as they arrive via your source."
-              : "Upload a CSV in Step 3 first."}
+              : "Upload a CSV in Step 2 first."}
           </p>
         </div>
       </div>
@@ -1262,7 +1343,7 @@ function Step5({
       {validateMutation.isError && (
         <div className="flex items-center gap-2 text-destructive text-xs bg-destructive/5 border border-destructive/20 rounded-lg px-3 py-2">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-          Check your field mapping in Step 4 (phone column must be mapped).
+          Check your field mapping in Step 3 (phone column must be mapped).
         </div>
       )}
 
@@ -1886,9 +1967,9 @@ function StepSidebar({
       <div className="px-4 py-5 border-b border-border">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Batch Wizard</p>
         <div className="mt-3">
-          <Progress value={(currentStep - 1) / 7 * 100} className="h-1" />
-          <p className="text-[11px] text-muted-foreground mt-1.5">Step {currentStep} of 8</p>
-          {/* Steps 2, 4, 5 may be auto-skipped based on source type */}
+          <Progress value={(currentStep - 1) / 6 * 100} className="h-1" />
+          <p className="text-[11px] text-muted-foreground mt-1.5">Step {currentStep} of 7</p>
+          {/* Steps 3, 4 may be auto-skipped for non-CSV sources */}
         </div>
       </div>
       <nav className="flex-1 py-2 overflow-y-auto">
@@ -1947,6 +2028,19 @@ export default function BatchWizardPage() {
     setWizardState(prev => ({ ...prev, ...patch }));
   }, []);
 
+  // Auto-init newSourceType from campaign's locked leadSource
+  const { data: campaignData } = useGetCampaign(campaignId, {
+    query: { queryKey: getGetCampaignQueryKey(campaignId), enabled: campaignId > 0 },
+  });
+  useEffect(() => {
+    if (!campaignData) return;
+    const ls = (campaignData as any).leadSource as SourceType | undefined;
+    if (ls && ls !== state.newSourceType) {
+      setState({ newSourceType: ls, sourceMode: "new" });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignData]);
+
   // Resolved source type from state (used for skip logic)
   function resolvedType(): SourceType {
     return state.sourceMode === "existing"
@@ -1958,23 +2052,20 @@ export default function BatchWizardPage() {
     switch (currentStep) {
       case 1: return state.batchName.trim().length > 0;
       case 2: {
-        // Step 2 is only shown for CRM flow — always advanceable once CRM is triggered
-        if (state.sourceMode === "crm") return true;
-        return !!(state.sourceMode === "existing" ? state.selectedSource : state.newSourceType);
-      }
-      case 3: {
+        // Source Config: csv needs a file, others are always ready
         if (state.sourceMode === "crm") return true;
         const t = resolvedType();
         if (t === "csv") return state.csvRows.length > 0;
-        // Webhook / Meta: campaign URL is always ready, no source creation needed
         return true;
       }
-      case 4: {
+      case 3: {
+        // Variable Mapping: csv needs phone mapped
         if (state.sourceMode === "crm") return true;
         const t = resolvedType();
         if (t !== "csv") return true;
         return !!state.fieldMapping["phone"];
       }
+      case 4: return true;
       case 5: return true;
       case 6: return true;
       default: return true;
@@ -1984,52 +2075,39 @@ export default function BatchWizardPage() {
   function goNext() {
     if (!canAdvance()) return;
 
-    // CRM: once triggered from step 2, jump straight to execution rules
-    if (state.sourceMode === "crm" && currentStep >= 2 && currentStep <= 6) {
-      setCompleted(prev => new Set([...prev, 2, 3, 4, 5, 6]));
-      setCurrentStep(7);
+    // CRM: from step 2 after import → jump to Execution Rules (step 6)
+    if (state.sourceMode === "crm" && currentStep === 2) {
+      setCompleted(prev => new Set([...prev, 2, 3, 4, 5]));
+      setCurrentStep(6);
       return;
     }
 
-    // Step 1 → skip step 2 for all non-CRM flows; source type already chosen in step 1
-    if (currentStep === 1) {
-      setCompleted(prev => new Set([...prev, 1, 2]));
-      setCurrentStep(3);
-      return;
-    }
-
-    // Step 3 → skip variable mapping + validation for non-CSV sources
-    if (currentStep === 3) {
+    // Step 2 (Source Config) → skip Variable Mapping + Validation for non-CSV
+    if (currentStep === 2) {
       const t = resolvedType();
       if (t !== "csv") {
-        setCompleted(prev => new Set([...prev, 3, 4, 5]));
-        setCurrentStep(6);
+        setCompleted(prev => new Set([...prev, 2, 3, 4]));
+        setCurrentStep(5);
         return;
       }
     }
 
     setCompleted(prev => new Set([...prev, currentStep]));
-    setCurrentStep(s => Math.min(s + 1, 8));
+    setCurrentStep(s => Math.min(s + 1, 7));
   }
 
   function goBack() {
-    // CRM: back from any middle step goes to step 2
-    if (state.sourceMode === "crm" && currentStep >= 3 && currentStep <= 7) {
+    // CRM: back from any middle/late step goes to step 2
+    if (state.sourceMode === "crm" && currentStep >= 3 && currentStep <= 6) {
       setCurrentStep(2);
       return;
     }
 
-    // Step 3 → back to step 1 (step 2 is skipped for non-CRM)
-    if (currentStep === 3 && state.sourceMode !== "crm") {
-      setCurrentStep(1);
-      return;
-    }
-
-    // Step 6 → back to step 3 for non-CSV (steps 4-5 were skipped)
-    if (currentStep === 6) {
+    // Step 5 (Duplicate Policy) → back to step 2 for non-CSV (steps 3-4 were skipped)
+    if (currentStep === 5) {
       const t = resolvedType();
       if (t !== "csv") {
-        setCurrentStep(3);
+        setCurrentStep(2);
         return;
       }
     }
@@ -2080,28 +2158,27 @@ export default function BatchWizardPage() {
         <div className="flex-1 overflow-y-auto px-8 py-6">
           {currentStep === 1 && <Step1 state={state} setState={setState} campaignId={campaignId} />}
           {currentStep === 2 && (
-            <Step2
+            <Step3
               state={state}
               setState={setState}
               campaignId={campaignId}
               onCrmImported={() => {
-                setCompleted(prev => new Set([...prev, 2, 3, 4, 5, 6]));
-                setCurrentStep(7);
+                setCompleted(prev => new Set([...prev, 2, 3, 4, 5]));
+                setCurrentStep(6);
               }}
             />
           )}
-          {currentStep === 3 && <Step3 state={state} setState={setState} campaignId={campaignId} />}
-          {currentStep === 4 && <Step4 state={state} setState={setState} campaignId={campaignId} />}
-          {currentStep === 5 && <Step5 state={state} setState={setState} campaignId={campaignId} />}
-          {currentStep === 6 && <Step6 state={state} setState={setState} />}
-          {currentStep === 7 && <Step7 state={state} setState={setState} />}
-          {currentStep === 8 && (
+          {currentStep === 3 && <Step4 state={state} setState={setState} campaignId={campaignId} />}
+          {currentStep === 4 && <Step5 state={state} setState={setState} campaignId={campaignId} />}
+          {currentStep === 5 && <Step6 state={state} setState={setState} />}
+          {currentStep === 6 && <Step7 state={state} setState={setState} />}
+          {currentStep === 7 && (
             <Step8 state={state} campaignId={campaignId} onLaunchSuccess={setLaunchedBatch} />
           )}
         </div>
 
-        {/* Bottom nav (hidden on Step 8 which has its own launch button) */}
-        {currentStep < 8 && (
+        {/* Bottom nav (hidden on Step 7 which has its own launch button) */}
+        {currentStep < 7 && (
           <div className="flex-shrink-0 px-8 py-4 border-t border-border flex items-center justify-between bg-background/60">
             <Button variant="ghost" size="sm" onClick={goBack} disabled={currentStep === 1}>
               <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />Back
