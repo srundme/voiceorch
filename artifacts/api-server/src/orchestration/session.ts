@@ -26,6 +26,7 @@ import { appendTraiDisclosure, scanForOptOut } from "../services/trai/index.js";
 import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.js";
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
+import { refillCampaignForLead } from "../services/batchScheduler.js";
 import { recordCallExecution } from "./campaignCaller.js";
 import {
   resolveCallerKey,
@@ -1440,6 +1441,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       void db.update(campaignLeadsTable)
         .set({ callStatus: terminalLeadStatus })
         .where(eq(campaignLeadsTable.id, session.campaignLeadId))
+        .then(() => {
+          // Rolling concurrency: this connected/completed/transferred call just
+          // freed a slot, so immediately top the campaign back up to its limit
+          // rather than waiting for the next 60 s poll. Fire-and-forget.
+          void refillCampaignForLead(session.campaignLeadId!);
+        })
         .catch((err) => {
           logger.warn({ campaignLeadId: session.campaignLeadId, err }, "Failed to mark campaign lead terminal");
         });

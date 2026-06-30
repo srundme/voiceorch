@@ -63,3 +63,4 @@
 - [Planning executeSql hits dev DB](planning-db-vs-prod-logs.md) — executeSql queries DEV; prod is a separate DB, same call ID can be a different call; trust user's prod logs
 - [Tool-call tail leaks to TTS](tool-tail-tts-leak.md) — envelope guard only checks first char; a tool tag appended AFTER text slips through and gets spoken; need mid/end-of-stream kill-switch + whole-string strip
 - [Explicit language request must latch](language-request-latch.md) — per-turn script auto-detect drags caller back to default; latch explicit requests but require a request cue (not bare mentions) or you trap them
+- [Campaign rolling concurrency](campaign-rolling-concurrency.md) — concurrency topped up by event-driven refill on every terminal call-end (not the 60s poll); DB calling/connected count is source of truth; serialize per-campaign + atomic claim or you over-claim/double-dial

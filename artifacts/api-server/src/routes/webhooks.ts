@@ -11,6 +11,7 @@ import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
 import { scheduleRetry } from "../services/retryEngine.js";
+import { refillCampaignConcurrency } from "../services/batchScheduler.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { APP_SECRET } from "../lib/app-secret.js";
 
@@ -162,6 +163,11 @@ async function handleCampaignLeadTerminalStatus(opts: {
   }
 
   logger.info({ campaignLeadId, rawCallStatus, leadStatus, retryScheduled }, "Campaign lead updated to terminal status");
+
+  // Rolling concurrency: a slot just freed (lead left the active calling/connected
+  // count), so immediately top the campaign back up to its limit instead of
+  // waiting for the next 60 s poll. Fire-and-forget — never block the webhook.
+  void refillCampaignConcurrency(lead.campaignId);
 }
 
 /**

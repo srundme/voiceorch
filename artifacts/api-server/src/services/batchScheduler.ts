@@ -76,32 +76,16 @@ async function pollScheduledBatches(): Promise<void> {
         .set({ status: "running" })
         .where(eq(campaignBatchesTable.id, batch.id));
 
-      // Queue up to the concurrency limit
-      const limit = campaign.concurrentCallLimit ?? 20;
-      const currentlyActive = await countCallingLeads(campaign.id);
-      const slots = Math.max(0, limit - currentlyActive);
+      // Fire the first wave up to the concurrency limit (atomic claim, shared
+      // with the event-driven refill so the limit is respected the same way).
+      await refillCampaignConcurrency(campaign.id);
 
-      if (slots <= 0) {
-        logger.info({ batchId: batch.id, campaignId: campaign.id }, "Campaign at concurrency limit — batch queued");
-        continue;
-      }
-
-      const pending = await db.select().from(campaignLeadsTable)
-        .where(and(
-          eq(campaignLeadsTable.campaignId, campaign.id),
-          sql`${campaignLeadsTable.batchId} = ${batch.id}`,
-          eq(campaignLeadsTable.callStatus, "pending"),
-        ))
-        .limit(slots);
-
-      for (const lead of pending) {
-        scheduleCampaignCall(lead, campaign);
-      }
-
-      logger.info({ batchId: batch.id, batchName: batch.name, leads: pending.length, slots, limit }, "Scheduled batch auto-started");
+      logger.info({ batchId: batch.id, batchName: batch.name }, "Scheduled batch auto-started");
     }
 
-    // Also check running batches — continue queueing as calls finish
+    // Also check running batches — backstop reconciliation: top each campaign
+    // back up to its limit in case an event-driven refill was missed, and mark
+    // batches complete once all their leads are processed.
     const runningBatches = await db.select().from(campaignBatchesTable)
       .where(eq(campaignBatchesTable.status, "running"));
 
@@ -110,27 +94,7 @@ async function pollScheduledBatches(): Promise<void> {
         .where(eq(campaignsTable.id, batch.campaignId));
       if (!campaign || !campaign.isActive) continue;
 
-      const limit = campaign.concurrentCallLimit ?? 20;
-      const currentlyActive = await countCallingLeads(campaign.id);
-      const slots = Math.max(0, limit - currentlyActive);
-
-      if (slots <= 0) continue;
-
-      const pending = await db.select().from(campaignLeadsTable)
-        .where(and(
-          eq(campaignLeadsTable.campaignId, campaign.id),
-          sql`${campaignLeadsTable.batchId} = ${batch.id}`,
-          eq(campaignLeadsTable.callStatus, "pending"),
-        ))
-        .limit(slots);
-
-      for (const lead of pending) {
-        scheduleCampaignCall(lead, campaign);
-      }
-
-      if (pending.length > 0) {
-        logger.info({ batchId: batch.id, campaignId: campaign.id, leads: pending.length, slots }, "Running batch continued");
-      }
+      await refillCampaignConcurrency(campaign.id);
 
       // If no more pending leads, mark batch complete
       const remainingPending = await db.select({ count: sql<number>`count(*)` })
@@ -159,6 +123,119 @@ async function countCallingLeads(campaignId: number): Promise<number> {
       inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
     ));
   return result[0]?.count ?? 0;
+}
+
+/**
+ * Event-driven rolling refill.
+ * ──────────────────────────────────────────────────────────────────────────
+ * Tops a campaign back up to its configured `concurrentCallLimit` by claiming
+ * and dialing the next pending lead(s) the instant a slot frees up — without
+ * waiting for the 60 s backstop poll. This is what makes concurrency *rolling*:
+ * every terminal call-end path (non-connected webhook, connected/completed,
+ * transfer, callback-scheduled) calls this so the campaign stays topped up.
+ *
+ * Uses the SAME atomic pre-claim as `fireStartBatch` (campaign-batches.ts) so
+ * the `calling`/`connected` count remains the single source of truth and the
+ * same lead is never double-dialed. Refills are serialized per-campaign within
+ * the process (`refillInFlight`) so two simultaneous call-ends can't both
+ * compute the same free-slot count and over-claim past the limit; if a refill
+ * is requested while one is already running for that campaign, it re-runs once
+ * more afterwards so no freed slot is missed.
+ */
+const refillInFlight = new Set<number>();
+const refillRerun = new Set<number>();
+
+export async function refillCampaignConcurrency(campaignId: number): Promise<void> {
+  if (refillInFlight.has(campaignId)) {
+    refillRerun.add(campaignId);
+    return;
+  }
+  refillInFlight.add(campaignId);
+  try {
+    await doRefillCampaignConcurrency(campaignId);
+  } finally {
+    refillInFlight.delete(campaignId);
+    if (refillRerun.delete(campaignId)) {
+      void refillCampaignConcurrency(campaignId);
+    }
+  }
+}
+
+async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
+  try {
+    const [campaign] = await db.select().from(campaignsTable)
+      .where(eq(campaignsTable.id, campaignId));
+    if (!campaign || !campaign.isActive) return;
+
+    const limit = campaign.concurrentCallLimit ?? 20;
+    const currentlyActive = await countCallingLeads(campaign.id);
+    let slots = Math.max(0, limit - currentlyActive);
+    if (slots <= 0) return;
+
+    // Oldest running batches first so leads dial in batch order.
+    const runningBatches = await db.select().from(campaignBatchesTable)
+      .where(and(
+        eq(campaignBatchesTable.campaignId, campaign.id),
+        eq(campaignBatchesTable.status, "running"),
+      ))
+      .orderBy(campaignBatchesTable.id);
+
+    for (const batch of runningBatches) {
+      if (slots <= 0) break;
+
+      // Atomic pre-claim — identical guard to fireStartBatch. The trailing
+      // `AND call_status = 'pending'` means a concurrent claim on the same rows
+      // sees the committed 'calling' status and skips them, so no lead is ever
+      // double-dialed even if the poll and an event-driven refill race.
+      const claimed = await db.execute<{ id: number }>(sql`
+        UPDATE campaign_leads
+        SET call_status = 'calling', last_attempt_at = now()
+        WHERE id IN (
+          SELECT id FROM campaign_leads
+          WHERE campaign_id = ${campaign.id}
+            AND batch_id = ${batch.id}
+            AND call_status = 'pending'
+          ORDER BY id
+          LIMIT ${slots}
+        )
+        AND call_status = 'pending'
+        RETURNING id
+      `);
+
+      const claimedIds = claimed.rows.map(r => r.id);
+      if (claimedIds.length === 0) continue;
+
+      const claimedLeads = await db.select().from(campaignLeadsTable)
+        .where(inArray(campaignLeadsTable.id, claimedIds));
+
+      for (const lead of claimedLeads) {
+        scheduleCampaignCall(lead, campaign);
+      }
+
+      slots -= claimedIds.length;
+      logger.info(
+        { campaignId: campaign.id, batchId: batch.id, dialed: claimedIds.length, limit, currentlyActive },
+        "Rolling refill: dialed next pending leads",
+      );
+    }
+  } catch (err) {
+    logger.error({ err, campaignId }, "refillCampaignConcurrency error");
+  }
+}
+
+/**
+ * Resolve a campaign lead's campaign and refill its concurrency. Convenience
+ * wrapper for call-end paths that only have the leadId in hand (e.g. session.ts).
+ */
+export async function refillCampaignForLead(leadId: number): Promise<void> {
+  try {
+    const [lead] = await db.select({ campaignId: campaignLeadsTable.campaignId })
+      .from(campaignLeadsTable)
+      .where(eq(campaignLeadsTable.id, leadId));
+    if (lead) await refillCampaignConcurrency(lead.campaignId);
+  } catch (err) {
+    logger.error({ err, leadId }, "refillCampaignForLead error");
+  }
 }
 
 /**
