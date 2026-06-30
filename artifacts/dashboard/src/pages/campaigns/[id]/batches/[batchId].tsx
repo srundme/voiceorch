@@ -1,7 +1,7 @@
 /**
  * Batch Workspace — Phase 4
  * Transforms a batch from "import container" → Operational Command Center.
- * Layout: Header → KPI Strip → Tabs (Overview | Leads | Activity | Sources)
+ * Layout: Header → KPI Strip → Tabs (Overview | Leads)
  * Keeps existing controls (Start / Pause / Stop / Redial) intact.
  */
 
@@ -19,8 +19,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
-  TrendingUp, CheckCircle2, Bell, PhoneIncoming, ExternalLink,
-  Eye, Activity, FileText, Database, AlertTriangle, RefreshCw,
+  TrendingUp, Bell, PhoneIncoming, ExternalLink,
+  Eye, Database, RefreshCw,
   User,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -56,23 +56,6 @@ type BatchWorkspaceLead = {
 
 type BatchLeadsPage = { items: BatchWorkspaceLead[]; total: number; page: number; limit: number };
 
-type ActivityEvent = {
-  id: number; leadId: number; leadName: string | null; leadPhone: string | null;
-  eventType: string; data: Record<string, unknown> | null; createdAt: string;
-};
-
-type ImportRun = {
-  id: number; fileName: string | null; status: string;
-  totalRows: number; validRows: number; invalidRows: number; duplicateRows: number; createdRows: number;
-  processingTimeMs: number | null; createdAt: string;
-  sourceName: string | null; sourceType: string | null;
-};
-
-type SourceSummary = {
-  sourceName: string; sourceType: string;
-  importRuns: number; totalRows: number; validRows: number; duplicates: number; errors: number;
-};
-
 type BatchHeader = {
   batch: {
     id: number; name: string; status: string; leadSource: string;
@@ -107,25 +90,6 @@ function fmtRelative(iso: string): string {
 
 // ── Status / outcome config — canonical maps from shared lib ─────────────────
 // BATCH_STATUS_MAP, callStatusCfg(), outcomeCfg() imported from @/lib/campaign-status
-
-const EVENT_CFG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  lead_imported:         { label: "Lead Imported",        icon: <FileText className="h-3 w-3"      />, color: "text-violet-400"   },
-  call_started:          { label: "Call Started",         icon: <PhoneCall className="h-3 w-3"     />, color: "text-sky-500"      },
-  call_completed:        { label: "Call Completed",       icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
-  call_failed:           { label: "Call Failed",          icon: <XCircle className="h-3 w-3"       />, color: "text-red-500"      },
-  booking_created:       { label: "Booking Created",      icon: <Calendar className="h-3 w-3"      />, color: "text-violet-500"   },
-  transfer_completed:    { label: "Transferred",          icon: <ArrowRightLeft className="h-3 w-3"/>, color: "text-sky-400"      },
-  callback_scheduled:    { label: "Callback Scheduled",   icon: <Bell className="h-3 w-3"          />, color: "text-amber-500"    },
-  callback_completed:    { label: "Callback Completed",   icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
-  interest_confirmed:    { label: "Interested",           icon: <TrendingUp className="h-3 w-3"    />, color: "text-emerald-400"  },
-  dnc_flagged:           { label: "DNC Flagged",          icon: <AlertTriangle className="h-3 w-3" />, color: "text-red-400"      },
-  batch_started:         { label: "Batch Started",        icon: <PhoneCall className="h-3 w-3"     />, color: "text-sky-500"      },
-  batch_completed:       { label: "Batch Completed",      icon: <CheckCircle2 className="h-3 w-3"  />, color: "text-emerald-500"  },
-  batch_stopped:         { label: "Batch Stopped",        icon: <XCircle className="h-3 w-3"       />, color: "text-red-500"      },
-  batch_paused:          { label: "Batch Paused",         icon: <Activity className="h-3 w-3"      />, color: "text-amber-500"    },
-  disposition_set:       { label: "Disposition Set",      icon: <Activity className="h-3 w-3"      />, color: "text-muted-foreground/50" },
-  outcome_updated:       { label: "Outcome Updated",      icon: <TrendingUp className="h-3 w-3"    />, color: "text-violet-400"   },
-};
 
 // ── BatchStatusBadge ──────────────────────────────────────────────────────────
 
@@ -543,198 +507,9 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
   );
 }
 
-// ── Activity Tab ──────────────────────────────────────────────────────────────
-
-function ActivityTab({ campaignId, batchId }: { campaignId: number; batchId: number }) {
-  const { data, isFetching, refetch } = useQuery<{ events: ActivityEvent[] }>({
-    queryKey: ["batch-activity", campaignId, batchId],
-    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/activity`),
-    refetchInterval: 15000,
-  });
-
-  const events = data?.events ?? [];
-
-  return (
-    <div className="p-5">
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
-          <Activity className="h-3.5 w-3.5" /> Activity Stream
-        </p>
-        <Button size="sm" variant="ghost" className={cn("h-7 gap-1.5 text-xs", isFetching && "opacity-60")}
-          onClick={() => void refetch()}>
-          <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
-        </Button>
-      </div>
-
-      {events.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 gap-2">
-          <Activity className="h-7 w-7 text-muted-foreground/20" />
-          <p className="text-sm text-muted-foreground/40">No activity recorded yet</p>
-          <p className="text-xs text-muted-foreground/30">Events will appear here as leads progress</p>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {events.map(evt => {
-            const cfg = EVENT_CFG[evt.eventType] ?? {
-              label: evt.eventType.replace(/_/g, " "),
-              icon: <Activity className="h-3 w-3" />,
-              color: "text-muted-foreground/50",
-            };
-            return (
-              <div key={evt.id} className="flex items-start gap-3 py-2 border-b border-border/20 last:border-0">
-                <div className={cn("mt-0.5 shrink-0", cfg.color)}>{cfg.icon}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn("text-xs font-medium", cfg.color)}>{cfg.label}</span>
-                    {(evt.leadName || evt.leadPhone) && (
-                      <span className="text-xs text-muted-foreground/60 truncate">
-                        {evt.leadName ?? evt.leadPhone}
-                      </span>
-                    )}
-                    {typeof evt.data?.disposition === "string" && evt.data.disposition && (
-                      <span className="text-xs text-muted-foreground/50 italic">
-                        &ldquo;{evt.data.disposition}&rdquo;
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground/40 shrink-0">{fmtRelative(evt.createdAt)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Sources Tab ───────────────────────────────────────────────────────────────
-
-function SourcesTab({ campaignId, batchId }: { campaignId: number; batchId: number }) {
-  const { data } = useQuery<{ sources: SourceSummary[]; runs: ImportRun[] }>({
-    queryKey: ["batch-sources", campaignId, batchId],
-    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/sources`),
-  });
-
-  const sources = data?.sources ?? [];
-  const runs    = data?.runs    ?? [];
-
-  return (
-    <div className="p-5 space-y-5">
-      {/* Source Summary */}
-      {sources.length > 0 && (
-        <div className="rounded-xl border border-border/40 bg-card p-4">
-          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40 mb-3">Source Summary</p>
-          <div className="space-y-0">
-            {sources.map((s, i) => (
-              <div key={i} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-0">
-                <div className="flex items-center gap-2 min-w-[130px]">
-                  {s.sourceType === "csv" ? (
-                    <FileText className="h-3 w-3 text-muted-foreground/40" />
-                  ) : (
-                    <Database className="h-3 w-3 text-muted-foreground/40" />
-                  )}
-                  <div>
-                    <p className="text-xs font-medium">{s.sourceName}</p>
-                    <p className="text-xs text-muted-foreground/50 uppercase">
-                      {s.sourceType === "csv" ? "CSV Import" : s.sourceType}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-4 text-xs flex-wrap">
-                  <div className="text-center"><p className="text-foreground font-semibold">{s.importRuns}</p><p className="text-muted-foreground/40 text-xs">Runs</p></div>
-                  <div className="text-center"><p className="text-foreground font-semibold">{s.totalRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Total</p></div>
-                  <div className="text-center"><p className="text-emerald-500 font-semibold">{s.validRows.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Valid</p></div>
-                  <div className="text-center"><p className="text-amber-500 font-semibold">{s.duplicates.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Dupes</p></div>
-                  <div className="text-center"><p className="text-red-500 font-semibold">{s.errors.toLocaleString()}</p><p className="text-muted-foreground/40 text-xs">Errors</p></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Import Run History */}
-      <div className="rounded-xl border border-border/40 bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border/30">
-          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40 flex items-center gap-2">
-            <FileText className="h-3 w-3" /> Import Runs
-          </p>
-        </div>
-        {runs.length === 0 ? (
-          <div className="py-10 flex flex-col items-center gap-2">
-            <FileText className="h-7 w-7 text-muted-foreground/20" />
-            <p className="text-xs text-muted-foreground/40">No import runs recorded</p>
-          </div>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="border-b border-border/30 bg-muted/10">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">File / Source</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Status</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">Total</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Created</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Dupes</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Errors</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">When</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/20">
-              {runs.map(r => (
-                <tr key={r.id} className="hover:bg-muted/10">
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium truncate max-w-[160px]">{r.fileName ?? r.sourceName ?? "Unknown"}</p>
-                    {r.sourceType && (
-                      <p className="text-xs text-muted-foreground/50 uppercase">
-                        {r.sourceType === "csv" ? "CSV Import" : r.sourceType}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 hidden sm:table-cell">
-                    <span className={cn(
-                      "inline-flex text-xs font-semibold px-2 py-0.5 rounded border",
-                      r.status === "completed" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
-                      r.status === "failed"    ? "bg-red-500/10 text-red-500 border-red-500/20" :
-                      "bg-amber-500/10 text-amber-600 border-amber-500/20",
-                    )}>
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <p className="tabular-nums">{r.totalRows}</p>
-                    <p className="text-xs text-emerald-500">{r.createdRows} created</p>
-                  </td>
-                  <td className="px-3 py-2.5 hidden md:table-cell">
-                    <span className={cn("tabular-nums", r.duplicateRows > 0 ? "text-amber-500" : "text-muted-foreground/50")}>
-                      {r.duplicateRows}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 hidden md:table-cell">
-                    <span className={cn("tabular-nums", r.invalidRows > 0 ? "text-red-500" : "text-muted-foreground/50")}>
-                      {r.invalidRows}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 hidden lg:table-cell">
-                    <span className="text-muted-foreground/50">
-                      {r.processingTimeMs != null ? `${(r.processingTimeMs / 1000).toFixed(1)}s` : "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 hidden xl:table-cell">
-                    <span className="text-muted-foreground/50">{fmtRelative(r.createdAt)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type WorkspaceTab = "overview" | "leads" | "activity" | "sources";
+type WorkspaceTab = "overview" | "leads";
 
 export default function BatchWorkspacePage() {
   const [, params] = useRoute("/app/campaigns/:id/batches/:batchId");
@@ -828,8 +603,6 @@ export default function BatchWorkspacePage() {
   const TABS: { key: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     { key: "overview",  label: "Overview",  icon: <TrendingUp className="h-3 w-3"   /> },
     { key: "leads",     label: "Leads",     icon: <Users className="h-3 w-3"        /> },
-    { key: "activity",  label: "Activity",  icon: <Activity className="h-3 w-3"     /> },
-    { key: "sources",   label: "Sources",   icon: <Database className="h-3 w-3"     /> },
   ];
 
   return (
@@ -944,8 +717,6 @@ export default function BatchWorkspacePage() {
       <div className="flex-1 overflow-auto min-h-0">
         {activeTab === "overview"  && <OverviewTab  campaignId={campaignId} batchId={batchId} header={header} />}
         {activeTab === "leads"     && <LeadsTab     campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} />}
-        {activeTab === "activity"  && <ActivityTab  campaignId={campaignId} batchId={batchId} />}
-        {activeTab === "sources"   && <SourcesTab   campaignId={campaignId} batchId={batchId} />}
       </div>
 
     </div>
