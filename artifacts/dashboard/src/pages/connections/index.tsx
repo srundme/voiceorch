@@ -30,7 +30,7 @@ import {
   Copy, CheckCircle2, Globe, Webhook, AlertCircle, Clock,
   Zap, Sheet, Radio, X, ChevronDown, ChevronRight,
   ArrowRight, ExternalLink, Lock, RefreshCw, Eye, EyeOff,
-  Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2,
+  Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -690,6 +690,195 @@ function ConnectionCard({
         />
       )}
     </>
+  );
+}
+
+// ── Compact Webhook Row ───────────────────────────────────────────────────────
+
+function WebhookRow({
+  connection,
+  onRefresh,
+  hasNewEvent = false,
+}: {
+  connection: Connection;
+  onRefresh: () => void;
+  hasNewEvent?: boolean;
+}) {
+  const [listenOpen, setListenOpen] = useState(false);
+  const [hmacOpen, setHmacOpen] = useState(false);
+  const [embedOpen, setEmbedOpen] = useState(false);
+
+  const initials = connection.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(w => w[0]?.toUpperCase() ?? "")
+    .join("") || "W";
+
+  return (
+    <>
+      <div className={cn("border-b border-border/50 last:border-b-0", hasNewEvent && "bg-violet-500/5")}>
+        <div className="flex items-center gap-3 px-4 py-2.5">
+          <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0 text-[10px] font-bold text-muted-foreground select-none">
+            {initials}
+          </div>
+
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground truncate max-w-[180px]">
+              {connection.name}
+            </span>
+            <StatusBadge status={connection.status as ConnectionStatus} pulse={hasNewEvent} />
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1 min-w-0 flex-1 max-w-[220px]">
+            <code className="text-[10px] text-muted-foreground font-mono truncate">
+              {connection.webhookUrl}
+            </code>
+            <CopyButton text={connection.webhookUrl} />
+          </div>
+
+          <div className="hidden md:block w-28 shrink-0 text-right">
+            {connection.lastEventAt ? (
+              <span className="text-[10px] text-muted-foreground">
+                {format(new Date(connection.lastEventAt), "MMM d, HH:mm")}
+              </span>
+            ) : (
+              <span className="text-[10px] text-muted-foreground/40">—</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-0.5 shrink-0">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setListenOpen(true)}
+              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+              title="Listen for incoming payloads"
+            >
+              <Radio className="w-3 h-3" />
+              <span className="hidden sm:inline">Listen</span>
+            </Button>
+            <Button
+              size="sm"
+              variant={embedOpen ? "secondary" : "ghost"}
+              onClick={() => setEmbedOpen(v => !v)}
+              className="h-6 px-2 text-muted-foreground hover:text-foreground"
+              title={embedOpen ? "Hide embed snippet" : "Show embed snippet"}
+            >
+              <Code2 className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setHmacOpen(true)}
+              className="h-6 px-2 text-muted-foreground hover:text-foreground"
+              title="Configure HMAC signature"
+            >
+              <Lock className={cn("w-3 h-3", connection.hasHmacSecret && "text-emerald-400")} />
+            </Button>
+          </div>
+        </div>
+
+        {embedOpen && (
+          <div className="px-4 pb-3 border-t border-border/30 pt-3">
+            <EmbedSnippetPanel connection={connection} />
+          </div>
+        )}
+      </div>
+
+      {listenOpen && (
+        <ListenDialog
+          connection={connection}
+          open={listenOpen}
+          onClose={() => setListenOpen(false)}
+          onMappingSaved={onRefresh}
+        />
+      )}
+      {hmacOpen && (
+        <HmacConfigDialog
+          connection={connection}
+          open={hmacOpen}
+          onClose={() => { setHmacOpen(false); onRefresh(); }}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Webhook Table ─────────────────────────────────────────────────────────────
+
+function WebhookTable({
+  connections,
+  onRefresh,
+  newEventIds,
+}: {
+  connections: Connection[];
+  onRefresh: () => void;
+  newEventIds: Set<number>;
+}) {
+  const [search, setSearch] = useState("");
+
+  const filtered = connections.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.status === "connected" && b.status !== "connected") return -1;
+    if (b.status === "connected" && a.status !== "connected") return 1;
+    const aTs = a.lastEventAt ? new Date(a.lastEventAt).getTime() : 0;
+    const bTs = b.lastEventAt ? new Date(b.lastEventAt).getTime() : 0;
+    if (bTs !== aTs) return bTs - aTs;
+    return a.name.localeCompare(b.name);
+  });
+
+  return (
+    <div className="space-y-2">
+      {connections.length > 5 && (
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Filter by campaign name…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border bg-muted/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary"
+          />
+        </div>
+      )}
+
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50 bg-muted/30">
+          <div className="w-7 shrink-0" />
+          <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign</div>
+          <div className="hidden sm:block flex-1 max-w-[220px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Webhook URL</div>
+          <div className="hidden md:block w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Last Event</div>
+          <div className="w-[100px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground text-right">Actions</div>
+        </div>
+
+        {sorted.length === 0 ? (
+          <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
+            {search ? `No campaigns match "${search}"` : "No webhook connections yet"}
+          </div>
+        ) : (
+          sorted.map(c => (
+            <WebhookRow
+              key={c.id}
+              connection={c}
+              onRefresh={onRefresh}
+              hasNewEvent={newEventIds.has(c.id)}
+            />
+          ))
+        )}
+      </div>
+
+      {sorted.length > 0 && (
+        <p className="text-[10px] text-muted-foreground pl-1">
+          {search && filtered.length !== connections.length
+            ? `${filtered.length} of ${connections.length} webhooks`
+            : `${connections.length} webhook${connections.length !== 1 ? "s" : ""}`}
+          {" — "}one per campaign, auto-created
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1404,7 +1593,7 @@ export default function ConnectionsPage() {
         <div>
           <h1 className="text-base font-semibold text-foreground">Connections</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage inbound lead sources — webhook, Meta Lead Ads, Google Sheets, and more.
+            Connect your CRM, automate lead intake, and manage campaign webhooks.
           </p>
         </div>
         <Button
@@ -1421,47 +1610,56 @@ export default function ConnectionsPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-6 py-8 space-y-8">
 
-          {/* Active connections */}
+          {/* 1. CRM Connectors — primary integrations */}
+          <CrmConnectorSection />
+
+          {/* 2. Campaign Webhooks — compact searchable table */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Your Connections
+                Campaign Webhooks
               </h2>
               <span className="text-[10px] text-muted-foreground">
-                {connections.length} connection{connections.length !== 1 ? "s" : ""}
+                {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
               </span>
             </div>
 
             {isLoading ? (
-              <div className="space-y-3">
-                {[1, 2].map(i => <div key={i} className="h-20 rounded-xl bg-card border border-border animate-pulse" />)}
+              <div className="space-y-1">
+                {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-card border border-border animate-pulse" />)}
               </div>
-            ) : connections.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                  <Webhook className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground">No connections yet</p>
+            ) : webhookConnections.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center bg-card border border-border rounded-xl">
+                <Webhook className="w-5 h-5 text-muted-foreground mb-2" />
+                <p className="text-sm font-medium text-muted-foreground">No webhook connections</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Create a campaign first — each campaign automatically gets a webhook URL for receiving leads.
+                  Create a campaign to get a webhook URL for receiving leads automatically.
                 </p>
               </div>
             ) : (
+              <WebhookTable
+                connections={webhookConnections}
+                onRefresh={handleRefresh}
+                newEventIds={newEventIds}
+              />
+            )}
+          </section>
+
+          {/* 3. Meta Lead Ads — only shown if connected */}
+          {metaConnections.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Meta Lead Ads
+              </h2>
               <div className="space-y-3">
-                {webhookConnections.map(c => (
-                  <ConnectionCard key={`wh-${c.id}`} connection={c} onRefresh={handleRefresh} hasNewEvent={newEventIds.has(c.id)} />
-                ))}
                 {metaConnections.map(c => (
                   <ConnectionCard key={`meta-${c.id}`} connection={c} onRefresh={handleRefresh} hasNewEvent={newEventIds.has(c.id)} />
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+          )}
 
-          {/* CRM Connectors */}
-          <CrmConnectorSection />
-
-          {/* Recipes */}
+          {/* 4. Setup Recipes */}
           <section className="space-y-3">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Setup Recipes
