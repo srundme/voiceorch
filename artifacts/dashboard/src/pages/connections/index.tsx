@@ -291,15 +291,15 @@ function ListenDialog({
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="bg-card border-border max-w-lg flex flex-col max-h-[90vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="text-sm">Listen for Test Event</DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
             Send a real payload from your source to capture a sample and map fields.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 pr-1 space-y-4">
           {/* Webhook URL */}
           <div className="bg-muted/40 border border-border rounded-lg p-3 space-y-1.5">
             <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Your Webhook URL</p>

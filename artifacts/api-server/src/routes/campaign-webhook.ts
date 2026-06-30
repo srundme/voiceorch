@@ -18,8 +18,8 @@
 
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { db, campaignsTable, campaignLeadsTable, leadTimelineTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, campaignsTable, campaignLeadsTable, campaignBatchesTable, leadTimelineTable } from "@workspace/db";
+import { eq, sql, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
@@ -137,8 +137,19 @@ async function insertLeadAndSchedule(opts: {
     }
   }
 
+  // Find the currently running batch for this campaign (if any) so the lead
+  // shows up in the batch view. Pick the most-recently-started running batch.
+  const runningBatch = await db.query.campaignBatchesTable.findFirst({
+    where: and(
+      eq(campaignBatchesTable.campaignId, opts.campaignId),
+      eq(campaignBatchesTable.status, "running"),
+    ),
+    orderBy: (t, { desc }) => [desc(t.id)],
+  });
+
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
+    batchId:         runningBatch?.id ?? null,
     phone:           opts.phone,
     normalizedPhone: normalized,
     name:            opts.name,
@@ -153,13 +164,19 @@ async function insertLeadAndSchedule(opts: {
     leadId:    lead!.id,
     campaignId: opts.campaignId,
     eventType: "imported",
-    data:      { source: opts.source, externalLeadId: opts.externalLeadId ?? null },
+    data:      { source: opts.source, externalLeadId: opts.externalLeadId ?? null, batchId: runningBatch?.id ?? null },
   });
 
-  // Increment totalLeads counter
+  // Increment totalLeads on campaign and (if matched) on the batch
   await db.update(campaignsTable)
     .set({ totalLeads: sql`${campaignsTable.totalLeads} + 1` })
     .where(eq(campaignsTable.id, opts.campaignId));
+
+  if (runningBatch) {
+    await db.update(campaignBatchesTable)
+      .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
+      .where(eq(campaignBatchesTable.id, runningBatch.id));
+  }
 
   scheduleCampaignCall(lead!, campaign);
 }
