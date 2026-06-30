@@ -232,6 +232,13 @@
       "when": 1784300000000,
       "tag": "0032_callback_triggered_call_id",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784400000000,
+      "tag": "0033_campaign_trigger_mode",
+      "breakpoints": true
     }
   ]
 }

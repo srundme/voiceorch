@@ -1093,7 +1093,8 @@ export default function CampaignDetailPage() {
             <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Overall Progress"     value={overallProgress} color="text-emerald-500" />
           </div>
 
-          {/* Batches */}
+          {/* Batches — batch-mode campaigns only */}
+          {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" ? (
           <div>
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
@@ -1123,6 +1124,13 @@ export default function CampaignDetailPage() {
               </div>
             )}
           </div>
+          ) : (
+          <div className="py-8 text-center border border-dashed border-border rounded-xl">
+            <Zap className="h-7 w-7 text-emerald-500/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground/50">Instant trigger — no batches needed</p>
+            <p className="text-xs text-muted-foreground/30 mt-0.5">Leads dial automatically as they arrive via the webhook URL above.</p>
+          </div>
+          )}
 
           {/* Webhook */}
           <div className="bg-card border border-border rounded-xl p-4">
