@@ -1188,16 +1188,6 @@ export default function CampaignDetailPage() {
           </div>
           )}
 
-          {/* Webhook — only for non-CSV intake */}
-          {(campaign as any).leadSource !== "csv" && (
-            <div className="bg-card border border-border rounded-xl p-4">
-              <p className="text-xs text-muted-foreground/40 uppercase tracking-wider mb-2">Webhook URL</p>
-              <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border">
-                <code className="text-xs font-mono text-muted-foreground/70 flex-1 truncate">{webhookUrl}</code>
-                <CopyButton text={webhookUrl} />
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
