@@ -204,3 +204,9 @@ id = "or03xgqd0tNDiaGzfIGf2"
 uri = "file://exports/system-architecture.pdf"
 type = "pdf"
 title = "SnapServe System Architecture Diagram (PDF)"
+
+[[outputs]]
+id = "Y1CLvYF0c0uvTGo0AUijy"
+uri = "file://regression-testing-checklist.pdf"
+type = "pdf"
+title = "Pre-Launch Regression Testing Checklist"
