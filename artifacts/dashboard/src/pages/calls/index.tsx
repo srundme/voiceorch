@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   Search, Phone, Mic, Cpu, Volume2, DollarSign,
   Filter, Calendar, Headphones, BarChart3, Download, X,
-  ChevronDown, ChevronUp, RefreshCw, Clock, AlertTriangle,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
   UserCheck, Users, TrendingUp, Activity, Globe, Eye,
   PhoneOff, PhoneMissed, Megaphone,
@@ -237,6 +237,10 @@ export default function CallsList() {
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState<string>("newest");
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState("");
+
+  const PAGE_SIZE = 100;
 
   const { data: calls, isLoading: callsLoading } = useListCalls(
     {
@@ -310,6 +314,34 @@ export default function CallsList() {
 
     return result;
   }, [calls, searchQuery, dateFrom, dateTo, sortBy]);
+
+  // Reset to page 1 whenever any filter/search/sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, agentFilter, searchQuery, dateFrom, dateTo, sortBy]);
+
+  // Pagination math (fixed 100 per page)
+  const totalPages = Math.max(1, Math.ceil(filteredCalls.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const pagedCalls = useMemo(
+    () => filteredCalls.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredCalls, safePage]
+  );
+
+  const goToPage = (page: number) => {
+    if (Number.isNaN(page)) return;
+    setCurrentPage(Math.min(Math.max(page, 1), totalPages));
+  };
+
+  const handleJumpToPage = () => {
+    const parsed = parseInt(pageInput, 10);
+    if (Number.isNaN(parsed)) {
+      setPageInput("");
+      return;
+    }
+    goToPage(parsed);
+    setPageInput("");
+  };
 
   // Compute stats
   const stats = useMemo(() => {
@@ -543,6 +575,55 @@ export default function CallsList() {
               </Button>
             </div>
 
+            <div className="shrink-0 flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => goToPage(safePage - 1)}
+                disabled={safePage <= 1}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => goToPage(safePage + 1)}
+                disabled={safePage >= totalPages}
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+              <Input
+                type="number"
+                min={1}
+                max={totalPages}
+                placeholder="#"
+                className="h-8 w-14 text-xs"
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleJumpToPage();
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={handleJumpToPage}
+              >
+                Go
+              </Button>
+            </div>
+
             {hasActiveFilters && (
               <div className="shrink-0">
                 <Button
@@ -596,8 +677,8 @@ export default function CallsList() {
                     <TableCell className="text-right"><Skeleton className="h-6 w-6 ml-auto rounded" /></TableCell>
                   </TableRow>
                 ))
-              ) : filteredCalls.length > 0 ? (
-                filteredCalls.map((call) => {
+              ) : pagedCalls.length > 0 ? (
+                pagedCalls.map((call) => {
                   const costCents = (call as any).costCents ?? 0;
 
                   return (
