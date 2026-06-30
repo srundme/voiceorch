@@ -100,6 +100,68 @@ function verifyHmacSignature(
   }
 }
 
+/**
+ * Find or create today's auto-dialing batch for webhook-sourced leads.
+ *
+ * Named "Live — {Month Day}" (e.g. "Live — Jun 30").  A single batch covers
+ * all webhook leads that arrive on the same calendar day.  The batch is set to
+ * "running" immediately so each new lead triggers a call without any manual
+ * "Create Batch → Start Batch" step.
+ *
+ * If a same-day batch already exists but is completed/draft (e.g. the batch
+ * scheduler closed it after it finished), it is re-opened to "running" so
+ * new same-day leads keep flowing.
+ */
+async function getOrCreateLiveBatch(
+  campaignId: number,
+): Promise<typeof campaignBatchesTable.$inferSelect | null> {
+  const now       = new Date();
+  const batchName = `Live — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+
+  // Check for an existing auto-batch created today for this campaign
+  const existing = await db.query.campaignBatchesTable.findFirst({
+    where: and(
+      eq(campaignBatchesTable.campaignId, campaignId),
+      eq(campaignBatchesTable.leadSource, "webhook"),
+      sql`${campaignBatchesTable.name} = ${batchName}`,
+    ),
+    orderBy: (t, { desc }) => [desc(t.id)],
+  });
+
+  if (existing) {
+    if (existing.status !== "running") {
+      await db.update(campaignBatchesTable)
+        .set({ status: "running" })
+        .where(eq(campaignBatchesTable.id, existing.id));
+    }
+    return { ...existing, status: "running" };
+  }
+
+  // Create a fresh live batch for today
+  const [batch] = await db.insert(campaignBatchesTable).values({
+    campaignId,
+    name:              batchName,
+    description:       "Auto-created — incoming website leads are dialled immediately",
+    leadSource:        "webhook",
+    callDelaySeconds:  0,
+    maxAttempts:       2,
+    retryDelayMinutes: 60,
+    duplicatePolicy:   "skip",
+  } as typeof campaignBatchesTable.$inferInsert).returning();
+
+  if (!batch) {
+    logger.warn({ campaignId }, "Failed to create live batch for webhook lead");
+    return null;
+  }
+
+  await db.update(campaignBatchesTable)
+    .set({ status: "running" })
+    .where(eq(campaignBatchesTable.id, batch.id));
+
+  logger.info({ campaignId, batchId: batch.id, batchName }, "Auto-created live batch for webhook leads");
+  return { ...batch, status: "running" };
+}
+
 async function insertLeadAndSchedule(opts: {
   campaignId: number;
   phone: string;
@@ -119,11 +181,6 @@ async function insertLeadAndSchedule(opts: {
   }
 
   // Find the currently running batch for this campaign (if any).
-  // Leads are ALWAYS captured (never dropped due to campaign pause/inactive status)
-  // because forms and Meta ads keep firing 24/7 regardless of campaign state.
-  // If a batch is running → assign to it and dial immediately.
-  // If no batch is running → store in the campaign queue (batchId=null); the lead
-  // will be picked up automatically when the user starts the next batch.
   const runningBatch = await db.query.campaignBatchesTable.findFirst({
     where: and(
       eq(campaignBatchesTable.campaignId, opts.campaignId),
@@ -151,9 +208,17 @@ async function insertLeadAndSchedule(opts: {
     }
   }
 
+  // For webhook / Instagram-Ads leads: if no batch is currently running, auto-
+  // create (or reuse) today's "Live — {date}" batch so the call fires immediately.
+  // CSV leads always arrive pre-assigned to a manually created batch — unchanged.
+  const isWebhookSource = opts.source === "webhook" || opts.source === "instagram_ads";
+  const targetBatch =
+    runningBatch ??
+    (isWebhookSource ? await getOrCreateLiveBatch(opts.campaignId) : null);
+
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
-    batchId:         runningBatch?.id ?? null,
+    batchId:         targetBatch?.id ?? null,
     phone:           opts.phone,
     normalizedPhone: normalized,
     name:            opts.name,
@@ -165,30 +230,33 @@ async function insertLeadAndSchedule(opts: {
   }).returning();
 
   await db.insert(leadTimelineTable).values({
-    leadId:    lead!.id,
+    leadId:     lead!.id,
     campaignId: opts.campaignId,
-    eventType: "imported",
-    data:      { source: opts.source, externalLeadId: opts.externalLeadId ?? null, batchId: runningBatch?.id ?? null },
+    eventType:  "imported",
+    data:       { source: opts.source, externalLeadId: opts.externalLeadId ?? null, batchId: targetBatch?.id ?? null },
   });
 
-  // Increment totalLeads on campaign and (if matched) on the batch
+  // Increment totalLeads on campaign and on the batch (if resolved)
   await db.update(campaignsTable)
     .set({ totalLeads: sql`${campaignsTable.totalLeads} + 1` })
     .where(eq(campaignsTable.id, opts.campaignId));
 
-  if (runningBatch) {
+  if (targetBatch) {
     await db.update(campaignBatchesTable)
       .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
-      .where(eq(campaignBatchesTable.id, runningBatch.id));
+      .where(eq(campaignBatchesTable.id, targetBatch.id));
 
-    // Dial immediately — batch is already running
+    // Dial immediately
     scheduleCampaignCall(lead!, campaign);
+    logger.info(
+      { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id, source: opts.source },
+      "Webhook lead dispatched for immediate dial",
+    );
   } else {
-    // No running batch: lead is queued (batchId=null).
-    // It will be auto-assigned to the next batch the user starts.
+    // No batch resolved (CSV lead with no running batch, or live-batch creation failed)
     logger.info(
       { campaignId: opts.campaignId, leadId: lead!.id },
-      "Webhook lead queued — no running batch; will dial when next batch starts",
+      "Lead queued (batchId=null) — will dial when next batch starts",
     );
   }
 }

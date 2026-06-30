@@ -503,6 +503,15 @@ function BatchRow({ batch, index, campaignId, onDelete }: {
         <div className="flex items-center gap-2 mb-0.5">
           <p className="text-sm font-medium text-foreground">{batch.name}</p>
           <StatusBadge status={batch.status} />
+          {batch.name.startsWith("Live — ") && batch.status === "running" && (
+            <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-medium">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              Live
+            </span>
+          )}
           {(batch as unknown as Record<string, unknown>)["leadSource"] !== "csv" && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 border border-purple-500/20 capitalize">
               {String((batch as unknown as Record<string, unknown>)["leadSource"] ?? "csv")}
@@ -817,10 +826,12 @@ export default function CampaignDetailPage() {
             </Button>
           </div>
 
-          {/* Queued leads banner — shown when webhook leads arrived with no running batch */}
+          {/* Queued leads banner — fallback: leads without a batch (auto-dial failed or pre-existing) */}
           {(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const queued: number = (campaign as any).queuedLeadsCount ?? 0;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const isWebhook = (campaign as any).leadSource === "webhook";
             if (queued === 0) return null;
             return (
               <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/8">
@@ -829,16 +840,20 @@ export default function CampaignDetailPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground">
-                    {queued} lead{queued !== 1 ? "s" : ""} waiting in queue
+                    {queued} lead{queued !== 1 ? "s" : ""} pending dial
                   </p>
                   <p className="text-xs text-muted-foreground/70 mt-0.5">
-                    These arrived from your webhook while no batch was running. Start a batch to begin dialing them.
+                    {isWebhook
+                      ? "These leads are queued and will be dialled as soon as a live batch is active."
+                      : "These arrived while no batch was running. Start a batch to begin dialling them."}
                   </p>
                 </div>
-                <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
-                  onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
-                  <Zap className="h-3.5 w-3.5" /> Start batch
-                </Button>
+                {!isWebhook && (
+                  <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
+                    onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
+                    <Zap className="h-3.5 w-3.5" /> Start batch
+                  </Button>
+                )}
               </div>
             );
           })()}
