@@ -441,8 +441,11 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
                     {/* Attempts */}
                     <td className="px-3 py-2.5 hidden md:table-cell">
                       {(() => {
+                        // Clamp the displayed attempt to the configured max so any
+                        // legacy/over-incremented row never renders "Attempt 3 of 2".
+                        const currentAttempt = Math.min(Math.max(1, lead.callAttempts), maxAttempts);
                         const exhausted = lead.callAttempts >= maxAttempts;
-                        const oneLeft   = !exhausted && lead.callAttempts === maxAttempts - 1;
+                        const oneLeft   = !exhausted && currentAttempt === maxAttempts - 1;
                         const counterCls = exhausted
                           ? "text-red-500"
                           : oneLeft
@@ -453,7 +456,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
                         return (
                           <div className="flex flex-col gap-0.5">
                             <span className={cn("text-xs tabular-nums font-medium", counterCls)}>
-                              Attempt {Math.max(1, lead.callAttempts)} of {maxAttempts}
+                              Attempt {currentAttempt} of {maxAttempts}
                             </span>
                             {showRetry && (
                               <span className="text-xs text-amber-500/80 tabular-nums" title={new Date(lead.nextRetryAt!).toLocaleString()}>

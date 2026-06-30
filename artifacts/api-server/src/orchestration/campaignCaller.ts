@@ -119,9 +119,33 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     }
   }
 
+  // Max-attempts cap — never dial or increment past the configured maximum.
+  // Resolves batch-level Execution Rules, falling back to campaign defaults.
+  // This protects both the rolling-refill claim path and the retry-fire path
+  // from pushing callAttempts past the limit (e.g. a duplicate/raced retry).
+  const currentAttempts = lead.callAttempts ?? 0;
+  const { maxAttempts } = await resolveRetryConfig(lead.batchId, campaign);
+  if (currentAttempts >= maxAttempts) {
+    logger.warn(
+      { leadId: lead.id, campaignId: campaign.id, currentAttempts, maxAttempts },
+      "Max attempts reached — skipping dial",
+    );
+    // Free any pre-claimed 'calling' slot so rolling refill is not starved and
+    // the lead settles into a terminal (exhausted) state instead of stuck.
+    if (isPreClaimed) {
+      await db.update(campaignLeadsTable)
+        .set({ callStatus: "failed", notes: `Max attempts (${maxAttempts}) reached` })
+        .where(and(
+          eq(campaignLeadsTable.id, lead.id),
+          eq(campaignLeadsTable.callStatus, "calling"),
+        ));
+    }
+    return;
+  }
+
   // Mark as calling + record attempt. Pre-claimed leads skip the callStatus
   // write (already 'calling') but still increment callAttempts.
-  const newAttempts = (lead.callAttempts ?? 0) + 1;
+  const newAttempts = currentAttempts + 1;
   await db.update(campaignLeadsTable)
     .set({
       ...(isPreClaimed ? {} : { callStatus: "calling" as const }),

@@ -86,6 +86,22 @@ export async function processRetries(): Promise<void> {
         continue;
       }
 
+      // Authoritative max-attempts guard at fire time. Regardless of how this
+      // retry row was created (or how many duplicate rows slipped through), never
+      // fire a retry once the lead's attempts already meet the configured maximum.
+      // Resolves batch-level Execution Rules, falling back to campaign defaults.
+      const { maxAttempts } = await resolveRetryConfig(lead.batchId, campaign);
+      if ((lead.callAttempts ?? 0) >= maxAttempts) {
+        await db.update(callRetriesTable)
+          .set({ status: "cancelled" })
+          .where(eq(callRetriesTable.id, retry.id));
+        logger.info(
+          { leadId: lead.id, campaignId: retry.campaignId, callAttempts: lead.callAttempts ?? 0, maxAttempts },
+          "Retry cancelled — max attempts already reached",
+        );
+        continue;
+      }
+
       await db.update(callRetriesTable)
         .set({ status: "fired" })
         .where(eq(callRetriesTable.id, retry.id));
@@ -126,11 +142,38 @@ export async function scheduleRetry(opts: {
 }): Promise<boolean> {
   const { leadId, campaignId, currentAttempts, maxAttempts, retryDelayMinutes, reason } = opts;
 
-  if (currentAttempts >= maxAttempts) {
+  // Use a fresh, authoritative attempts value so every caller (webhook terminal
+  // handler, campaignCaller catch path, stuck-calling sweep) resolves the guard
+  // identically even if the count changed since each read its own snapshot.
+  const [leadRow] = await db
+    .select({ callAttempts: campaignLeadsTable.callAttempts })
+    .from(campaignLeadsTable)
+    .where(eq(campaignLeadsTable.id, leadId))
+    .limit(1);
+  const effectiveAttempts = Math.max(currentAttempts, leadRow?.callAttempts ?? 0);
+
+  if (effectiveAttempts >= maxAttempts) {
     return false;
   }
 
-  const nextAttempt = currentAttempts + 1;
+  // Idempotent per lead: if a pending retry already exists for this lead, do not
+  // insert another. The three independent failure paths above can each fire for
+  // the same call; without this guard each would create a duplicate call_retries
+  // row and the retry engine would over-dial past the configured maximum.
+  const [existing] = await db
+    .select({ id: callRetriesTable.id })
+    .from(callRetriesTable)
+    .where(and(
+      eq(callRetriesTable.leadId, leadId),
+      eq(callRetriesTable.status, "pending"),
+    ))
+    .limit(1);
+  if (existing) {
+    logger.info({ leadId, campaignId }, "Retry already pending — skipping duplicate schedule");
+    return false;
+  }
+
+  const nextAttempt = effectiveAttempts + 1;
   const scheduledAt = new Date(Date.now() + retryDelayMinutes * 60 * 1000);
 
   await db.insert(callRetriesTable).values({
