@@ -2,7 +2,7 @@ import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimel
 import { eq, and, lte, isNull, or, sql, inArray, lt } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
-import { scheduleRetry, processRetries } from "./retryEngine.js";
+import { scheduleRetry, processRetries, resolveRetryConfig } from "./retryEngine.js";
 import { isCampaignDialable } from "./campaign-dialable.js";
 import { logger } from "../lib/logger.js";
 
@@ -288,12 +288,13 @@ async function sweepStuckCallingLeads(): Promise<void> {
           .where(eq(campaignsTable.id, lead.campaignId));
 
         if (campaign) {
+          const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
           await scheduleRetry({
             leadId:            lead.id,
             campaignId:        lead.campaignId,
             currentAttempts:   lead.callAttempts ?? 0,
-            maxAttempts:       campaign.maxAttempts ?? 1,
-            retryDelayMinutes: campaign.retryDelayMinutes ?? 60,
+            maxAttempts,
+            retryDelayMinutes,
             reason:            "stuck_calling",
           });
         }

@@ -5,12 +5,45 @@
  * Called from batchScheduler every 60 s.
  */
 
-import { db, callRetriesTable, campaignLeadsTable, campaignsTable, leadTimelineTable } from "@workspace/db";
+import { db, callRetriesTable, campaignLeadsTable, campaignsTable, campaignBatchesTable, leadTimelineTable } from "@workspace/db";
 import { and, eq, lte } from "drizzle-orm";
 import { withDbRetry } from "../orchestration/db-retry.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { isCampaignDialable } from "./campaign-dialable.js";
 import { logger } from "../lib/logger.js";
+
+/**
+ * Resolve the effective retry config (Max Attempts / Retry Delay) for a lead.
+ *
+ * Execution Rules are configured PER BATCH and stored on the `campaign_batches`
+ * row. The retry scheduler must honor those batch-level values; it falls back to
+ * the campaign-level defaults only when the lead has no batch (or the batch row
+ * is missing). This is the single source of truth shared by every retry path
+ * (webhook terminal-status handler, campaignCaller catch path, batch-scheduler
+ * stuck-call sweep, and the session.ts max-attempts check) so they all resolve
+ * identically.
+ */
+export async function resolveRetryConfig(
+  batchId: number | null | undefined,
+  campaign: { maxAttempts?: number | null; retryDelayMinutes?: number | null } | null | undefined,
+): Promise<{ maxAttempts: number; retryDelayMinutes: number }> {
+  let batch: { maxAttempts: number | null; retryDelayMinutes: number | null } | undefined;
+  if (batchId != null) {
+    [batch] = await db
+      .select({
+        maxAttempts:       campaignBatchesTable.maxAttempts,
+        retryDelayMinutes: campaignBatchesTable.retryDelayMinutes,
+      })
+      .from(campaignBatchesTable)
+      .where(eq(campaignBatchesTable.id, batchId))
+      .limit(1);
+  }
+
+  return {
+    maxAttempts:       batch?.maxAttempts ?? campaign?.maxAttempts ?? 1,
+    retryDelayMinutes: batch?.retryDelayMinutes ?? campaign?.retryDelayMinutes ?? 60,
+  };
+}
 
 export async function processRetries(): Promise<void> {
   try {

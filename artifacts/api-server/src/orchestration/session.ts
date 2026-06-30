@@ -27,6 +27,7 @@ import { appendDpdpDisclosure, scanAndRedactPII } from "../services/dpdp/index.j
 import { appendIrdaiAiDisclosure } from "../services/irdai/index.js";
 import { scheduleNetworkDropCallback } from "../services/autoRedial.js";
 import { refillCampaignForLead } from "../services/batchScheduler.js";
+import { resolveRetryConfig } from "../services/retryEngine.js";
 import { recordCallExecution } from "./campaignCaller.js";
 import {
   resolveCallerKey,
@@ -1493,9 +1494,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             .limit(1);
           const hasPendingCallback = !!cbRow;
 
-          // Max-attempts check
+          // Max-attempts check — resolve from the lead's batch (Execution Rules),
+          // falling back to the campaign-level default only when unset.
           const [freshLead] = await db
-            .select({ callAttempts: campaignLeadsTable.callAttempts, campaignId: campaignLeadsTable.campaignId })
+            .select({
+              callAttempts: campaignLeadsTable.callAttempts,
+              campaignId:   campaignLeadsTable.campaignId,
+              batchId:      campaignLeadsTable.batchId,
+            })
             .from(campaignLeadsTable)
             .where(eq(campaignLeadsTable.id, leadId))
             .limit(1);
@@ -1503,12 +1509,13 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           let maxAttemptsReached = false;
           if (freshLead) {
             const [camp] = await db
-              .select({ maxAttempts: campaignsTable.maxAttempts })
+              .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
               .from(campaignsTable)
               .where(eq(campaignsTable.id, freshLead.campaignId))
               .limit(1);
             if (camp) {
-              maxAttemptsReached = (freshLead.callAttempts ?? 0) >= (camp.maxAttempts ?? 1);
+              const { maxAttempts } = await resolveRetryConfig(freshLead.batchId, camp);
+              maxAttemptsReached = (freshLead.callAttempts ?? 0) >= maxAttempts;
             }
           }
 

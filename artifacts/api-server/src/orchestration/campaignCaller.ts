@@ -17,7 +17,7 @@ import { logger } from "../lib/logger.js";
 import { normalizePhone } from "../lib/phone-normalize.js";
 import { isOnDnc } from "../lib/dnc-check.js";
 import { traiPreDialCheck, logPreDialDecision } from "../services/trai/index.js";
-import { scheduleRetry } from "../services/retryEngine.js";
+import { scheduleRetry, resolveRetryConfig } from "../services/retryEngine.js";
 import { createHmac } from "node:crypto";
 import { APP_SECRET } from "../lib/app-secret.js";
 
@@ -282,12 +282,13 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     await addTimelineEvent(lead.id, campaign.id, "call_failed", { reason: errMsg, attempt: newAttempts });
 
     // Schedule auto-retry if attempts remaining
+    const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
     await scheduleRetry({
       leadId:            lead.id,
       campaignId:        campaign.id,
       currentAttempts:   newAttempts,
-      maxAttempts:       campaign.maxAttempts ?? 1,
-      retryDelayMinutes: campaign.retryDelayMinutes ?? 60,
+      maxAttempts,
+      retryDelayMinutes,
       reason:            "failed",
     });
   }

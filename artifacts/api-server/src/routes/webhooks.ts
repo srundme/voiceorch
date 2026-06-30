@@ -10,7 +10,7 @@ import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
-import { scheduleRetry } from "../services/retryEngine.js";
+import { scheduleRetry, resolveRetryConfig } from "../services/retryEngine.js";
 import { refillCampaignConcurrency } from "../services/batchScheduler.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { APP_SECRET } from "../lib/app-secret.js";
@@ -188,12 +188,13 @@ async function handleCampaignLeadTerminalStatus(opts: {
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, lead.campaignId));
   let retryScheduled = false;
   if (campaign) {
+    const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(lead.batchId, campaign);
     retryScheduled = await scheduleRetry({
       leadId:            campaignLeadId,
       campaignId:        lead.campaignId,
       currentAttempts:   lead.callAttempts ?? 0,
-      maxAttempts:       campaign.maxAttempts ?? 1,
-      retryDelayMinutes: campaign.retryDelayMinutes ?? 60,
+      maxAttempts,
+      retryDelayMinutes,
       reason:            leadStatus,
     });
   }
