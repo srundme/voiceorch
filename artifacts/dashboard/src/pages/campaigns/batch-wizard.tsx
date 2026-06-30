@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useMutation } from "@tanstack/react-query";
 import {
-  useGetCampaign, useListLeadSources, useCreateLeadSource,
+  useGetCampaign, useListLeadSources,
   useListAgentVariables, useCreateCampaignBatch,
   getGetCampaignQueryKey, getListLeadSourcesQueryKey, getListAgentVariablesQueryKey,
   useListCrmConnections, getListCrmConnectionsQueryKey,
@@ -96,7 +96,7 @@ const INITIAL_STATE: WizardState = {
   sourceMode: "new",
   crmBatchId: null,
   selectedSource: null,
-  newSourceType: "csv",
+  newSourceType: "webhook",
   createdSource: null,
   csvFile: null,
   csvHeaders: [],
@@ -295,6 +295,45 @@ function Step1({
             <DetailRow icon={<Phone className="w-3.5 h-3.5" />} label="Phone" value={campaign?.fromNumber ?? "—"} />
           </>
         )}
+      </div>
+
+      {/* Lead source selector — campaign-level decision, set once per batch */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">How will leads arrive?</p>
+          <p className="text-[11px] text-muted-foreground mt-1">This is set at the campaign level — all batches share the same intake method.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { type: "webhook"   as const, label: "Webhook / API",  desc: "POST from any CRM or form",    icon: <Webhook className="w-5 h-5 text-violet-400" />   },
+            { type: "csv"       as const, label: "CSV Upload",     desc: "Upload a spreadsheet",         icon: <FileText className="w-5 h-5 text-blue-400" />     },
+            { type: "meta_form" as const, label: "Meta Form",      desc: "Facebook Lead Ads",            icon: <Building2 className="w-5 h-5 text-orange-400" />  },
+          ]).map(({ type, label, desc, icon }) => {
+            const isSelected = state.newSourceType === type && state.sourceMode === "new";
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setState({ newSourceType: type, sourceMode: "new", selectedSource: null })}
+                className={cn(
+                  "flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all",
+                  isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/40 hover:bg-muted/30",
+                )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  {icon}
+                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-primary" />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -794,8 +833,6 @@ function Step3({
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const createSource = useCreateLeadSource();
-  const [sourceName, setSourceName] = useState("");
   const [copied, setCopied] = useState(false);
   const { data: campaign } = useGetCampaign(campaignId, {
     query: { queryKey: getGetCampaignQueryKey(campaignId) },
@@ -822,21 +859,6 @@ function Step3({
       setState({ csvFile: file, csvHeaders: headers, csvRows: rows, csvFileName: file.name, fieldMapping: {} });
     };
     reader.readAsText(file);
-  }
-
-  async function handleCreateWebhook() {
-    if (!sourceName.trim()) {
-      toast({ title: "Source name required", variant: "destructive" });
-      return;
-    }
-    try {
-      const src = await createSource.mutateAsync({
-        data: { sourceType: "webhook", sourceName: sourceName.trim() },
-      });
-      setState({ createdSource: src });
-    } catch {
-      toast({ title: "Failed to create source", variant: "destructive" });
-    }
   }
 
   function copy(text: string) {
@@ -932,67 +954,47 @@ function Step3({
 
   // Webhook ────────────────────────────────────────────────────────────────────
   if (effectiveType === "webhook") {
-    const src = state.selectedSource ?? state.createdSource;
+    const webhookUrl = `${window.location.origin}${BASE}/api/webhooks/lead/${campaign?.webhookToken ?? ""}`;
     return (
       <div className="space-y-5 max-w-xl">
         <div>
           <h2 className="text-lg font-semibold">Webhook Source</h2>
-          <p className="text-sm text-muted-foreground mt-1">Send leads from any external system via HTTP POST.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your campaign has a dedicated intake URL — shared across all batches. POST leads from any CRM, form, or external system.
+          </p>
         </div>
-
-        {!src ? (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Source Name <span className="text-destructive">*</span></Label>
-              <Input
-                value={sourceName}
-                onChange={e => setSourceName(e.target.value)}
-                placeholder="e.g. Webhook Source 1"
-                className="h-9 text-sm"
-              />
-            </div>
-            <Button
-              onClick={() => void handleCreateWebhook()}
-              disabled={createSource.isPending || !sourceName.trim()}
-              size="sm"
-            >
-              {createSource.isPending
-                ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-2" />
-                : <Webhook className="w-3.5 h-3.5 mr-2" />}
-              Generate Webhook
-            </Button>
+        <div className="space-y-4">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-sm text-emerald-400">Campaign webhook is ready to receive leads</span>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm text-emerald-400">Webhook created: <strong>{src.sourceName}</strong></span>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Campaign Intake URL</Label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-muted/50 border border-border px-3 py-2 rounded-lg font-mono truncate">
+                {webhookUrl}
+              </code>
+              <button
+                type="button"
+                onClick={() => copy(webhookUrl)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              </button>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Endpoint URL</Label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-muted/50 border border-border px-3 py-2 rounded-lg font-mono truncate">
-                  {`${window.location.origin}${BASE}/api/webhooks/lead/${campaign?.webhookToken ?? ""}`}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => copy(`${window.location.origin}${BASE}/api/webhooks/lead/${campaign?.webhookToken ?? ""}`)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <div className="bg-muted/30 border border-border rounded-lg p-4">
-              <p className="text-xs font-semibold mb-2">Sample Payload</p>
-              <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto">{`{
+            <p className="text-[11px] text-muted-foreground">
+              This URL is shared across all batches. Leads arriving when no batch is running are queued and auto-assigned when you start one.
+            </p>
+          </div>
+          <div className="bg-muted/30 border border-border rounded-lg p-4">
+            <p className="text-xs font-semibold mb-2">Sample Payload</p>
+            <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto">{`{
   "phone": "+919876543210",
   "name": "Priya Sharma",
   "email": "priya@example.com"
 }`}</pre>
-            </div>
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -1886,6 +1888,7 @@ function StepSidebar({
         <div className="mt-3">
           <Progress value={(currentStep - 1) / 7 * 100} className="h-1" />
           <p className="text-[11px] text-muted-foreground mt-1.5">Step {currentStep} of 8</p>
+          {/* Steps 2, 4, 5 may be auto-skipped based on source type */}
         </div>
       </div>
       <nav className="flex-1 py-2 overflow-y-auto">
@@ -1944,33 +1947,35 @@ export default function BatchWizardPage() {
     setWizardState(prev => ({ ...prev, ...patch }));
   }, []);
 
+  // Resolved source type from state (used for skip logic)
+  function resolvedType(): SourceType {
+    return state.sourceMode === "existing"
+      ? (state.selectedSource?.sourceType as SourceType) ?? "webhook"
+      : state.newSourceType;
+  }
+
   function canAdvance(): boolean {
     switch (currentStep) {
       case 1: return state.batchName.trim().length > 0;
       case 2: {
+        // Step 2 is only shown for CRM flow — always advanceable once CRM is triggered
         if (state.sourceMode === "crm") return true;
         return !!(state.sourceMode === "existing" ? state.selectedSource : state.newSourceType);
       }
       case 3: {
         if (state.sourceMode === "crm") return true;
-        const t: SourceType =
-          state.sourceMode === "existing"
-            ? (state.selectedSource?.sourceType as SourceType) ?? "csv"
-            : state.newSourceType;
-        if (t === "csv")     return state.csvRows.length > 0;
-        if (t === "webhook") return !!(state.selectedSource ?? state.createdSource);
+        const t = resolvedType();
+        if (t === "csv") return state.csvRows.length > 0;
+        // Webhook / Meta: campaign URL is always ready, no source creation needed
         return true;
       }
       case 4: {
         if (state.sourceMode === "crm") return true;
-        const t: SourceType =
-          state.sourceMode === "existing"
-            ? (state.selectedSource?.sourceType as SourceType) ?? "csv"
-            : state.newSourceType;
+        const t = resolvedType();
         if (t !== "csv") return true;
         return !!state.fieldMapping["phone"];
       }
-      case 5: return state.sourceMode === "crm" ? true : true;
+      case 5: return true;
       case 6: return true;
       default: return true;
     }
@@ -1978,20 +1983,57 @@ export default function BatchWizardPage() {
 
   function goNext() {
     if (!canAdvance()) return;
+
+    // CRM: once triggered from step 2, jump straight to execution rules
     if (state.sourceMode === "crm" && currentStep >= 2 && currentStep <= 6) {
       setCompleted(prev => new Set([...prev, 2, 3, 4, 5, 6]));
       setCurrentStep(7);
       return;
     }
+
+    // Step 1 → skip step 2 for all non-CRM flows; source type already chosen in step 1
+    if (currentStep === 1) {
+      setCompleted(prev => new Set([...prev, 1, 2]));
+      setCurrentStep(3);
+      return;
+    }
+
+    // Step 3 → skip variable mapping + validation for non-CSV sources
+    if (currentStep === 3) {
+      const t = resolvedType();
+      if (t !== "csv") {
+        setCompleted(prev => new Set([...prev, 3, 4, 5]));
+        setCurrentStep(6);
+        return;
+      }
+    }
+
     setCompleted(prev => new Set([...prev, currentStep]));
     setCurrentStep(s => Math.min(s + 1, 8));
   }
 
   function goBack() {
+    // CRM: back from any middle step goes to step 2
     if (state.sourceMode === "crm" && currentStep >= 3 && currentStep <= 7) {
       setCurrentStep(2);
       return;
     }
+
+    // Step 3 → back to step 1 (step 2 is skipped for non-CRM)
+    if (currentStep === 3 && state.sourceMode !== "crm") {
+      setCurrentStep(1);
+      return;
+    }
+
+    // Step 6 → back to step 3 for non-CSV (steps 4-5 were skipped)
+    if (currentStep === 6) {
+      const t = resolvedType();
+      if (t !== "csv") {
+        setCurrentStep(3);
+        return;
+      }
+    }
+
     setCurrentStep(s => Math.max(s - 1, 1));
   }
 

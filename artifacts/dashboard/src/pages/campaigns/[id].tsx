@@ -615,6 +615,37 @@ function BatchKpiCard({ batch, index, campaignId }: {
   );
 }
 
+// ── Webhook Intake URL Card ───────────────────────────────────────────────────
+
+function WebhookIntakeCard({ webhookUrl }: { webhookUrl: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    void navigator.clipboard.writeText(webhookUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-muted/20">
+      <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+        <Globe className="h-4 w-4 text-violet-400" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Webhook Intake URL</p>
+        <code className="text-[11px] font-mono text-foreground/70 truncate block">{webhookUrl}</code>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+        title="Copy URL"
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -808,6 +839,11 @@ export default function CampaignDetailPage() {
               </div>
             );
           })()}
+
+          {/* Webhook Intake URL — always visible, campaign-level */}
+          {campaign.webhookToken && (
+            <WebhookIntakeCard webhookUrl={webhookUrl} />
+          )}
 
           {/* Summary stat tiles — connected strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
