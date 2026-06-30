@@ -134,7 +134,7 @@ function factIcon(key: string): FactIcon {
 function AgentAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
   const dims = size === "lg" ? "w-12 h-12 text-[15px]" : size === "sm" ? "w-8 h-8 text-[11px]" : "w-10 h-10 text-[13px]";
   return (
-    <div className={`${dims} rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0`}>
+    <div className={`${dims} rounded-xl bg-muted/50 border border-border/60 flex items-center justify-center shrink-0`}>
       <span className="font-semibold text-muted-foreground tracking-tight">{initials(name)}</span>
     </div>
   );
@@ -153,10 +153,13 @@ function AgentRow({
     <div
       className={`group relative rounded-lg transition-colors ${
         selected
-          ? "bg-primary/[0.07]"
-          : "hover:bg-accent/40"
+          ? "bg-muted/40"
+          : "hover:bg-muted/20"
       }`}
     >
+      {selected && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-primary/70" />
+      )}
       <button onClick={onClick} className="w-full text-left px-2.5 py-2.5 flex items-center gap-2.5">
         <AgentAvatar name={agent.agentName} size="sm" />
         <div className="flex-1 min-w-0 pr-5">
@@ -204,15 +207,15 @@ function SectionCard({
   bodyClassName?: string;
 }) {
   return (
-    <section className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
+    <section className="rounded-xl border border-border/50 bg-card overflow-hidden">
       <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-elevated flex items-center justify-center shrink-0">
-            <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="w-7 h-7 rounded-lg bg-muted/40 flex items-center justify-center shrink-0">
+            <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />
           </div>
           <h3 className="text-[13px] font-semibold text-foreground truncate">{title}</h3>
           {count != null && (
-            <span className="text-[11px] font-medium text-muted-foreground tabular-nums rounded-md bg-elevated px-1.5 py-0.5 shrink-0">
+            <span className="text-[11px] font-medium text-muted-foreground tabular-nums rounded-md bg-muted/40 px-1.5 py-0.5 shrink-0">
               {count}
             </span>
           )}
@@ -271,8 +274,8 @@ function FactCard({
   }
 
   return (
-    <div className="group rounded-xl border border-border/60 bg-elevated/40 hover:bg-elevated/70 transition-colors p-3.5 flex items-start gap-3 relative">
-      <div className="w-8 h-8 rounded-lg bg-elevated border border-border/60 flex items-center justify-center shrink-0 text-muted-foreground">
+    <div className="group rounded-xl border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors p-3.5 flex items-start gap-3 relative">
+      <div className="w-8 h-8 rounded-lg bg-muted/50 border border-border/50 flex items-center justify-center shrink-0 text-muted-foreground/70">
         <Icon className="w-4 h-4" />
       </div>
       <div className="min-w-0 flex-1 pr-6">
@@ -379,7 +382,7 @@ function TimelineFeed({
             <span className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ring-4 ${dotCls}`} />
             <div className="flex items-center gap-2">
               <p className="text-[12px] font-semibold text-foreground">{episodeTime(it.createdAt)}</p>
-              <span className="text-[9px] font-medium rounded-md border px-1.5 py-0.5 text-muted-foreground border-border bg-elevated">
+              <span className="text-[9px] font-medium rounded-md border px-1.5 py-0.5 text-muted-foreground border-border/50 bg-muted/40">
                 {isFact ? "Fact" : "Episode"}
               </span>
             </div>
@@ -420,7 +423,7 @@ function DirectionBadge({ direction }: { direction: Direction }) {
   };
   const c = cfg[direction];
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-md border border-border bg-elevated px-1.5 py-0.5 text-muted-foreground">
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
       {c.icon}{c.label}
     </span>
   );
@@ -430,13 +433,13 @@ function DirectionBadge({ direction }: { direction: Direction }) {
 function OutcomeBadge({ status }: { status: Call["status"] }) {
   const cfg: Record<string, { label: string; cls: string }> = {
     completed:   { label: "Completed",   cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
-    in_progress: { label: "In progress", cls: "text-foreground bg-elevated border-border" },
-    pending:     { label: "Pending",     cls: "text-muted-foreground bg-elevated border-border" },
-    transferred: { label: "Transferred", cls: "text-foreground bg-elevated border-border" },
+    in_progress: { label: "In progress", cls: "text-foreground bg-muted/40 border-border/50" },
+    pending:     { label: "Pending",     cls: "text-muted-foreground bg-muted/40 border-border/50" },
+    transferred: { label: "Transferred", cls: "text-foreground bg-muted/40 border-border/50" },
     failed:      { label: "Failed",      cls: "text-red-400 bg-red-500/10 border-red-500/20" },
     cancelled:   { label: "Cancelled",   cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   };
-  const c = cfg[status] ?? { label: humanize(status), cls: "text-muted-foreground bg-elevated border-border" };
+  const c = cfg[status] ?? { label: humanize(status), cls: "text-muted-foreground bg-muted/40 border-border/50" };
   return (
     <span className={`inline-flex items-center text-[10px] font-medium rounded-md border px-1.5 py-0.5 ${c.cls}`}>
       {c.label}
@@ -570,7 +573,7 @@ function CallerAvatar({ contact, size = "md" }: { contact: CallerContact; size?:
   const txt = size === "lg" ? "text-[13px]" : "text-[11px]";
   if (isWebCaller(contact.phoneNumber)) {
     return (
-      <div className={`${dims} bg-elevated border border-border flex items-center justify-center shrink-0`}>
+      <div className={`${dims} bg-muted/50 border border-border/60 flex items-center justify-center shrink-0`}>
         <Globe className={`${iconDim} text-muted-foreground`} />
       </div>
     );
@@ -579,7 +582,7 @@ function CallerAvatar({ contact, size = "md" }: { contact: CallerContact; size?:
     ? initials(contact.name)
     : contact.phoneNumber.slice(-2).toUpperCase();
   return (
-    <div className={`${dims} bg-elevated border border-border flex items-center justify-center shrink-0`}>
+    <div className={`${dims} bg-muted/50 border border-border/60 flex items-center justify-center shrink-0`}>
       <span className={`${txt} font-semibold text-muted-foreground`}>{label}</span>
     </div>
   );
@@ -596,12 +599,15 @@ function CallerListRow({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-xl px-2.5 py-2.5 flex items-center gap-3 transition-colors ${
+      className={`relative w-full text-left rounded-xl px-2.5 py-2.5 flex items-center gap-3 transition-colors ${
         selected
-          ? "bg-primary/[0.07]"
-          : "hover:bg-accent/40"
+          ? "bg-muted/40"
+          : "hover:bg-muted/20"
       }`}
     >
+      {selected && (
+        <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-primary/70" />
+      )}
       <CallerAvatar contact={contact} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -609,7 +615,7 @@ function CallerListRow({
             {callerDisplayName(contact)}
           </span>
           {web && (
-            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-muted-foreground border-border/60 bg-elevated shrink-0">
+            <span className="text-[9px] font-medium border rounded px-1 py-0.5 text-muted-foreground border-border/50 bg-muted/40 shrink-0">
               Web
             </span>
           )}
@@ -659,7 +665,7 @@ function CallerListColumn({
           <Input
             type="search"
             placeholder="Search callers…"
-            className="pl-9 h-9 text-xs bg-elevated/50 border-border/60"
+            className="pl-9 h-9 text-xs bg-muted/30 border-border/50"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -768,7 +774,7 @@ function CallerDetailView({
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-[22px] font-semibold tracking-tight text-foreground truncate leading-none">{callerDisplayName(contact)}</h2>
               {web && (
-                <span className="text-[10px] font-medium rounded-md px-1.5 py-0.5 text-muted-foreground bg-elevated border border-border/60">
+                <span className="text-[10px] font-medium rounded-md px-1.5 py-0.5 text-muted-foreground bg-muted/40 border border-border/50">
                   Web
                 </span>
               )}
@@ -786,17 +792,17 @@ function CallerDetailView({
           </div>
         </div>
 
-        {/* Per-caller stat band — clean, divided, deliberate header element */}
-        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 rounded-xl border border-border/60 bg-card/40 overflow-hidden divide-x divide-y sm:divide-y-0 divide-border/50">
+        {/* Per-caller stat band — clean spaced cells, hierarchy via type weight */}
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Total Calls", value: String(contact.callCount) },
             { label: "Facts",       value: String(contact.factCount) },
             { label: "Episodes",    value: String(contact.archiveCount) },
             { label: "Last Active", value: timeAgo(contact.lastCalledAt) },
           ].map(s => (
-            <div key={s.label} className="px-4 py-3 min-w-0">
-              <p className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">{s.label}</p>
-              <p className="text-[18px] font-semibold text-foreground tabular-nums leading-none mt-1.5 truncate">{s.value}</p>
+            <div key={s.label} className="rounded-xl border border-border/50 bg-card px-4 py-3 min-w-0">
+              <p className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">{s.label}</p>
+              <p className="text-[20px] font-semibold text-foreground tabular-nums leading-none mt-2 truncate">{s.value}</p>
             </div>
           ))}
         </div>
@@ -959,7 +965,7 @@ function CallerDetailView({
 function NoAgentsState() {
   return (
     <div className="flex flex-col items-center justify-center flex-1 py-24 text-center px-4">
-      <div className="w-14 h-14 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-5">
+      <div className="w-14 h-14 rounded-2xl bg-muted/40 border border-border/50 flex items-center justify-center mb-5">
         <Brain className="w-6 h-6 text-muted-foreground/40" />
       </div>
       <h3 className="font-semibold text-foreground text-[15px] mb-2">No agents yet</h3>
@@ -1053,7 +1059,7 @@ export default function MemoryPage() {
       {/* Header */}
       <div className="px-6 pt-6 pb-5 border-b border-border/40 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-elevated border border-border/60 flex items-center justify-center shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-muted/40 border border-border/50 flex items-center justify-center shrink-0">
             <Brain className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="min-w-0">
@@ -1096,7 +1102,7 @@ export default function MemoryPage() {
                     <Input
                       type="search"
                       placeholder="Search agents…"
-                      className="pl-9 h-9 text-xs bg-elevated/50 border-border/60"
+                      className="pl-9 h-9 text-xs bg-muted/30 border-border/50"
                       value={agentSearch}
                       onChange={e => setAgentSearch(e.target.value)}
                     />
@@ -1153,7 +1159,7 @@ export default function MemoryPage() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                    <div className="w-12 h-12 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-4">
+                    <div className="w-12 h-12 rounded-2xl bg-muted/40 border border-border/50 flex items-center justify-center mb-4">
                       <User className="w-5 h-5 text-muted-foreground/40" />
                     </div>
                     <p className="text-[13px] text-muted-foreground">
