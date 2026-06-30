@@ -116,7 +116,9 @@ async function getOrCreateLiveBatch(
   campaignId: number,
 ): Promise<typeof campaignBatchesTable.$inferSelect | null> {
   const now       = new Date();
-  const batchName = `Live — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  // Use IST (Asia/Kolkata) so day boundaries match Indian calendar dates,
+  // not UTC which rolls over 5h30m earlier.
+  const batchName = `Live — ${now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}`;
 
   // Check for an existing auto-batch created today for this campaign
   const existing = await db.query.campaignBatchesTable.findFirst({
