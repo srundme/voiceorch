@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, or, gte, lte, sql } from "drizzle-orm";
+import { eq, and, or, gte, lte, sql, getTableColumns } from "drizzle-orm";
 import { formatInTimeZone } from "date-fns-tz";
 import { db, bookingsTable, eventTypesTable, schedulingCalendarsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
@@ -53,7 +53,7 @@ router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> 
   const qp = ListBookingsQueryParams.safeParse(req.query);
   if (!qp.success) { res.status(400).json({ error: "Validation failed", issues: qp.error.issues }); return; }
 
-  const conditions: any[] = [eq(bookingsTable.userId, clerkId)];
+  const conditions: any[] = [eq(schedulingCalendarsTable.userId, clerkId)];
   if (qp.data.status) conditions.push(eq(bookingsTable.status, qp.data.status));
   if (qp.data.calendarId != null) conditions.push(eq(bookingsTable.calendarId, qp.data.calendarId));
   if (qp.data.startDate) conditions.push(gte(bookingsTable.slotStart, new Date(qp.data.startDate)));
@@ -61,7 +61,8 @@ router.get("/scheduling/bookings", requireAuth, async (req, res): Promise<void> 
   if (qp.data.bookedVia) conditions.push(eq(bookingsTable.bookedVia, qp.data.bookedVia));
   if (qp.data.calendarSyncStatus) conditions.push(eq(bookingsTable.calendarSyncStatus, qp.data.calendarSyncStatus));
 
-  const rows = await db.select().from(bookingsTable)
+  const rows = await db.select(getTableColumns(bookingsTable)).from(bookingsTable)
+    .innerJoin(schedulingCalendarsTable, eq(bookingsTable.calendarId, schedulingCalendarsTable.id))
     .where(and(...conditions))
     .orderBy(bookingsTable.slotStart);
   res.json(ListBookingsResponse.parse(rows.map(formatBooking)));
@@ -299,8 +300,9 @@ router.get("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<vo
   const clerkId = (req as any).clerkUserId as string;
   const params = GetBookingParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: "Validation failed", issues: params.error.issues }); return; }
-  const [row] = await db.select().from(bookingsTable)
-    .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)));
+  const [row] = await db.select(getTableColumns(bookingsTable)).from(bookingsTable)
+    .innerJoin(schedulingCalendarsTable, eq(bookingsTable.calendarId, schedulingCalendarsTable.id))
+    .where(and(eq(bookingsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)));
   if (!row) { res.status(404).json({ error: "Booking not found" }); return; }
   res.json(GetBookingResponse.parse(formatBooking(row)));
 });
@@ -312,8 +314,9 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
   const parsed = UpdateBookingBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
-  const [existing] = await db.select().from(bookingsTable)
-    .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)));
+  const [existing] = await db.select(getTableColumns(bookingsTable)).from(bookingsTable)
+    .innerJoin(schedulingCalendarsTable, eq(bookingsTable.calendarId, schedulingCalendarsTable.id))
+    .where(and(eq(bookingsTable.id, params.data.id), eq(schedulingCalendarsTable.userId, clerkId)));
   if (!existing) { res.status(404).json({ error: "Booking not found" }); return; }
 
   const existingGoogleEventId = existing.googleEventId ?? null;
@@ -541,7 +544,7 @@ router.patch("/scheduling/bookings/:id", requireAuth, async (req, res): Promise<
 
   const [row] = await db.update(bookingsTable)
     .set(updates)
-    .where(and(eq(bookingsTable.id, params.data.id), eq(bookingsTable.userId, clerkId)))
+    .where(eq(bookingsTable.id, params.data.id))
     .returning();
   if (!row) { res.status(404).json({ error: "Booking not found" }); return; }
 
