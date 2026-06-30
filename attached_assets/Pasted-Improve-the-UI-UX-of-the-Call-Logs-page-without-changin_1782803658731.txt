@@ -1,0 +1,192 @@
+Improve the UI/UX of the Call Logs page without changing any backend logic, APIs, database schema, or existing functionality. This is purely a frontend usability improvement.
+
+## Current Issues
+
+### 1. Missing "From" and "To" Numbers
+The Call Logs table currently does not display the phone numbers involved in the call.
+
+Add two new columns:
+
+- From Number
+- To Number
+
+These should display:
+
+- Customer number
+- AI Agent/Business number
+
+This is critical because users need to immediately know who called whom without opening the call details.
+
+Suggested column order:
+
+Date & Time
+Call ID
+Agent
+From Number
+To Number
+Call Type
+Status
+Duration
+Cost
+Actions
+
+Do not change the existing API.
+Use the data already available.
+
+---
+
+### 2. Add View Details Action
+
+Implement the same Eye (👁) icon that already exists in the Campaign Batch Leads page.
+
+The behaviour should be identical.
+
+When clicking the Eye icon:
+
+Open the Call Details page/modal.
+
+Users should be able to see:
+
+- Full transcript
+- Recording
+- Summary
+- Call outcome
+- Tool calls
+- Memory
+- Timeline
+- Token usage
+- Metadata
+
+Reuse the existing Call Details component if it already exists.
+
+Do NOT build a new implementation.
+
+Maintain UI consistency across the product.
+
+---
+
+### 3. Improve Table Readability
+
+Increase usability by improving spacing only.
+
+Examples:
+
+- slightly taller rows
+- better padding
+- align numbers
+- consistent badge sizes
+- consistent icon spacing
+
+Do not redesign the page.
+
+Just polish it.
+
+---
+
+### 4. Improve Status Badges
+
+Keep the existing statuses.
+
+Just make them visually easier to scan.
+
+Example colors:
+
+Completed → Green
+
+Failed → Red
+
+Transferred → Orange
+
+Busy → Amber
+
+No Pickup → Gray
+
+In Progress → Blue
+
+The badge sizes should all be identical.
+
+---
+
+### 5. Improve Filters
+
+Keep all current filters.
+
+Only improve layout.
+
+Suggested order:
+
+Search
+
+Status Filter
+
+Agent Filter
+
+Date Range
+
+Export
+
+Analytics
+
+Everything should align on one row.
+
+---
+
+### 6. Responsive Columns
+
+From/To numbers should not wrap unnecessarily.
+
+Use ellipsis when needed.
+
+Allow copy-on-click for phone numbers.
+
+---
+
+### 7. Actions Column
+
+Current:
+
+Only one action.
+
+Update to:
+
+👁 View
+
+Future actions can be added later.
+
+For now keep only View.
+
+Use the exact same icon style used inside Campaign Batch Leads.
+
+---
+
+### 8. Do NOT Change
+
+Do NOT change:
+
+- backend
+- APIs
+- database
+- routing
+- filtering logic
+- export logic
+- analytics
+- call detail logic
+
+Only improve presentation.
+
+---
+
+## Goal
+
+The Call Logs page should feel consistent with the Campaign module.
+
+A user should immediately be able to identify:
+
+- Who called whom
+- Which agent handled the call
+- Call status
+- Duration
+- Cost
+- Quickly open the full call details
+
+This is a UI/UX polish task only. Existing functionality must continue working exactly as it does today.
