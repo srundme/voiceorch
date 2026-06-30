@@ -110,6 +110,19 @@ export async function processRetries(): Promise<void> {
         .set({ callStatus: "pending", notes: `Auto-retry #${retry.attemptNumber}` })
         .where(eq(campaignLeadsTable.id, lead.id));
 
+      // If this lead belongs to a completed batch, reopen it so the scheduler
+      // picks it up again. Without this a retry on a completed batch would flip
+      // the lead to pending but the 60 s poll would skip it (only queries
+      // status = 'running') and the lead would sit pending forever.
+      if (lead.batchId) {
+        await db.update(campaignBatchesTable)
+          .set({ status: "running" })
+          .where(and(
+            eq(campaignBatchesTable.id, lead.batchId),
+            eq(campaignBatchesTable.status, "completed"),
+          ));
+      }
+
       await db.insert(leadTimelineTable).values({
         leadId:     lead.id,
         campaignId: retry.campaignId,
@@ -121,7 +134,7 @@ export async function processRetries(): Promise<void> {
         .where(eq(campaignLeadsTable.id, lead.id));
 
       scheduleCampaignCall(freshLead!, campaign);
-      logger.info({ leadId: lead.id, attempt: retry.attemptNumber, campaignId: retry.campaignId }, "Retry fired");
+      logger.info({ leadId: lead.id, attempt: retry.attemptNumber, campaignId: retry.campaignId, batchId: lead.batchId ?? null }, "Retry fired");
     }
   } catch (err) {
     logger.error({ err }, "Retry engine error");

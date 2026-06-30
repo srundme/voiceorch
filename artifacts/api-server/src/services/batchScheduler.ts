@@ -97,18 +97,27 @@ async function pollScheduledBatches(): Promise<void> {
 
       await refillCampaignConcurrency(campaign.id);
 
-      // If no more pending leads, mark batch complete
-      const remainingPending = await db.select({ count: sql<number>`count(*)` })
+      // Mark batch complete when no leads are pending OR still actively calling.
+      // Note: PostgreSQL returns count(*) as a string — use Number() to coerce.
+      const [pendingRow] = await db.select({ count: sql<string>`count(*)` })
         .from(campaignLeadsTable)
         .where(and(
           eq(campaignLeadsTable.batchId, batch.id),
           eq(campaignLeadsTable.callStatus, "pending"),
         ));
-      if (remainingPending[0]?.count === 0) {
+      const [activeRow] = await db.select({ count: sql<string>`count(*)` })
+        .from(campaignLeadsTable)
+        .where(and(
+          eq(campaignLeadsTable.batchId, batch.id),
+          inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
+        ));
+      const pendingCount = Number(pendingRow?.count ?? 0);
+      const activeCount  = Number(activeRow?.count  ?? 0);
+      if (pendingCount === 0 && activeCount === 0) {
         await db.update(campaignBatchesTable)
           .set({ status: "completed" })
           .where(eq(campaignBatchesTable.id, batch.id));
-        logger.info({ batchId: batch.id }, "Batch completed — all leads processed");
+        logger.info({ batchId: batch.id, pendingCount, activeCount }, "Batch completed — all leads processed");
       }
     }
   } catch (err) {
