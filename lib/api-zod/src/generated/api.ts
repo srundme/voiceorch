@@ -2060,6 +2060,9 @@ export const ListCampaignsResponseItem = zod.object({
   "isActive": zod.boolean(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).default(listCampaignsResponseLeadSourceDefault).describe('Primary lead source for this campaign'),
   "triggerMode": zod.enum(['instant', 'batch']).default(listCampaignsResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
+  "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
+  "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
+  "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2128,6 +2131,9 @@ export const GetCampaignResponse = zod.object({
   "isActive": zod.boolean(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).default(getCampaignResponseLeadSourceDefault).describe('Primary lead source for this campaign'),
   "triggerMode": zod.enum(['instant', 'batch']).default(getCampaignResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
+  "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
+  "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
+  "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2153,7 +2159,10 @@ export const UpdateCampaignBody = zod.object({
   "callDelaySeconds": zod.number().optional(),
   "maxAttempts": zod.number().optional(),
   "retryDelayMinutes": zod.number().optional(),
-  "isActive": zod.boolean().optional()
+  "isActive": zod.boolean().optional(),
+  "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction.'),
+  "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction.'),
+  "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.')
 })
 
 export const updateCampaignResponseConcurrentCallLimitDefault = 20;
@@ -2178,6 +2187,9 @@ export const UpdateCampaignResponse = zod.object({
   "isActive": zod.boolean(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).default(updateCampaignResponseLeadSourceDefault).describe('Primary lead source for this campaign'),
   "triggerMode": zod.enum(['instant', 'batch']).default(updateCampaignResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
+  "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
+  "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
+  "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

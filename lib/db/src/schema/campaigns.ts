@@ -50,6 +50,9 @@ export const campaignsTable = pgTable("campaigns", {
   lastWebhookStatus:    text("last_webhook_status"),
   leadSource:           text("lead_source").notNull().default("csv"),
   triggerMode:          text("trigger_mode").notNull().default("batch"),
+  timezone:             text("timezone"),
+  businessHoursStart:   integer("business_hours_start"),
+  businessHoursEnd:     integer("business_hours_end"),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

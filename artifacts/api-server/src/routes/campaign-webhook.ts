@@ -183,15 +183,6 @@ async function insertLeadAndSchedule(opts: {
     return;
   }
 
-  // Find the currently running batch for this campaign (if any).
-  const runningBatch = await db.query.campaignBatchesTable.findFirst({
-    where: and(
-      eq(campaignBatchesTable.campaignId, opts.campaignId),
-      eq(campaignBatchesTable.status, "running"),
-    ),
-    orderBy: (t, { desc }) => [desc(t.id)],
-  });
-
   const normalized = normalizePhone(opts.phone);
 
   // DNC check
@@ -211,13 +202,8 @@ async function insertLeadAndSchedule(opts: {
     }
   }
 
-  // For webhook / Instagram-Ads leads: if no batch is currently running, auto-
-  // create (or reuse) today's "Live — {date}" batch so the call fires immediately.
-  // CSV leads always arrive pre-assigned to a manually created batch — unchanged.
-  const isWebhookSource = opts.source === "webhook" || opts.source === "instagram_ads";
-
   // Resolve the agent's IANA timezone for date-boundary decisions.
-  let agentTimezone = "Asia/Kolkata";
+  let agentTimezone = campaign.timezone ?? "Asia/Kolkata";
   if (campaign.agentId) {
     const agent = await db.query.agentsTable.findFirst({
       where: eq(agentsTable.id, campaign.agentId),
@@ -227,9 +213,25 @@ async function insertLeadAndSchedule(opts: {
     if (typeof tz === "string" && tz.length > 0) agentTimezone = tz;
   }
 
-  const targetBatch =
-    runningBatch ??
-    (isWebhookSource ? await getOrCreateLiveBatch(opts.campaignId, agentTimezone) : null);
+  // For webhook / Instagram-Ads leads: ALWAYS use getOrCreateLiveBatch so the
+  // daily batch is keyed on TODAY's date in the agent's timezone.  We must NOT
+  // use a runningBatch lookup here — that would pick up yesterday's still-running
+  // batch and add new leads to the wrong date group.
+  // CSV leads always arrive pre-assigned to a manually created batch — unchanged.
+  const isWebhookSource = opts.source === "webhook" || opts.source === "instagram_ads";
+
+  // Find the currently running batch for this campaign (non-webhook only).
+  const runningBatch = isWebhookSource ? null : await db.query.campaignBatchesTable.findFirst({
+    where: and(
+      eq(campaignBatchesTable.campaignId, opts.campaignId),
+      eq(campaignBatchesTable.status, "running"),
+    ),
+    orderBy: (t, { desc }) => [desc(t.id)],
+  });
+
+  const targetBatch = isWebhookSource
+    ? await getOrCreateLiveBatch(opts.campaignId, agentTimezone)
+    : runningBatch ?? null;
 
   const [lead] = await db.insert(campaignLeadsTable).values({
     campaignId:      opts.campaignId,
@@ -261,12 +263,30 @@ async function insertLeadAndSchedule(opts: {
       .set({ totalLeads: sql`${campaignBatchesTable.totalLeads} + 1` })
       .where(eq(campaignBatchesTable.id, targetBatch.id));
 
-    // Dial immediately
-    scheduleCampaignCall(lead!, campaign);
-    logger.info(
-      { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id, source: opts.source },
-      "Webhook lead dispatched for immediate dial",
-    );
+    // Gate dialing on campaign status and business hours.
+    // If paused or outside calling hours: lead stays pending in the batch and the
+    // batchScheduler's 60 s backstop will claim it once hours resume / campaign resumes.
+    const isPaused = campaign.status === "paused";
+    const inHours  = isWithinBusinessHours(campaign, agentTimezone);
+
+    if (isPaused) {
+      logger.info(
+        { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id },
+        "Lead queued — campaign is paused; will dial when resumed",
+      );
+    } else if (!inHours) {
+      logger.info(
+        { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id,
+          businessHoursStart: campaign.businessHoursStart, businessHoursEnd: campaign.businessHoursEnd, tz: agentTimezone },
+        "Lead queued — outside business hours; will dial when hours open",
+      );
+    } else {
+      scheduleCampaignCall(lead!, campaign);
+      logger.info(
+        { campaignId: opts.campaignId, leadId: lead!.id, batchId: targetBatch.id, source: opts.source },
+        "Webhook lead dispatched for immediate dial",
+      );
+    }
   } else {
     // No batch resolved (CSV lead with no running batch, or live-batch creation failed)
     logger.info(
@@ -274,6 +294,32 @@ async function insertLeadAndSchedule(opts: {
       "Lead queued (batchId=null) — will dial when next batch starts",
     );
   }
+}
+
+/**
+ * Returns true if the current time falls within the campaign's configured
+ * calling window.  If no window is set (both nullable columns are null) every
+ * hour is allowed.
+ *
+ * @param campaign   Must carry businessHoursStart / businessHoursEnd / timezone.
+ * @param fallbackTz IANA timezone to use when campaign.timezone is absent.
+ */
+export function isWithinBusinessHours(
+  campaign: {
+    businessHoursStart?: number | null;
+    businessHoursEnd?:   number | null;
+    timezone?:           string | null;
+  },
+  fallbackTz: string,
+): boolean {
+  const start = campaign.businessHoursStart;
+  const end   = campaign.businessHoursEnd;
+  if (start == null || end == null) return true; // no restriction — dial any time
+  const tz = campaign.timezone ?? fallbackTz;
+  // Convert "now" to a wall-clock Date in the target timezone, then read .getHours().
+  const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+  const hour = nowLocal.getHours();
+  return start <= hour && hour < end;
 }
 
 /** Mark last webhook event on the campaign row (fire-and-forget, best-effort). */

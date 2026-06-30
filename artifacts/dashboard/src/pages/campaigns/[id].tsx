@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
@@ -38,6 +38,30 @@ import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP } from "@/lib/campaign-status";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// ── Business hours helpers ────────────────────────────────────────────────────
+
+function formatHour(h: number): string {
+  if (h === 0)  return "12 AM";
+  if (h === 12) return "12 PM";
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+const COMMON_TZ = [
+  { value: "Asia/Kolkata",     label: "IST — India (UTC+5:30)" },
+  { value: "Asia/Dubai",       label: "GST — Dubai (UTC+4)" },
+  { value: "Asia/Singapore",   label: "SGT — Singapore (UTC+8)" },
+  { value: "Asia/Colombo",     label: "SLST — Sri Lanka (UTC+5:30)" },
+  { value: "Asia/Dhaka",       label: "BST — Bangladesh (UTC+6)" },
+  { value: "Asia/Karachi",     label: "PKT — Pakistan (UTC+5)" },
+  { value: "America/New_York", label: "ET — Eastern US (UTC−5/4)" },
+  { value: "America/Chicago",  label: "CT — Central US (UTC−6/5)" },
+  { value: "America/Denver",   label: "MT — Mountain US (UTC−7/6)" },
+  { value: "America/Los_Angeles", label: "PT — Pacific US (UTC−8/7)" },
+  { value: "Europe/London",    label: "GMT/BST — London (UTC+0/1)" },
+  { value: "Europe/Berlin",    label: "CET — Europe Central (UTC+1/2)" },
+  { value: "UTC",              label: "UTC" },
+];
 
 // ── CSV parser ───────────────────────────────────────────────────────────────
 
@@ -685,6 +709,23 @@ export default function CampaignDetailPage() {
   const deleteBatch = useDeleteCampaignBatch();
   const update = useUpdateCampaign();
 
+  async function handleSaveBusinessHours() {
+    const start = hoursStart === "" ? null : parseInt(hoursStart, 10);
+    const end   = hoursEnd   === "" ? null : parseInt(hoursEnd,   10);
+    try {
+      await update.mutateAsync({
+        id: campaignId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { businessHoursStart: start, businessHoursEnd: end, timezone: hoursTz } as any,
+      });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      setEditingHours(false);
+      toast({ title: "Calling hours saved" });
+    } catch {
+      toast({ title: "Failed to save calling hours", variant: "destructive" });
+    }
+  }
+
   async function handleStatusChange(status: "active" | "paused" | "draft") {
     try {
       await update.mutateAsync({ id: campaignId, data: { status } });
@@ -704,6 +745,21 @@ export default function CampaignDetailPage() {
   const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 30_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 30_000 } as any });
+
+  // Business hours editor state — declared after campaign so the useEffect dep is valid
+  const [editingHours, setEditingHours] = useState(false);
+  const [hoursStart, setHoursStart] = useState<string>("");
+  const [hoursEnd,   setHoursEnd]   = useState<string>("");
+  const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
+
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = campaign as any;
+    if (!d) return;
+    setHoursStart(d.businessHoursStart != null ? String(d.businessHoursStart) : "");
+    setHoursEnd  (d.businessHoursEnd   != null ? String(d.businessHoursEnd)   : "");
+    setHoursTz   (d.timezone ?? "Asia/Kolkata");
+  }, [campaign]);
 
   const webhookUrl = campaign
     ? `${window.location.origin}${BASE}/api/webhooks/lead/${campaign.webhookToken}`
@@ -840,33 +896,56 @@ export default function CampaignDetailPage() {
                 <Plus className="h-3.5 w-3.5" /> Create Batch
               </Button>
             )}
-            {(campaign.status === "active" || campaign.status === "paused") && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="outline" className="h-8 w-8">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
+            {/* Instant trigger campaigns get inline Pause / Resume / Stop buttons */}
+            {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant"
+              ? (campaign.status === "active" || campaign.status === "paused") && (
+                <div className="flex items-center gap-1.5">
                   {campaign.status === "active" && (
-                    <DropdownMenuItem className="text-amber-600 gap-2"
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
                       onClick={() => void handleStatusChange("paused")}>
-                      <PauseCircle className="h-4 w-4" /> Pause
-                    </DropdownMenuItem>
+                      <PauseCircle className="h-3.5 w-3.5" /> Pause
+                    </Button>
                   )}
                   {campaign.status === "paused" && (
-                    <DropdownMenuItem className="text-emerald-600 gap-2"
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
                       onClick={() => void handleStatusChange("active")}>
-                      <PlayCircle className="h-4 w-4" /> Resume
-                    </DropdownMenuItem>
+                      <PlayCircle className="h-3.5 w-3.5" /> Resume
+                    </Button>
                   )}
-                  <DropdownMenuItem className="text-red-500 gap-2"
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-red-500 border-red-500/40 hover:bg-red-500/10"
                     onClick={() => void handleStatusChange("draft")}>
-                    <XCircle className="h-4 w-4" /> Stop
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                    <XCircle className="h-3.5 w-3.5" /> Stop
+                  </Button>
+                </div>
+              )
+              : (campaign.status === "active" || campaign.status === "paused") && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="outline" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    {campaign.status === "active" && (
+                      <DropdownMenuItem className="text-amber-600 gap-2"
+                        onClick={() => void handleStatusChange("paused")}>
+                        <PauseCircle className="h-4 w-4" /> Pause
+                      </DropdownMenuItem>
+                    )}
+                    {campaign.status === "paused" && (
+                      <DropdownMenuItem className="text-emerald-600 gap-2"
+                        onClick={() => void handleStatusChange("active")}>
+                        <PlayCircle className="h-4 w-4" /> Resume
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="text-red-500 gap-2"
+                      onClick={() => void handleStatusChange("draft")}>
+                      <XCircle className="h-4 w-4" /> Stop
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )
+            }
           </div>
         </div>
 
@@ -915,6 +994,92 @@ export default function CampaignDetailPage() {
           {/* Webhook Intake URL — always visible, campaign-level */}
           {campaign.webhookToken && (
             <WebhookIntakeCard webhookUrl={webhookUrl} />
+          )}
+
+          {/* Calling Hours — instant trigger campaigns only */}
+          {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant" && (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground/50" />
+                  <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Calling Hours</p>
+                </div>
+                {!editingHours && (
+                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground"
+                    onClick={() => setEditingHours(true)}>
+                    <Settings className="h-3 w-3" /> Configure
+                  </Button>
+                )}
+              </div>
+              {!editingHours ? (
+                <div>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(campaign as any).businessHoursStart != null && (campaign as any).businessHoursEnd != null ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs font-mono text-sky-400">
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {formatHour((campaign as any).businessHoursStart)} – {formatHour((campaign as any).businessHoursEnd)}
+                      </span>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      <span className="text-xs text-muted-foreground/50">{(campaign as any).timezone ?? "Asia/Kolkata"}</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/50">24/7 — no calling restriction. Leads are dialled immediately on arrival.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Start (hour, 0–23)</Label>
+                      <select
+                        value={hoursStart}
+                        onChange={e => setHoursStart(e.target.value)}
+                        className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                      >
+                        <option value="">— no restriction —</option>
+                        {Array.from({ length: 24 }, (_, h) => (
+                          <option key={h} value={String(h)}>{formatHour(h)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">End (exclusive, 0–23)</Label>
+                      <select
+                        value={hoursEnd}
+                        onChange={e => setHoursEnd(e.target.value)}
+                        className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                      >
+                        <option value="">— no restriction —</option>
+                        {Array.from({ length: 24 }, (_, h) => (
+                          <option key={h} value={String(h)}>{formatHour(h)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Timezone</Label>
+                    <select
+                      value={hoursTz}
+                      onChange={e => setHoursTz(e.target.value)}
+                      className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                    >
+                      {COMMON_TZ.map(tz => (
+                        <option key={tz.value} value={tz.value}>{tz.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-xs text-muted-foreground/50">
+                    Leads arriving outside this window are queued and dialled automatically when the window opens.
+                    Clear both fields to allow 24/7 dialling.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button size="sm" className="h-7 text-xs" onClick={() => void handleSaveBusinessHours()}>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingHours(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Campaign-level summary tiles — connected strip */}

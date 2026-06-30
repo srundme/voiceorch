@@ -8308,6 +8308,18 @@ components:
           enum: [instant, batch]
           description: "How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually."
           default: batch
+        businessHoursStart:
+          type: integer
+          nullable: true
+          description: "Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone."
+        businessHoursEnd:
+          type: integer
+          nullable: true
+          description: "Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM."
+        timezone:
+          type: string
+          nullable: true
+          description: "IANA timezone for businessHoursStart/End evaluation. Defaults to Asia/Kolkata when absent."
         createdAt:
           type: string
           format: date-time
@@ -8443,6 +8455,18 @@ components:
           type: integer
         isActive:
           type: boolean
+        businessHoursStart:
+          type: integer
+          nullable: true
+          description: "Hour of day (0–23) when calling starts. Null = no restriction."
+        businessHoursEnd:
+          type: integer
+          nullable: true
+          description: "Hour of day (0–23) when calling stops (exclusive). Null = no restriction."
+        timezone:
+          type: string
+          nullable: true
+          description: "IANA timezone for businessHoursStart/End evaluation."
 
     CampaignLead:
       type: object

@@ -1949,6 +1949,12 @@ export interface Campaign {
   leadSource: CampaignLeadSource;
   /** How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually. */
   triggerMode: CampaignTriggerMode;
+  /** Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone. */
+  businessHoursStart?: number | null;
+  /** Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM. */
+  businessHoursEnd?: number | null;
+  /** IANA timezone for businessHoursStart/End evaluation. Defaults to Asia/Kolkata when absent. */
+  timezone?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2087,6 +2093,12 @@ export interface CampaignUpdate {
   maxAttempts?: number;
   retryDelayMinutes?: number;
   isActive?: boolean;
+  /** Hour of day (0–23) when calling starts. Null = no restriction. */
+  businessHoursStart?: number | null;
+  /** Hour of day (0–23) when calling stops (exclusive). Null = no restriction. */
+  businessHoursEnd?: number | null;
+  /** IANA timezone for businessHoursStart/End evaluation. */
+  timezone?: string | null;
 }
 
 export type CampaignLeadLeadData = {[key: string]: string};

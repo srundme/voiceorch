@@ -95,6 +95,9 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     isActive:              row.isActive,
     leadSource:            row.leadSource ?? "csv",
     triggerMode:           row.triggerMode ?? "batch",
+    businessHoursStart:    row.businessHoursStart ?? null,
+    businessHoursEnd:      row.businessHoursEnd ?? null,
+    timezone:              row.timezone ?? null,
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };

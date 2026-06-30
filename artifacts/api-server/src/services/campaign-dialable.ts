@@ -17,18 +17,43 @@
  * dialing unless it has been explicitly paused or has completed. A `draft`
  * campaign with a running batch is dialable — the running batch is the real
  * "calls should be flowing" signal, enforced by the per-batch claim.
+ *
+ * Business hours are also enforced here: if businessHoursStart / businessHoursEnd
+ * are configured on the campaign, dialing is suppressed outside those hours.
+ * The 60 s backstop poll naturally resumes at the next tick after hours open.
  */
 
 /** Campaign statuses that mean "do not dial / do not refill". */
 export const NON_DIALABLE_CAMPAIGN_STATUSES = new Set<string>(["paused", "completed", "cancelled"]);
+
+type DialableFields = {
+  status:             string | null;
+  businessHoursStart?: number | null;
+  businessHoursEnd?:   number | null;
+  timezone?:           string | null;
+};
 
 /**
  * True when a campaign should keep dialing (initial wave, rolling refill,
  * retries). Anything that is not explicitly paused/completed/cancelled counts
  * as dialable — including `draft`, so a started batch is never starved waiting
  * for the legacy `is_active` flag that may never be set.
+ *
+ * If businessHoursStart/End are set, dialing is additionally gated on the
+ * current hour being within [start, end) in the campaign's timezone.
  */
-export function isCampaignDialable(campaign: { status: string | null } | null | undefined): boolean {
+export function isCampaignDialable(campaign: DialableFields | null | undefined): boolean {
   if (!campaign) return false;
-  return !NON_DIALABLE_CAMPAIGN_STATUSES.has(campaign.status ?? "");
+  if (NON_DIALABLE_CAMPAIGN_STATUSES.has(campaign.status ?? "")) return false;
+
+  const start = campaign.businessHoursStart;
+  const end   = campaign.businessHoursEnd;
+  if (start != null && end != null) {
+    const tz       = campaign.timezone ?? "Asia/Kolkata";
+    const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+    const hour     = nowLocal.getHours();
+    if (!(start <= hour && hour < end)) return false;
+  }
+
+  return true;
 }
