@@ -210,3 +210,9 @@ id = "Y1CLvYF0c0uvTGo0AUijy"
 uri = "file://regression-testing-checklist.pdf"
 type = "pdf"
 title = "Pre-Launch Regression Testing Checklist"
+
+[[outputs]]
+id = "VXDCY5pvQoIokSrKtrlFq"
+uri = "file://artifacts/snapserve-book/public/brochure/snapserve-brochure.pdf"
+type = "pdf"
+title = "SnapServe Product Brochure (PDF)"
