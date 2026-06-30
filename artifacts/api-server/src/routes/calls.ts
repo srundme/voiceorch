@@ -611,7 +611,14 @@ router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
       return;
     }
   }
-  const enriched = await enrichCall(call);
+  const [exec] = await db
+    .select({ campaignId: callExecutionsTable.campaignId })
+    .from(callExecutionsTable)
+    .where(eq(callExecutionsTable.callId, call.id));
+  const enriched = {
+    ...(await enrichCall(call)),
+    campaignId: exec?.campaignId ?? null,
+  };
   res.json(GetCallResponse.parse(enriched));
 });
 

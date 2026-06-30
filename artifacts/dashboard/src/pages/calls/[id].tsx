@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Download, FileText, AlertTriangle, Info, Bot, User,
   Receipt, Sparkles, ClipboardList, Pencil, Check, X, Zap,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Phone, Calendar, Clock, TrendingUp,
-  BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, UserCheck,
+  BarChart3, Mic, Cpu, Volume2, Hash, ArrowRight, ArrowUpRight, UserCheck,
   Voicemail, BookOpen, Tag, Activity, ExternalLink, Copy, CheckCircle2,
   XCircle, PlayCircle, PauseCircle, MicOff, ScrollText,
   Play, Pause, MoreVertical, VolumeX, Gauge
@@ -899,6 +899,7 @@ export function CallDetailContent({
   totalCount?: number;
 }) {
   const id = callId;
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { getToken } = useAuth();
@@ -1118,6 +1119,17 @@ export function CallDetailContent({
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-semibold tracking-tight">Call #{call.id}</h2>
                 <StatusBadge status={call.status} />
+                {(call as any).campaignId != null && (
+                  <button
+                    type="button"
+                    onClick={() => setLocation(`/app/campaigns/${(call as any).campaignId}`)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-elevated text-foreground/70 border border-border hover:text-foreground hover:bg-accent transition-colors"
+                    title="Go to Campaign"
+                  >
+                    Go to Campaign
+                    <ArrowUpRight className="h-3 w-3" />
+                  </button>
+                )}
               </div>
               <p className="text-muted-foreground text-xs flex items-center gap-2 mt-0.5">
                 <span className="font-mono">{call.executionId ?? `EXE-${String(call.id).padStart(7, '0')}`}</span>
