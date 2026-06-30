@@ -1,25 +1,18 @@
 import { useState, useRef } from "react";
-import LiveQueueTab from "./live-queue";
-import CallbacksTab from "./callbacks";
-import IncomingCallsTab from "./incoming";
-import BookingsTab from "./bookings";
-import TransfersTab from "./transfers";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
-  useListCampaignLeads, useListAgents, useGetCampaignActivity,
+  useListCampaignLeads, useGetCampaignActivity,
   useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
-  getListCampaignLeadsQueryKey,
 } from "@workspace/api-client-react";
 import type { CampaignBatch } from "@workspace/api-client-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -44,26 +37,6 @@ import { format, formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, CAMPAIGN_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type LiveQueueMetrics = {
-  total: number;
-  queued: number;
-  calling: number;
-  connected: number;
-  retryScheduled: number;
-  callbackScheduled: number;
-  nopickup: number;
-  failed: number;
-};
-
-async function apiFetch<T>(url: string): Promise<T> {
-  const token = localStorage.getItem("voiceorch:session");
-  const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<T>;
-}
 
 // ── CSV parser ───────────────────────────────────────────────────────────────
 
@@ -810,104 +783,6 @@ function LeadsTab({ campaignId }: { campaignId: number }) {
   );
 }
 
-// ── Settings form ────────────────────────────────────────────────────────────
-
-function SettingsTab({ campaign, campaignId }: { campaign: Record<string, unknown>; campaignId: number }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const update = useUpdateCampaign();
-  const { data: agents } = useListAgents();
-
-  const [name, setName] = useState(String(campaign["name"] ?? ""));
-  const [desc, setDesc] = useState(String(campaign["description"] ?? ""));
-  const [status, setStatus] = useState(String(campaign["status"] ?? "draft"));
-  const [fromNumber, setFromNumber] = useState(String(campaign["fromNumber"] ?? ""));
-  const [agentId, setAgentId] = useState(campaign["agentId"] ? String(campaign["agentId"]) : "");
-  const [concurrentCallLimit, setConcurrentCallLimit] = useState(Number(campaign["concurrentCallLimit"] ?? 20));
-
-  async function handleSave() {
-    try {
-      await update.mutateAsync({
-        id: campaignId,
-        data: {
-          name: name.trim(),
-          description: desc.trim() || undefined,
-          status: status as "draft" | "active" | "paused",
-          fromNumber: fromNumber.trim() || undefined,
-          agentId: agentId ? parseInt(agentId, 10) : undefined,
-          concurrentCallLimit,
-        },
-      });
-      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
-      toast({ title: "Settings saved" });
-    } catch {
-      toast({ title: "Failed to save", variant: "destructive" });
-    }
-  }
-
-  return (
-    <div className="max-w-lg space-y-5">
-      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Campaign Details</h3>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Name</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} className="h-9 text-sm" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Description</Label>
-          <Input value={desc} onChange={e => setDesc(e.target.value)} className="h-9 text-xs" placeholder="Optional description" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="draft" className="text-xs">Draft</SelectItem>
-                <SelectItem value="active" className="text-xs">Active</SelectItem>
-                <SelectItem value="paused" className="text-xs">Paused</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">From Number</Label>
-            <Input value={fromNumber} onChange={e => setFromNumber(e.target.value)} className="h-9 text-xs" placeholder="+1..." />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Agent</Label>
-          <Select value={agentId} onValueChange={setAgentId}>
-            <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select agent…" /></SelectTrigger>
-            <SelectContent>
-              {(agents ?? []).map(a => (
-                <SelectItem key={a.id} value={String(a.id)} className="text-xs">{a.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Concurrency</h3>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <Label className="text-xs">Max Concurrent Calls</Label>
-            <span className="text-xl font-mono font-bold">{concurrentCallLimit}</span>
-          </div>
-          <input type="range" min={1} max={100} step={1} value={concurrentCallLimit}
-            onChange={e => setConcurrentCallLimit(Number(e.target.value))}
-            className="w-full h-1.5 accent-foreground cursor-pointer" />
-          <div className="flex justify-between mt-1 text-xs text-muted-foreground/40"><span>1</span><span>100</span></div>
-        </div>
-      </div>
-
-      <Button onClick={() => void handleSave()} disabled={update.isPending} className="h-9 text-xs">
-        {update.isPending ? "Saving…" : "Save Changes"}
-      </Button>
-    </div>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -921,14 +796,6 @@ export default function CampaignDetailPage() {
   const deleteBatch = useDeleteCampaignBatch();
   const update = useUpdateCampaign();
   const [activeTab, setActiveTab] = useState("overview");
-  const [opTab, setOpTab] = useState<"all" | "callbacks" | "incoming" | "bookings" | "transfers">("all");
-
-  const { data: liveMetrics } = useQuery<LiveQueueMetrics>({
-    queryKey: ["live-queue-metrics", campaignId],
-    queryFn: () => apiFetch<LiveQueueMetrics>(`${BASE}/api/campaigns/${campaignId}/live-queue/metrics`),
-    refetchInterval: 10_000,
-    enabled: activeTab === "operations",
-  });
 
   async function handleStatusChange(status: "active" | "paused" | "draft") {
     try {
@@ -1065,32 +932,10 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* KPI chips */}
-        <div className="flex items-center gap-2 pb-3 overflow-x-auto">
-          {[
-            { label: "Leads",      value: imported,                    tab: "overview",    pct: null },
-            { label: "Called",     value: called,                      tab: "operations",  pct: calledPct > 0 ? calledPct : null },
-            { label: "Connected",  value: connected,                   tab: "analytics",   pct: connRate > 0 ? connRate : null },
-            { label: "Booked",     value: booked,                      tab: "operations",  pct: bookRate > 0 ? bookRate : null },
-            { label: "Callbacks",  value: analytics?.callbacks ?? 0,   tab: "operations",  pct: null },
-            { label: "Transfers",  value: transferred,                 tab: "operations",  pct: null },
-          ].map(kpi => (
-            <button key={kpi.label}
-              onClick={() => setActiveTab(kpi.tab)}
-              className="flex flex-col items-start px-3 py-2 bg-card border border-border rounded-lg hover:border-foreground/30 hover:bg-muted/20 transition-colors shrink-0 min-w-[72px]">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-base font-bold text-foreground tabular-nums leading-none">{kpi.value.toLocaleString()}</span>
-                {kpi.pct !== null && <span className="text-xs font-medium text-muted-foreground/50 tabular-nums">{kpi.pct}%</span>}
-              </div>
-              <span className="text-xs text-muted-foreground/40 uppercase tracking-widest mt-0.5">{kpi.label}</span>
-            </button>
-          ))}
-        </div>
-
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="h-auto bg-transparent p-0 gap-0 border-0 -mb-px overflow-x-auto flex-nowrap">
-            {(["overview", "operations", "leads", "analytics", "settings"] as const).map(tab => (
+          <TabsList className="h-auto bg-transparent p-0 gap-1 border-0 -mb-px overflow-x-auto flex-nowrap mt-3">
+            {(["overview", "leads"] as const).map(tab => (
               <TabsTrigger key={tab} value={tab}
                 className="h-9 px-4 rounded-none border-b-2 border-transparent bg-transparent data-[state=active]:border-foreground data-[state=active]:border-b-[3px] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold text-muted-foreground/60 text-xs font-medium whitespace-nowrap hover:text-foreground transition-colors shrink-0">
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1101,13 +946,36 @@ export default function CampaignDetailPage() {
           {/* ── Overview ────────────────────────────────────────────────────── */}
           <TabsContent value="overview" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              {/* Funnel */}
-              <div className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Call Funnel</h3>
+              {/* Summary stat tiles */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {[
+                  { label: "Leads",     value: imported,                  pct: null,                       icon: <Users className="h-4 w-4" />,        accent: "text-blue-500",    tint: "bg-blue-500/10" },
+                  { label: "Called",    value: called,                    pct: calledPct > 0 ? calledPct : null, icon: <PhoneCall className="h-4 w-4" />, accent: "text-sky-500",     tint: "bg-sky-500/10" },
+                  { label: "Connected", value: connected,                 pct: connRate > 0 ? connRate : null,   icon: <Activity className="h-4 w-4" />,  accent: "text-cyan-500",    tint: "bg-cyan-500/10" },
+                  { label: "Booked",    value: booked,                    pct: bookRate > 0 ? bookRate : null,    icon: <Target className="h-4 w-4" />,    accent: "text-emerald-500", tint: "bg-emerald-500/10" },
+                  { label: "Callbacks", value: analytics?.callbacks ?? 0, pct: null,                       icon: <Clock className="h-4 w-4" />,        accent: "text-amber-500",   tint: "bg-amber-500/10" },
+                  { label: "Transfers", value: transferred,               pct: null,                       icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500", tint: "bg-purple-500/10" },
+                ].map(kpi => (
+                  <div key={kpi.label} className="bg-card border border-border/60 rounded-xl p-4">
+                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center mb-3", kpi.tint, kpi.accent)}>
+                      {kpi.icon}
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-bold text-foreground tabular-nums leading-none">{kpi.value.toLocaleString()}</span>
+                      {kpi.pct !== null && <span className="text-xs font-medium text-muted-foreground/50 tabular-nums">{kpi.pct}%</span>}
+                    </div>
+                    <span className="block text-xs text-muted-foreground/50 uppercase tracking-widest mt-1.5">{kpi.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Call Funnel */}
+              <div className="bg-card border border-border/60 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-sm font-semibold text-foreground">Call Funnel</h3>
                   {analytics && (
                     <div className="flex items-center gap-3">
-                      {connRate > 0 && <span className="text-xs text-blue-500 font-medium">{connRate}% conn.</span>}
+                      {connRate > 0 && <span className="text-xs text-sky-500 font-medium">{connRate}% conn.</span>}
                       {bookRate > 0  && <span className="text-xs text-emerald-500 font-medium">{bookRate}% booked</span>}
                     </div>
                   )}
@@ -1131,11 +999,11 @@ export default function CampaignDetailPage() {
                   ))}
                 </div>
                 {imported > 0 && (
-                  <div className="mt-4">
+                  <div className="mt-5">
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary/40 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
                     </div>
-                    <div className="flex justify-between mt-1 text-xs text-muted-foreground/40">
+                    <div className="flex justify-between mt-1.5 text-xs text-muted-foreground/40">
                       <span>{called.toLocaleString()} called</span>
                       <span>{(imported - called).toLocaleString()} remaining</span>
                     </div>
@@ -1146,7 +1014,7 @@ export default function CampaignDetailPage() {
               {/* Batch cards */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Batches</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Batches</h3>
                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
                     onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
                     <Plus className="h-3 w-3" /> New Batch
@@ -1229,59 +1097,6 @@ export default function CampaignDetailPage() {
             </div>
           </TabsContent>
 
-          {/* ── Operations ──────────────────────────────────────────────────── */}
-          <TabsContent value="operations" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              {/* Live count-chip strip — Queued / Calling / Retry / Callback / No Pickup */}
-              <div className="px-6 py-2.5 border-b border-border/60 bg-muted/5 flex items-center gap-2 overflow-x-auto">
-                {[
-                  { label: "Queued",    value: liveMetrics?.queued            ?? 0, cls: "text-blue-500",   dot: "bg-blue-400",   pulse: false },
-                  { label: "Calling",   value: liveMetrics?.calling           ?? 0, cls: "text-amber-500",  dot: "bg-amber-400",  pulse: true  },
-                  { label: "Retry",     value: liveMetrics?.retryScheduled    ?? 0, cls: "text-sky-500",    dot: "bg-sky-400",    pulse: false },
-                  { label: "Callback",  value: liveMetrics?.callbackScheduled ?? 0, cls: "text-purple-500", dot: "bg-purple-400", pulse: false },
-                  { label: "No Pickup", value: liveMetrics?.nopickup          ?? 0, cls: "text-orange-500", dot: "bg-orange-400", pulse: false },
-                ].map((chip, i) => (
-                  <span key={chip.label} className="flex items-center gap-2 shrink-0">
-                    {i > 0 && <span className="h-3.5 w-px bg-border/50 shrink-0" />}
-                    <span className="flex items-center gap-1.5">
-                      <span className={cn(
-                        "h-1.5 w-1.5 rounded-full shrink-0",
-                        chip.dot,
-                        chip.pulse && chip.value > 0 && "animate-pulse",
-                      )} />
-                      <span className="text-xs text-muted-foreground/60">{chip.label}</span>
-                      <span className={cn("text-xs font-semibold tabular-nums", chip.cls)}>{chip.value.toLocaleString()}</span>
-                    </span>
-                  </span>
-                ))}
-              </div>
-
-              {/* Sub-nav */}
-              <div className="px-6 pt-3 pb-0 flex items-center gap-0 border-b border-border/60 overflow-x-auto">
-                {(["all", "callbacks", "incoming", "bookings", "transfers"] as const).map(t => (
-                  <button key={t} onClick={() => setOpTab(t)}
-                    className={cn(
-                      "px-4 py-2.5 text-xs border-b-2 transition-colors whitespace-nowrap capitalize shrink-0 -mb-px",
-                      opTab === t
-                        ? "border-foreground text-foreground font-semibold"
-                        : "border-transparent text-muted-foreground/60 font-medium hover:text-foreground"
-                    )}>
-                    {t === "all" ? "All Work" : t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              {/* Content */}
-              <div className="px-6 py-4">
-                {opTab === "all"       && <LiveQueueTab     campaignId={campaign.id} />}
-                {opTab === "callbacks" && <CallbacksTab     campaignId={campaign.id} />}
-                {opTab === "incoming"  && <IncomingCallsTab campaignId={campaign.id} />}
-                {opTab === "bookings"  && <BookingsTab      campaignId={campaign.id} />}
-                {opTab === "transfers" && <TransfersTab     campaignId={campaign.id} />}
-              </div>
-            </div>
-          </TabsContent>
-
           {/* ── Leads ───────────────────────────────────────────────────────── */}
           <TabsContent value="leads" className="mt-0 border-0 p-0">
             <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
@@ -1289,125 +1104,6 @@ export default function CampaignDetailPage() {
             </div>
           </TabsContent>
 
-          {/* ── Analytics ───────────────────────────────────────────────────── */}
-          <TabsContent value="analytics" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              {!analytics ? (
-                <div className="py-16 text-center text-muted-foreground/40">
-                  <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No analytics data yet</p>
-                  <p className="text-xs mt-1">Start calling leads to see results here</p>
-                </div>
-              ) : (
-                <>
-                  {/* Performance rates */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      {
-                        label: "Connection Rate",
-                        value: connRate > 0 ? `${connRate}%` : "—",
-                        sub: `${connected.toLocaleString()} of ${called.toLocaleString()} calls`,
-                        accent: "text-blue-500",
-                        icon: <TrendingUp className="h-4 w-4" />,
-                      },
-                      {
-                        label: "Booking Rate",
-                        value: bookRate > 0 ? `${bookRate}%` : "—",
-                        sub: `${booked.toLocaleString()} bookings`,
-                        accent: "text-emerald-500",
-                        icon: <Target className="h-4 w-4" />,
-                      },
-                      {
-                        label: "Success Rate",
-                        value: successRate > 0 ? `${successRate}%` : "—",
-                        sub: `Booked / Called`,
-                        accent: "text-amber-500",
-                        icon: <Flame className="h-4 w-4" />,
-                      },
-                      {
-                        label: "Avg Cost / Booking",
-                        value: analytics.avgCostPerBooking != null
-                          ? `$${(analytics.avgCostPerBooking / 100).toFixed(2)}`
-                          : "—",
-                        sub: (analytics.totalCostCents ?? 0) > 0
-                          ? `$${((analytics.totalCostCents ?? 0) / 100).toFixed(2)} total · ${analytics.avgCallDurationS != null ? `${analytics.avgCallDurationS}s avg call` : ""}`
-                          : "No cost data",
-                        accent: "text-muted-foreground",
-                        icon: <DollarSign className="h-4 w-4" />,
-                      },
-                    ].map(r => (
-                      <div key={r.label} className="bg-card border border-border rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs text-muted-foreground/50 uppercase tracking-widest">{r.label}</p>
-                          <span className={cn("opacity-40", r.accent)}>{r.icon}</span>
-                        </div>
-                        <p className={cn("text-3xl font-bold tabular-nums", r.accent)}>{r.value}</p>
-                        <p className="text-xs text-muted-foreground/40 mt-1">{r.sub}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Funnel bar chart */}
-                  <div className="bg-card border border-border rounded-xl p-5">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Funnel</h3>
-                    <div className="space-y-2">
-                      {[
-                        { label: "Imported",    value: imported },
-                        { label: "Called",      value: called },
-                        { label: "Connected",   value: connected },
-                        { label: "Interested",  value: interested },
-                        { label: "Booked",      value: booked },
-                        { label: "Transferred", value: transferred },
-                        { label: "Failed",      value: failed },
-                      ].map(stage => {
-                        const pct = imported > 0 ? Math.round((stage.value / imported) * 100) : 0;
-                        return (
-                          <div key={stage.label} className="flex items-center gap-3">
-                            <span className="text-xs text-muted-foreground/60 w-24 shrink-0">{stage.label}</span>
-                            <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
-                              <div className="h-full bg-foreground/15 rounded-md flex items-center px-2 transition-all" style={{ width: `${Math.max(pct, 2)}%` }}>
-                                <span className="text-xs font-mono text-foreground/70 whitespace-nowrap">{stage.value.toLocaleString()}</span>
-                              </div>
-                            </div>
-                            <span className="text-xs font-mono text-muted-foreground/40 w-9 text-right shrink-0">{pct}%</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Disposition Breakdown */}
-                  {analytics.dispositions.length > 0 && (
-                    <div className="bg-card border border-border rounded-xl p-5">
-                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Disposition Breakdown</h3>
-                      <div className="space-y-3">
-                        {analytics.dispositions.map((d: { label: string; count: number }) => {
-                          const pct = called > 0 ? Math.round((d.count / called) * 100) : 0;
-                          return (
-                            <div key={d.label} className="flex items-center gap-3">
-                              <span className="text-xs text-foreground/70 capitalize w-40 shrink-0 truncate">{d.label.replace(/_/g, " ")}</span>
-                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                <div className="h-full bg-foreground/20 rounded-full transition-all" style={{ width: `${Math.max(pct, 1)}%` }} />
-                              </div>
-                              <span className="text-xs font-semibold text-foreground tabular-nums w-12 text-right shrink-0">{d.count.toLocaleString()}</span>
-                              <span className="text-xs text-muted-foreground/40 tabular-nums w-8 text-right shrink-0">{pct}%</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* ── Settings ────────────────────────────────────────────────────── */}
-          <TabsContent value="settings" className="mt-0 border-0 p-0">
-            <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
-              <SettingsTab campaign={campaign as unknown as Record<string, unknown>} campaignId={campaignId} />
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
 

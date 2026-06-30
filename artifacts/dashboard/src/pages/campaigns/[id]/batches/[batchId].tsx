@@ -15,7 +15,6 @@ import {
   getListBatchLeadsQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
@@ -27,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
@@ -40,9 +39,6 @@ type BatchWorkspaceKpis = {
   callbacks: number; incoming: number; bookings: number; transfers: number;
   successRate: number;
 };
-
-type FunnelStage = { key: string; label: string; value: number };
-type BatchFunnel = { stages: FunnelStage[]; total: number };
 
 type BatchWorkspaceLead = {
   id: number; name: string | null; phone: string;
@@ -124,127 +120,6 @@ function KpiCard({ icon, label, value, color, onClick, active }: {
       </div>
       <p className={cn("text-xl font-bold tabular-nums", color ?? "text-foreground")}>{value}</p>
     </button>
-  );
-}
-
-// ── Funnel ────────────────────────────────────────────────────────────────────
-
-function BatchFunnelView({ funnel }: { funnel: BatchFunnel }) {
-  const total = funnel.total || 1;
-  const COLORS = [
-    "bg-sky-500", "bg-violet-500", "bg-emerald-500",
-    "bg-amber-500", "bg-emerald-600", "bg-sky-600",
-  ];
-
-  return (
-    <div className="space-y-2">
-      {funnel.stages.map((s, i) => {
-        const pct = Math.round((s.value / total) * 100);
-        return (
-          <div key={s.key} className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground/60 w-20 text-right shrink-0">{s.label}</span>
-            <div className="flex-1 h-5 bg-muted/30 rounded-sm overflow-hidden">
-              <div
-                className={cn("h-full rounded-sm transition-all duration-500", COLORS[i])}
-                style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }}
-              />
-            </div>
-            <span className="text-xs font-mono font-semibold w-16 tabular-nums">
-              {s.value.toLocaleString()} <span className="text-muted-foreground/40">({pct}%)</span>
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Overview Tab ──────────────────────────────────────────────────────────────
-
-function OverviewTab({ campaignId, batchId, header }: {
-  campaignId: number; batchId: number; header: BatchHeader | undefined;
-}) {
-  const { data: funnel } = useQuery<BatchFunnel>({
-    queryKey: ["batch-funnel", campaignId, batchId],
-    queryFn: () => apiFetch(`${BASE}/api/campaigns/${campaignId}/batches/${batchId}/workspace/funnel`),
-    refetchInterval: 15000,
-  });
-
-  const b = header?.batch;
-  const c = header?.campaign;
-  const calledPct = b && b.totalLeads > 0 ? Math.round((b.calledLeads / b.totalLeads) * 100) : 0;
-
-  return (
-    <div className="space-y-4 p-5">
-      {/* Funnel */}
-      <div className="rounded-xl border border-border/40 bg-card p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/50 mb-4 flex items-center gap-2">
-          <TrendingUp className="h-3.5 w-3.5" /> Operational Funnel
-        </h3>
-        {funnel ? (
-          <BatchFunnelView funnel={funnel} />
-        ) : (
-          <div className="space-y-2">
-            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
-          </div>
-        )}
-      </div>
-
-      {/* Progress card — Total Leads / Called / Remaining */}
-      <div className="rounded-xl border border-border/40 bg-card p-5">
-        <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40 mb-4">Progress</p>
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center">
-            <p className="text-3xl font-bold tabular-nums text-foreground">{(b?.totalLeads ?? 0).toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase tracking-wider">Total Leads</p>
-          </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold tabular-nums text-sky-500">{(b?.calledLeads ?? 0).toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase tracking-wider">Called</p>
-          </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold tabular-nums text-amber-500">{((b?.totalLeads ?? 0) - (b?.calledLeads ?? 0)).toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase tracking-wider">Remaining</p>
-          </div>
-        </div>
-        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-sky-500/70 rounded-full transition-all" style={{ width: `${calledPct}%` }} />
-        </div>
-        <p className="text-xs text-muted-foreground/40 mt-1.5 text-right tabular-nums">{calledPct}% complete</p>
-      </div>
-
-      {/* Batch info cards — GENERAL + SOURCE */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* GENERAL */}
-        <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
-          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40">General</p>
-          <Row label="Status">
-            {b && <BatchStatusBadge status={b.status} />}
-          </Row>
-          <Row label="Created">{b ? format(new Date(b.createdAt), "MMM d, yyyy HH:mm") : "—"}</Row>
-          <Row label="Scheduled">{b?.scheduledStartAt ? format(new Date(b.scheduledStartAt), "MMM d, yyyy HH:mm") : "Not scheduled"}</Row>
-          <Row label="Campaign">{c?.name ?? "—"}</Row>
-          <Row label="Agent">{c?.agentName ?? "No agent"}</Row>
-          <Row label="Phone">{c?.fromNumber ?? "Unset"}</Row>
-        </div>
-
-        {/* SOURCE */}
-        <div className="rounded-xl border border-border/40 bg-card p-4 space-y-2.5">
-          <p className="text-xs uppercase tracking-widest font-semibold text-muted-foreground/40">Source</p>
-          <Row label="Type">{b?.leadSource === "csv" ? "CSV Import" : (b?.leadSource ?? "—")}</Row>
-          <Row label="Name">{header?.source?.name ?? "—"}</Row>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-muted-foreground/50 shrink-0">{label}</span>
-      <span className="text-xs font-medium text-right">{children}</span>
-    </div>
   );
 }
 
@@ -509,14 +384,11 @@ function LeadsTab({ campaignId, batchId, maxAttempts }: { campaignId: number; ba
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type WorkspaceTab = "overview" | "leads";
-
 export default function BatchWorkspacePage() {
   const [, params] = useRoute("/app/campaigns/:id/batches/:batchId");
   const campaignId = parseInt(params?.id      ?? "0", 10);
   const batchId    = parseInt(params?.batchId ?? "0", 10);
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -600,11 +472,6 @@ export default function BatchWorkspacePage() {
     }
   }
 
-  const TABS: { key: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
-    { key: "overview",  label: "Overview",  icon: <TrendingUp className="h-3 w-3"   /> },
-    { key: "leads",     label: "Leads",     icon: <Users className="h-3 w-3"        /> },
-  ];
-
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
 
@@ -686,37 +553,18 @@ export default function BatchWorkspacePage() {
       {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
       <div className="flex items-stretch gap-2 px-5 py-3 overflow-x-auto shrink-0 border-b border-border/20">
         <KpiCard icon={<Users className="h-3 w-3" />}        label="Total"     value={kpis?.total       ?? "—"} />
-        <KpiCard icon={<PhoneCall className="h-3 w-3" />}    label="Connected" value={kpis?.connected    ?? "—"} color="text-emerald-500" onClick={() => setActiveTab("leads")} active={activeTab === "leads"} />
-        <KpiCard icon={<Bell className="h-3 w-3" />}         label="Callbacks" value={kpis?.callbacks    ?? "—"} color="text-amber-500"   onClick={() => setActiveTab("leads")} />
+        <KpiCard icon={<PhoneCall className="h-3 w-3" />}    label="Connected" value={kpis?.connected    ?? "—"} color="text-emerald-500" />
+        <KpiCard icon={<Bell className="h-3 w-3" />}         label="Callbacks" value={kpis?.callbacks    ?? "—"} color="text-amber-500"   />
         <KpiCard icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming" value={kpis?.incoming     ?? "—"} color="text-sky-500"     />
-        <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Bookings"  value={kpis?.bookings     ?? "—"} color="text-violet-500"  onClick={() => setActiveTab("leads")} />
-        <KpiCard icon={<ArrowRightLeft className="h-3 w-3" />} label="Transfers" value={kpis?.transfers  ?? "—"} color="text-sky-400"    onClick={() => setActiveTab("leads")} />
-        <KpiCard icon={<XCircle className="h-3 w-3" />}      label="Failed"    value={kpis?.failed       ?? "—"} color="text-red-500"     onClick={() => { setActiveTab("leads"); }} />
+        <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Bookings"  value={kpis?.bookings     ?? "—"} color="text-violet-500"  />
+        <KpiCard icon={<ArrowRightLeft className="h-3 w-3" />} label="Transfers" value={kpis?.transfers  ?? "—"} color="text-sky-400"    />
+        <KpiCard icon={<XCircle className="h-3 w-3" />}      label="Failed"    value={kpis?.failed       ?? "—"} color="text-red-500"     />
         <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Success"   value={kpis ? `${kpis.successRate}%` : "—"} color="text-emerald-500" />
       </div>
 
-      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-0.5 px-5 py-2 border-b border-border/20 shrink-0">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-none border-b-2 text-xs font-medium transition-colors -mb-px",
-              activeTab === t.key
-                ? "border-foreground text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Tab Content ─────────────────────────────────────────────────────── */}
+      {/* ── Leads ───────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">
-        {activeTab === "overview"  && <OverviewTab  campaignId={campaignId} batchId={batchId} header={header} />}
-        {activeTab === "leads"     && <LeadsTab     campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} />}
+        <LeadsTab campaignId={campaignId} batchId={batchId} maxAttempts={header?.batch.maxAttempts ?? 1} />
       </div>
 
     </div>
