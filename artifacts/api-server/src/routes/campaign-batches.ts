@@ -101,14 +101,23 @@ async function fireStartBatch(batch: BatchRow, campaign: CampaignRow): Promise<v
   // READ COMMITTED isolation, a second concurrent UPDATE on the same rows sees
   // the already-committed 'calling' status and skips them — preventing
   // double-scheduling when the batch scheduler and a manual /start race.
+  // NB: only call_status is written here. last_attempt_at is set by
+  // fireCampaignCall at the moment a real dial is placed, so "Last Activity"
+  // reflects an actual outbound attempt and never a mere pre-claim.
   const claimed = await db.execute<{ id: number }>(sql`
     UPDATE campaign_leads
-    SET call_status = 'calling', last_attempt_at = now()
+    SET call_status = 'calling'
     WHERE id IN (
       SELECT id FROM campaign_leads
       WHERE campaign_id = ${campaign.id}
         AND batch_id = ${batch.id}
         AND call_status = 'pending'
+        AND NOT EXISTS (
+          SELECT 1 FROM call_retries cr
+          WHERE cr.lead_id = campaign_leads.id
+            AND cr.status = 'pending'
+            AND cr.scheduled_at > now()
+        )
       ORDER BY id
       LIMIT ${slots}
     )

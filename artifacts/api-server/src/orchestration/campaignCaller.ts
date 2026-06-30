@@ -143,16 +143,54 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
     return;
   }
 
-  // Mark as calling + record attempt. Pre-claimed leads skip the callStatus
-  // write (already 'calling') but still increment callAttempts.
-  const newAttempts = currentAttempts + 1;
-  await db.update(campaignLeadsTable)
-    .set({
-      ...(isPreClaimed ? {} : { callStatus: "calling" as const }),
-      callAttempts: sql`${campaignLeadsTable.callAttempts} + 1`,
-      lastAttemptAt: new Date(),
-    })
-    .where(eq(campaignLeadsTable.id, lead.id));
+  // ── Atomic dial claim ──────────────────────────────────────────────────────
+  // Transition the lead and increment the attempt counter in a SINGLE
+  // conditional UPDATE so the attempt is counted EXACTLY ONCE — only when this
+  // invocation wins the claim. Two independent paths can race to dial the same
+  // lead (the rolling-refill atomic claim and a processRetries-deferred fire);
+  // without an atomic guard both would increment callAttempts AND place a dial,
+  // inflating "Attempt N of N" and exhausting the lead far faster than the
+  // configured retry spacing. The loser sees the row already moved out of its
+  // expected status and bails without dialing or touching the counter, so
+  // callAttempts/lastAttemptAt only ever reflect a real outbound dial.
+  //
+  // The non-pre-claimed path also re-asserts the retry-timing gate: a lead
+  // carrying a not-yet-due pending call_retries row is never dialed early. This
+  // makes call_retries.scheduledAt the single source of truth for retry spacing
+  // across every dial path (rolling refill, batch start, and this direct fire).
+  let newAttempts: number;
+  if (isPreClaimed) {
+    const claimed = await db.execute<{ call_attempts: number }>(sql`
+      UPDATE campaign_leads
+      SET call_attempts = call_attempts + 1, last_attempt_at = now()
+      WHERE id = ${lead.id} AND call_status = 'calling'
+      RETURNING call_attempts
+    `);
+    if (claimed.rows.length === 0) {
+      logger.info({ leadId: lead.id, campaignId: campaign.id }, "Dial skipped — pre-claimed lead no longer 'calling' (ended/claimed elsewhere)");
+      return;
+    }
+    newAttempts = Number(claimed.rows[0]!.call_attempts);
+  } else {
+    const claimed = await db.execute<{ call_attempts: number }>(sql`
+      UPDATE campaign_leads
+      SET call_status = 'calling', call_attempts = call_attempts + 1, last_attempt_at = now()
+      WHERE id = ${lead.id}
+        AND call_status = 'pending'
+        AND NOT EXISTS (
+          SELECT 1 FROM call_retries cr
+          WHERE cr.lead_id = campaign_leads.id
+            AND cr.status = 'pending'
+            AND cr.scheduled_at > now()
+        )
+      RETURNING call_attempts
+    `);
+    if (claimed.rows.length === 0) {
+      logger.info({ leadId: lead.id, campaignId: campaign.id }, "Dial skipped — lead not dialable (claimed elsewhere or has a not-yet-due retry)");
+      return;
+    }
+    newAttempts = Number(claimed.rows[0]!.call_attempts);
+  }
 
   await addTimelineEvent(lead.id, campaign.id, "call_started", { attemptNumber: newAttempts });
 
