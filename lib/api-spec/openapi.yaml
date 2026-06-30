@@ -11184,6 +11184,8 @@ components:
         cancelledAt:           { type: string, format: date-time, nullable: true }
         createdAt:             { type: string, format: date-time }
         minutesUntilDue:       { type: integer, nullable: true }
+        originCallId:          { type: integer, nullable: true }
+        triggeredCallId:       { type: integer, nullable: true }
 
     ScheduledCallbackListResponse:
       type: object

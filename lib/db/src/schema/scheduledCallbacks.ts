@@ -28,4 +28,10 @@ export const scheduledCallbacksTable = pgTable("scheduled_callbacks", {
    * enumeration of serial cbId values to trigger arbitrary outbound redialing.
    */
   callbackSecret:        text("callback_secret"),
+  /**
+   * The `calls.id` of the outbound call that was dialed when this callback
+   * fired (set by the telephony session after the call record is created).
+   * Null until the callback is triggered and a call record is established.
+   */
+  triggeredCallId:       integer("triggered_call_id").references(() => callsTable.id, { onDelete: "set null" }),
 });

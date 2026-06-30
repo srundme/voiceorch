@@ -73,6 +73,8 @@ router.get("/callbacks", async (req, res): Promise<void> => {
       triggeredAt:           scheduledCallbacksTable.triggeredAt,
       cancelledAt:           scheduledCallbacksTable.cancelledAt,
       createdAt:             scheduledCallbacksTable.createdAt,
+      originCallId:          scheduledCallbacksTable.createdFromCallId,
+      triggeredCallId:       scheduledCallbacksTable.triggeredCallId,
     })
     .from(scheduledCallbacksTable)
     .innerJoin(agentsTable, eq(scheduledCallbacksTable.agentId, agentsTable.id))
@@ -97,6 +99,8 @@ router.get("/callbacks", async (req, res): Promise<void> => {
     cancelledAt:           r.cancelledAt?.toISOString() ?? null,
     createdAt:             r.createdAt.toISOString(),
     minutesUntilDue:       r.scheduledAt ? Math.round((r.scheduledAt.getTime() - Date.now()) / 60_000) : null,
+    originCallId:          r.originCallId ?? null,
+    triggeredCallId:       r.triggeredCallId ?? null,
   }));
 
   res.json({ items, total: countRow?.count ?? 0, page, limit });

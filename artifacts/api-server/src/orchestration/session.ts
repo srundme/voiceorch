@@ -130,6 +130,10 @@ export async function createSession(params: {
    *  (e.g. "network_drop"). Stored in session state and used in endSession to prevent
    *  a dropped retry call from scheduling yet another callback (single-retry invariant). */
   sourceCallbackReason?: string;
+  /** When this call was spawned by a scheduled callback, the row ID of that callback.
+   *  After the call record is created, this ID is used to write back `triggeredCallId`
+   *  so users can navigate directly to the triggered call from the Callbacks page. */
+  scheduledCallbackId?: number;
   /** Context snapshot from the previous call, generated after a network drop.
    *  When present, injected into the system prompt so the agent resumes naturally
    *  instead of treating the callback as a cold start. */
@@ -803,6 +807,16 @@ export async function createSession(params: {
     if (!inserted) throw new Error("Failed to create call record");
     return inserted;
   })();
+
+  // ── Write back triggeredCallId on the scheduled callback row ─────────────────
+  if (params.scheduledCallbackId) {
+    void db.update(scheduledCallbacksTable)
+      .set({ triggeredCallId: callRecord.id })
+      .where(eq(scheduledCallbacksTable.id, params.scheduledCallbackId))
+      .catch((err) => {
+        logger.warn({ scheduledCallbackId: params.scheduledCallbackId, callId: callRecord.id, err }, "Failed to write back triggeredCallId on callback row");
+      });
+  }
 
   // ── Mark campaign lead as connected + record call execution row ───────────────
   if (params.campaignLeadId && campaignLeadResult) {

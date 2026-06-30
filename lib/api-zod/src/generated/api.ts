@@ -6106,7 +6106,9 @@ export const ListCallbacksResponse = zod.object({
   "triggeredAt": zod.coerce.date().nullish(),
   "cancelledAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date(),
-  "minutesUntilDue": zod.number().nullish()
+  "minutesUntilDue": zod.number().nullish(),
+  "originCallId": zod.number().nullish(),
+  "triggeredCallId": zod.number().nullish()
 })),
   "total": zod.number(),
   "page": zod.number(),

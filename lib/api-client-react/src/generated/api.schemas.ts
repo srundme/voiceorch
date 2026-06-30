@@ -4434,6 +4434,8 @@ export interface ScheduledCallbackItem {
   cancelledAt?: string | null;
   createdAt: string;
   minutesUntilDue?: number | null;
+  originCallId?: number | null;
+  triggeredCallId?: number | null;
 }
 
 export interface ScheduledCallbackListResponse {

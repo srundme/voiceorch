@@ -119,6 +119,7 @@ export async function handleTwilioWebSocket(
             campaignLeadId,
             resumeContext,
             sourceCallbackReason,
+            scheduledCallbackId: callbackId,
             onAudioOut: sendAudioToTwilio,
             onCallEnd: () => ws.close(),
             onBargeIn: () => {

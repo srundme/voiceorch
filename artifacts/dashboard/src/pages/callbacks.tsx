@@ -15,8 +15,9 @@ import {
 } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  PhoneMissed, PhoneCall, Clock, Calendar, RefreshCw, X, AlertTriangle,
+  PhoneMissed, PhoneCall, Clock, Calendar, RefreshCw, X, AlertTriangle, Eye,
 } from "lucide-react";
+import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API  = `${BASE}/api`;
@@ -39,6 +40,8 @@ interface CallbackItem {
   cancelledAt: string | null;
   createdAt: string;
   minutesUntilDue: number | null;
+  originCallId: number | null;
+  triggeredCallId: number | null;
 }
 
 interface CallbackListResponse {
@@ -177,12 +180,15 @@ function CallbackRow({
   cb,
   onCancel,
   onReschedule,
+  onViewCall,
 }: {
   cb: CallbackItem;
   onCancel: (cb: CallbackItem) => void;
   onReschedule: (cb: CallbackItem) => void;
+  onViewCall: (callId: number) => void;
 }) {
   const isDue = cb.minutesUntilDue !== null && cb.minutesUntilDue <= 0;
+  const viewableCallId = cb.triggeredCallId ?? cb.originCallId;
 
   return (
     <div className="flex items-start gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/30">
@@ -241,28 +247,41 @@ function CallbackRow({
       </div>
 
       {/* actions */}
-      {cb.status === "pending" && (
-        <div className="flex gap-2 flex-none">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            onClick={() => onReschedule(cb)}
-          >
-            <Calendar className="w-3 h-3 mr-1" />
-            Reschedule
-          </Button>
+      <div className="flex gap-2 flex-none items-start mt-0.5">
+        {viewableCallId != null && (
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-            onClick={() => onCancel(cb)}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+            title="View call details"
+            onClick={() => onViewCall(viewableCallId)}
           >
-            <X className="w-3 h-3 mr-1" />
-            Cancel
+            <Eye className="w-3.5 h-3.5" />
           </Button>
-        </div>
-      )}
+        )}
+        {cb.status === "pending" && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              onClick={() => onReschedule(cb)}
+            >
+              <Calendar className="w-3 h-3 mr-1" />
+              Reschedule
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+              onClick={() => onCancel(cb)}
+            >
+              <X className="w-3 h-3 mr-1" />
+              Cancel
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -274,11 +293,13 @@ function CallbackList({
   reason,
   onCancel,
   onReschedule,
+  onViewCall,
 }: {
   status: string;
   reason: string;
   onCancel: (cb: CallbackItem) => void;
   onReschedule: (cb: CallbackItem) => void;
+  onViewCall: (callId: number) => void;
 }) {
   const { data, isLoading } = useQuery<CallbackListResponse>({
     queryKey: ["callbacks", status, reason],
@@ -314,7 +335,7 @@ function CallbackList({
   return (
     <div className="space-y-2">
       {data.items.map((cb) => (
-        <CallbackRow key={cb.id} cb={cb} onCancel={onCancel} onReschedule={onReschedule} />
+        <CallbackRow key={cb.id} cb={cb} onCancel={onCancel} onReschedule={onReschedule} onViewCall={onViewCall} />
       ))}
       {data.total > data.items.length && (
         <p className="text-xs text-center text-muted-foreground pt-2">
@@ -334,6 +355,7 @@ export default function CallbacksPage() {
   const [reasonFilter, setReasonFilter] = useState("all");
   const [toCancel, setToCancel] = useState<CallbackItem | null>(null);
   const [toReschedule, setToReschedule] = useState<CallbackItem | null>(null);
+  const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
   const { data: stats } = useQuery<CallbackStats>({
     queryKey: ["callbacks", "stats"],
@@ -398,6 +420,7 @@ export default function CallbacksPage() {
             reason={reasonFilter}
             onCancel={(cb) => setToCancel(cb)}
             onReschedule={(cb) => setToReschedule(cb)}
+            onViewCall={setSelectedCallId}
           />
         </TabsContent>
 
@@ -407,6 +430,7 @@ export default function CallbacksPage() {
             reason={reasonFilter}
             onCancel={(cb) => setToCancel(cb)}
             onReschedule={(cb) => setToReschedule(cb)}
+            onViewCall={setSelectedCallId}
           />
         </TabsContent>
 
@@ -416,9 +440,17 @@ export default function CallbacksPage() {
             reason={reasonFilter}
             onCancel={(cb) => setToCancel(cb)}
             onReschedule={(cb) => setToReschedule(cb)}
+            onViewCall={setSelectedCallId}
           />
         </TabsContent>
       </Tabs>
+
+      {/* Call detail drawer */}
+      <CallDetailDrawer
+        open={selectedCallId !== null}
+        callId={selectedCallId}
+        onClose={() => setSelectedCallId(null)}
+      />
 
       {/* Cancel confirm dialog */}
       <Dialog open={!!toCancel} onOpenChange={() => setToCancel(null)}>

@@ -122,6 +122,7 @@ export async function handlePlivoWebSocket(
             campaignLeadId,
             resumeContext,
             sourceCallbackReason,
+            scheduledCallbackId: callbackId,
             onAudioOut: sendAudioToPlivo,
             onCallEnd: () => ws.close(),
             onBargeIn: sendBargeIn,

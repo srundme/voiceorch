@@ -205,6 +205,7 @@ export async function handleVobizWebSocket(
             voicemailDelivery,
             resumeContext: priorResumeContext,
             sourceCallbackReason,
+            scheduledCallbackId: callbackId,
             onAudioOut: (audio: Buffer) => {
               stopSilence();            // first real audio → drop silence immediately
               sendAudioToVobiz(audio);
