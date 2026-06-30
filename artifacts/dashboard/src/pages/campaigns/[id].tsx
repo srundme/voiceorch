@@ -778,7 +778,7 @@ export default function CampaignDetailPage() {
           {/* View Analytics */}
           <div className="flex items-center justify-end">
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-              onClick={() => setLocation("/app/analytics")}>
+              onClick={() => setLocation(`/app/analytics?campaignId=${campaignId}`)}>
               <BarChart3 className="h-3 w-3" /> View Analytics
             </Button>
           </div>

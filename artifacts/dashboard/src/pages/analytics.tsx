@@ -1,32 +1,23 @@
 /**
  * Platform Analytics — /app/analytics
- * Tabbed analytics driven entirely by operationalOutcome.
+ * Overview of operational outcomes across all campaigns.
  */
 
-import { useState, useCallback } from "react";
-import { Link } from "wouter";
+import { useState } from "react";
+import { useSearch, useLocation } from "wouter";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
   Users, PhoneCall, TrendingUp, CalendarCheck, ArrowRightLeft,
-  PhoneIncoming, Clock, BarChart2, Phone, CheckCircle2, XCircle,
-  AlertCircle, Download, Filter,
+  PhoneIncoming, Clock, BarChart2, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format, subDays, parseISO } from "date-fns";
 import { useChartTheme } from "@/hooks/use-chart-theme";
-import {
-  useGetPlatformAnalyticsOverview,
-  useGetPlatformAnalyticsFunnel,
-  useGetPlatformAnalyticsSources,
-  useGetPlatformAnalyticsCampaigns,
-  useGetPlatformAnalyticsAgents,
-  useGetPlatformAnalyticsQueue,
-} from "@workspace/api-client-react";
+import { useGetPlatformAnalyticsOverview } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,38 +27,6 @@ interface OverviewData {
   connectionRate: number; bookingRate: number; transferRate: number;
   callbackSuccessRate: number; avgDurationSeconds: number;
   dailyTrend: Array<{ date: string; connected: number; booked: number; transferred: number; failed: number; callbacks: number }>;
-}
-
-interface FunnelStage { stage: string; count: number; pct: number; dropoff: number; }
-interface FunnelData {
-  funnel: FunnelStage[];
-  filters: { campaigns: Array<{ id: number; name: string }>; sources: Array<{ id: number; name: string; type: string }> };
-}
-
-interface SourceRow {
-  sourceId: number | null; sourceName: string; sourceType: string;
-  total: number; called: number; connected: number; booked: number; transferred: number;
-  connectionRate: number; bookingRate: number; transferRate: number;
-}
-
-interface CampaignRow {
-  campaignId: number; campaignName: string; agentName: string | null;
-  total: number; called: number; connected: number; booked: number; transferred: number;
-  successRate: number; connectionRate: number;
-}
-
-interface AgentRow {
-  agentId: number | null; agentName: string;
-  total: number; called: number; connected: number; booked: number; transferred: number;
-  connectionRate: number; bookingRate: number; transferRate: number;
-  avgDurationSeconds: number | null;
-  sentimentBreakdown: Record<string, number>;
-}
-
-interface QueueData {
-  callbacks:  { total: number; pending: number; completed: number; cancelled: number; missed: number; overdue: number };
-  bookings:   { total: number; scheduled: number; completed: number; cancelled: number };
-  transfers:  { total: number; initiated: number; connected: number; completed: number; failed: number };
 }
 
 // ── Date range ────────────────────────────────────────────────────────────────
@@ -90,20 +49,6 @@ function presetToRange(p: Preset): DateRange {
     case "30d":
       return { from: format(subDays(today, 29), "yyyy-MM-dd"), to: format(today, "yyyy-MM-dd") };
   }
-}
-
-// ── CSV export helper ─────────────────────────────────────────────────────────
-
-function exportCsv(filename: string, headers: string[], rows: (string | number | null)[][]) {
-  const csvRows = [
-    headers.join(","),
-    ...rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")),
-  ];
-  const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -139,29 +84,6 @@ function RateBar({ label, value, color }: { label: string; value: number; color:
   );
 }
 
-function QueueGroup({
-  title, icon: Icon, items, accent,
-}: { title: string; icon: React.ElementType; items: Array<{ label: string; value: number; highlight?: boolean }>; accent: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-5 space-y-4">
-      <div className="flex items-center gap-2">
-        <div className={cn("h-7 w-7 rounded-md flex items-center justify-center", accent)}>
-          <Icon className="h-3.5 w-3.5" />
-        </div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-      </div>
-      <div className="space-y-2">
-        {items.map(it => (
-          <div key={it.label} className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
-            <span className="text-xs text-muted-foreground">{it.label}</span>
-            <span className={cn("text-sm font-semibold tabular-nums", it.highlight && "text-destructive")}>{it.value.toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function fmtDur(s: number | null | undefined) {
   if (!s) return "—";
   const m = Math.floor(s / 60);
@@ -169,7 +91,7 @@ function fmtDur(s: number | null | undefined) {
   return `${m}m ${sec}s`;
 }
 
-// ── Tab: Overview ─────────────────────────────────────────────────────────────
+// ── Overview ──────────────────────────────────────────────────────────────────
 
 function OverviewTab({ range }: { range: DateRange }) {
   const ct = useChartTheme();
@@ -254,405 +176,7 @@ function OverviewTab({ range }: { range: DateRange }) {
   );
 }
 
-// ── Tab: Funnel ───────────────────────────────────────────────────────────────
-
-function FunnelTab({ range }: { range: DateRange }) {
-  const [campaignId, setCampaignId] = useState<string>("");
-  const [sourceId,   setSourceId]   = useState<string>("");
-
-  const params = {
-    from: range.from,
-    to:   range.to,
-    ...(campaignId ? { campaignId: Number(campaignId) } : {}),
-    ...(sourceId   ? { sourceId:   Number(sourceId)   } : {}),
-  };
-
-  const { data, isLoading } = useGetPlatformAnalyticsFunnel(params);
-  const d = data as FunnelData | undefined;
-
-  const funnel   = d?.funnel   ?? [];
-  const maxCount = funnel[0]?.count ?? 1;
-
-  const STAGE_COLORS: Record<string, string> = {
-    Imported:    "bg-zinc-400",
-    Called:      "bg-blue-500",
-    Connected:   "bg-cyan-500",
-    Interested:  "bg-amber-500",
-    Booked:      "bg-emerald-500",
-    Transferred: "bg-violet-500",
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <select
-          value={campaignId}
-          onChange={e => setCampaignId(e.target.value)}
-          className="text-xs rounded-md border border-border bg-background px-2 py-1.5 min-w-36"
-        >
-          <option value="">All Campaigns</option>
-          {(d?.filters.campaigns ?? []).map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select
-          value={sourceId}
-          onChange={e => setSourceId(e.target.value)}
-          className="text-xs rounded-md border border-border bg-background px-2 py-1.5 min-w-36"
-        >
-          <option value="">All Sources</option>
-          {(d?.filters.sources ?? []).map(s => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Funnel bars */}
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        {isLoading ? (
-          <div className="py-16 text-center text-muted-foreground text-sm">Loading…</div>
-        ) : funnel.length === 0 ? (
-          <div className="py-16 text-center text-muted-foreground text-sm">No data for this range.</div>
-        ) : (
-          funnel.map((stage, i) => (
-            <div key={stage.stage} className="space-y-1">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium w-28 shrink-0">{stage.stage}</span>
-                <div className="flex-1 mx-4">
-                  <div className="h-8 rounded-md bg-muted overflow-hidden">
-                    <div
-                      className={cn("h-full rounded-md transition-all flex items-center px-2", STAGE_COLORS[stage.stage] ?? "bg-zinc-400")}
-                      style={{ width: `${Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 2 : 0)}%` }}
-                    >
-                      <span className="text-[10px] text-white font-medium tabular-nums truncate">
-                        {stage.count > 0 ? stage.count.toLocaleString() : ""}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right w-28 shrink-0 space-y-0.5">
-                  <div className="text-sm font-semibold tabular-nums">{stage.count.toLocaleString()}</div>
-                  <div className="text-[10px] text-muted-foreground">{stage.pct}% of total</div>
-                </div>
-              </div>
-              {i < funnel.length - 1 && stage.dropoff > 0 && (
-                <div className="ml-28 pl-4 text-[10px] text-destructive/70">
-                  ↓ {stage.dropoff}% drop-off to next stage
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Sources ──────────────────────────────────────────────────────────────
-
-function SourcesTab({ range }: { range: DateRange }) {
-  const { data, isLoading } = useGetPlatformAnalyticsSources({ from: range.from, to: range.to });
-  const rows = (data as SourceRow[] | undefined) ?? [];
-
-  function handleExport() {
-    exportCsv(
-      `sources-${range.from}-${range.to}.csv`,
-      ["Source", "Type", "Total", "Called", "Connected", "Booked", "Transferred", "Connection%", "Booking%", "Transfer%"],
-      rows.map(r => [r.sourceName, r.sourceType, r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.bookingRate, r.transferRate]),
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={handleExport} disabled={rows.length === 0}>
-          <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
-        </Button>
-      </div>
-      <div className="rounded-lg border bg-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-xs text-muted-foreground">
-              <th className="text-left px-4 py-3 font-medium">Source</th>
-              <th className="text-left px-4 py-3 font-medium">Type</th>
-              <th className="text-right px-4 py-3 font-medium">Leads</th>
-              <th className="text-right px-4 py-3 font-medium">Connected</th>
-              <th className="text-right px-4 py-3 font-medium">Booked</th>
-              <th className="text-right px-4 py-3 font-medium">Transferred</th>
-              <th className="text-right px-4 py-3 font-medium">Conn%</th>
-              <th className="text-right px-4 py-3 font-medium">Book%</th>
-              <th className="text-right px-4 py-3 font-medium">Xfer%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
-              <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">Loading…</td></tr>
-            )}
-            {!isLoading && rows.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">No source data for this range.</td></tr>
-            )}
-            {rows.map((r, i) => (
-              <tr key={r.sourceId ?? i} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3 font-medium">{r.sourceName}</td>
-                <td className="px-4 py-3">
-                  <Badge variant="outline" className="text-[10px]">{r.sourceType}</Badge>
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.total.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.connected.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-emerald-500">{r.booked.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-violet-500">{r.transferred.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.connectionRate}%</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.bookingRate}%</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.transferRate}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Campaigns ────────────────────────────────────────────────────────────
-
-function CampaignsTab({ range }: { range: DateRange }) {
-  const { data, isLoading } = useGetPlatformAnalyticsCampaigns({ from: range.from, to: range.to });
-  const rows = (data as CampaignRow[] | undefined) ?? [];
-
-  function handleExport() {
-    exportCsv(
-      `campaigns-${range.from}-${range.to}.csv`,
-      ["Campaign", "Agent", "Total", "Called", "Connected", "Booked", "Transferred", "Conn%", "Success%"],
-      rows.map(r => [r.campaignName, r.agentName ?? "", r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.successRate]),
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={handleExport} disabled={rows.length === 0}>
-          <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
-        </Button>
-      </div>
-      <div className="rounded-lg border bg-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-xs text-muted-foreground">
-              <th className="text-left px-4 py-3 font-medium">Campaign</th>
-              <th className="text-left px-4 py-3 font-medium">Agent</th>
-              <th className="text-right px-4 py-3 font-medium">Leads</th>
-              <th className="text-right px-4 py-3 font-medium">Called</th>
-              <th className="text-right px-4 py-3 font-medium">Connected</th>
-              <th className="text-right px-4 py-3 font-medium">Booked</th>
-              <th className="text-right px-4 py-3 font-medium">Transferred</th>
-              <th className="text-right px-4 py-3 font-medium">Conn%</th>
-              <th className="text-right px-4 py-3 font-medium">Success%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
-              <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">Loading…</td></tr>
-            )}
-            {!isLoading && rows.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">No campaign data for this range.</td></tr>
-            )}
-            {rows.map(r => (
-              <tr key={r.campaignId} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3">
-                  <Link href={`/app/campaigns/${r.campaignId}`} className="font-medium hover:underline text-foreground">
-                    {r.campaignName}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{r.agentName ?? "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.total.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.called.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.connected.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-emerald-500">{r.booked.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-violet-500">{r.transferred.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.connectionRate}%</td>
-                <td className="px-4 py-3 text-right">
-                  <span className={cn(
-                    "text-xs font-medium tabular-nums px-2 py-0.5 rounded-full",
-                    r.successRate >= 20 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                    : r.successRate >= 10 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                    : "bg-muted text-muted-foreground",
-                  )}>{r.successRate}%</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Agents ───────────────────────────────────────────────────────────────
-
-function AgentsTab({ range }: { range: DateRange }) {
-  const ct = useChartTheme();
-  const { data, isLoading } = useGetPlatformAnalyticsAgents({ from: range.from, to: range.to });
-  const rows = (data as AgentRow[] | undefined) ?? [];
-
-  function handleExport() {
-    exportCsv(
-      `agents-${range.from}-${range.to}.csv`,
-      ["Agent", "Total", "Called", "Connected", "Booked", "Transferred", "Conn%", "Book%", "Xfer%", "Avg Duration (s)"],
-      rows.map(r => [r.agentName, r.total, r.called, r.connected, r.booked, r.transferred, r.connectionRate, r.bookingRate, r.transferRate, r.avgDurationSeconds ?? ""]),
-    );
-  }
-
-  const chartData = rows.slice(0, 10).map(r => ({
-    name: r.agentName.length > 14 ? r.agentName.slice(0, 14) + "…" : r.agentName,
-    Booked: r.booked, Transferred: r.transferred, Connected: r.connected,
-  }));
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={handleExport} disabled={rows.length === 0}>
-          <Download className="h-3.5 w-3.5 mr-1.5" /> Export CSV
-        </Button>
-      </div>
-
-      {/* Leaderboard chart */}
-      {chartData.length > 0 && (
-        <div className="rounded-lg border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Agent Leaderboard — Outcomes</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke={ct.gridColor} strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10, fill: ct.tickColor }} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: ct.tickColor }} width={90} />
-              <Tooltip contentStyle={{ background: ct.tooltipBg, border: `1px solid ${ct.tooltipBorder}`, borderRadius: 6, fontSize: 11 }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Booked"      stackId="a" fill="#10b981" radius={[0,0,0,0]} />
-              <Bar dataKey="Transferred" stackId="a" fill="#8b5cf6" radius={[0,0,0,0]} />
-              <Bar dataKey="Connected"   stackId="a" fill="#3b82f6" radius={[0,4,4,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="rounded-lg border bg-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-xs text-muted-foreground">
-              <th className="text-left px-4 py-3 font-medium">#</th>
-              <th className="text-left px-4 py-3 font-medium">Agent</th>
-              <th className="text-right px-4 py-3 font-medium">Calls</th>
-              <th className="text-right px-4 py-3 font-medium">Connected</th>
-              <th className="text-right px-4 py-3 font-medium">Booked</th>
-              <th className="text-right px-4 py-3 font-medium">Transferred</th>
-              <th className="text-right px-4 py-3 font-medium">Conn%</th>
-              <th className="text-right px-4 py-3 font-medium">Book%</th>
-              <th className="text-right px-4 py-3 font-medium">Avg Duration</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
-              <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">Loading…</td></tr>
-            )}
-            {!isLoading && rows.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-muted-foreground py-10 text-xs">No agent data for this range.</td></tr>
-            )}
-            {rows.map((r, i) => (
-              <tr key={r.agentId ?? i} className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3 text-muted-foreground text-xs tabular-nums">{i + 1}</td>
-                <td className="px-4 py-3 font-medium">
-                  {r.agentId ? (
-                    <Link href={`/app/analytics/agents/${r.agentId}`} className="hover:underline">{r.agentName}</Link>
-                  ) : r.agentName}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.called.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.connected.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-emerald-500">{r.booked.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-violet-500">{r.transferred.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.connectionRate}%</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.bookingRate}%</td>
-                <td className="px-4 py-3 text-right text-muted-foreground">{fmtDur(r.avgDurationSeconds)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Queue ────────────────────────────────────────────────────────────────
-
-function QueueTab() {
-  const { data, isLoading } = useGetPlatformAnalyticsQueue();
-  const d = data as QueueData | undefined;
-
-  const cb = d?.callbacks;
-  const bk = d?.bookings;
-  const tr = d?.transfers;
-
-  return (
-    <div className="space-y-4">
-      {isLoading ? (
-        <div className="text-center text-muted-foreground py-10 text-sm">Loading…</div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <QueueGroup
-            title="Callbacks"
-            icon={PhoneCall}
-            accent="bg-amber-500/15 text-amber-600 dark:text-amber-400"
-            items={[
-              { label: "Total",     value: cb?.total     ?? 0 },
-              { label: "Pending",   value: cb?.pending   ?? 0 },
-              { label: "Completed", value: cb?.completed ?? 0 },
-              { label: "Cancelled", value: cb?.cancelled ?? 0 },
-              { label: "Missed",    value: cb?.missed    ?? 0 },
-              { label: "⚠ Overdue", value: cb?.overdue  ?? 0, highlight: (cb?.overdue ?? 0) > 0 },
-            ]}
-          />
-          <QueueGroup
-            title="Bookings"
-            icon={CalendarCheck}
-            accent="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-            items={[
-              { label: "Total",     value: bk?.total     ?? 0 },
-              { label: "Scheduled", value: bk?.scheduled ?? 0 },
-              { label: "Completed", value: bk?.completed ?? 0 },
-              { label: "Cancelled", value: bk?.cancelled ?? 0 },
-            ]}
-          />
-          <QueueGroup
-            title="Transfers"
-            icon={ArrowRightLeft}
-            accent="bg-violet-500/15 text-violet-600 dark:text-violet-400"
-            items={[
-              { label: "Total",     value: tr?.total     ?? 0 },
-              { label: "Initiated", value: tr?.initiated ?? 0 },
-              { label: "Connected", value: tr?.connected ?? 0 },
-              { label: "Completed", value: tr?.completed ?? 0 },
-              { label: "Failed",    value: tr?.failed    ?? 0, highlight: (tr?.failed ?? 0) > 0 },
-            ]}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
-
-type TabKey = "overview" | "funnel" | "sources" | "campaigns" | "agents" | "queue";
-
-const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: "overview",   label: "Overview"   },
-  { key: "funnel",     label: "Funnel"     },
-  { key: "sources",    label: "Sources"    },
-  { key: "campaigns",  label: "Campaigns"  },
-  { key: "agents",     label: "Agents"     },
-  { key: "queue",      label: "Queue"      },
-];
 
 const PRESETS: Array<{ key: Preset; label: string }> = [
   { key: "today",     label: "Today"     },
@@ -662,15 +186,28 @@ const PRESETS: Array<{ key: Preset; label: string }> = [
 ];
 
 export default function AnalyticsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [preset,    setPreset]    = useState<Preset>("30d");
+  const [preset, setPreset] = useState<Preset>("30d");
   const range = presetToRange(preset);
 
-  const handlePreset = useCallback((p: Preset) => setPreset(p), []);
+  const search = useSearch();
+  const [, setLocation] = useLocation();
+  const campaignId = new URLSearchParams(search).get("campaignId");
+  const backTo = campaignId ? `/app/campaigns/${campaignId}` : "/app/campaigns";
 
   return (
     <div className="flex flex-col h-full overflow-auto bg-background">
       <div className="max-w-screen-2xl mx-auto w-full p-6 space-y-5">
+
+        {/* Back navigation */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 -ml-2 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+          onClick={() => setLocation(backTo)}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          {campaignId ? "Back to campaign" : "Back to campaigns"}
+        </Button>
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -688,7 +225,7 @@ export default function AnalyticsPage() {
             {PRESETS.map(p => (
               <button
                 key={p.key}
-                onClick={() => handlePreset(p.key)}
+                onClick={() => setPreset(p.key)}
                 className={cn(
                   "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
                   preset === p.key
@@ -708,32 +245,9 @@ export default function AnalyticsPage() {
           <span className="font-medium text-foreground">{range.to}</span>
         </p>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={cn(
-                "px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all -mb-px",
-                activeTab === t.key
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
+        {/* Overview content */}
         <div className="pb-8">
-          {activeTab === "overview"  && <OverviewTab  range={range} />}
-          {activeTab === "funnel"    && <FunnelTab    range={range} />}
-          {activeTab === "sources"   && <SourcesTab   range={range} />}
-          {activeTab === "campaigns" && <CampaignsTab range={range} />}
-          {activeTab === "agents"    && <AgentsTab    range={range} />}
-          {activeTab === "queue"     && <QueueTab />}
+          <OverviewTab range={range} />
         </div>
       </div>
     </div>
