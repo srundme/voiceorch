@@ -656,6 +656,22 @@ function WebhookIntakeCard({ webhookUrl }: { webhookUrl: string }) {
   );
 }
 
+// ── Campaign summary KPI card (mirrors the Batch Workspace KpiCard) ───────────
+
+function KpiCard({ icon, label, value, color }: {
+  icon: React.ReactNode; label: string; value: number | string; color?: string;
+}) {
+  return (
+    <div className="bg-card px-3.5 py-3 flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className={cn("text-muted-foreground/50", color)}>{icon}</span>
+        <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground/40 truncate">{label}</span>
+      </div>
+      <p className={cn("text-xl font-bold tabular-nums truncate", color ?? "text-foreground")}>{value}</p>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -696,15 +712,51 @@ export default function CampaignDetailPage() {
   const fm = campaign?.fieldMappings as Record<string, string> | undefined;
   const imported    = analytics?.imported    ?? campaign?.totalLeads  ?? 0;
   const called      = analytics?.called      ?? campaign?.calledLeads ?? 0;
-  const connected   = analytics?.connected   ?? 0;
-  const booked      = analytics?.booked      ?? 0;
-  const transferred = analytics?.transferred ?? 0;
   const failed      = analytics?.failed      ?? 0;
-  const calledPct   = imported > 0 ? Math.round((called / imported) * 100) : 0;
-  const connRate    = analytics?.connectionRate ?? 0;
-  const bookRate    = analytics?.bookingRate    ?? 0;
-  const successRate = analytics?.successRate    ?? 0;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
+
+  // ── Campaign-level summary metrics ────────────────────────────────────────
+  const totalBatches     = batches?.length ?? 0;
+  const activeBatches    = batches?.filter(b => b.status === "running").length ?? 0;
+  const completedBatches = batches?.filter(b => (b.status as string) === "completed").length ?? 0;
+  const stoppedBatches   = batches?.filter(b => b.status === "stopped").length ?? 0;
+
+  const campaignCreated = campaign?.createdAt
+    ? formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })
+    : "—";
+
+  // Overall progress: leads processed vs imported. While running with no
+  // progress yet, show "Tracking..." instead of a bare 0%.
+  const overallPct = imported > 0 ? Math.round((called / imported) * 100) : 0;
+  const campaignRunning = activeBatches > 0;
+  const overallProgress = overallPct > 0
+    ? `${overallPct}%`
+    : campaignRunning
+      ? "Tracking..."
+      : "0%";
+
+  // Campaign health: derived purely from already-fetched batch/analytics data.
+  const failureRate = called > 0 ? failed / called : 0;
+  const campaignHealth: { label: string; accent: string } = (() => {
+    // No activity yet → neutral.
+    if (imported === 0 && called === 0) {
+      return { label: "Healthy", accent: "text-emerald-500" };
+    }
+    // Fully completed (everything processed) → healthy.
+    if (imported > 0 && called >= imported) {
+      return { label: "Healthy", accent: "text-emerald-500" };
+    }
+    // Unfinished work but nothing running → stalled.
+    if (imported > called && activeBatches === 0) {
+      return { label: "Stalled", accent: "text-red-500" };
+    }
+    // Something running but high failure rate or mixed stopped batches → needs attention.
+    if (activeBatches > 0 && (failureRate >= 0.3 || stoppedBatches > 0)) {
+      return { label: "Needs Attention", accent: "text-amber-500" };
+    }
+    // Otherwise running cleanly.
+    return { label: "Healthy", accent: "text-emerald-500" };
+  })();
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -865,34 +917,15 @@ export default function CampaignDetailPage() {
             <WebhookIntakeCard webhookUrl={webhookUrl} />
           )}
 
-          {/* Summary stat tiles — connected strip */}
+          {/* Campaign-level summary tiles — connected strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
-            {[
-              { label: "Leads",     value: imported,          pct: null,                              icon: <Users className="h-4 w-4" />,         accent: "text-blue-500",    tint: "bg-blue-500/10",    badge: "" },
-              { label: "Called",    value: called,            pct: calledPct > 0 ? calledPct : null,  icon: <PhoneCall className="h-4 w-4" />,      accent: "text-sky-500",     tint: "bg-sky-500/10",     badge: "text-sky-500" },
-              { label: "Connected", value: connected,         pct: connRate > 0 ? connRate : null,    icon: <Activity className="h-4 w-4" />,       accent: "text-cyan-500",    tint: "bg-cyan-500/10",    badge: "text-emerald-500" },
-              { label: "Booked",    value: booked,            pct: bookRate > 0 ? bookRate : null,    icon: <Target className="h-4 w-4" />,         accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "text-emerald-500" },
-              { label: "Callbacks", value: analytics?.callbacks ?? 0, pct: null,                      icon: <Clock className="h-4 w-4" />,          accent: "text-amber-500",   tint: "bg-amber-500/10",   badge: "" },
-              { label: "Transfers", value: transferred,       pct: null,                              icon: <ArrowRightLeft className="h-4 w-4" />, accent: "text-purple-500",  tint: "bg-purple-500/10",  badge: "text-purple-500" },
-              { label: "Success",   value: `${successRate}%`, pct: null,                              icon: <TrendingUp className="h-4 w-4" />,     accent: "text-emerald-500", tint: "bg-emerald-500/10", badge: "" },
-            ].map(kpi => (
-              <div key={kpi.label} className="bg-card px-4 py-3.5 flex flex-col gap-1.5">
-                <div className="flex items-center gap-2.5">
-                  <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", kpi.tint, kpi.accent)}>
-                    {kpi.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-bold text-foreground tabular-nums leading-none">
-                      {typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
-                    </p>
-                    <p className="text-xs text-muted-foreground/50 mt-1 truncate">{kpi.label}</p>
-                  </div>
-                </div>
-                {kpi.pct !== null && (
-                  <span className={cn("text-xs font-semibold tabular-nums", kpi.badge || "text-muted-foreground/50")}>{kpi.pct}%</span>
-                )}
-              </div>
-            ))}
+            <KpiCard icon={<Layers className="h-3 w-3" />}       label="Total Batches"        value={totalBatches} />
+            <KpiCard icon={<Users className="h-3 w-3" />}        label="Total Leads Imported" value={imported.toLocaleString()} />
+            <KpiCard icon={<PlayCircle className="h-3 w-3" />}   label="Active Batches"       value={activeBatches} color="text-sky-500" />
+            <KpiCard icon={<CheckCircle2 className="h-3 w-3" />} label="Completed Batches"    value={completedBatches} color="text-emerald-500" />
+            <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Campaign Created"     value={campaignCreated} />
+            <KpiCard icon={<Activity className="h-3 w-3" />}     label="Campaign Health"      value={campaignHealth.label} color={campaignHealth.accent} />
+            <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Overall Progress"     value={overallProgress} color="text-emerald-500" />
           </div>
 
           {/* Batches */}
