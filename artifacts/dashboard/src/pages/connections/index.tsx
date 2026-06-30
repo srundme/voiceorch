@@ -30,7 +30,7 @@ import {
   Copy, CheckCircle2, Globe, Webhook, AlertCircle, Clock,
   Zap, Sheet, Radio, X, ChevronDown, ChevronRight,
   ArrowRight, ExternalLink, Lock, RefreshCw, Eye, EyeOff,
-  Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2,
+  Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -503,6 +503,69 @@ function HmacConfigDialog({
   );
 }
 
+// ── Embed Snippet Panel ───────────────────────────────────────────────────────
+
+function EmbedSnippetPanel({ connection }: { connection: Connection }) {
+  // Derive the base origin from the webhook URL (strip the /api/webhooks/... path)
+  const webhookOrigin = (() => {
+    try {
+      return new URL(connection.webhookUrl).origin;
+    } catch {
+      return window.location.origin;
+    }
+  })();
+
+  const scriptSrc = `${webhookOrigin}/api/widget/lead-capture.js`;
+  const token = connection.webhookToken ?? "";
+
+  // Build a submit({}) example using source field names from fieldMappings
+  const fm = (connection.fieldMappings ?? {}) as Record<string, string>;
+  const submitFields: Record<string, string> = {};
+  // Core roles first (phone, name, email), then any extra keys
+  const roles = ["phone", "name", "email", ...Object.keys(fm).filter(k => !["phone","name","email"].includes(k))];
+  for (const role of roles) {
+    const srcField = fm[role];
+    if (srcField) submitFields[srcField] = role === "phone" ? "+919876543210" : role === "name" ? "Priya Sharma" : role === "email" ? "priya@example.com" : "";
+  }
+  // If no mappings at all, fall back to sensible defaults
+  if (Object.keys(submitFields).length === 0) {
+    submitFields["phone"] = "+919876543210";
+    submitFields["name"]  = "Priya Sharma";
+  }
+
+  const submitArg = JSON.stringify(submitFields, null, 2)
+    .replace(/^/gm, "  ")
+    .trimStart();
+
+  const scriptTag   = `<script src="${scriptSrc}"\n        data-token="${token}">\n</script>`;
+  const submitCall  = `SnapServe.submit(${submitArg})\n  .then(() => console.log("Lead sent!"))\n  .catch(err => console.error(err.message));`;
+  const curlCommand = `curl -X POST "${webhookOrigin}/api/webhooks/lead/${token}" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(Object.fromEntries(Object.entries(submitFields)))}'`;
+
+  const Block = ({ label, code }: { label: string; code: string }) => (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</p>
+        <CopyButton text={code} label="Copy" />
+      </div>
+      <pre className="bg-muted rounded-lg px-3 py-2.5 text-[11px] font-mono text-muted-foreground overflow-x-auto border border-border whitespace-pre">
+        {code}
+      </pre>
+    </div>
+  );
+
+  return (
+    <div className="px-4 pb-4 border-t border-border/50 pt-3 space-y-3">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Embed Snippet</p>
+      <p className="text-xs text-muted-foreground">
+        Drop the script tag on any page. Call <code className="font-mono text-foreground">SnapServe.submit(fields)</code> on form submit — no server required.
+      </p>
+      <Block label="1. Script tag" code={scriptTag} />
+      <Block label="2. On form submit" code={submitCall} />
+      <Block label="3. Test with curl" code={curlCommand} />
+    </div>
+  );
+}
+
 // ── Connection Card ───────────────────────────────────────────────────────────
 
 function ConnectionCard({
@@ -517,6 +580,7 @@ function ConnectionCard({
   const [listenOpen, setListenOpen] = useState(false);
   const [hmacOpen, setHmacOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [embedOpen, setEmbedOpen] = useState(false);
 
   const typeLabel = connection.type === "meta_lead_ads" ? "Meta Lead Ads" : "Webhook";
   const typeIcon  = connection.type === "meta_lead_ads"
@@ -566,6 +630,16 @@ function ConnectionCard({
                 </Button>
                 <Button
                   size="sm"
+                  variant={embedOpen ? "secondary" : "ghost"}
+                  onClick={() => setEmbedOpen(v => !v)}
+                  className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                  title={embedOpen ? "Hide embed snippet" : "Show embed snippet"}
+                >
+                  <Code2 className="w-3 h-3 mr-1" />
+                  {embedOpen ? "Hide snippet" : "Show embed snippet"}
+                </Button>
+                <Button
+                  size="sm"
                   variant="ghost"
                   onClick={() => setHmacOpen(true)}
                   className="h-7 px-2 text-muted-foreground hover:text-foreground"
@@ -585,6 +659,11 @@ function ConnectionCard({
             </Button>
           </div>
         </div>
+
+        {/* Embed Snippet panel */}
+        {embedOpen && connection.type === "webhook" && (
+          <EmbedSnippetPanel connection={connection} />
+        )}
 
         {/* Expanded setup steps */}
         {expanded && (

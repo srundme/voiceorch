@@ -36,6 +36,14 @@ app.use(
 
 import { getAppOrigins } from "./lib/app-domain.js";
 
+// Public paths that must accept browser requests from any origin (embed widget).
+// Mount BEFORE the restrictive global cors so OPTIONS preflights reach this
+// middleware first and are answered with Access-Control-Allow-Origin: *.
+app.use(
+  ["/api/webhooks/lead", "/api/widget/lead-capture.js"],
+  cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"] }),
+);
+
 // In production restrict CORS to known dashboard origins; in dev allow all.
 const corsOrigin: string | string[] | boolean = (() => {
   if (process.env["NODE_ENV"] !== "production") return true;

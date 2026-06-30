@@ -16,7 +16,7 @@
  * Token-only sources (no hmacSecret) continue to work unchanged.
  */
 
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db, campaignsTable, campaignLeadsTable, leadTimelineTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
@@ -27,6 +27,20 @@ import { isOnDnc } from "../lib/dnc-check.js";
 import { captureListenSample } from "./connections.js";
 
 const router: IRouter = Router();
+
+// ── Public CORS for the lead webhook (used by the embed widget) ────────────
+// The global CORS config in app.ts allows only known dashboard origins in
+// production, but browser-initiated fetch from embed widgets on arbitrary
+// third-party sites must be allowed. We open these two specific public paths
+// to all origins while keeping every other route restricted.
+function publicCors(_req: Request, res: Response, next: NextFunction): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Hub-Signature-256, X-Signature-256, X-Signature");
+  next();
+}
+
+router.options("/webhooks/lead/:token", publicCors, (_req, res) => { res.sendStatus(204); });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -159,7 +173,7 @@ function touchWebhookStatus(campaignId: number, status: "ok" | "error"): void {
 }
 
 // ── GET /api/webhooks/lead/:token — Instagram Meta verification ────────────
-router.get("/webhooks/lead/:token", (req, res): void => {
+router.get("/webhooks/lead/:token", publicCors, (req, res): void => {
   const mode      = req.query["hub.mode"]         as string | undefined;
   const token     = req.query["hub.verify_token"] as string | undefined;
   const challenge = req.query["hub.challenge"]    as string | undefined;
@@ -175,12 +189,12 @@ router.get("/webhooks/lead/:token", (req, res): void => {
 });
 
 // ── POST /api/webhooks/lead/:token — Universal lead intake ─────────────────
-router.post("/webhooks/lead/:token", async (req, res): Promise<void> => {
-  const token = req.params["token"];
+router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void> => {
+  const token = req.params["token"] as string;
 
   // Look up campaign by webhook token
   const campaign = await db.query.campaignsTable.findFirst({
-    where: eq(campaignsTable.webhookToken, token!),
+    where: eq(campaignsTable.webhookToken, token),
   });
 
   if (!campaign) {

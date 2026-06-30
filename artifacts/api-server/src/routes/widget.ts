@@ -314,4 +314,65 @@ router.get("/widget.js", (req, res): void => {
     .send(widgetJs);
 });
 
+/**
+ * GET /api/widget/lead-capture.js
+ * Returns a tiny self-contained lead-capture helper (~1 KB).
+ *
+ * Usage on any website:
+ *   <script src="https://your-domain/api/widget/lead-capture.js"
+ *           data-token="YOUR_CAMPAIGN_WEBHOOK_TOKEN">
+ *   </script>
+ *
+ * Then on form submit:
+ *   SnapServe.submit({ phone: "…", name: "…" })
+ *     .then(() => console.log("Lead captured"))
+ *     .catch(err => console.error(err.message));
+ */
+router.get("/widget/lead-capture.js", (req, res): void => {
+  const leadCaptureJs = `(function () {
+  "use strict";
+  var s = document.currentScript;
+  var token = s && s.getAttribute("data-token");
+
+  // Derive the API origin from the script's own src URL so the widget works
+  // correctly on any third-party site (window.location would be wrong there).
+  // data-origin is an optional override for proxied/CDN setups.
+  var apiOrigin = (s && s.getAttribute("data-origin")) ||
+    (s && s.src ? new URL(s.src).origin : "");
+  var url = token && apiOrigin ? apiOrigin + "/api/webhooks/lead/" + token : null;
+
+  window.SnapServe = {
+    submit: function (fields) {
+      if (!token) {
+        return Promise.reject(new Error("SnapServe: missing data-token on <script> tag"));
+      }
+      if (!url) {
+        return Promise.reject(new Error("SnapServe: could not determine API origin"));
+      }
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields || {}),
+      }).then(function (r) {
+        if (r.ok) return r.json();
+        return r.json().catch(function () { return {}; }).then(function (e) {
+          throw new Error(e.error || ("SnapServe: request failed (" + r.status + ")"));
+        });
+      });
+    },
+  };
+
+  if (!token) {
+    console.warn("SnapServe: missing data-token on <script> tag — SnapServe.submit() will reject");
+  }
+})();
+`;
+
+  res
+    .set("Content-Type", "application/javascript; charset=utf-8")
+    .set("Access-Control-Allow-Origin", "*")
+    .set("Cache-Control", "public, max-age=300")
+    .send(leadCaptureJs);
+});
+
 export default router;
