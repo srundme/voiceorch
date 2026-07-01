@@ -143,50 +143,24 @@ function CopyButton({ text }: { text: string }) {
 
 // ── CRM Integration Card ──────────────────────────────────────────────────────
 
-function CrmIntegrationCard({ campaignId, triggerMode }: { campaignId: number; triggerMode?: string }) {
+function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaignId: number; triggerMode?: string; webhookToken?: string }) {
   const { toast } = useToast();
-  const qc = useQueryClient();
   const { data: crmConns = [] } = useListCrmConnections();
   const updateMut = useUpdateCrmConnection();
 
   const [importConn, setImportConn] = useState<CrmConnection | null>(null);
-  const [linking, setLinking] = useState(false);
-  const [selectedConnId, setSelectedConnId] = useState<number | "">("");
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [regenSaving, setRegenSaving] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
   if (crmConns.length === 0) return null;
 
-  const linkedConns = crmConns.filter(c => c.webhookCampaignId === campaignId);
-
+  // Each campaign has its own unique webhook URL (connection ID + campaign token).
+  // This means multiple campaigns can safely share the same CRM connection —
+  // each campaign's URL routes only to that campaign, no overwriting.
   const webhookUrlFor = (conn: CrmConnection) =>
-    `${window.location.origin}${BASE}/api/crm/webhook/${conn.provider}/${conn.id}`;
+    `${window.location.origin}${BASE}/api/crm/webhook/${conn.provider}/${conn.id}/${webhookToken ?? ""}`;
 
-  const handleLink = async () => {
-    if (!selectedConnId) return;
-    setLinking(true);
-    try {
-      await updateMut.mutateAsync({ id: Number(selectedConnId), data: { webhookCampaignId: campaignId } });
-      await qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() });
-      toast({ title: "CRM linked — new leads will auto-dial this campaign" });
-      setSelectedConnId("");
-    } catch {
-      toast({ title: "Failed to link CRM", variant: "destructive" });
-    } finally {
-      setLinking(false);
-    }
-  };
-
-  const handleUnlink = async (conn: CrmConnection) => {
-    try {
-      await updateMut.mutateAsync({ id: conn.id, data: { webhookCampaignId: null } });
-      await qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() });
-      toast({ title: "CRM trigger unlinked" });
-    } catch {
-      toast({ title: "Failed to unlink", variant: "destructive" });
-    }
-  };
 
   const handleRegenSecret = async (conn: CrmConnection) => {
     setRegenSaving(true);
@@ -219,17 +193,13 @@ function CrmIntegrationCard({ campaignId, triggerMode }: { campaignId: number; t
           <span className="text-[10px] text-muted-foreground/60">— auto-dial new CRM leads the moment they arrive</span>
         </div>
 
-        {linkedConns.map(conn => (
+        {crmConns.map(conn => (
           <div key={conn.id} className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
                 <Building2 className="w-3 h-3 text-muted-foreground" />
                 {conn.accountName ?? conn.provider} <span className="text-muted-foreground font-normal">({conn.provider})</span>
               </span>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300 shrink-0"
-                onClick={() => void handleUnlink(conn)}>
-                <Link2Off className="w-3 h-3 mr-1" /> Unlink
-              </Button>
             </div>
             <div className="space-y-1">
               <p className="text-[10px] font-medium text-muted-foreground">Webhook URL — paste into your CRM automation</p>
@@ -310,25 +280,9 @@ function CrmIntegrationCard({ campaignId, triggerMode }: { campaignId: number; t
           </div>
         ))}
 
-        {linkedConns.length === 0 && (
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedConnId}
-              onChange={e => setSelectedConnId(e.target.value ? Number(e.target.value) : "")}
-              className="flex-1 h-8 text-xs rounded border border-border bg-background px-2 text-foreground focus:outline-none focus:border-primary"
-            >
-              <option value="">— select a connected CRM account —</option>
-              {crmConns.map(c => (
-                <option key={c.id} value={c.id}>{c.accountName ?? c.provider} ({c.provider})</option>
-              ))}
-            </select>
-            <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
-              disabled={!selectedConnId || linking} onClick={() => void handleLink()}>
-              {linking ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
-              Link
-            </Button>
-          </div>
-        )}
+        <p className="text-[10px] text-muted-foreground/60 pt-1">
+          Each campaign has its own webhook URL — you can safely use the same CRM account across multiple campaigns.
+        </p>
       </div>
       )}
 
@@ -1623,7 +1577,7 @@ export default function CampaignDetailPage() {
 
           {/* CRM Integration — only shown for CRM-sourced campaigns */}
           {(campaign as any).leadSource === "crm" && (
-            <CrmIntegrationCard campaignId={campaignId} triggerMode={(campaign as any).triggerMode} />
+            <CrmIntegrationCard campaignId={campaignId} triggerMode={(campaign as any).triggerMode} webhookToken={campaign.webhookToken} />
           )}
 
           {/* Calling Hours — instant trigger campaigns only */}

@@ -804,6 +804,105 @@ router.post("/crm/webhook/zoho/:connectionId", async (req, res): Promise<void> =
   }
 });
 
+/* ── POST /crm/webhook/zoho/:connectionId/:campaignToken (public, campaign-specific) ── */
+//
+// Campaign-specific variant: connectionId identifies the Zoho connection for
+// secret validation; campaignToken is the campaign's unique webhookToken and
+// determines which campaign receives the lead.
+//
+// This allows one Zoho account to fan out leads to multiple campaigns
+// independently — each campaign gets its own URL, no webhookCampaignId
+// overwriting occurs.
+
+router.post("/crm/webhook/zoho/:connectionId/:campaignToken", async (req, res): Promise<void> => {
+  const connectionId = Number(req.params["connectionId"]);
+  const campaignToken = (req.params["campaignToken"] as string ?? "").trim();
+
+  if (isNaN(connectionId)) { res.status(400).json({ error: "Invalid connectionId" }); return; }
+  if (!campaignToken)       { res.status(400).json({ error: "Missing campaignToken" }); return; }
+
+  const [conn] = await db.select().from(crmConnectionsTable)
+    .where(eq(crmConnectionsTable.id, connectionId));
+
+  if (!conn || conn.provider !== "zoho") {
+    logger.warn({ connectionId }, "Zoho campaign-webhook for unknown/wrong-provider connection");
+    res.sendStatus(200);
+    return;
+  }
+
+  // Secret verification — same logic as the connection-level route
+  if (!conn.webhookSecret) {
+    logger.warn({ connectionId }, "Zoho campaign-webhook rejected — no secret configured");
+    res.status(403).json({ error: "Webhook secret not configured — generate one in the Campaign detail page" });
+    return;
+  }
+
+  const providedSecret =
+    (req.headers["x-zoho-webhook-secret"] as string | undefined) ??
+    (req.query["secret"] as string | undefined);
+
+  if (!providedSecret) {
+    logger.warn({ connectionId }, "Zoho campaign-webhook missing secret — rejected");
+    res.status(401).json({ error: "Missing webhook secret" });
+    return;
+  }
+
+  let valid = false;
+  try {
+    const a = Buffer.from(conn.webhookSecret);
+    const b = Buffer.from(providedSecret);
+    valid = a.length === b.length && timingSafeEqual(a, b);
+  } catch { valid = false; }
+
+  if (!valid) {
+    logger.warn({ connectionId }, "Zoho campaign-webhook secret mismatch — rejected");
+    res.status(401).json({ error: "Invalid webhook secret" });
+    return;
+  }
+
+  // Ack immediately; process fire-and-forget
+  res.sendStatus(200);
+
+  // Look up campaign by its unique webhook token; must belong to same user as connection
+  const [campaign] = await db.select().from(campaignsTable)
+    .where(and(eq(campaignsTable.webhookToken, campaignToken), eq(campaignsTable.userId, conn.userId)));
+
+  if (!campaign) {
+    logger.warn({ connectionId, campaignToken }, "Zoho campaign-webhook — campaign token not found or wrong tenant");
+    return;
+  }
+
+  // Normalise Zoho payload shapes (same as the connection-level route)
+  const body = req.body as Record<string, unknown>;
+  let leads: Array<Record<string, unknown>>;
+  if (Array.isArray(body["leads"])) {
+    leads = body["leads"] as Array<Record<string, unknown>>;
+  } else if (body["leads"] && typeof body["leads"] === "object") {
+    leads = [body["leads"] as Record<string, unknown>];
+  } else if (body["Mobile"] ?? body["Phone"] ?? body["phone"] ?? body["mobile"]) {
+    leads = [body];
+  } else {
+    const reserved = new Set(["secret", "connectionId"]);
+    const qData = Object.fromEntries(
+      Object.entries(req.query as Record<string, unknown>).filter(([k]) => !reserved.has(k)),
+    );
+    leads = (qData["Mobile"] ?? qData["Phone"] ?? qData["phone"] ?? qData["mobile"] ?? qData["id"])
+      ? [qData]
+      : [];
+  }
+
+  if (leads.length === 0) {
+    logger.info({ connectionId, campaignToken }, "Zoho campaign-webhook payload has no recognisable leads");
+    return;
+  }
+
+  for (const lead of leads) {
+    void processZohoWebhookLead(lead, conn, campaign).catch((err: unknown) => {
+      logger.error({ err, connectionId, campaignToken }, "Failed to process Zoho campaign-webhook lead");
+    });
+  }
+});
+
 async function processZohoWebhookLead(
   raw: Record<string, unknown>,
   conn: typeof crmConnectionsTable.$inferSelect,
