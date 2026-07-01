@@ -786,11 +786,12 @@ function CrmPassthroughBanner({ title }: { title: string }) {
 // ── Step 3: Source Configuration ──────────────────────────────────────────────
 
 function Step3({
-  state, setState, campaignId, onCrmImported,
+  state, setState, campaignId, campaignLeadSource, onCrmImported,
 }: {
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
   campaignId: number;
+  campaignLeadSource?: string | null;
   onCrmImported?: (batchId: number, leadsCreated: number) => void;
 }) {
   const { toast } = useToast();
@@ -898,6 +899,87 @@ function Step3({
       </p>
     </div>
   );
+
+  // CRM campaign: show only CRM import UI (no existing-sources list, no CSV/webhook/meta tiles)
+  if (campaignLeadSource === "crm") {
+    return (
+      <div className="space-y-5 max-w-2xl">
+        <div>
+          <h2 className="text-lg font-semibold">Import from CRM</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            This campaign is configured to pull leads from your CRM. Select a connected CRM below to import contacts.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-3 gap-3">
+            {CRM_TILES_DEF.map(crm => {
+              const conn = "disabled" in crm && crm.disabled ? undefined : crmConnections.find(c => c.provider === crm.id);
+              const isConnected = !!conn;
+              const isDisabled  = "disabled" in crm && crm.disabled;
+              const handleClick = () => {
+                if (isDisabled) return;
+                if (isConnected && conn) {
+                  setImportConn(conn);
+                } else {
+                  window.location.href = `${BASE}/app/connections#crm-connect=${crm.id}`;
+                }
+              };
+              return (
+                <button
+                  key={crm.id}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={handleClick}
+                  className={cn(
+                    "p-4 rounded-xl border text-left transition-all space-y-2",
+                    isDisabled
+                      ? "border-border opacity-40 pointer-events-none"
+                      : isConnected
+                        ? "border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-500/60 hover:bg-emerald-500/10"
+                        : "border-border hover:border-primary/50 hover:bg-muted/30",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    {crm.icon}
+                    {isConnected
+                      ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <span className="w-1 h-1 rounded-full bg-emerald-500" />Connected
+                        </span>
+                      : !isDisabled && <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    }
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{crm.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {isDisabled ? "Coming Soon" : isConnected ? "Import contacts →" : "Connect & import →"}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            {crmConnections.length > 0
+              ? "Click a connected CRM to import contacts directly into this campaign."
+              : "Click HubSpot or Zoho CRM to connect your account first, then return here to import."}
+          </p>
+        </div>
+        {importConn && (
+          <CrmImportDialog
+            connection={importConn}
+            open={!!importConn}
+            onClose={() => setImportConn(null)}
+            defaultCampaignId={campaignId}
+            onImported={(batchId, leadsCreated) => {
+              setState({ sourceMode: "crm", crmBatchId: batchId });
+              setImportConn(null);
+              onCrmImported?.(batchId, leadsCreated);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
 
   // CSV ────────────────────────────────────────────────────────────────────────
   if (effectiveType === "csv") {
@@ -2001,6 +2083,7 @@ export default function BatchWizardPage() {
   const [state, setWizardState]           = useState<WizardState>({ ...INITIAL_STATE });
   const [completedSteps, setCompleted]    = useState<Set<number>>(new Set());
   const [launchedBatch, setLaunchedBatch] = useState<CampaignBatch | null>(null);
+  const [campaignLeadSource, setCampaignLeadSource] = useState<string | null>(null);
 
   const setState = useCallback((patch: Partial<WizardState>) => {
     setWizardState(prev => ({ ...prev, ...patch }));
@@ -2012,9 +2095,11 @@ export default function BatchWizardPage() {
   });
   useEffect(() => {
     if (!campaignData) return;
-    const ls = (campaignData as any).leadSource as SourceType | undefined;
-    if (ls && ls !== state.newSourceType) {
-      setState({ newSourceType: ls, sourceMode: "new" });
+    const ls = (campaignData as any).leadSource as string | undefined;
+    setCampaignLeadSource(ls ?? null);
+    // For non-CRM lead sources, pre-select the source type in the wizard state
+    if (ls && ls !== "crm" && ls !== state.newSourceType) {
+      setState({ newSourceType: ls as SourceType, sourceMode: "new" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignData]);
@@ -2140,6 +2225,7 @@ export default function BatchWizardPage() {
               state={state}
               setState={setState}
               campaignId={campaignId}
+              campaignLeadSource={campaignLeadSource}
               onCrmImported={() => {
                 setCompleted(prev => new Set([...prev, 2, 3, 4, 5]));
                 setCurrentStep(6);
