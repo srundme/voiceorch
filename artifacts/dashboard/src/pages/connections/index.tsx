@@ -1327,19 +1327,21 @@ export function CrmImportDialog({
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Destination Campaign</Label>
-              <select
-                value={campaignId ?? ""}
-                onChange={e => setCampaignId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full h-8 text-sm rounded-md border border-border bg-muted px-2 text-foreground focus:outline-none focus:border-primary"
-              >
-                <option value="">— pick a campaign —</option>
-                {campaigns.map((c: { id: number; name: string }) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+            {!defaultCampaignId && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Destination Campaign</Label>
+                <select
+                  value={campaignId ?? ""}
+                  onChange={e => setCampaignId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full h-8 text-sm rounded-md border border-border bg-muted px-2 text-foreground focus:outline-none focus:border-primary"
+                >
+                  <option value="">— pick a campaign —</option>
+                  {campaigns.map((c: { id: number; name: string }) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {availableLists.length > 0 && (
               <div className="space-y-1.5">
