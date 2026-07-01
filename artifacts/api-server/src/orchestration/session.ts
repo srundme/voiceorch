@@ -47,6 +47,34 @@ import {
 } from "./callerMemory.js";
 
 
+/**
+ * Returns true when the last ~300 characters of the transcript contain a
+ * farewell phrase, indicating the caller ended the call intentionally.
+ * Used to suppress false-positive network-drop callbacks.
+ */
+function isFarewellEnding(transcript: string): boolean {
+  if (!transcript) return false;
+  const tail = transcript.slice(-300).toLowerCase();
+  const farewells = [
+    "bye",
+    "goodbye",
+    "good bye",
+    "take care",
+    "talk soon",
+    "see you",
+    "have a good",
+    "thank you bye",
+    "thanks bye",
+    "ok bye",
+    "okay bye",
+    "alright bye",
+    "ciao",
+    "tata",
+    "ta-ta",
+  ];
+  return farewells.some((phrase) => tail.includes(phrase));
+}
+
 interface MetricsAcc {
   sttTotal: number;
   llmTotal: number;
@@ -1714,11 +1742,16 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // SINGLE-RETRY INVARIANT: if this call was itself a network-drop callback retry
       // (sourceCallbackReason === "network_drop"), never schedule another — prevents
       // an infinite redial chain when the retry call also drops.
+      //
+      // FAREWELL GUARD: if the transcript tail contains a farewell phrase the caller
+      // said goodbye and the carrier terminated cleanly — not a network drop.
       const autoRedialCfg = (ag?.agentConfig as { autoRedial?: { enabled?: boolean; delayMinutes?: number; maxAttempts?: number } } | null)?.autoRedial;
       const wasUnexpectedDrop = !session.naturalEndTriggered && !session.wasTransferred;
       const isRealPhoneCall = session.callerPhone && !session.callerPhone.startsWith("webcall:");
       const isNetworkDropRetry = session.sourceCallbackReason === "network_drop";
-      if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
+      const hasFarewellEnding = isFarewellEnding(transcript);
+      const hasConversationContent = metricsAcc.count > 0;
+      if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && !hasFarewellEnding && hasConversationContent && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
         void scheduleNetworkDropCallback({
           agentId:  ag.id,
           toNumber: session.callerPhone!,
@@ -1727,6 +1760,13 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         }).catch((rdErr) => {
           logger.warn({ sessionId, rdErr }, "Network-drop callback scheduling failed");
         });
+      } else if (ag && autoRedialCfg?.enabled && wasUnexpectedDrop && isRealPhoneCall && !isCampaignCall && !isNetworkDropRetry) {
+        const tail = transcript.slice(-100);
+        if (hasFarewellEnding) {
+          logger.info({ sessionId, tail }, "Network-drop suppressed: farewell detected in transcript tail");
+        } else if (!hasConversationContent) {
+          logger.info({ sessionId }, "Network-drop suppressed: zero-turn drop (no conversation content)");
+        }
       }
 
       // ── Record per-service usage events (STT / LLM / TTS) ────────────────────
