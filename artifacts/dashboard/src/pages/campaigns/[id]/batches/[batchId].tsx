@@ -22,12 +22,17 @@ import {
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
   TrendingUp, Bell, PhoneIncoming,
   Eye, Database, RefreshCw,
-  User, Search, X, CheckCircle2, Clock,
+  User, Search, X, CheckCircle2, Clock, Pencil,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
@@ -62,13 +67,130 @@ function useCountdown(targetIso: string | null | undefined): Countdown | null {
   return { days, hours, minutes, seconds, expired: false };
 }
 
-// ── ScheduledCountdownBanner ──────────────────────────────────────────────────
+// ── Timezone helpers ──────────────────────────────────────────────────────────
 
-function ScheduledCountdownBanner({
+/** Format a UTC ISO string as a human-readable local time in the given IANA timezone. */
+function formatInTz(isoString: string, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "short",
+      month:   "short",
+      day:     "numeric",
+      hour:    "numeric",
+      minute:  "2-digit",
+      hour12:  true,
+      timeZoneName: "short",
+    }).format(new Date(isoString));
+  } catch {
+    return new Date(isoString).toLocaleString();
+  }
+}
+
+/** Convert a UTC ISO string to a "YYYY-MM-DDTHH:MM" value for a datetime-local input, in the given timezone. */
+function utcToTzInput(isoString: string, tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(new Date(isoString));
+    const g = (t: string) => parts.find(p => p.type === t)?.value ?? "00";
+    return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}`;
+  } catch {
+    return "";
+  }
+}
+
+/** Convert a "YYYY-MM-DDTHH:MM" string (entered as local time in `tz`) to a UTC ISO string. */
+function tzInputToUtc(localStr: string, tz: string): string {
+  try {
+    // Treat localStr as UTC first to get a reference Date
+    const approx = new Date(localStr + ":00Z");
+    // Find what UTC offset the target timezone has at that moment
+    const tzParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, timeZoneName: "shortOffset",
+    }).formatToParts(approx);
+    const offsetStr = tzParts.find(p => p.type === "timeZoneName")?.value ?? "+00:00";
+    const m = offsetStr.match(/GMT([+-])(\d+)(?::(\d+))?/);
+    if (!m) return approx.toISOString();
+    const sign = m[1] === "+" ? 1 : -1;
+    const offsetMs = sign * (parseInt(m[2]!) * 60 + parseInt(m[3] ?? "0")) * 60_000;
+    return new Date(approx.getTime() - offsetMs).toISOString();
+  } catch {
+    return new Date(localStr).toISOString();
+  }
+}
+
+// ── EditScheduleDialog ────────────────────────────────────────────────────────
+
+function EditScheduleDialog({
+  open,
+  onOpenChange,
   scheduledStartAt,
+  timezone,
+  onSave,
+  saving,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  scheduledStartAt: string;
+  timezone: string;
+  onSave: (isoUtc: string) => void;
+  saving: boolean;
+}) {
+  const [value, setValue] = useState(() => utcToTzInput(scheduledStartAt, timezone));
+  // Re-sync if the scheduled time changes externally
+  useEffect(() => {
+    setValue(utcToTzInput(scheduledStartAt, timezone));
+  }, [scheduledStartAt, timezone]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[340px]">
+        <DialogHeader>
+          <DialogTitle className="text-sm">Edit Scheduled Time</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Launch time</Label>
+            <Input
+              type="datetime-local"
+              className="h-9 text-xs"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Times are in <span className="font-medium text-foreground">{timezone}</span> (agent timezone)
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            size="sm"
+            disabled={!value || saving}
+            onClick={() => onSave(tzInputToUtc(value, timezone))}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── ScheduledInlineChip ───────────────────────────────────────────────────────
+
+function ScheduledInlineChip({
+  scheduledStartAt,
+  timezone,
+  onEdit,
   onExpired,
 }: {
   scheduledStartAt: string;
+  timezone: string;
+  onEdit: () => void;
   onExpired: () => void;
 }) {
   const cd = useCountdown(scheduledStartAt);
@@ -81,30 +203,29 @@ function ScheduledCountdownBanner({
     }
   }, [cd?.expired, onExpired]);
 
-  if (!cd) return null;
+  if (!cd || cd.expired) return null;
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  const timeStr = cd.days > 0
+  const countdownStr = cd.days > 0
     ? `${cd.days}d ${pad(cd.hours)}:${pad(cd.minutes)}:${pad(cd.seconds)}`
     : `${pad(cd.hours)}:${pad(cd.minutes)}:${pad(cd.seconds)}`;
 
   return (
-    <div className="mx-5 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center gap-4 shrink-0">
-      <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-500/15 shrink-0">
-        <Clock className="h-4 w-4 text-amber-500" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-amber-600/80 uppercase tracking-wider mb-0.5">Scheduled — launches in</p>
-        <p className="text-2xl font-bold tabular-nums tracking-tight text-amber-500 leading-none">{timeStr}</p>
-        <p className="text-xs text-muted-foreground/50 mt-0.5">
-          {format(new Date(scheduledStartAt), "EEEE, MMM d 'at' h:mm a")}
-        </p>
-      </div>
-      <div className="shrink-0 text-right hidden sm:block">
-        <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider font-semibold">You can still</p>
-        <p className="text-xs text-muted-foreground/60 font-medium">Start early ↑</p>
-      </div>
-    </div>
+    <span className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-md border border-amber-500/30 bg-amber-500/8 text-amber-600 text-[11px] font-medium whitespace-nowrap">
+      <Clock className="h-3 w-3 shrink-0" />
+      <span className="font-mono tabular-nums">{countdownStr}</span>
+      <span className="text-muted-foreground/60 font-normal hidden sm:inline">
+        · {formatInTz(scheduledStartAt, timezone)}
+      </span>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); onEdit(); }}
+        className="ml-0.5 h-5 w-5 rounded flex items-center justify-center hover:bg-amber-500/15 transition-colors shrink-0"
+        title="Edit schedule"
+      >
+        <Pencil className="h-2.5 w-2.5" />
+      </button>
+    </span>
   );
 }
 
@@ -133,6 +254,7 @@ type BatchHeader = {
     id: number; name: string; status: string; leadSource: string;
     totalLeads: number; calledLeads: number; createdAt: string;
     scheduledStartAt: string | null;
+    timezone: string | null;
     maxAttempts: number; retryDelayMinutes: number;
   };
   campaign: { id: number; name: string; agentId: number | null; agentName: string | null; fromNumber: string | null };
@@ -508,6 +630,8 @@ export default function BatchWorkspacePage() {
   const update = useUpdateCampaignBatch();
   const redial = useRedialBatchNoPickup();
   const [isStarting, setIsStarting] = useState(false);
+  const [editScheduleOpen, setEditScheduleOpen] = useState(false);
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Header data (light, kept in sync with polling)
   const { data: header } = useQuery<BatchHeader>({
@@ -593,6 +717,20 @@ export default function BatchWorkspacePage() {
     }
   }
 
+  async function handleSaveSchedule(isoUtc: string) {
+    setIsSavingSchedule(true);
+    try {
+      await update.mutateAsync({ id: campaignId, batchId, data: { scheduledStartAt: isoUtc } });
+      await qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
+      setEditScheduleOpen(false);
+      toast({ title: "Schedule updated" });
+    } catch {
+      toast({ title: "Failed to update schedule", variant: "destructive" });
+    } finally {
+      setIsSavingSchedule(false);
+    }
+  }
+
   async function handleRedialAll() {
     try {
       const r = await redial.mutateAsync({ id: campaignId, batchId });
@@ -627,6 +765,14 @@ export default function BatchWorkspacePage() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-lg font-semibold tracking-tight">{header?.batch.name ?? "Batch Workspace"}</h2>
                 {header && <BatchStatusBadge status={batchStatus} />}
+                {batchStatus === "draft" && header?.batch.scheduledStartAt && (
+                  <ScheduledInlineChip
+                    scheduledStartAt={header.batch.scheduledStartAt}
+                    timezone={header.batch.timezone ?? "UTC"}
+                    onEdit={() => setEditScheduleOpen(true)}
+                    onExpired={() => void qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] })}
+                  />
+                )}
                 {header?.campaign.agentName && (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground/50">
                     <User className="h-2.5 w-2.5" />
@@ -683,13 +829,15 @@ export default function BatchWorkspacePage() {
         </div>
       </div>
 
-      {/* ── Scheduled countdown banner ───────────────────────────────────── */}
-      {batchStatus === "draft" && header?.batch.scheduledStartAt && (
-        <ScheduledCountdownBanner
+      {/* ── Edit schedule dialog ────────────────────────────────────────────── */}
+      {header?.batch.scheduledStartAt && (
+        <EditScheduleDialog
+          open={editScheduleOpen}
+          onOpenChange={setEditScheduleOpen}
           scheduledStartAt={header.batch.scheduledStartAt}
-          onExpired={() => {
-            void qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
-          }}
+          timezone={header.batch.timezone ?? "UTC"}
+          onSave={(iso) => void handleSaveSchedule(iso)}
+          saving={isSavingSchedule}
         />
       )}
 

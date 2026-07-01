@@ -518,6 +518,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/header", async (req, res):
       calledLeads:      batch.calledLeads,
       createdAt:        batch.createdAt.toISOString(),
       scheduledStartAt: batch.scheduledStartAt?.toISOString() ?? null,
+      timezone:         batch.timezone ?? null,
       maxAttempts:      batch.maxAttempts,
       retryDelayMinutes: batch.retryDelayMinutes,
     },
