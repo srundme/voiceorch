@@ -1987,6 +1987,8 @@ export interface Campaign {
   lastWebhookAt?: string | null;
   /** Status of the most recent webhook event. */
   lastWebhookStatus?: CampaignLastWebhookStatus;
+  /** Last 6 characters of the stored Meta Page Access Token (write-only field — full token never returned). Null when not configured. */
+  metaPageAccessTokenHint?: string | null;
   /** Most recent form_id mismatch audit record. Null when no validation failures have occurred. */
   lastValidationError?: CampaignLastValidationError;
   createdAt: string;
@@ -2137,6 +2139,8 @@ export interface CampaignUpdate {
   sourceFormId?: string | null;
   /** Expected page/account ID from the source platform (e.g. Meta page_id). */
   sourcePageId?: string | null;
+  /** Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses. */
+  metaPageAccessToken?: string | null;
 }
 
 export type CampaignLeadLeadData = {[key: string]: string};

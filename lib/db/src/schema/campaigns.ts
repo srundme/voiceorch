@@ -72,6 +72,11 @@ export const campaignsTable = pgTable("campaigns", {
   // lastValidationError: stores the most recent form_id mismatch audit record.
   // Null = no validation failures since last successful lead or form cleared.
   lastValidationError:  json("last_validation_error").$type<CampaignValidationError | null>(),
+  // metaPageAccessToken: AES-256-GCM encrypted Page Access Token used to fetch
+  // lead field_data from the Meta Graph API after receiving a leadgen notification.
+  // Meta webhooks only carry the leadgen_id — the actual fields (phone, name, email)
+  // must be retrieved via GET /{leadgen_id}?fields=field_data&access_token=...
+  metaPageAccessToken:  text("meta_page_access_token"),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

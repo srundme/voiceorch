@@ -2067,6 +2067,7 @@ export const ListCampaignsResponseItem = zod.object({
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
   "lastWebhookAt": zod.coerce.date().nullish().describe('Timestamp of the most recent webhook event (any status).'),
   "lastWebhookStatus": zod.enum(['ok', 'error']).nullish().describe('Status of the most recent webhook event.'),
+  "metaPageAccessTokenHint": zod.string().nullish().describe('Last 6 characters of the stored Meta Page Access Token (write-only field — full token never returned). Null when not configured.'),
   "lastValidationError": zod.object({
   "receivedFormId": zod.string().optional(),
   "expectedFormId": zod.string().nullish(),
@@ -2151,6 +2152,7 @@ export const GetCampaignResponse = zod.object({
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
   "lastWebhookAt": zod.coerce.date().nullish().describe('Timestamp of the most recent webhook event (any status).'),
   "lastWebhookStatus": zod.enum(['ok', 'error']).nullish().describe('Status of the most recent webhook event.'),
+  "metaPageAccessTokenHint": zod.string().nullish().describe('Last 6 characters of the stored Meta Page Access Token (write-only field — full token never returned). Null when not configured.'),
   "lastValidationError": zod.object({
   "receivedFormId": zod.string().optional(),
   "expectedFormId": zod.string().nullish(),
@@ -2190,7 +2192,8 @@ export const UpdateCampaignBody = zod.object({
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.'),
   "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id).'),
-  "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id).')
+  "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id).'),
+  "metaPageAccessToken": zod.string().nullish().describe('Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses.')
 })
 
 export const updateCampaignResponseConcurrentCallLimitDefault = 10;
@@ -2222,6 +2225,7 @@ export const UpdateCampaignResponse = zod.object({
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
   "lastWebhookAt": zod.coerce.date().nullish().describe('Timestamp of the most recent webhook event (any status).'),
   "lastWebhookStatus": zod.enum(['ok', 'error']).nullish().describe('Status of the most recent webhook event.'),
+  "metaPageAccessTokenHint": zod.string().nullish().describe('Last 6 characters of the stored Meta Page Access Token (write-only field — full token never returned). Null when not configured.'),
   "lastValidationError": zod.object({
   "receivedFormId": zod.string().optional(),
   "expectedFormId": zod.string().nullish(),

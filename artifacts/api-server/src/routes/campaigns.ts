@@ -6,6 +6,7 @@ import {
   UpdateCampaignBody,
 } from "@workspace/api-zod";
 import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
+import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { eq, and, count, desc, inArray, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type IrdaiGateResult } from "../services/irdai/gate.js";
@@ -104,11 +105,14 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     businessHoursStart:    row.businessHoursStart ?? null,
     businessHoursEnd:      row.businessHoursEnd ?? null,
     timezone:              row.timezone ?? null,
-    sourceFormId:          row.sourceFormId ?? null,
-    sourcePageId:          row.sourcePageId ?? null,
-    lastValidationError:   row.lastValidationError ?? null,
-    lastWebhookAt:         row.lastWebhookAt?.toISOString() ?? null,
-    lastWebhookStatus:     row.lastWebhookStatus ?? null,
+    sourceFormId:              row.sourceFormId ?? null,
+    sourcePageId:              row.sourcePageId ?? null,
+    lastValidationError:       row.lastValidationError ?? null,
+    lastWebhookAt:             row.lastWebhookAt?.toISOString() ?? null,
+    lastWebhookStatus:         row.lastWebhookStatus ?? null,
+    metaPageAccessTokenHint:   row.metaPageAccessToken
+      ? (() => { try { const t = decryptKey(row.metaPageAccessToken!); return `…${t.slice(-6)}`; } catch { return "…(set)"; } })()
+      : null,
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };
@@ -293,9 +297,14 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   }
 
   // If toggling isActive, also sync status field
-  const { fieldMappings: rawMappings, ...rest } = parsed.data;
+  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, ...rest } = parsed.data as typeof parsed.data & { metaPageAccessToken?: string | null };
   const updateData: Partial<typeof campaignsTable.$inferInsert> = { ...rest };
   if (rawMappings) updateData.fieldMappings = rawMappings as CampaignFieldMappings;
+  // Encrypt the Meta Page Access Token at rest (same pattern as provider API keys).
+  // null clears the stored token; undefined means "not provided — leave unchanged".
+  if (rawMetaToken !== undefined) {
+    updateData.metaPageAccessToken = rawMetaToken ? encryptKey(rawMetaToken) : null;
+  }
   if (parsed.data.isActive === true  && !parsed.data.status) updateData.status = "active";
   if (parsed.data.isActive === false && !parsed.data.status) updateData.status = "paused";
 

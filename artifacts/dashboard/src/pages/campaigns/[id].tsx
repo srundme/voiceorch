@@ -923,6 +923,7 @@ type MetaCampaignProps = {
   lastWebhookStatus?: string | null;
   sourceFormId?: string | null;
   sourcePageId?: string | null;
+  metaPageAccessTokenHint?: string | null;
   lastValidationError?: MetaValidationError | null;
 };
 
@@ -937,10 +938,11 @@ function MetaIntegrationCard({
   const qc = useQueryClient();
   const update = useUpdateCampaign();
 
-  const [formId,  setFormId]  = useState(campaign.sourceFormId ?? "");
-  const [pageId,  setPageId]  = useState(campaign.sourcePageId ?? "");
-  const [editing, setEditing] = useState(false);
-  const [saving,  setSaving]  = useState(false);
+  const [formId,     setFormId]     = useState(campaign.sourceFormId ?? "");
+  const [pageId,     setPageId]     = useState(campaign.sourcePageId ?? "");
+  const [pageToken,  setPageToken]  = useState("");
+  const [editing,    setEditing]    = useState(false);
+  const [saving,     setSaving]     = useState(false);
 
   useEffect(() => {
     setFormId(campaign.sourceFormId ?? "");
@@ -950,13 +952,17 @@ function MetaIntegrationCard({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await update.mutateAsync({
-        id: campaignId,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data: { sourceFormId: formId.trim() || null, sourcePageId: pageId.trim() || null } as any,
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = {
+        sourceFormId: formId.trim() || null,
+        sourcePageId: pageId.trim() || null,
+      };
+      // Only send the token if the user typed a new one (blank = keep existing)
+      if (pageToken.trim()) data.metaPageAccessToken = pageToken.trim();
+      await update.mutateAsync({ id: campaignId, data });
       await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
       setEditing(false);
+      setPageToken("");
       toast({ title: "Meta Integration saved" });
     } catch {
       toast({ title: "Failed to save", variant: "destructive" });
@@ -969,11 +975,14 @@ function MetaIntegrationCard({
     setEditing(false);
     setFormId(campaign.sourceFormId ?? "");
     setPageId(campaign.sourcePageId ?? "");
+    setPageToken("");
   };
 
-  const lastErr    = campaign.lastValidationError;
-  const hasErr     = !!lastErr;
+  const lastErr      = campaign.lastValidationError;
+  const hasErr       = !!lastErr;
   const isConfigured = !!campaign.sourceFormId;
+  const hasToken     = !!campaign.metaPageAccessTokenHint;
+  const tokenMissing = !hasToken;
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 space-y-4">
@@ -1045,9 +1054,39 @@ function MetaIntegrationCard({
         </div>
       </div>
 
-      {/* Form ID configuration */}
+      {/* Page Access Token warning — shown when not configured */}
+      {tokenMissing && (
+        <div className="flex items-start gap-3 px-3 py-3 rounded-lg border border-red-500/30 bg-red-500/[0.06]">
+          <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-red-600 mb-0.5">Page Access Token Required</p>
+            <p className="text-[10px] text-muted-foreground/70">
+              Meta webhooks only send a lead ID — the actual fields (phone, name, email)
+              must be fetched from the Graph API using your Page Access Token.
+              Click <strong>Configure</strong> to add it.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Configuration: read view */}
       {!editing ? (
         <div className="space-y-2">
+          {/* Token status row */}
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/40">Page Access Token</p>
+            <span className={cn(
+              "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border",
+              hasToken
+                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                : "bg-red-500/10 text-red-500 border-red-500/20",
+            )}>
+              {hasToken
+                ? <><CheckCircle2 className="h-2.5 w-2.5" /> Configured ({campaign.metaPageAccessTokenHint})</>
+                : <><AlertCircle className="h-2.5 w-2.5" /> Not set — leads won&apos;t be fetched</>}
+            </span>
+          </div>
+          {/* Form/Page ID validation row */}
           <div className="flex items-center justify-between">
             <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/40">Validation</p>
             <span className={cn(
@@ -1058,34 +1097,48 @@ function MetaIntegrationCard({
             )}>
               {isConfigured
                 ? <><CheckCircle2 className="h-2.5 w-2.5" /> Form ID set</>
-                : "Not configured — all leads accepted"}
+                : "Optional — all forms accepted"}
             </span>
           </div>
           {isConfigured && (
-            <div className="space-y-1 text-xs">
+            <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <span className="text-muted-foreground/50 w-20 shrink-0">Form ID</span>
+                <span className="text-muted-foreground/50 text-[10px] w-20 shrink-0">Form ID</span>
                 <span className="font-mono text-[10px] text-foreground/80 truncate">{campaign.sourceFormId}</span>
               </div>
               {campaign.sourcePageId && (
                 <div className="flex items-center gap-3">
-                  <span className="text-muted-foreground/50 w-20 shrink-0">Page ID</span>
+                  <span className="text-muted-foreground/50 text-[10px] w-20 shrink-0">Page ID</span>
                   <span className="font-mono text-[10px] text-foreground/80 truncate">{campaign.sourcePageId}</span>
                 </div>
               )}
             </div>
           )}
-          {!isConfigured && (
-            <p className="text-[10px] text-muted-foreground/40">
-              Set a Meta Lead Form ID to reject webhooks from misconfigured forms.
-            </p>
-          )}
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Page Access Token input — REQUIRED for leads to work */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
-              Meta Lead Form ID <span className="text-red-400 text-[10px]">(required for validation)</span>
+              Page Access Token <span className="text-red-400 text-[10px]">(required — leads won&apos;t work without this)</span>
+            </Label>
+            <Input
+              className="h-8 text-xs font-mono"
+              type="password"
+              placeholder={hasToken ? `Current: ${campaign.metaPageAccessTokenHint} — paste new to replace` : "EAAxxxx..."}
+              value={pageToken}
+              onChange={e => setPageToken(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground/50">
+              Get this from: Meta for Developers → Tools → Graph API Explorer → select your Page →
+              generate a Page token with <code className="bg-muted px-0.5 rounded">leads_retrieval</code> +{" "}
+              <code className="bg-muted px-0.5 rounded">pages_manage_metadata</code> permissions.
+              Stored encrypted. Never shown in full.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Meta Lead Form ID <span className="text-muted-foreground/40 text-[10px]">(optional — restricts to one form)</span>
             </Label>
             <Input
               className="h-8 text-xs font-mono"
@@ -1094,8 +1147,8 @@ function MetaIntegrationCard({
               onChange={e => setFormId(e.target.value)}
             />
             <p className="text-[10px] text-muted-foreground/50">
-              Found in Meta Ads Manager → Lead Ads → Your Form → Form ID.
-              Webhooks with a different form_id will be rejected before a lead is created.
+              Found in Meta Ads Manager → Lead Ads → your form → Form ID.
+              When set, webhooks from other forms on this Page are rejected.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -1108,9 +1161,6 @@ function MetaIntegrationCard({
               value={pageId}
               onChange={e => setPageId(e.target.value)}
             />
-            <p className="text-[10px] text-muted-foreground/50">
-              Found in your Facebook Page Settings → About. Adds a second layer of validation.
-            </p>
           </div>
           <div className="flex items-center gap-2 pt-1">
             <Button size="sm" className="h-7 text-xs gap-1.5" onClick={handleSave} disabled={saving}>
@@ -1120,15 +1170,6 @@ function MetaIntegrationCard({
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={handleCancel}>
               Cancel
             </Button>
-            {isConfigured && (
-              <Button
-                size="sm" variant="ghost"
-                className="h-7 text-xs text-muted-foreground/40 hover:text-red-500 ml-auto"
-                onClick={() => { setFormId(""); setPageId(""); }}
-              >
-                Clear IDs
-              </Button>
-            )}
           </div>
         </div>
       )}

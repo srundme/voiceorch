@@ -19,6 +19,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db, campaignsTable, campaignLeadsTable, campaignBatchesTable, leadTimelineTable, agentsTable, type CampaignValidationError } from "@workspace/db";
+import { decryptKey } from "../lib/crypto.js";
 import { eq, sql, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -493,11 +494,46 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
         // ── End of source validation ──────────────────────────────────────
 
         const leadgenId = String(value["leadgen_id"] ?? "");
-        const fieldData = Array.isArray(value["field_data"]) ? value["field_data"] : [];
+
+        // ── Fetch lead field_data from Meta Graph API ─────────────────────
+        // Meta webhooks only deliver a notification (leadgen_id + form_id).
+        // The actual field values (phone, name, email) must be retrieved via
+        // a separate Graph API call using the campaign's Page Access Token.
+        let fieldData: Array<{ name: string; values: string[] }> = [];
+
+        // First try: in-payload field_data (older Meta apps / some test tools send it)
+        if (Array.isArray(value["field_data"])) {
+          fieldData = value["field_data"] as Array<{ name: string; values: string[] }>;
+        } else if (leadgenId && campaign.metaPageAccessToken) {
+          // Standard path: fetch from Graph API
+          try {
+            const pageToken = decryptKey(campaign.metaPageAccessToken);
+            const graphUrl  = `https://graph.facebook.com/v20.0/${leadgenId}?fields=field_data&access_token=${encodeURIComponent(pageToken)}`;
+            const gRes      = await fetch(graphUrl, { signal: AbortSignal.timeout(8000) });
+            if (gRes.ok) {
+              const gData = await gRes.json() as { field_data?: Array<{ name: string; values: string[] }> };
+              fieldData = gData.field_data ?? [];
+            } else {
+              const errBody = await gRes.text();
+              logger.warn({ campaignId: campaign.id, leadgenId, status: gRes.status, errBody },
+                "Meta Graph API fetch failed — lead skipped");
+              continue;
+            }
+          } catch (fetchErr) {
+            logger.warn({ campaignId: campaign.id, leadgenId, fetchErr },
+              "Meta Graph API request error — lead skipped");
+            continue;
+          }
+        } else if (leadgenId && !campaign.metaPageAccessToken) {
+          logger.warn({ campaignId: campaign.id, leadgenId },
+            "Meta lead received but no Page Access Token configured — set it in Campaign → Meta Integration");
+          continue;
+        }
+        // ── End Graph API fetch ───────────────────────────────────────────
 
         // Convert Meta field_data array → flat map
         const metaFlat: Record<string, string> = {};
-        for (const fd of fieldData as Array<{ name: string; values: string[] }>) {
+        for (const fd of fieldData) {
           metaFlat[fd.name] = fd.values?.[0] ?? "";
         }
 

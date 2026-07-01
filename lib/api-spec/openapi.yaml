@@ -8424,6 +8424,10 @@ components:
           enum: [ok, error]
           nullable: true
           description: "Status of the most recent webhook event."
+        metaPageAccessTokenHint:
+          type: string
+          nullable: true
+          description: "Last 6 characters of the stored Meta Page Access Token (write-only field — full token never returned). Null when not configured."
         lastValidationError:
           type: object
           nullable: true
@@ -8602,6 +8606,10 @@ components:
           type: string
           nullable: true
           description: "Expected page/account ID from the source platform (e.g. Meta page_id)."
+        metaPageAccessToken:
+          type: string
+          nullable: true
+          description: "Meta Page Access Token used to fetch lead field_data from the Graph API. Stored encrypted at rest; pass null to clear. Never returned in GET responses."
 
     CampaignLead:
       type: object
