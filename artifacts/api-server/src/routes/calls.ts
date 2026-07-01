@@ -174,7 +174,10 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
   const PROVIDER_LIMIT_BUFFER_SECONDS = 120;
   const agentMaxDurationSeconds = agent.maxDuration ?? 600;
   const minProviderLimitSeconds = Math.max(agentMaxDurationSeconds, 600);
-  let maxDurationSeconds: number | undefined;
+  // Always seed with a safe baseline so VoBiz receives a time_limit even if
+  // the user row is missing from the DB.  Without this, VoBiz falls back to
+  // its ~3-minute platform default and sends a BYE mid-conversation.
+  let maxDurationSeconds: number = minProviderLimitSeconds + PROVIDER_LIMIT_BUFFER_SECONDS;
   if (agent.userId) {
     const [user] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
       .from(usersTable).where(eq(usersTable.clerkId, agent.userId));
