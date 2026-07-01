@@ -1522,11 +1522,60 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
     // ── Mark campaign lead terminal (drains the active Connected count) ──────────
     if (session.campaignLeadId) {
-      const terminalLeadStatus = session.wasTransferred ? "transferred" : "completed";
+      // A mid-conversation drop (naturalEnd=false, not transferred, duration >15s)
+      // should be retried just like a BUSY/NO_ANSWER: mark the lead "failed" and
+      // let scheduleRetry decide whether attempts remain. Without this, dropped
+      // campaign calls are silently marked "completed" and never retried.
+      const midConvDrop =
+        !session.naturalEndTriggered &&
+        !session.wasTransferred &&
+        durationSeconds > 15;
+
+      const terminalLeadStatus = session.wasTransferred
+        ? "transferred"
+        : midConvDrop
+          ? "failed"
+          : "completed";
+
       void db.update(campaignLeadsTable)
         .set({ callStatus: terminalLeadStatus })
         .where(eq(campaignLeadsTable.id, session.campaignLeadId))
-        .then(() => {
+        .then(async () => {
+          // For mid-conversation drops: schedule a retry via the same path used
+          // by BUSY/NO_ANSWER so the lead is redialled if attempts remain.
+          if (midConvDrop) {
+            try {
+              const leadId = session.campaignLeadId!;
+              const [freshLead] = await db
+                .select({ callAttempts: campaignLeadsTable.callAttempts, campaignId: campaignLeadsTable.campaignId, batchId: campaignLeadsTable.batchId })
+                .from(campaignLeadsTable)
+                .where(eq(campaignLeadsTable.id, leadId))
+                .limit(1);
+              if (freshLead) {
+                const [camp] = await db
+                  .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
+                  .from(campaignsTable)
+                  .where(eq(campaignsTable.id, freshLead.campaignId))
+                  .limit(1);
+                const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(freshLead.batchId, camp);
+                const scheduled = await import("../services/retryEngine.js")
+                  .then(m => m.scheduleRetry({
+                    leadId,
+                    campaignId:         freshLead.campaignId,
+                    currentAttempts:    freshLead.callAttempts ?? 0,
+                    maxAttempts,
+                    retryDelayMinutes,
+                    reason:             "network_drop",
+                  }));
+                logger.info(
+                  { campaignLeadId: leadId, durationSeconds, retryScheduled: scheduled },
+                  "Campaign call mid-conversation drop — retry scheduled",
+                );
+              }
+            } catch (retryErr) {
+              logger.warn({ campaignLeadId: session.campaignLeadId, retryErr }, "Failed to schedule mid-conv drop retry");
+            }
+          }
           // Rolling concurrency: this connected/completed/transferred call just
           // freed a slot, so immediately top the campaign back up to its limit
           // rather than waiting for the next 60 s poll. Fire-and-forget.
@@ -1589,7 +1638,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          const termStatus = session.wasTransferred ? "transferred" : "completed";
+          const termStatus = session.wasTransferred ? "transferred" : midConvDrop ? "failed" : "completed";
           const outcome = computeOperationalOutcome({
             callStatus:           termStatus,
             disposition:          null, // disposeCall runs async; a later taxonomy run may update this
