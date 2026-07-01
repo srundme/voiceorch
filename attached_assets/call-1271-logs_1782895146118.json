@@ -1,0 +1,361 @@
+[
+  {
+    "id": 62791,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.259Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 56,
+      "agentName": "Ravilla campaign testing agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1271,
+      "sessionId": "live-1271",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-01T08:32:14.251Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 62792,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.259Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 62793,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.259Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 4
+      },
+      "factCount": 4,
+      "facts": {
+        "requested_call_back_time_override": "2 minutes",
+        "current_availability": "2 minutes",
+        "requested_call_back_time": "2 PM",
+        "availability_time": "2 minutes later"
+      },
+      "recentCallsCount": 3
+    },
+    "metadata": null
+  },
+  {
+    "id": 62794,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.259Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "918637416033",
+        "from_number": "917971442381",
+        "agent_name": "Ravilla campaign testing agent",
+        "caller_number": "917971442381",
+        "date": "Wednesday, July 1, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 4  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Request a call back or inquire about a pending issue\n📊 SENTIMENT ARC: 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• requested_call_back_time_override: 2 minutes  [yesterday]\n• current_availability: 2 minutes  [yesterday]\n• requested_call_back_time: 2 PM  [yesterday]\n• availability_time: 2 minutes later  [yesterday]\n\nRECENT EPISODES:\n[yesterday] 😐 The caller is busy and requests a call back in 2 minutes, overriding the previously agreed call back time of 2 PM. The agent agrees to call back"
+    },
+    "metadata": null
+  },
+  {
+    "id": 62795,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.274Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 62796,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.275Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "5457e2e77224",
+      "promptLength": 21139,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 4  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: Request a call back or inquire about a pending issue\n📊 SENTIMENT ARC: 😐 → 😐 (↕ m"
+    }
+  },
+  {
+    "id": 62798,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.275Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    }
+  },
+  {
+    "id": 62797,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:14.275Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 62799,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:15.562Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 62800,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:15.563Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஹலோ! ராவிலா ஹோம்ஸ்ல இருந்து வர்ஷா பேசறேன். நீங்க ப்ராப்பர்ட்டி பார்க்க ரெடியா இருக்கீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 62802,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.864Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5303,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 153314,
+      "textLength": 91,
+      "firstByteMs": 419
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 5303
+    }
+  },
+  {
+    "id": 62801,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.864Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4791,
+      "turnNumber": 0,
+      "durationMs": 5303
+    }
+  },
+  {
+    "id": 62803,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.931Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 62804,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.946Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1271"
+    }
+  },
+  {
+    "id": 62805,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.946Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1271"
+    }
+  },
+  {
+    "id": 62806,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.973Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 6,
+        "turns": 0,
+        "lastComponent": "Recording",
+        "lastUserTranscript": null,
+        "lastAgentResponse": "ஹலோ! ராவிலா ஹோம்ஸ்ல இருந்து வர்ஷா பேசறேன். நீங்க ப்ராப்பர்ட்டி பார்க்க ரெடியா இருக்கீங்களா?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 6,
+      "turns": 0,
+      "avgSttMs": null,
+      "avgLlmMs": null,
+      "avgTtsMs": null
+    }
+  },
+  {
+    "id": 62807,
+    "callId": 1271,
+    "agentId": 56,
+    "ts": "2026-07-01T08:32:20.982Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false
+    }
+  }
+]

@@ -1,0 +1,128 @@
+# CRM & CSV Import Enhancements
+
+## Issue 1: Hide CRM Integration for CSV Campaigns
+
+### Current Problem
+When creating a new batch, the UI always displays the CRM Integration option, regardless of the campaign's lead source.
+
+For campaigns created with:
+- Campaign Name: Ravilla Homes
+- Source: CSV
+
+there is no need to display CRM-related options because the campaign only accepts CSV uploads.
+
+### Expected Behavior
+
+The Batch Creation page should dynamically determine the campaign's source.
+
+If:
+
+Campaign Source = CSV
+
+Then:
+
+- Hide the CRM Integration section completely.
+- Show only the CSV upload workflow.
+- Do not confuse users with unnecessary CRM options.
+
+If:
+
+Campaign Source = CRM (Zoho or any supported CRM)
+
+Then:
+
+- Display the CRM Integration section.
+- Allow users to import leads directly from the connected CRM.
+
+This should be based on the campaign configuration, not a manual selection during batch creation.
+
+---
+
+# Issue 2: Lead Validation for Both CSV and CRM Imports
+
+### Current Problem
+
+Currently, validation primarily focuses on CSV imports.
+
+However, CRM-imported leads should go through the exact same validation pipeline to maintain consistent data quality.
+
+### Expected Behavior
+
+Every imported lead should be validated regardless of its source.
+
+Supported Sources:
+
+- CSV Upload
+- Zoho CRM
+- Future CRM integrations
+
+The validation should include:
+
+- Duplicate phone number detection
+- Missing required fields
+- Invalid phone number format
+- Invalid email format (if applicable)
+- Empty lead records
+- Duplicate records within the current import
+- Previously imported leads
+
+The validation experience should remain identical for all import sources.
+
+---
+
+# Issue 3: Detect Previously Imported Leads
+
+### Current Problem
+
+Users can repeatedly import the same leads from Zoho CRM without knowing they already exist inside the campaign.
+
+This creates duplicate calling and poor campaign management.
+
+### Expected Behavior
+
+Whenever leads are fetched from Zoho CRM, the system should compare them against leads already imported into the current campaign.
+
+Matching can be based on:
+
+- Phone Number (Primary)
+- Mobile Number
+- CRM Lead ID (if available)
+
+If a matching lead already exists in the campaign:
+
+- Display an "Already Imported" badge or tag.
+- Visually distinguish these records from new leads.
+- Disable selection by default (optional), or pre-select only new leads.
+
+The user should still have the ability to intentionally import duplicates if required.
+
+For example:
+
+✓ New Lead
+
+Already Imported
+
+Already Imported
+
+✓ New Lead
+
+Then provide:
+
+- Import Selected
+- Import All
+- Import Including Existing
+
+This prevents accidental duplicate imports while still giving users full control.
+
+---
+
+# Why This Change Is Important
+
+These improvements will:
+
+- Reduce duplicate calling.
+- Prevent accidental re-imports.
+- Keep campaign data clean.
+- Provide a consistent experience across CSV and CRM imports.
+- Make batch creation context-aware by only displaying relevant options.
+- Improve user confidence during lead imports without changing the existing backend logic.
