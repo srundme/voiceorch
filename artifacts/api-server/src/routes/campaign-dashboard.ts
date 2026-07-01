@@ -2,6 +2,10 @@
  * Campaign Operations Dashboard — aggregation endpoint.
  * GET /campaigns/dashboard
  * Returns summary stats + per-campaign enriched rows in one round-trip.
+ *
+ * Fault-tolerant: every sub-query has an individual .catch(() => []) so a
+ * single failing enrichment query never kills the whole response. Any query
+ * failure is logged so it shows up in Railway logs.
  */
 import { Router } from "express";
 import { getAuth } from "../lib/auth-compat.js";
@@ -81,26 +85,53 @@ function serializeCampaign(row: typeof campaignsTable.$inferSelect) {
   };
 }
 
+const ZERO_STATS = {
+  activeCampaigns:    0,
+  listeningCampaigns: 0,
+  liveCalls:          0,
+  queuedLeads:        0,
+  todayLeads:         0,
+  todayBookings:      0,
+};
+
 router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { start: todayStart, yesterday: yestStart, now } = todayUtcBounds();
 
-  const campaigns = await db.select().from(campaignsTable)
-    .where(eq(campaignsTable.userId, userId))
-    .orderBy(desc(campaignsTable.createdAt));
+  // ── 1. fetch campaigns ────────────────────────────────────────────────────
+  let campaigns: (typeof campaignsTable.$inferSelect)[];
+  try {
+    campaigns = await db.select().from(campaignsTable)
+      .where(eq(campaignsTable.userId, userId))
+      .orderBy(desc(campaignsTable.createdAt));
+  } catch (err) {
+    req.log.error({ err }, "campaign-dashboard: failed to fetch campaigns");
+    res.status(500).json({ error: "Failed to load campaigns" });
+    return;
+  }
 
   if (campaigns.length === 0) {
-    res.json({
-      stats: { activeCampaigns: 0, listeningCampaigns: 0, liveCalls: 0, queuedLeads: 0, todayLeads: 0, todayBookings: 0 },
-      campaigns: [],
-    });
+    res.json({ stats: ZERO_STATS, campaigns: [] });
     return;
   }
 
   const ids = campaigns.map(c => c.id);
   const uniqueAgentIds = [...new Set(campaigns.map(c => c.agentId).filter((id): id is number => id != null))];
+
+  // ── 2. parallel enrichment — runSafe wraps each query so a failing
+  //       sub-query never kills the whole response; the fallback is typed
+  //       identically to the happy-path so TypeScript infers cleanly. ────────
+  async function runSafe<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+    try { return await fn(); }
+    catch (err) { req.log.error({ err }, `campaign-dashboard: sub-query '${label}' failed`); return fallback; }
+  }
+
+  type LeadRow    = { campaignId: number | null; n: number };
+  type AgentRow   = { id: number; name: string };
+  const noLeads: LeadRow[]  = [];
+  const noAgents: AgentRow[] = [];
 
   const [
     agentRows,
@@ -111,47 +142,68 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
     completedRows,
     bookedTodayRows,
   ] = await Promise.all([
-    uniqueAgentIds.length > 0
-      ? db.select({ id: agentsTable.id, name: agentsTable.name }).from(agentsTable)
-          .where(inArray(agentsTable.id, uniqueAgentIds))
-      : Promise.resolve([]),
+    runSafe("agents", () =>
+      uniqueAgentIds.length > 0
+        ? db.select({ id: agentsTable.id, name: agentsTable.name }).from(agentsTable)
+            .where(inArray(agentsTable.id, uniqueAgentIds))
+        : Promise.resolve(noAgents),
+      noAgents,
+    ),
 
-    db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
-      .from(campaignLeadsTable)
-      .where(and(inArray(campaignLeadsTable.campaignId, ids), gte(campaignLeadsTable.createdAt, todayStart)))
-      .groupBy(campaignLeadsTable.campaignId),
+    runSafe("todayLeads", () =>
+      db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
+        .from(campaignLeadsTable)
+        .where(and(inArray(campaignLeadsTable.campaignId, ids), gte(campaignLeadsTable.createdAt, todayStart)))
+        .groupBy(campaignLeadsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
 
-    db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
-      .from(campaignLeadsTable)
-      .where(and(
-        inArray(campaignLeadsTable.campaignId, ids),
-        gte(campaignLeadsTable.createdAt, yestStart),
-        lt(campaignLeadsTable.createdAt, todayStart),
-      ))
-      .groupBy(campaignLeadsTable.campaignId),
+    runSafe("yestLeads", () =>
+      db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
+        .from(campaignLeadsTable)
+        .where(and(
+          inArray(campaignLeadsTable.campaignId, ids),
+          gte(campaignLeadsTable.createdAt, yestStart),
+          lt(campaignLeadsTable.createdAt, todayStart),
+        ))
+        .groupBy(campaignLeadsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
 
-    db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
-      .from(campaignLeadsTable)
-      .where(and(inArray(campaignLeadsTable.campaignId, ids), eq(campaignLeadsTable.callStatus, "pending")))
-      .groupBy(campaignLeadsTable.campaignId),
+    runSafe("queuedLeads", () =>
+      db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
+        .from(campaignLeadsTable)
+        .where(and(inArray(campaignLeadsTable.campaignId, ids), eq(campaignLeadsTable.callStatus, "pending")))
+        .groupBy(campaignLeadsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
 
-    db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
-      .from(campaignLeadsTable)
-      .where(and(inArray(campaignLeadsTable.campaignId, ids), eq(campaignLeadsTable.callStatus, "calling")))
-      .groupBy(campaignLeadsTable.campaignId),
+    runSafe("callingLeads", () =>
+      db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
+        .from(campaignLeadsTable)
+        .where(and(inArray(campaignLeadsTable.campaignId, ids), eq(campaignLeadsTable.callStatus, "calling")))
+        .groupBy(campaignLeadsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
 
-    db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
-      .from(campaignLeadsTable)
-      .where(and(
-        inArray(campaignLeadsTable.campaignId, ids),
-        inArray(campaignLeadsTable.callStatus, ["completed", "transferred"]),
-      ))
-      .groupBy(campaignLeadsTable.campaignId),
+    runSafe("completedLeads", () =>
+      db.select({ campaignId: campaignLeadsTable.campaignId, n: count() })
+        .from(campaignLeadsTable)
+        .where(and(
+          inArray(campaignLeadsTable.campaignId, ids),
+          inArray(campaignLeadsTable.callStatus, ["completed", "transferred"]),
+        ))
+        .groupBy(campaignLeadsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
 
-    db.select({ campaignId: callBookingsTable.campaignId, n: count() })
-      .from(callBookingsTable)
-      .where(and(inArray(callBookingsTable.campaignId, ids), gte(callBookingsTable.createdAt, todayStart)))
-      .groupBy(callBookingsTable.campaignId),
+    runSafe("bookedToday", () =>
+      db.select({ campaignId: callBookingsTable.campaignId, n: count() })
+        .from(callBookingsTable)
+        .where(and(inArray(callBookingsTable.campaignId, ids), gte(callBookingsTable.createdAt, todayStart)))
+        .groupBy(callBookingsTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
   ]);
 
   const agentMap     = new Map(agentRows.map(a => [a.id, a.name]));
@@ -167,10 +219,10 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
   const stats = {
     activeCampaigns:    campaigns.filter(c => ["active", "listening"].includes(c.status)).length,
     listeningCampaigns: campaigns.filter(c => c.status === "active" && LISTENING_SOURCES.includes(c.leadSource)).length,
-    liveCalls:          callingRows.reduce((s, r) => s + Number(r.n), 0),
-    queuedLeads:        queuedRows.reduce((s, r) => s + Number(r.n), 0),
-    todayLeads:         todayLeadRows.reduce((s, r) => s + Number(r.n), 0),
-    todayBookings:      bookedTodayRows.reduce((s, r) => s + Number(r.n), 0),
+    liveCalls:          callingRows.reduce<number>((s, r) => s + Number(r.n), 0),
+    queuedLeads:        queuedRows.reduce<number>((s, r) => s + Number(r.n), 0),
+    todayLeads:         todayLeadRows.reduce<number>((s, r) => s + Number(r.n), 0),
+    todayBookings:      bookedTodayRows.reduce<number>((s, r) => s + Number(r.n), 0),
   };
 
   const enriched = campaigns.map(c => {
