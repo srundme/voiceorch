@@ -438,6 +438,13 @@ export interface StreamSTT {
 export interface LLMUsage {
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Number of input tokens served from the provider's prompt cache
+   * (OpenAI `usage.prompt_tokens_details.cached_tokens`). Optional — only
+   * providers that report a cache breakdown populate it. Used to verify that
+   * the static system-prompt prefix is actually hitting cache turn-over-turn.
+   */
+  cachedTokens?: number;
 }
 
 export interface LLMAdapter {

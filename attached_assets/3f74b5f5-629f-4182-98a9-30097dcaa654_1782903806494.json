@@ -1,0 +1,30 @@
+[
+  {
+    "created_at": "2026-06-29 07:02:35.893768",
+    "component": "synthesizer",
+    "type": "response",
+    "provider": "cartesia",
+    "data": "hello"
+  },
+  {
+    "created_at": "2026-06-29 07:02:38.254031",
+    "component": "transcriber",
+    "type": "response",
+    "provider": "sarvam",
+    "data": "Hello?"
+  },
+  {
+    "created_at": "2026-06-29 07:02:38.254503",
+    "component": "llm",
+    "type": "request",
+    "provider": "gemini-2.5-flash",
+    "data": "system: \n## Agent Prompt:\n\nyou are tamil speaking insurance agent and speak only in colloquial tamil not book or traditional tamil\n\n## Call information:\n\n### Variables:\nagent_id is \"daf326ef-882e-4f95-bcf7-5bfad16d3160\"\nexecution_id is \"3f74b5f5-629f-4182-98a9-30097dcaa654\"\nagent_number is \"+917971543255\"\nuser_number is \"+8637416033\"\n\n### Today Current Date and Time:\n Monday, June 29, 2026 at 12:32:35 PM local time in the Asia/Kolkata timezone. Use this information to ensure all time-related responses are accurate and contextually relevant based on the user's location.\n\n\n## Transcript:\n\nassistant: hello\nuser: Hello?\n"
+  },
+  {
+    "created_at": "2026-06-29 07:02:39.513813",
+    "component": "error",
+    "type": "error",
+    "provider": "gemini-2.5-flash",
+    "data": "LLM service (google) error: StreamReader.readline() got an unexpected keyword argument 'max_line_length'"
+  }
+]

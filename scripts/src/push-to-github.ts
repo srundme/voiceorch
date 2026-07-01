@@ -22,8 +22,9 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "lib/db/src/index.ts",
-  "artifacts/api-server/src/orchestration/telephony/vobiz.ts",
+  "artifacts/api-server/src/orchestration/pipeline.ts",
+  "artifacts/api-server/src/orchestration/adapters/llm/openai.ts",
+  "artifacts/api-server/src/orchestration/types.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -60,7 +61,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(db): keep a warm Postgres connection floor to kill ~6s outbound-call dead air — raise idle timeout to 5min, add pool error handler + warm-pool keepalive, allowExitOnIdle so CLI scripts still exit; add vobiz setupMs log to verify pre-pipeline setup window`,
+      message: `perf(llm): stop the per-turn [CURRENT DATE & TIME] line from breaking OpenAI prompt cache — move dtInjection from the top of the system prompt to the very end (after the staged-prompt rebuild) so the ~7k-token static block (language rules + caller memory + tool guides) stays a byte-identical cacheable prefix; capture usage.prompt_tokens_details.cached_tokens in the OpenAI adapter and log per-turn cachedTokens + cacheHitRatio`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

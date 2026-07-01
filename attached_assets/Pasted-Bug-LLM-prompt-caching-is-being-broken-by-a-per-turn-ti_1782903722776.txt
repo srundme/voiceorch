@@ -1,0 +1,16 @@
+Bug: LLM prompt caching is being broken by a per-turn timestamp, causing high/variable latency on voice calls
+In our voice AI pipeline (orchestration/pipeline.ts / orchestration/session.ts), we build a system prompt for each LLM turn (OpenAI gpt-4.1-mini) that looks roughly like:
+[LANGUAGE — ABSOLUTE RULE] ...
+[CURRENT DATE & TIME] Wednesday, July 1, 2026 at 4:12 PM GMT+5:30 (Asia/Kolkata)
+=== CALLER MEMORY — NEVER FORGETS ===
+... (large caller memory / facts block, ~7,000+ tokens)
+OpenAI's prompt caching only works on an exact, unbroken prefix match. Because [CURRENT DATE & TIME] is near the top of the prompt and updates every turn (down to the minute), it invalidates the cache for everything that follows — meaning the entire multi-thousand-token static block (language rules + caller memory + instructions) gets fully reprocessed on every single turn instead of hitting cache. This is very likely a major contributor to our LLM time-to-first-token latency and its variance across turns.
+Please do the following:
+
+Find where the system prompt is assembled for each LLM call (likely in orchestration/pipeline.ts, orchestration/session.ts, or wherever systemPromptPreview / the OpenAI request payload is built).
+Reorder the prompt so that all static content (language rules, caller memory block, tool instructions, anything that doesn't change turn-to-turn within a call) comes first, and move the [CURRENT DATE & TIME] line (and any other per-turn-dynamic content) to the very end of the system prompt, immediately before the conversation history / latest user turn.
+If the date/time doesn't need minute-level precision for the model's reasoning, consider truncating it to just the date (or dropping the time entirely) to reduce how often it changes.
+After the fix, log the usage.prompt_tokens_details.cached_tokens field from the OpenAI response for each turn (if not already captured), so we can verify cache hits are actually occurring turn-over-turn within a call.
+Don't change any of the actual prompt content/instructions — just reorder so static content is a stable prefix and dynamic content is appended at the end.
+
+Test by running a multi-turn call locally/in staging and confirming cached_tokens grows close to full prompt length after turn 1, and that LLM TTFT drops and stabilizes across turns 2+.

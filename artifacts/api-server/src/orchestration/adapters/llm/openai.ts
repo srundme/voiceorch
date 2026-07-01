@@ -59,6 +59,10 @@ export class OpenAILLM implements LLMAdapter {
         usage = {
           inputTokens: chunk.usage.prompt_tokens,
           outputTokens: chunk.usage.completion_tokens,
+          // Prompt-cache hit size (OpenAI reports it under prompt_tokens_details).
+          // Lets the pipeline verify the static system-prompt prefix is cached
+          // turn-over-turn. Absent on providers that don't report a breakdown.
+          cachedTokens: chunk.usage.prompt_tokens_details?.cached_tokens,
         };
       }
 

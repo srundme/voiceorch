@@ -2795,6 +2795,7 @@ export class OrchestrationPipeline {
     // Per-turn token usage (for the LLM execution-log row metadata).
     let turnInputTokens = 0;
     let turnOutputTokens = 0;
+    let turnCachedTokens = 0;
 
     // ── Think-block + function-tag filters (streaming) ──────────────────────
     // Strips <think>…</think> blocks (DeepSeek-R1) and <function=…>…</function>
@@ -2915,9 +2916,17 @@ export class OrchestrationPipeline {
           `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
       }
     }
+    // NOTE: dtInjection ([CURRENT DATE & TIME]) is deliberately NOT placed here.
+    // It changes every minute, so keeping it near the top would invalidate the
+    // OpenAI prompt cache for the entire static block that follows (language
+    // rules + caller memory + base instructions + tool guides) on every turn —
+    // OpenAI caching only reuses an exact, unbroken token prefix. It is appended
+    // at the VERY END of the system prompt instead (see the "[CURRENT DATE &
+    // TIME]" block after the staged-prompt layer below), so the large static
+    // prefix stays byte-identical and cacheable turn-over-turn.
     systemPromptForTurn = langGuard
-      ? `${langGuard}\n\n${dtInjection}\n\n${systemPromptForTurn}\n\n${langGuard}`
-      : `${dtInjection}\n\n${systemPromptForTurn}`;
+      ? `${langGuard}\n\n${systemPromptForTurn}\n\n${langGuard}`
+      : systemPromptForTurn;
 
 
     let kbContextPromise: Promise<string | null>;
@@ -3223,6 +3232,17 @@ export class OrchestrationPipeline {
       }
     }
 
+    // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────
+    // This is the only element that changes on every single turn (down to the
+    // minute). Appending it here — after the base prompt, KB context, gender
+    // directive, tool guides AND the staged-prompt rebuild above — keeps every
+    // token before it byte-identical across turns, so OpenAI prompt caching can
+    // serve the large static block (language rules + caller memory + base
+    // instructions + tool guides) from cache instead of reprocessing it every
+    // turn. It sits at the tail of the system message, immediately before the
+    // conversation history that llm.chat() appends after it.
+    systemPromptForTurn += `\n\n${dtInjection}`;
+
     // Layer 1: Anthropic KV Cache flag (honoured by AnthropicLLM adapter)
     const useKvCache = tokenOptEnabled && this.agent.llmProvider === "anthropic";
 
@@ -3393,6 +3413,7 @@ export class OrchestrationPipeline {
                 this.llmOutputTokensTotal += usage.outputTokens;
                 turnInputTokens += usage.inputTokens;
                 turnOutputTokens += usage.outputTokens;
+                turnCachedTokens += usage.cachedTokens ?? 0;
                 // Accumulate baseline estimate for savings calculation
                 if (fullHistoryLen > sentHistoryLen && sentHistoryLen > 0) {
                   this.baselineInputTokensEstimate += Math.round(usage.inputTokens * fullHistoryLen / sentHistoryLen);
@@ -3409,6 +3430,7 @@ export class OrchestrationPipeline {
                 this.llmOutputTokensTotal += usage.outputTokens;
                 turnInputTokens += usage.inputTokens;
                 turnOutputTokens += usage.outputTokens;
+                turnCachedTokens += usage.cachedTokens ?? 0;
                 if (fullHistoryLen > sentHistoryLen && sentHistoryLen > 0) {
                   this.baselineInputTokensEstimate += Math.round(usage.inputTokens * fullHistoryLen / sentHistoryLen);
                 } else {
@@ -3485,6 +3507,7 @@ export class OrchestrationPipeline {
                 this.llmOutputTokensTotal += usage.outputTokens;
                 turnInputTokens += usage.inputTokens;
                 turnOutputTokens += usage.outputTokens;
+                turnCachedTokens += usage.cachedTokens ?? 0;
               },
             },
           );
@@ -3559,8 +3582,28 @@ export class OrchestrationPipeline {
         latencyMs: llmFirstTokenAt ? llmFirstTokenAt - llmStart : Date.now() - llmStart,
         turnNumber: _currentTurnIndex,
         responsePayload: { text: _llmLogText || (triggeredToolName ? `[calling tool: ${triggeredToolName}]` : "") },
-        metadata: { inputTokens: turnInputTokens, outputTokens: turnOutputTokens, model: this.agent.llmModel ?? "" },
+        metadata: { inputTokens: turnInputTokens, outputTokens: turnOutputTokens, cachedTokens: turnCachedTokens, model: this.agent.llmModel ?? "" },
       });
+    }
+
+    // Prompt-cache visibility: log cached vs total input tokens per turn so we can
+    // confirm the static system-prompt prefix is hitting the provider's prompt
+    // cache turn-over-turn. After turn 1, cachedTokens should climb toward
+    // turnInputTokens (OpenAI reports it via usage.prompt_tokens_details.cached_tokens);
+    // providers that don't report a cache breakdown leave it at 0.
+    if (this.hasRealLlmUsage && turnInputTokens > 0) {
+      logger.info(
+        {
+          callId: this.config.callId,
+          turnNumber: _currentTurnIndex,
+          provider: this.agent.llmProvider,
+          model: this.agent.llmModel ?? "",
+          inputTokens: turnInputTokens,
+          cachedTokens: turnCachedTokens,
+          cacheHitRatio: Math.round((turnCachedTokens / turnInputTokens) * 100) / 100,
+        },
+        "LLM prompt cache",
+      );
     }
 
     // ── If LLM called a tool, execute it and skip TTS ──
