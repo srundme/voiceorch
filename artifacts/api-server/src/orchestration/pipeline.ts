@@ -652,34 +652,55 @@ export class OrchestrationPipeline {
             logger.error({ callId: config.callId, soundId: track, err }, "Ambient noise: failed to load PCM loop — ambient disabled for this call");
           });
       }
-      // Send one 20 ms ambient chunk every 20 ms while the agent is silent.
-      // isSendingTtsAudio=true means playSentence() is actively streaming bytes
-      // to the carrier — skip here to avoid two concurrent senders on the same
-      // WebSocket.  NOTE: we intentionally do NOT gate on isPlaying so that
-      // ambient continues during the inter-sentence gap in playTask (while
-      // waiting for the next LLM token) rather than leaving the line dead.
+    }
+
+    // Ambient noise / VoBiz keepalive interval — runs every 20 ms while the
+    // agent is not actively streaming TTS audio.
+    //
+    // Two cases:
+    //   1. ambientStream loaded → send ambient audio (built-in or uploaded).
+    //   2. No ambient stream + VoBiz telephony → send PCM-zero silence to
+    //      keep the VoBiz audio bridge alive.  VoBiz drops the call if the
+    //      bridge receives no audio data for ~2 s even with keepCallAlive=true.
+    //      Without this, calls where the caller pauses >2 s before replying
+    //      disconnect with hangup code 4010 "End Of XML Instructions".
+    //
+    // isSendingTtsAudio=true means playSentence() is actively streaming bytes
+    // to the carrier — skip here to avoid two concurrent senders on the same
+    // WebSocket.  NOT gated on isPlaying so audio continues during the
+    // inter-sentence gap in playTask (while waiting for the next LLM token).
+    {
+      const KEEPALIVE_FRAME_MS      = 20;
+      const VOBIZ_SILENCE_SAMPLES   = (8000 * KEEPALIVE_FRAME_MS) / 1000; // 160 @ 8 kHz
+      const vobizSilenceFrame       = Buffer.alloc(VOBIZ_SILENCE_SAMPLES * 2, 0); // PCM16-LE zeros
       this.ambientInterval = setInterval(() => {
-        if (!this.closed && !this.isSendingTtsAudio && this.ambientStream) {
-          // Emit the encoding the call actually consumes: raw 8 kHz PCM for
-          // web calls (rawPcmOutput), mulaw for telephony. Sending mulaw bytes
-          // into a raw-PCM stream makes the browser reinterpret them as PCM16
-          // and play garbled static during silence gaps.
-          const chunk = this.config.rawPcmOutput
-            ? this.ambientStream.nextPcmChunk()
-            : this.ambientStream.nextMulawChunk();
-          this.config.onAudioOut(chunk);
-          // Prove (once per call) that ambient audio actually went out on the
-          // wire — distinguishes "enabled but never emitted" from a genuine
-          // carrier-level audibility issue when debugging from prod logs.
-          if (!this.ambientFirstChunkLogged) {
-            this.ambientFirstChunkLogged = true;
-            logger.info(
-              { callId: this.config.callId, bytes: chunk.length, encoding: this.config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k" },
-              "Ambient noise: first silence chunk emitted to caller",
-            );
+        if (!this.closed && !this.isSendingTtsAudio) {
+          if (this.ambientStream) {
+            // Emit the encoding the call actually consumes: raw 8 kHz PCM for
+            // web calls (rawPcmOutput), mulaw for telephony. Sending mulaw bytes
+            // into a raw-PCM stream makes the browser reinterpret them as PCM16
+            // and play garbled static during silence gaps.
+            const chunk = this.config.rawPcmOutput
+              ? this.ambientStream.nextPcmChunk()
+              : this.ambientStream.nextMulawChunk();
+            this.config.onAudioOut(chunk);
+            // Prove (once per call) that ambient audio actually went out on the
+            // wire — distinguishes "enabled but never emitted" from a genuine
+            // carrier-level audibility issue when debugging from prod logs.
+            if (!this.ambientFirstChunkLogged) {
+              this.ambientFirstChunkLogged = true;
+              logger.info(
+                { callId: this.config.callId, bytes: chunk.length, encoding: this.config.rawPcmOutput ? "pcm16-8k" : "mulaw-8k" },
+                "Ambient noise: first silence chunk emitted to caller",
+              );
+            }
+          } else if (this.config.telephonyProvider === "vobiz") {
+            // No ambient stream — send PCM zeros to keep the VoBiz audio
+            // bridge alive during listening (prevents 4010 hangup on pauses).
+            this.config.onAudioOut(vobizSilenceFrame);
           }
         }
-      }, 20);
+      }, KEEPALIVE_FRAME_MS);
     }
 
     // Turn safety net — two timers guarding the "Listening…" hang.
