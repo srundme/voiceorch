@@ -1131,7 +1131,12 @@ export default function CampaignDetailPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
               <StatusBadge status={
-                campaign.status === "draft" && batches?.some(b => b.status === "running")
+                // Reflect real execution state: if any batch is actively running,
+                // show "active" regardless of the persisted campaign.status (covers
+                // both a draft campaign whose batch auto-started and the brief
+                // window before an auto-completed campaign is reopened). Otherwise
+                // trust the campaign's own status (completed / paused / etc).
+                batches?.some(b => b.status === "running")
                   ? "active"
                   : campaign.status
               } />

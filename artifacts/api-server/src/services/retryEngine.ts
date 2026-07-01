@@ -72,7 +72,22 @@ export async function processRetries(): Promise<void> {
       const [campaign] = await db.select().from(campaignsTable)
         .where(eq(campaignsTable.id, retry.campaignId));
 
-      if (!campaign || !isCampaignDialable(campaign)) {
+      if (!campaign) {
+        await db.update(callRetriesTable)
+          .set({ status: "cancelled" })
+          .where(eq(callRetriesTable.id, retry.id));
+        continue;
+      }
+
+      // A due retry means real work is re-entering the campaign. If the scheduler
+      // previously auto-completed it, treat it as "active" for the dialability
+      // check (which still enforces business hours) — we reopen the campaign row
+      // below, at fire time, alongside the batch reopen. Only "completed" is
+      // scheduler-set; a user-chosen "paused"/"cancelled" is left as-is here so a
+      // retry can never resurrect a campaign the user deliberately halted.
+      const wasAutoCompleted = campaign.status === "completed";
+      const dialableCampaign = wasAutoCompleted ? { ...campaign, status: "active" } : campaign;
+      if (!isCampaignDialable(dialableCampaign)) {
         await db.update(callRetriesTable)
           .set({ status: "cancelled" })
           .where(eq(callRetriesTable.id, retry.id));
@@ -109,6 +124,18 @@ export async function processRetries(): Promise<void> {
       await db.update(campaignLeadsTable)
         .set({ callStatus: "pending", notes: `Auto-retry #${retry.attemptNumber}` })
         .where(eq(campaignLeadsTable.id, lead.id));
+
+      // If the scheduler auto-completed the campaign, reopen it to "active" now
+      // that a real dial is re-entering — guarded on status = 'completed' so it
+      // never overrides a concurrent user pause/cancel.
+      if (wasAutoCompleted) {
+        await db.update(campaignsTable)
+          .set({ status: "active" })
+          .where(and(
+            eq(campaignsTable.id, campaign.id),
+            eq(campaignsTable.status, "completed"),
+          ));
+      }
 
       // If this lead belongs to a completed batch, reopen it so the scheduler
       // picks it up again. Without this a retry on a completed batch would flip

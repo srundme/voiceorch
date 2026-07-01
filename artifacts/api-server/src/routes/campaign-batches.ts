@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
+import { reopenCampaignIfCompleted } from "../services/batchScheduler.js";
 import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
 import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG } from "../services/phone-normalization.js";
 import { isOnDnc } from "../lib/dnc-check.js";
@@ -365,6 +366,8 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
       return;
     }
     await db.update(campaignBatchesTable).set({ status: "running" }).where(eq(campaignBatchesTable.id, fresh!.id));
+    // New batch of work — reopen the campaign if the scheduler auto-completed it.
+    await reopenCampaignIfCompleted(campaign.id);
     await fireStartBatch(fresh!, campaign);
     // Reflect the status update in the object used to build the response so the
     // frontend sees "running" immediately instead of the stale "draft" value.
@@ -540,6 +543,8 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
     .returning();
 
   if (body.status === "running" && batch.status !== "running") {
+    // Work is re-entering — reopen the campaign if the scheduler auto-completed it.
+    await reopenCampaignIfCompleted(campaignId);
     await fireStartBatch(updated!, campaign);
   }
 
@@ -585,6 +590,8 @@ router.post("/campaigns/:id/batches/:batchId/start", async (req, res): Promise<v
     .where(eq(campaignBatchesTable.id, batchId))
     .returning();
 
+  // Work is re-entering — reopen the campaign if the scheduler auto-completed it.
+  await reopenCampaignIfCompleted(campaignId);
   await fireStartBatch(updated!, campaign);
 
   res.json(toBatch(updated!));
@@ -751,6 +758,19 @@ router.post("/campaigns/:id/batches/:batchId/redial", async (req, res): Promise<
       .where(eq(campaignLeadsTable.id, lead.id))
       .returning();
     if (updated) { scheduleCampaignCall(updated, campaign); queued++; }
+  }
+
+  // Work re-opened: reopen a completed batch so the rolling-refill poll (which
+  // only queries running batches) tops it up, and reopen an auto-completed
+  // campaign so it becomes dialable again.
+  if (queued > 0) {
+    await db.update(campaignBatchesTable)
+      .set({ status: "running" })
+      .where(and(
+        eq(campaignBatchesTable.id, batchId),
+        eq(campaignBatchesTable.status, "completed"),
+      ));
+    await reopenCampaignIfCompleted(campaignId);
   }
 
   res.json({ queued });

@@ -11,7 +11,7 @@ import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-
 import { logger } from "../lib/logger.js";
 import { scheduleNextRedial, scheduleNoAnswerRedial, cancelPendingRedials } from "../services/autoRedial.js";
 import { scheduleRetry, resolveRetryConfig } from "../services/retryEngine.js";
-import { refillCampaignConcurrency } from "../services/batchScheduler.js";
+import { refillCampaignConcurrency, reconcileCampaignBatches } from "../services/batchScheduler.js";
 import { computeOperationalOutcome, setOperationalOutcome } from "../services/operational-outcome.js";
 import { APP_SECRET } from "../lib/app-secret.js";
 
@@ -226,6 +226,10 @@ async function handleCampaignLeadTerminalStatus(opts: {
   // count), so immediately top the campaign back up to its limit instead of
   // waiting for the next 60 s poll. Fire-and-forget — never block the webhook.
   void refillCampaignConcurrency(lead.campaignId);
+  // ...then reconcile so a now-finished batch/campaign flips to "completed" right
+  // away. Runs AFTER retry scheduling above, so a scheduled retry (pending
+  // call_retries row) correctly keeps the batch open. Fire-and-forget.
+  void reconcileCampaignBatches(lead.campaignId);
 }
 
 /**

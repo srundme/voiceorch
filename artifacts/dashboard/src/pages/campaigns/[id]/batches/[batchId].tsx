@@ -449,6 +449,11 @@ export default function BatchWorkspacePage() {
   });
 
   const batchStatus = header?.batch.status ?? "draft";
+  // A terminal batch (completed / stopped / cancelled) has no more work, so it
+  // must not present Running-only actions. Start is also blocked for completed /
+  // cancelled (the backend 409s), while a stopped batch can still be restarted.
+  const canStart     = !(batchStatus === "running" || batchStatus === "completed" || batchStatus === "cancelled");
+  const canStopPause = batchStatus === "running" || batchStatus === "paused";
 
   // Batch analytics — used to know whether any scheduled retries are still pending.
   const { data: batchAnalytics } = useGetBatchAnalytics(campaignId, batchId, {
@@ -578,7 +583,7 @@ export default function BatchWorkspacePage() {
             ) : (
               <>
                 <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  disabled={batchStatus === "running" || update.isPending || isStarting}
+                  disabled={!canStart || update.isPending || isStarting}
                   onClick={() => void handleStart()}>
                   <Play className="h-3.5 w-3.5" /> Start
                 </Button>
@@ -588,7 +593,7 @@ export default function BatchWorkspacePage() {
                   <Pause className="h-3.5 w-3.5" /> Pause
                 </Button>
                 <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-red-500/20 text-red-600 hover:bg-red-500/5"
-                  disabled={batchStatus === "stopped" || update.isPending}
+                  disabled={!canStopPause || update.isPending}
                   onClick={() => void handleControl("stopped")}>
                   <Square className="h-3.5 w-3.5" /> Stop
                 </Button>

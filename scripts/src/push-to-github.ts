@@ -22,8 +22,12 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "scripts/src/sync-to-github.ts",
-  "scripts/src/push-to-github.ts",
+  "artifacts/api-server/src/services/batchScheduler.ts",
+  "artifacts/api-server/src/services/retryEngine.ts",
+  "artifacts/api-server/src/routes/campaign-batches.ts",
+  "artifacts/api-server/src/routes/webhooks.ts",
+  "artifacts/dashboard/src/pages/campaigns/[id]/batches/[batchId].tsx",
+  "artifacts/dashboard/src/pages/campaigns/[id].tsx",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -60,7 +64,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: sync-to-github — handle empty tree after skipping absent files; fix sha:null for deletions`,
+      message: `fix: sync batch & campaign status to real execution state (auto-complete + reopen)`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

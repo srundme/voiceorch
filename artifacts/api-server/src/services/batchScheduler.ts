@@ -1,4 +1,4 @@
-import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimelineTable, callsTable } from "@workspace/db";
+import { db, campaignsTable, campaignBatchesTable, campaignLeadsTable, leadTimelineTable, callsTable, callRetriesTable } from "@workspace/db";
 import { eq, and, lte, isNull, or, sql, inArray, lt } from "drizzle-orm";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -87,41 +87,216 @@ async function pollScheduledBatches(): Promise<void> {
     // Also check running batches — backstop reconciliation: top each campaign
     // back up to its limit in case an event-driven refill was missed, and mark
     // batches complete once all their leads are processed.
+    //
+    // IMPORTANT: refill stays behind the dialability gate (never dial a paused /
+    // off-hours campaign), but completion evaluation is dialability-INDEPENDENT —
+    // a paused or off-hours campaign whose leads are all done must still have its
+    // batch flipped to "completed" so the UI stops showing a stuck "Running".
     const runningBatches = await db.select().from(campaignBatchesTable)
       .where(eq(campaignBatchesTable.status, "running"));
 
+    const campaignIdsSeen = new Set<number>();
     for (const batch of runningBatches) {
       const [campaign] = await db.select().from(campaignsTable)
         .where(eq(campaignsTable.id, batch.campaignId));
-      if (!campaign || !isCampaignDialable(campaign)) continue;
+      if (!campaign) continue;
 
-      await refillCampaignConcurrency(campaign.id);
-
-      // Mark batch complete when no leads are pending OR still actively calling.
-      // Note: PostgreSQL returns count(*) as a string — use Number() to coerce.
-      const [pendingRow] = await db.select({ count: sql<string>`count(*)` })
-        .from(campaignLeadsTable)
-        .where(and(
-          eq(campaignLeadsTable.batchId, batch.id),
-          eq(campaignLeadsTable.callStatus, "pending"),
-        ));
-      const [activeRow] = await db.select({ count: sql<string>`count(*)` })
-        .from(campaignLeadsTable)
-        .where(and(
-          eq(campaignLeadsTable.batchId, batch.id),
-          inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
-        ));
-      const pendingCount = Number(pendingRow?.count ?? 0);
-      const activeCount  = Number(activeRow?.count  ?? 0);
-      if (pendingCount === 0 && activeCount === 0) {
-        await db.update(campaignBatchesTable)
-          .set({ status: "completed" })
-          .where(eq(campaignBatchesTable.id, batch.id));
-        logger.info({ batchId: batch.id, pendingCount, activeCount }, "Batch completed — all leads processed");
+      if (isCampaignDialable(campaign)) {
+        await refillCampaignConcurrency(campaign.id);
       }
+
+      await evaluateBatchCompletion(batch.id);
+      campaignIdsSeen.add(campaign.id);
+    }
+
+    // After every running batch has settled, reconcile each seen campaign's own
+    // status so it auto-transitions to "completed" in lockstep with its batches.
+    for (const campaignId of campaignIdsSeen) {
+      await evaluateCampaignCompletion(campaignId);
     }
   } catch (err) {
     logger.error({ err }, "Batch scheduler error");
+  }
+}
+
+// Batch statuses that still represent outstanding (or resumable) work.
+// Anything NOT in this set (completed / stopped / cancelled) is terminal.
+const NON_TERMINAL_BATCH_STATUSES = ["draft", "running", "paused"];
+
+/**
+ * Decide whether a running batch is finished and flip it to "completed".
+ *
+ * A batch is complete only when it has genuinely nothing left to do:
+ *   - zero leads in "pending"
+ *   - zero leads in "calling" / "connected" (nothing in flight)
+ *   - zero *pending* call_retries still scheduled for any of its leads
+ *
+ * The final UPDATE is guarded on `status = 'running'` so it is a no-op (and
+ * never fights a concurrent reopen) if the batch was already resumed. This is
+ * intentionally dialability-independent: completion must happen even while the
+ * campaign is paused or outside business hours.
+ *
+ * Returns true iff this call transitioned the batch to "completed".
+ */
+export async function evaluateBatchCompletion(batchId: number): Promise<boolean> {
+  try {
+    // PostgreSQL returns count(*) as a string — coerce with Number().
+    const [pendingRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(campaignLeadsTable)
+      .where(and(
+        eq(campaignLeadsTable.batchId, batchId),
+        eq(campaignLeadsTable.callStatus, "pending"),
+      ));
+    const [activeRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(campaignLeadsTable)
+      .where(and(
+        eq(campaignLeadsTable.batchId, batchId),
+        inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
+      ));
+    const [retryRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(callRetriesTable)
+      .where(and(
+        eq(callRetriesTable.status, "pending"),
+        sql`EXISTS (
+          SELECT 1 FROM campaign_leads cl
+          WHERE cl.id = ${callRetriesTable.leadId}
+            AND cl.batch_id = ${batchId}
+        )`,
+      ));
+
+    const pendingCount = Number(pendingRow?.count ?? 0);
+    const activeCount  = Number(activeRow?.count  ?? 0);
+    const retryCount   = Number(retryRow?.count   ?? 0);
+    if (pendingCount !== 0 || activeCount !== 0 || retryCount !== 0) return false;
+
+    const updated = await db.update(campaignBatchesTable)
+      .set({ status: "completed" })
+      .where(and(
+        eq(campaignBatchesTable.id, batchId),
+        eq(campaignBatchesTable.status, "running"),
+      ))
+      .returning({ id: campaignBatchesTable.id });
+
+    if (updated.length > 0) {
+      logger.info({ batchId, pendingCount, activeCount, retryCount }, "Batch completed — all leads processed & retries exhausted");
+      return true;
+    }
+    return false;
+  } catch (err) {
+    logger.error({ err, batchId }, "evaluateBatchCompletion error");
+    return false;
+  }
+}
+
+/**
+ * Auto-transition a campaign to "completed" in lockstep with its batches.
+ *
+ * Only fires for campaigns currently in "active" or "draft" (a batch can run
+ * while the campaign row is still "draft"). A user-chosen "paused"/"cancelled"
+ * and an already-"completed" campaign are left untouched.
+ *
+ * Completion requires that ALL of the following hold campaign-wide:
+ *   - no non-terminal batches (draft / running / paused)
+ *   - no leads still active (pending / calling / connected) — this also covers
+ *     instant / batchless campaigns whose leads have batch_id = null
+ *   - no pending call_retries
+ *   - at least one lead ever existed (never "complete" an empty campaign)
+ *
+ * The final UPDATE is status-guarded so it never races a concurrent reopen.
+ */
+export async function evaluateCampaignCompletion(campaignId: number): Promise<void> {
+  try {
+    const [campaign] = await db.select().from(campaignsTable)
+      .where(eq(campaignsTable.id, campaignId));
+    if (!campaign) return;
+    if (campaign.status !== "active" && campaign.status !== "draft") return;
+
+    const [openBatchRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(campaignBatchesTable)
+      .where(and(
+        eq(campaignBatchesTable.campaignId, campaignId),
+        inArray(campaignBatchesTable.status, NON_TERMINAL_BATCH_STATUSES),
+      ));
+    if (Number(openBatchRow?.count ?? 0) > 0) return;
+
+    const [activeLeadRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(campaignLeadsTable)
+      .where(and(
+        eq(campaignLeadsTable.campaignId, campaignId),
+        inArray(campaignLeadsTable.callStatus, ["pending", "calling", "connected"]),
+      ));
+    if (Number(activeLeadRow?.count ?? 0) > 0) return;
+
+    const [retryRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(callRetriesTable)
+      .where(and(
+        eq(callRetriesTable.campaignId, campaignId),
+        eq(callRetriesTable.status, "pending"),
+      ));
+    if (Number(retryRow?.count ?? 0) > 0) return;
+
+    // Never auto-complete a campaign that never had any work.
+    const [totalLeadRow] = await db.select({ count: sql<string>`count(*)` })
+      .from(campaignLeadsTable)
+      .where(eq(campaignLeadsTable.campaignId, campaignId));
+    if (Number(totalLeadRow?.count ?? 0) === 0) return;
+
+    const updated = await db.update(campaignsTable)
+      .set({ status: "completed" })
+      .where(and(
+        eq(campaignsTable.id, campaignId),
+        inArray(campaignsTable.status, ["active", "draft"]),
+      ))
+      .returning({ id: campaignsTable.id });
+
+    if (updated.length > 0) {
+      logger.info({ campaignId }, "Campaign auto-completed — all batches terminal & no work remaining");
+    }
+  } catch (err) {
+    logger.error({ err, campaignId }, "evaluateCampaignCompletion error");
+  }
+}
+
+/**
+ * Evaluate every running batch of a campaign for completion, then reconcile the
+ * campaign's own status. Call this from any terminal call-end path (after the
+ * refill) so batch/campaign status tracks real execution state immediately,
+ * without waiting for the 60 s backstop poll.
+ */
+export async function reconcileCampaignBatches(campaignId: number): Promise<void> {
+  try {
+    const runningBatches = await db.select({ id: campaignBatchesTable.id })
+      .from(campaignBatchesTable)
+      .where(and(
+        eq(campaignBatchesTable.campaignId, campaignId),
+        eq(campaignBatchesTable.status, "running"),
+      ));
+    for (const b of runningBatches) {
+      await evaluateBatchCompletion(b.id);
+    }
+    await evaluateCampaignCompletion(campaignId);
+  } catch (err) {
+    logger.error({ err, campaignId }, "reconcileCampaignBatches error");
+  }
+}
+
+/**
+ * Re-open a campaign that the scheduler previously auto-completed, returning it
+ * to a dialable "active" status when work re-enters (a batch is started, leads
+ * are redialed, or a retry fires). Guarded on `status = 'completed'` so it only
+ * ever reopens an auto-completed campaign — a user-chosen "paused"/"cancelled"
+ * campaign is never touched.
+ */
+export async function reopenCampaignIfCompleted(campaignId: number): Promise<void> {
+  try {
+    await db.update(campaignsTable)
+      .set({ status: "active" })
+      .where(and(
+        eq(campaignsTable.id, campaignId),
+        eq(campaignsTable.status, "completed"),
+      ));
+  } catch (err) {
+    logger.error({ err, campaignId }, "reopenCampaignIfCompleted error");
   }
 }
 
@@ -254,7 +429,12 @@ export async function refillCampaignForLead(leadId: number): Promise<void> {
     const [lead] = await db.select({ campaignId: campaignLeadsTable.campaignId })
       .from(campaignLeadsTable)
       .where(eq(campaignLeadsTable.id, leadId));
-    if (lead) await refillCampaignConcurrency(lead.campaignId);
+    if (lead) {
+      await refillCampaignConcurrency(lead.campaignId);
+      // Terminal call-end: reconcile so a now-finished batch/campaign flips to
+      // "completed" immediately instead of waiting for the backstop poll.
+      await reconcileCampaignBatches(lead.campaignId);
+    }
   } catch (err) {
     logger.error({ err, leadId }, "refillCampaignForLead error");
   }
@@ -275,9 +455,13 @@ async function sweepStuckCallingLeads(): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - STUCK_CALLING_TIMEOUT_MS);
 
+    // Cover both in-flight states. A lead can hang in "connected" too (e.g. the
+    // media stream drops without a terminal hangup webhook), and a stuck
+    // "connected" lead blocks the concurrency counter AND keeps its batch from
+    // ever completing. Both are swept the same way.
     const stuck = await db.select().from(campaignLeadsTable)
       .where(and(
-        eq(campaignLeadsTable.callStatus, "calling"),
+        inArray(campaignLeadsTable.callStatus, ["calling", "connected"]),
         lt(campaignLeadsTable.lastAttemptAt, cutoff),
       ))
       .limit(200);
@@ -288,11 +472,13 @@ async function sweepStuckCallingLeads(): Promise<void> {
 
     for (const lead of stuck) {
       try {
+        // Guard the update on the lead's OWN observed status so a terminal
+        // webhook that lands between the SELECT and this UPDATE wins the race.
         await db.update(campaignLeadsTable)
-          .set({ callStatus: "failed", notes: "Stuck in calling — no terminal webhook received; auto-failed by scheduler" })
+          .set({ callStatus: "failed", notes: `Stuck in ${lead.callStatus} — no terminal webhook received; auto-failed by scheduler` })
           .where(and(
             eq(campaignLeadsTable.id, lead.id),
-            eq(campaignLeadsTable.callStatus, "calling"),
+            eq(campaignLeadsTable.callStatus, lead.callStatus),
           ));
 
         await db.insert(leadTimelineTable).values({
@@ -325,9 +511,11 @@ async function sweepStuckCallingLeads(): Promise<void> {
     }
 
     // Freed the stuck slots — immediately top each affected campaign back up so
-    // rolling concurrency resumes now instead of waiting for the next poll tick.
+    // rolling concurrency resumes now instead of waiting for the next poll tick,
+    // then reconcile in case failing the stuck lead was the last outstanding work.
     for (const campaignId of affectedCampaigns) {
       await refillCampaignConcurrency(campaignId);
+      await reconcileCampaignBatches(campaignId);
     }
 
     logger.info({ count: stuck.length, campaigns: affectedCampaigns.size }, "sweepStuckCallingLeads: processed stuck leads");
