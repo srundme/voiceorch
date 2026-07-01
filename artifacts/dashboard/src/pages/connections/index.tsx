@@ -1870,6 +1870,7 @@ const CRM_PROVIDERS: Array<{
   description: string;
   color: string;
   logo: React.ReactNode;
+  comingSoon?: boolean;
 }> = [
   {
     id: "hubspot",
@@ -1877,6 +1878,7 @@ const CRM_PROVIDERS: Array<{
     description: "Import contacts and push call outcomes as notes",
     color: "text-orange-400",
     logo: <span className="text-orange-400 font-bold text-sm">HS</span>,
+    comingSoon: true,
   },
   {
     id: "zoho",
@@ -1954,7 +1956,13 @@ function CrmConnectorSection() {
             const isConnected = activeConns.length > 0;
 
             return (
-              <div key={provider.id} className="bg-card border border-border rounded-xl p-4">
+              <div
+                key={provider.id}
+                className={provider.comingSoon ? "cursor-not-allowed" : undefined}
+              >
+              <div
+                className={`bg-card border border-border rounded-xl p-4${provider.comingSoon ? " opacity-50 pointer-events-none" : ""}`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-0.5">
@@ -2007,7 +2015,7 @@ function CrmConnectorSection() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    {activeConns.map(conn => (
+                    {!provider.comingSoon && activeConns.map(conn => (
                       <div key={conn.id} className="flex items-center gap-1.5">
                         <Button
                           size="sm"
@@ -2020,17 +2028,24 @@ function CrmConnectorSection() {
                         </Button>
                       </div>
                     ))}
-                    <Button
-                      size="sm"
-                      variant={isConnected ? "ghost" : "default"}
-                      onClick={() => handleConnect(provider.id)}
-                      className="h-7 px-3 text-xs"
-                    >
-                      <Link2 className="w-3 h-3 mr-1.5" />
-                      {isConnected ? "Connect another" : "Connect"}
-                    </Button>
+                    {provider.comingSoon ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+                        Coming Soon
+                      </span>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant={isConnected ? "ghost" : "default"}
+                        onClick={() => handleConnect(provider.id)}
+                        className="h-7 px-3 text-xs"
+                      >
+                        <Link2 className="w-3 h-3 mr-1.5" />
+                        {isConnected ? "Connect another" : "Connect"}
+                      </Button>
+                    )}
                   </div>
                 </div>
+              </div>
               </div>
             );
           })}
