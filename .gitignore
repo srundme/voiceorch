@@ -48,6 +48,9 @@ Thumbs.db
 .cache/
 .local/
 
+# Runtime logs / diagnostic dumps (may contain PII)
+attached_assets/logs.*
+
 # Database backups
 *.sql
 backup.sql
