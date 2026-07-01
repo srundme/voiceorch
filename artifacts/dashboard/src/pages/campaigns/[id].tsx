@@ -143,7 +143,7 @@ function CopyButton({ text }: { text: string }) {
 
 // ── CRM Integration Card ──────────────────────────────────────────────────────
 
-function CrmIntegrationCard({ campaignId }: { campaignId: number }) {
+function CrmIntegrationCard({ campaignId, triggerMode }: { campaignId: number; triggerMode?: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: crmConns = [] } = useListCrmConnections();
@@ -210,8 +210,8 @@ function CrmIntegrationCard({ campaignId }: { campaignId: number }) {
         <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">CRM Integration</p>
       </div>
 
-      {/* Instant Trigger */}
-      <div className="space-y-2">
+      {/* Instant Trigger — only shown for instant-trigger CRM campaigns */}
+      {triggerMode !== "batch" && <div className="space-y-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Activity className="w-3 h-3 text-blue-400 shrink-0" />
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Instant Trigger</p>
@@ -328,24 +328,26 @@ function CrmIntegrationCard({ campaignId }: { campaignId: number }) {
             </Button>
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* Import & Batch */}
-      <div className="border-t border-border/60 pt-3 space-y-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Users className="w-3 h-3 text-emerald-400 shrink-0" />
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import & Batch</p>
-          <span className="text-[10px] text-muted-foreground/60">— pull contacts from your CRM into a new batch</span>
+      {/* Import & Batch — only shown for batch-mode CRM campaigns */}
+      {triggerMode !== "instant" && (
+        <div className="border-t border-border/60 pt-3 space-y-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Users className="w-3 h-3 text-emerald-400 shrink-0" />
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import & Batch</p>
+            <span className="text-[10px] text-muted-foreground/60">— pull contacts from your CRM into a new batch</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {crmConns.map(conn => (
+              <Button key={conn.id} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                onClick={() => setImportConn(conn)}>
+                Import from {conn.accountName ?? conn.provider}
+              </Button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {crmConns.map(conn => (
-            <Button key={conn.id} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-              onClick={() => setImportConn(conn)}>
-              Import from {conn.accountName ?? conn.provider}
-            </Button>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
 
     {importConn && (
@@ -1619,7 +1621,7 @@ export default function CampaignDetailPage() {
 
           {/* CRM Integration — only shown for CRM-sourced campaigns */}
           {(campaign as any).leadSource === "crm" && (
-            <CrmIntegrationCard campaignId={campaignId} />
+            <CrmIntegrationCard campaignId={campaignId} triggerMode={(campaign as any).triggerMode} />
           )}
 
           {/* Calling Hours — instant trigger campaigns only */}

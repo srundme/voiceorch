@@ -306,11 +306,11 @@ function CampaignRow({
 
 // ── Campaign Creation Wizard ──────────────────────────────────────────────
 
-const WIZARD_STEPS = ["info", "source", "agent", "phone", "settings", "review"] as const;
+const WIZARD_STEPS = ["info", "source", "crm_mode", "agent", "phone", "settings", "review"] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  info: "Details", source: "Source", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
+  info: "Details", source: "Source", crm_mode: "CRM Mode", agent: "Agent", phone: "Phone", settings: "Settings", review: "Review",
 };
 
 type CampaignLeadSource = "csv" | "webhook" | "meta_ads" | "crm";
@@ -347,9 +347,9 @@ const SOURCE_OPTIONS: {
   {
     value: "crm",
     label: "CRM",
-    description: "Import leads from your CRM. Calls are organised into batches you manage manually.",
+    description: "Import leads from your CRM. Choose instant trigger or scheduled batch import.",
     icon: <Layers className="h-5 w-5" />,
-    defaultTrigger: "batch",
+    defaultTrigger: "instant",
   },
 ];
 
@@ -384,6 +384,11 @@ function CampaignWizard({
   const [desc, setDesc] = useState("");
   const [leadSource, setLeadSource] = useState<CampaignLeadSource>("webhook");
   const [triggerMode, setTriggerMode] = useState<CampaignTriggerMode>("instant");
+
+  // CRM campaigns get an extra "CRM Mode" step; all others skip it
+  const activeSteps = (leadSource === "crm"
+    ? WIZARD_STEPS
+    : WIZARD_STEPS.filter(s => s !== "crm_mode")) as readonly WizardStep[];
   const [agentId, setAgentId] = useState<number | null>(null);
   const [fromNumber, setFromNumber] = useState<string | null>(null);
   const [concurrentCallLimit, setConcurrentCallLimit] = useState<number | null>(null);
@@ -410,7 +415,7 @@ function CampaignWizard({
   }
   function close() { reset(); onClose(); }
 
-  const stepIdx = WIZARD_STEPS.indexOf(step);
+  const stepIdx = activeSteps.indexOf(step);
   const isLast = step === "review";
   const selectedAgent = agents?.find(a => a.id === agentId);
   const agentDpdpEnabled = !!(
@@ -430,18 +435,19 @@ function CampaignWizard({
   function canNext(): boolean {
     if (step === "info") return name.trim().length > 0;
     if (step === "source") return !!leadSource;
+    if (step === "crm_mode") return true;
     if (step === "agent") return agentId !== null;
     if (step === "phone") return fromNumber !== null;
     return true;
   }
 
   function next() {
-    const i = WIZARD_STEPS.indexOf(step);
-    if (i < WIZARD_STEPS.length - 1) setStep(WIZARD_STEPS[i + 1]!);
+    const i = activeSteps.indexOf(step);
+    if (i < activeSteps.length - 1) setStep(activeSteps[i + 1]!);
   }
   function back() {
-    const i = WIZARD_STEPS.indexOf(step);
-    if (i > 0) setStep(WIZARD_STEPS[i - 1]!);
+    const i = activeSteps.indexOf(step);
+    if (i > 0) setStep(activeSteps[i - 1]!);
   }
 
   async function handleCreate() {
@@ -478,7 +484,7 @@ function CampaignWizard({
           <p className="text-xs text-muted-foreground/60 mt-0.5">Set up an AI voice calling campaign in a few steps</p>
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mt-4">
-            {WIZARD_STEPS.map((s, i) => (
+            {activeSteps.map((s, i) => (
               <div key={s} className="flex items-center gap-1.5 flex-1">
                 <div className={cn(
                   "flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap transition-all",
@@ -489,7 +495,7 @@ function CampaignWizard({
                   <span className="tabular-nums">{i + 1}</span>
                   <span className="hidden sm:inline">{STEP_LABELS[s]}</span>
                 </div>
-                {i < WIZARD_STEPS.length - 1 && <div className="flex-1 h-px bg-border" />}
+                {i < activeSteps.length - 1 && <div className="flex-1 h-px bg-border" />}
               </div>
             ))}
           </div>
@@ -525,7 +531,7 @@ function CampaignWizard({
                   const isSelected = leadSource === opt.value;
                   return (
                     <button key={opt.value} type="button"
-                      onClick={() => { setLeadSource(opt.value); setTriggerMode(opt.defaultTrigger); }}
+                      onClick={() => { setLeadSource(opt.value); if (opt.value !== "crm") setTriggerMode(opt.defaultTrigger); }}
                       className={cn(
                         "text-left p-4 rounded-xl border transition-all",
                         isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground" :
@@ -544,7 +550,11 @@ function CampaignWizard({
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 mt-2">
-                        {opt.defaultTrigger === "instant" ? (
+                        {opt.value === "crm" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                            <Zap className="h-2.5 w-2.5" /> Instant or Batch
+                          </span>
+                        ) : opt.defaultTrigger === "instant" ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
                             <Zap className="h-2.5 w-2.5" /> Instant dial
                           </span>
@@ -553,6 +563,67 @@ function CampaignWizard({
                             <Layers className="h-2.5 w-2.5" /> Batch-wise
                           </span>
                         )}
+                      </div>
+                      {isSelected && (
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600">
+                          <CheckCircle2 className="h-3 w-3" /> Selected
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === "crm_mode" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-0.5">Dialing Mode</h3>
+                <p className="text-xs text-muted-foreground/60">How should this campaign handle incoming CRM leads?</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {([
+                  {
+                    mode: "instant" as CampaignTriggerMode,
+                    label: "Instant Trigger",
+                    description: "Auto-dial new CRM leads the moment they arrive via webhook.",
+                    icon: <Zap className="h-5 w-5" />,
+                    badge: { text: "Instant dial", className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+                  },
+                  {
+                    mode: "batch" as CampaignTriggerMode,
+                    label: "Import & Batch",
+                    description: "Pull contacts from your CRM into a new batch and manage calls manually.",
+                    icon: <Layers className="h-5 w-5" />,
+                    badge: { text: "Batch-wise", className: "bg-muted text-muted-foreground border-border" },
+                  },
+                ] as const).map(opt => {
+                  const isSelected = triggerMode === opt.mode;
+                  return (
+                    <button key={opt.mode} type="button" onClick={() => setTriggerMode(opt.mode)}
+                      className={cn(
+                        "text-left p-4 rounded-xl border transition-all",
+                        isSelected ? "border-foreground bg-foreground/5 ring-1 ring-foreground"
+                          : "border-border bg-card hover:bg-muted/30 hover:border-foreground/20"
+                      )}
+                    >
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
+                          isSelected ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
+                        )}>
+                          {opt.icon}
+                        </div>
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                          <p className="text-xs text-muted-foreground/60 mt-0.5 leading-relaxed">{opt.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border", opt.badge.className)}>
+                          {opt.mode === "instant" ? <Zap className="h-2.5 w-2.5" /> : <Layers className="h-2.5 w-2.5" />}
+                          {opt.badge.text}
+                        </span>
                       </div>
                       {isSelected && (
                         <div className="mt-2 flex items-center gap-1 text-[10px] text-emerald-600">
@@ -802,7 +873,7 @@ function CampaignWizard({
             {stepIdx === 0 ? "Cancel" : "← Back"}
           </Button>
           <div className="flex items-center gap-1">
-            {WIZARD_STEPS.map((_, i) => (
+            {activeSteps.map((_, i) => (
               <div key={i} className={cn("h-1.5 rounded-full transition-all",
                 i === stepIdx ? "w-4 bg-foreground" : i < stepIdx ? "w-1.5 bg-foreground/40" : "w-1.5 bg-border"
               )} />
