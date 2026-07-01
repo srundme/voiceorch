@@ -621,12 +621,18 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   let routingRules: RoutingRule[] | null = null;
 
   if (!agentId) {
-    const toNumber: string = String(req.body?.To ?? req.body?.to ?? "").trim();
-    if (toNumber) {
+    const toRaw: string = String(req.body?.To ?? req.body?.to ?? "").trim();
+    if (toRaw) {
+      // VoBiz may send the number with or without the '+' prefix; try both forms
+      // so the DB lookup succeeds regardless of carrier normalisation.
+      const toWithPlus    = toRaw.startsWith("+") ? toRaw : `+${toRaw}`;
+      const toWithoutPlus = toRaw.startsWith("+") ? toRaw.slice(1) : toRaw;
       const [pn] = await db
         .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
         .from(phoneNumbersTable)
-        .where(eq(phoneNumbersTable.number, toNumber));
+        .where(
+          sql`${phoneNumbersTable.number} IN (${toWithPlus}, ${toWithoutPlus})`
+        );
       if (pn?.agentId) {
         agentId = pn.agentId;
         platformTelephony = true;
