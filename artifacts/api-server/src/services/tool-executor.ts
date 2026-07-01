@@ -108,6 +108,21 @@ export function matchToolByName<T extends { name: string }>(
 
 // ── Tool definitions builder ──────────────────────────────────────────────────
 
+/** Canonical function name the LLM must use to hang up. */
+export const END_CALL_TOOL_NAME = "end_call";
+
+/** Shared description for the hangup tool, used by both the built-in injection
+ *  and the canonicalized explicit end_call definition. */
+const END_CALL_TOOL_DESCRIPTION =
+  "End the phone call. ONLY call this when the caller EXPLICITLY says goodbye, bye, wants to hang up, or clearly states their needs are fully addressed AND they are done. Do NOT call this if the caller says 'hello', 'hi', or any greeting — that means they are still in the conversation. Do NOT end the call just because the topic seems concluded — always ask 'Is there anything else I can help you with?' first and wait for a clear goodbye or dismissal before ending.";
+
+/** The canonical hangup ToolDefinition offered to the LLM. */
+const END_CALL_TOOL_DEF: ToolDefinition = {
+  name: END_CALL_TOOL_NAME,
+  description: END_CALL_TOOL_DESCRIPTION,
+  parameters: { type: "object", properties: {}, required: [] },
+};
+
 /**
  * Build the ToolDefinition array from an agent's tools array.
  * Always injects a built-in `end_call` tool unless the agent already defines one.
@@ -117,14 +132,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
   const hasExplicitEndCall = tools.some((t) => t.type === "end_call");
   const builtInEndCall: ToolDefinition[] = hasExplicitEndCall
     ? []
-    : [
-        {
-          name: "end_call",
-          description:
-            "End the phone call. ONLY call this when the caller EXPLICITLY says goodbye, bye, wants to hang up, or clearly states their needs are fully addressed AND they are done. Do NOT call this if the caller says 'hello', 'hi', or any greeting — that means they are still in the conversation. Do NOT end the call just because the topic seems concluded — always ask 'Is there anything else I can help you with?' first and wait for a clear goodbye or dismissal before ending.",
-          parameters: { type: "object", properties: {}, required: [] },
-        },
-      ];
+    : [{ ...END_CALL_TOOL_DEF }];
 
   const defs: ToolDefinition[] = [
     ...builtInEndCall,
@@ -290,6 +298,14 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           },
         };
       }
+      // End Call: always emit under the canonical `end_call` function name with
+      // the built-in description, regardless of what (possibly blank) name was
+      // persisted on the tool. This repairs existing agents whose stored end_call
+      // name is empty — otherwise it sanitizes to the fallback sentinel and gets
+      // dropped, leaving the LLM with no way to hang up.
+      if (t.type === "end_call") {
+        return { ...END_CALL_TOOL_DEF };
+      }
       // Webhook: use caller-defined parameters if provided
       if (t.type === "webhook" && t.parameters) {
         return {
@@ -298,7 +314,7 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           parameters: t.parameters,
         };
       }
-      // Generic fallback for call_transfer, webhook (no params), send_sms, end_call, cal_com
+      // Generic fallback for call_transfer, webhook (no params), send_sms, cal_com
       return {
         name: t.name,
         description: t.description,
@@ -323,7 +339,16 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
   // happens when an agent tool has a blank or entirely non-ASCII name.  Sending a
   // tool literally named "tool" confuses every model — it looks like a type field,
   // not a function name — and can cause the LLM to stall or ignore all tools.
-  return normalized.filter((d) => d.name !== FALLBACK_TOOL_NAME);
+  const filtered = normalized.filter((d) => d.name !== FALLBACK_TOOL_NAME);
+
+  // Safety net: if the agent has an end_call-type tool but no valid `end_call`
+  // definition survived (e.g. some future path stripped it), inject the built-in
+  // so the agent is never left without a way to hang up.
+  if (hasExplicitEndCall && !filtered.some((d) => d.name === END_CALL_TOOL_NAME)) {
+    filtered.unshift({ ...END_CALL_TOOL_DEF });
+  }
+
+  return filtered;
 }
 
 // ── Native scheduling executors ───────────────────────────────────────────────

@@ -1275,6 +1275,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     native_list_bookings: "list_bookings",
     native_reschedule: "reschedule_booking",
     native_cancel: "cancel_booking",
+    end_call: "end_call",
   };
 
   const toggleNativeTool = (type: string) => {
