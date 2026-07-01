@@ -6554,6 +6554,16 @@ export const ImportCrmContactsParams = zod.object({
   "id": zod.coerce.number()
 })
 
+
+
+export const importCrmContactsBodyBusinessHoursStartMin = 0;
+export const importCrmContactsBodyBusinessHoursStartMax = 23;
+
+export const importCrmContactsBodyBusinessHoursEndMin = 0;
+export const importCrmContactsBodyBusinessHoursEndMax = 23;
+
+
+
 export const ImportCrmContactsBody = zod.object({
   "campaignId": zod.number(),
   "batchName": zod.string().optional(),
@@ -6566,7 +6576,13 @@ export const ImportCrmContactsBody = zod.object({
   "rawFields": zod.record(zod.string(), zod.string()).optional()
 })),
   "fieldMapping": zod.record(zod.string(), zod.string()),
-  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).optional()
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).optional(),
+  "maxAttempts": zod.number().min(1).optional(),
+  "retryDelayMinutes": zod.number().min(1).optional(),
+  "timezone": zod.string().optional(),
+  "businessHoursStart": zod.number().min(importCrmContactsBodyBusinessHoursStartMin).max(importCrmContactsBodyBusinessHoursStartMax).optional(),
+  "businessHoursEnd": zod.number().min(importCrmContactsBodyBusinessHoursEndMin).max(importCrmContactsBodyBusinessHoursEndMax).optional(),
+  "scheduledStartAt": zod.coerce.date().optional()
 })
 
 export const ImportCrmContactsResponse = zod.object({

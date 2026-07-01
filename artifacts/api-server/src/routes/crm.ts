@@ -534,14 +534,20 @@ router.post("/crm/connections/:id/import", requireAuth, async (req, res): Promis
   if (!conn) { res.status(404).json({ error: "CRM connection not found" }); return; }
 
   const body = req.body as {
-    campaignId:      number;
-    batchName?:      string;
-    contacts:        Array<{
+    campaignId:          number;
+    batchName?:          string;
+    contacts:            Array<{
       id: string; phone: string; name: string | null; email: string | null;
       company: string | null; rawFields?: Record<string, string>;
     }>;
-    fieldMapping:    Record<string, string>;
-    duplicatePolicy?: DuplicatePolicy;
+    fieldMapping:        Record<string, string>;
+    duplicatePolicy?:    DuplicatePolicy;
+    maxAttempts?:        number;
+    retryDelayMinutes?:  number;
+    timezone?:           string;
+    businessHoursStart?: number;
+    businessHoursEnd?:   number;
+    scheduledStartAt?:   string;
   };
 
   if (!body.campaignId || !Array.isArray(body.contacts) || body.contacts.length === 0) {
@@ -569,12 +575,19 @@ router.post("/crm/connections/:id/import", requireAuth, async (req, res): Promis
   // Resolve which raw field holds the phone number
   const phoneField = fieldMapping["phone"] ?? "phone";
 
-  // Create batch
+  // Create batch — execution params from the wizard are persisted here so the
+  // batch runner honours retry/hours/schedule without any post-import update step.
   const [batch] = await db.insert(campaignBatchesTable).values({
-    campaignId:     body.campaignId,
-    name:           batchName,
-    leadSource:     conn.provider === "hubspot" ? "hubspot" : "zoho",
+    campaignId:         body.campaignId,
+    name:               batchName,
+    leadSource:         conn.provider === "hubspot" ? "hubspot" : "zoho",
     duplicatePolicy,
+    maxAttempts:        body.maxAttempts        ?? 1,
+    retryDelayMinutes:  body.retryDelayMinutes  ?? 60,
+    timezone:           body.timezone           || undefined,
+    businessHoursStart: body.businessHoursStart ?? undefined,
+    businessHoursEnd:   body.businessHoursEnd   ?? undefined,
+    scheduledStartAt:   body.scheduledStartAt   ? new Date(body.scheduledStartAt) : undefined,
   } as typeof campaignBatchesTable.$inferInsert).returning();
 
   let leadsCreated    = 0;

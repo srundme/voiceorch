@@ -11570,8 +11570,8 @@ components:
       type: object
       required: [campaignId, contacts, fieldMapping]
       properties:
-        campaignId:    { type: integer }
-        batchName:     { type: string }
+        campaignId:          { type: integer }
+        batchName:           { type: string }
         contacts:
           type: array
           items:
@@ -11582,6 +11582,12 @@ components:
         duplicatePolicy:
           type: string
           enum: [ignore, skip, reject_with_report]
+        maxAttempts:         { type: integer, minimum: 1 }
+        retryDelayMinutes:   { type: integer, minimum: 1 }
+        timezone:            { type: string }
+        businessHoursStart:  { type: integer, minimum: 0, maximum: 23 }
+        businessHoursEnd:    { type: integer, minimum: 0, maximum: 23 }
+        scheduledStartAt:    { type: string, format: date-time }
 
     CrmImportResult:
       type: object

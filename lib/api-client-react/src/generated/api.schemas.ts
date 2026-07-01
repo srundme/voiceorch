@@ -4769,6 +4769,22 @@ export interface CrmImportBody {
   contacts: CrmContact[];
   fieldMapping: CrmImportBodyFieldMapping;
   duplicatePolicy?: CrmImportBodyDuplicatePolicy;
+  /** @minimum 1 */
+  maxAttempts?: number;
+  /** @minimum 1 */
+  retryDelayMinutes?: number;
+  timezone?: string;
+  /**
+     * @minimum 0
+     * @maximum 23
+     */
+  businessHoursStart?: number;
+  /**
+     * @minimum 0
+     * @maximum 23
+     */
+  businessHoursEnd?: number;
+  scheduledStartAt?: string;
 }
 
 export interface CrmImportResult {

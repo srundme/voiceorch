@@ -15,6 +15,7 @@ import {
   useUpdateCrmConnection,
   getListCrmConnectionsQueryKey,
   useListCampaignLeads,
+  useStartCampaignBatch,
   customFetch,
 } from "@workspace/api-client-react";
 import type { Connection, CrmConnection, CrmContact } from "@workspace/api-client-react";
@@ -26,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Copy, CheckCircle2, Globe, Webhook, AlertCircle, Clock,
@@ -1089,8 +1091,10 @@ export function CrmImportDialog({
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  // Step state (1–6)
+  const [step, setStep]             = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+
   // Step 1 state
-  const [step, setStep]             = useState<1 | 2>(1);
   const [campaignId, setCampaignId] = useState<number | null>(defaultCampaignId ?? null);
   const [query, setQuery]           = useState("");
   const [listId, setListId]         = useState<string>("");
@@ -1103,6 +1107,19 @@ export function CrmImportDialog({
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>(
     (connection.fieldMapping as Record<string, string> | null) ?? { phone: "phone" }
   );
+
+  // Step 4 state — duplicate policy
+  const [duplicatePolicy, setDuplicatePolicy] = useState<"ignore" | "skip" | "reject_with_report">("skip");
+
+  // Step 5 state — execution rules
+  const [maxAttempts, setMaxAttempts]               = useState(2);
+  const [retryDelayMinutes, setRetryDelayMinutes]   = useState(60);
+  const [timezone, setTimezone]                     = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [businessHoursStart, setBusinessHoursStart] = useState<number | null>(null);
+  const [businessHoursEnd, setBusinessHoursEnd]     = useState<number | null>(null);
+  const [scheduledStartAt, setScheduledStartAt]     = useState<string | null>(null);
+  const [autoStart, setAutoStart]                   = useState(false);
+
   const [importing, setImporting] = useState(false);
 
   const { data: campaigns = [] } = useListCampaigns();
@@ -1124,6 +1141,7 @@ export function CrmImportDialog({
 
   const importMut     = useImportCrmContacts();
   const updateConnMut = useUpdateCrmConnection();
+  const startBatchMut = useStartCampaignBatch();
 
   // Fetch existing leads for the selected campaign to detect previously imported contacts
   const { data: existingLeadsPage } = useListCampaignLeads(
@@ -1140,6 +1158,21 @@ export function CrmImportDialog({
     const normalized = contactPhone.replace(/\D/g, "").slice(-10);
     return existingPhones.has(normalized);
   }
+
+  // Validation summary — computed from selected contacts + field mapping (used in steps 3 & 6)
+  const selectedContacts = contacts.filter(c => selected.has(c.id));
+  const phoneField       = fieldMapping["phone"] ?? "phone";
+  const withPhone        = selectedContacts.filter(c => {
+    const ph = ((c.rawFields as Record<string, string> | undefined)?.[phoneField] ?? c.phone ?? "").trim();
+    return ph.length > 0;
+  });
+  const withoutPhone          = selectedContacts.length - withPhone.length;
+  const alreadyImportedCount  = withPhone.filter(c => isAlreadyImported(c.phone)).length;
+
+  const allTimezones: string[] = (() => {
+    try { return Intl.supportedValuesOf("timeZone") as string[]; }
+    catch { return [timezone]; }
+  })();
 
   const toggleAll = () => {
     if (selected.size === contacts.length) setSelected(new Set());
@@ -1186,8 +1219,18 @@ export function CrmImportDialog({
             rawFields: (c.rawFields ?? {}) as Record<string, string>,
           })),
           fieldMapping,
+          duplicatePolicy,
+          maxAttempts,
+          retryDelayMinutes,
+          timezone,
+          businessHoursStart: businessHoursStart ?? undefined,
+          businessHoursEnd:   businessHoursEnd   ?? undefined,
+          scheduledStartAt:   scheduledStartAt   ?? undefined,
         },
       });
+      if (autoStart) {
+        await startBatchMut.mutateAsync({ id: campaignId, batchId: result.batchId });
+      }
       await qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() });
       toast({
         title: `Import complete — ${result.leadsCreated} leads added`,
@@ -1211,31 +1254,58 @@ export function CrmImportDialog({
       setStep(1); setSelected(new Set()); setQuery(""); setCampaignId(null); setListId("");
       setModule("contacts");
       setFieldMapping((connection.fieldMapping as Record<string, string> | null) ?? { phone: "phone" });
+      setDuplicatePolicy("skip");
+      setMaxAttempts(2);
+      setRetryDelayMinutes(60);
+      setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      setBusinessHoursStart(null);
+      setBusinessHoursEnd(null);
+      setScheduledStartAt(null);
+      setAutoStart(false);
     }
   }, [open, connection.fieldMapping]);
 
   const providerName = connection.provider === "hubspot" ? "HubSpot" : "Zoho CRM";
   const listLabel    = connection.provider === "hubspot" ? "list" : "view";
   const recordLabel  = isZoho ? (module === "leads" ? "lead" : "contact") : "contact";
+  const STEP_LABELS  = ["Select Contacts", "Field Mapping", "Validation", "Duplicates", "Execution Rules", "Review"];
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="bg-card border-border max-w-lg">
+      <DialogContent className="bg-card border-border max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
             Import from {providerName}
-            <span className="ml-auto text-[10px] font-normal text-muted-foreground">Step {step} of 2</span>
+            <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+              Step {step} of 6 — {STEP_LABELS[step - 1]}
+            </span>
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            {step === 1
-              ? `${connection.accountName ?? connection.accountId} — filter by ${listLabel}, then select ${recordLabel}s.`
-              : "Map CRM fields to agent variables. Phone is required."}
+            {step === 1 ? `${connection.accountName ?? connection.accountId} — filter by ${listLabel}, then select ${recordLabel}s.`
+              : step === 2 ? "Map CRM fields to agent variables. Phone is required."
+              : step === 3 ? "Review which contacts will be imported and which will be skipped."
+              : step === 4 ? "Choose how to handle contacts already in this campaign."
+              : step === 5 ? "Set retry rules, calling hours, and when to run the batch."
+              : "Review all settings then click Import to create the batch."}
           </DialogDescription>
         </DialogHeader>
 
-        {step === 1 ? (
+        {/* Step progress dots */}
+        <div className="flex items-center justify-center gap-1.5">
+          {([1, 2, 3, 4, 5, 6] as const).map(s => (
+            <div
+              key={s}
+              className={cn(
+                "h-1.5 rounded-full transition-all",
+                s === step ? "w-5 bg-primary" : s < step ? "w-1.5 bg-primary/50" : "w-1.5 bg-muted-foreground/25",
+              )}
+            />
+          ))}
+        </div>
+
+        {/* ── Step 1: Select Contacts ──────────────────────────────────────── */}
+        {step === 1 && (
           <div className="space-y-4">
-            {/* Zoho module toggle — Contacts vs Leads */}
             {isZoho && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Import from</Label>
@@ -1247,9 +1317,7 @@ export function CrmImportDialog({
                       onClick={() => { if (module !== m) { setModule(m); setListId(""); setSelected(new Set()); } }}
                       className={cn(
                         "flex-1 text-xs font-medium transition-colors",
-                        module === m
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-muted/70",
+                        module === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
                       )}
                     >
                       {m === "contacts" ? "Contacts" : "Leads"}
@@ -1259,7 +1327,6 @@ export function CrmImportDialog({
               </div>
             )}
 
-            {/* Campaign picker */}
             <div className="space-y-1.5">
               <Label className="text-xs">Destination Campaign</Label>
               <select
@@ -1274,7 +1341,6 @@ export function CrmImportDialog({
               </select>
             </div>
 
-            {/* List / View filter */}
             {availableLists.length > 0 && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Filter by {listLabel} <span className="text-muted-foreground">(optional)</span></Label>
@@ -1285,15 +1351,12 @@ export function CrmImportDialog({
                 >
                   <option value="">— All contacts —</option>
                   {availableLists.map((l: { id: string; name: string; count?: number }) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}{l.count != null ? ` (${l.count})` : ""}
-                    </option>
+                    <option key={l.id} value={l.id}>{l.name}{l.count != null ? ` (${l.count})` : ""}</option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Contact browser */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Input
@@ -1308,7 +1371,6 @@ export function CrmImportDialog({
                   </Button>
                 )}
               </div>
-
               <div className="border border-border rounded-lg overflow-hidden max-h-52 overflow-y-auto">
                 {contactsLoading || isFetching ? (
                   <div className="flex items-center justify-center py-8">
@@ -1362,20 +1424,20 @@ export function CrmImportDialog({
                   </div>
                 )}
               </div>
-
               {contacts.length > 0 && (
                 <p className="text-[10px] text-muted-foreground">
                   {selected.size} of {contacts.length} {recordLabel}s selected
                   {contactsPage?.total != null && contacts.length < contactsPage.total
-                    ? ` (${contactsPage.total} total — search to filter)`
-                    : ""}
+                    ? ` (${contactsPage.total} total — search to filter)` : ""}
                 </p>
               )}
             </div>
           </div>
-        ) : (
-          /* Step 2: Field mapping + writeback config */
-          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+        )}
+
+        {/* ── Step 2: Field Mapping ─────────────────────────────────────────── */}
+        {step === 2 && (
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {Object.keys(rawFields).length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 No raw fields available. The import will use phone/name/email/company directly.
@@ -1388,7 +1450,6 @@ export function CrmImportDialog({
                 onChange={setFieldMapping}
               />
             )}
-            {/* Writeback status-field config */}
             <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
                 Post-call status update (optional)
@@ -1426,6 +1487,273 @@ export function CrmImportDialog({
           </div>
         )}
 
+        {/* ── Step 3: Validation Preview ────────────────────────────────────── */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="bg-muted/30 border border-border rounded-xl p-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-2xl font-bold">{selectedContacts.length}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Selected</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-emerald-400">{withPhone.length}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Ready to import</p>
+                </div>
+                <div>
+                  <p className={cn("text-2xl font-bold", withoutPhone > 0 ? "text-amber-400" : "text-muted-foreground")}>
+                    {withoutPhone}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Missing phone</p>
+                </div>
+              </div>
+            </div>
+
+            {withPhone.length === 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-400">
+                  No contacts have a phone number under the mapped "{phoneField}" field. Go back and adjust the field mapping.
+                </p>
+              </div>
+            )}
+
+            {alreadyImportedCount > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-amber-400 font-medium">{alreadyImportedCount} contacts</span> appear to already be in this campaign. You'll set the duplicate policy in the next step.
+                </p>
+              </div>
+            )}
+
+            <div className="border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Name</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Phone</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedContacts.slice(0, 6).map(c => {
+                    const ph = ((c.rawFields as Record<string, string> | undefined)?.[phoneField] ?? c.phone ?? "").trim();
+                    const hasPhone = ph.length > 0;
+                    const already = isAlreadyImported(c.phone);
+                    return (
+                      <tr key={c.id} className="border-b border-border/50 last:border-0">
+                        <td className="px-3 py-2 truncate max-w-[120px]">{c.name ?? "—"}</td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground text-[10px]">{ph || "—"}</td>
+                        <td className="px-3 py-2">
+                          {!hasPhone
+                            ? <span className="text-amber-400">No phone</span>
+                            : already
+                              ? <span className="text-amber-400">Already imported</span>
+                              : <span className="text-emerald-400">Ready</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {selectedContacts.length > 6 && (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-2 text-center text-muted-foreground">
+                        +{selectedContacts.length - 6} more
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 4: Duplicate Handling ────────────────────────────────────── */}
+        {step === 4 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Choose what happens when a contact's phone already exists in this campaign.
+            </p>
+            {([
+              { value: "skip",               label: "Skip duplicates",    desc: "Duplicate contacts are silently skipped. Recommended for re-imports." },
+              { value: "ignore",             label: "Allow duplicates",   desc: "All contacts are imported even if their phone exists. May cause repeat calls." },
+              { value: "reject_with_report", label: "Reject with report", desc: "Duplicates are rejected and counted in the import result." },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDuplicatePolicy(opt.value)}
+                className={cn(
+                  "w-full text-left rounded-xl border p-3.5 transition-colors",
+                  duplicatePolicy === opt.value ? "border-primary bg-primary/5" : "border-border bg-muted/30 hover:bg-muted/50",
+                )}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className={cn(
+                    "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
+                    duplicatePolicy === opt.value ? "border-primary" : "border-muted-foreground/40",
+                  )}>
+                    {duplicatePolicy === opt.value && <div className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium">{opt.label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{opt.desc}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Step 5: Execution Rules ───────────────────────────────────────── */}
+        {step === 5 && (
+          <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Retry Settings</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Max Attempts</Label>
+                  <Input
+                    type="number" min={1} max={10}
+                    value={maxAttempts}
+                    onChange={e => setMaxAttempts(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Retry Delay (min)</Label>
+                  <Input
+                    type="number" min={1}
+                    value={retryDelayMinutes}
+                    onChange={e => setRetryDelayMinutes(Math.max(1, parseInt(e.target.value, 10) || 60))}
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                Business Hours <span className="normal-case font-normal text-muted-foreground">(optional)</span>
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Timezone</Label>
+                <select
+                  value={timezone}
+                  onChange={e => setTimezone(e.target.value)}
+                  className="w-full h-9 text-sm rounded-md border border-border bg-muted px-2 text-foreground focus:outline-none focus:border-primary"
+                >
+                  {allTimezones.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Start Hour (24h)</Label>
+                  <Input
+                    type="number" min={0} max={23}
+                    value={businessHoursStart ?? ""}
+                    onChange={e => setBusinessHoursStart(e.target.value ? parseInt(e.target.value, 10) : null)}
+                    placeholder="e.g. 9"
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">End Hour (24h)</Label>
+                  <Input
+                    type="number" min={0} max={23}
+                    value={businessHoursEnd ?? ""}
+                    onChange={e => setBusinessHoursEnd(e.target.value ? parseInt(e.target.value, 10) : null)}
+                    placeholder="e.g. 18"
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Schedule Batch</p>
+              <p className="text-xs text-muted-foreground -mt-2">When do you want to run this batch?</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Run At</Label>
+                <Input
+                  type="datetime-local"
+                  value={scheduledStartAt ?? ""}
+                  onChange={e => setScheduledStartAt(e.target.value || null)}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[{ label: "In 10 Minutes", minutes: 10 }, { label: "In 30 Minutes", minutes: 30 }, { label: "In 1 Hour", minutes: 60 }].map(({ label, minutes }) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    onClick={() => {
+                      const d = new Date(Date.now() + minutes * 60 * 1000);
+                      setScheduledStartAt(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-3 pt-1 border-t border-border">
+                <Switch id="crm-autostart" checked={autoStart} onCheckedChange={setAutoStart} />
+                <Label htmlFor="crm-autostart" className="text-xs cursor-pointer">
+                  Auto-start immediately after import
+                </Label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 6: Review & Launch ───────────────────────────────────────── */}
+        {step === 6 && (
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+            <div className="bg-muted/30 border border-border rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Contacts</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-bold">{selectedContacts.length}</p>
+                  <p className="text-[10px] text-muted-foreground">Selected</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-emerald-400">{withPhone.length}</p>
+                  <p className="text-[10px] text-muted-foreground">Will import</p>
+                </div>
+                <div>
+                  <p className={cn("text-lg font-bold", withoutPhone > 0 ? "text-amber-400" : "text-muted-foreground")}>
+                    {withoutPhone}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Skipped</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-muted/30 border border-border rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Execution</p>
+              <div className="space-y-1.5">
+                {([
+                  ["Duplicate Policy", duplicatePolicy.replace(/_/g, " ")],
+                  ["Max Attempts",     String(maxAttempts)],
+                  ["Retry Delay",      `${retryDelayMinutes} min`],
+                  ["Timezone",         timezone],
+                  ...(businessHoursStart != null && businessHoursEnd != null
+                    ? [["Business Hours", `${businessHoursStart}:00 – ${businessHoursEnd}:00`]] : []),
+                  ["Run", scheduledStartAt
+                    ? new Date(scheduledStartAt).toLocaleString()
+                    : autoStart ? "Immediately after import" : "Manual — stays in Draft"],
+                ] as [string, string][]).map(([label, value]) => (
+                  <div key={label} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="truncate max-w-[200px] text-right">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           {step === 1 ? (
             <>
@@ -1434,12 +1762,25 @@ export function CrmImportDialog({
                 Next: Field Mapping →
               </Button>
             </>
+          ) : step < 6 ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setStep((step - 1) as typeof step)} className="text-muted-foreground">
+                ← Back
+              </Button>
+              <Button
+                size="sm"
+                disabled={step === 3 && withPhone.length === 0}
+                onClick={() => setStep((step + 1) as typeof step)}
+              >
+                {step === 5 ? "Review →" : "Next →"}
+              </Button>
+            </>
           ) : (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setStep(1)} className="text-muted-foreground">← Back</Button>
-              <Button size="sm" disabled={importing} onClick={handleImport}>
+              <Button variant="ghost" size="sm" onClick={() => setStep(5)} className="text-muted-foreground">← Back</Button>
+              <Button size="sm" disabled={importing || withPhone.length === 0} onClick={handleImport}>
                 {importing ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : null}
-                Import {selected.size} {recordLabel}{selected.size !== 1 ? "s" : ""}
+                Import {withPhone.length} {recordLabel}{withPhone.length !== 1 ? "s" : ""}
               </Button>
             </>
           )}
