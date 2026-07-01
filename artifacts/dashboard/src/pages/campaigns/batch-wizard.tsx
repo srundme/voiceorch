@@ -1584,25 +1584,6 @@ function Step7({
               className="h-9 text-sm"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Call Delay (sec)</Label>
-            <Input
-              type="number" min={0} max={60}
-              value={state.callDelaySeconds}
-              onChange={e => setState({ callDelaySeconds: Math.max(0, parseInt(e.target.value, 10) || 5) })}
-              className="h-9 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Max Daily Calls</Label>
-            <Input
-              type="number" min={0}
-              value={state.maxDailyCalls ?? ""}
-              onChange={e => setState({ maxDailyCalls: e.target.value ? parseInt(e.target.value, 10) : null })}
-              placeholder="Unlimited"
-              className="h-9 text-sm"
-            />
-          </div>
         </div>
       </div>
 
@@ -1830,9 +1811,6 @@ function Step8({
           {state.timezone && <DetailRow icon={<Globe className="w-3.5 h-3.5" />} label="Timezone" value={state.timezone} />}
           {state.businessHoursStart != null && state.businessHoursEnd != null && (
             <DetailRow label="Business Hours" value={`${state.businessHoursStart}:00 – ${state.businessHoursEnd}:00`} />
-          )}
-          {state.maxDailyCalls != null && (
-            <DetailRow label="Max Daily Calls" value={state.maxDailyCalls.toLocaleString()} />
           )}
           <DetailRow
             icon={<Play className="w-3.5 h-3.5 text-emerald-400" />}
