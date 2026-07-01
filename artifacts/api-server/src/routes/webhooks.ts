@@ -640,9 +640,9 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     const toRaw: string = String(req.body?.To ?? req.body?.to ?? "").trim();
     if (toRaw) {
       // VoBiz delivers the dialed number in several shapes across carriers/routes:
-      // E.164 with '+' ("+<CC><national>"), bare with country code ("<CC><national>"),
+      // E.164 with '+' ("+917971442376"), bare with country code ("917971442376"),
       // or — the one that used to silently miss — national trunk format with a
-      // leading '0' and NO country code ("0<national>"). The DB stores the E.164
+      // leading '0' and NO country code ("07971442376"). The DB stores the E.164
       // form, so we build every candidate: raw, the +/no-+ flip, and the canonical
       // form (`canonicalizeCallerKey` drops the trunk 0 and adds the default CC),
       // both with and without a leading '+'. Matching any one resolves the agent.
@@ -653,7 +653,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
       };
       addCandidate(toRaw);
       addCandidate(toRaw.startsWith("+") ? toRaw.slice(1) : `+${toRaw}`);
-      const canonTo = canonicalizeCallerKey(toRaw); // "0<national>" -> "<CC><national>"
+      const canonTo = canonicalizeCallerKey(toRaw); // "07971442376" -> "917971442376"
       addCandidate(canonTo);
       if (canonTo) addCandidate(`+${canonTo}`);
       const [pn] = await db

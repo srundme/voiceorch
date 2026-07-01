@@ -1295,8 +1295,8 @@ export default function CampaignDetailPage() {
             </>
           )}
 
-          {/* CRM Integration — instant trigger + import/batch (hidden for CSV campaigns) */}
-          {(campaign as any).leadSource !== "csv" && (
+          {/* CRM Integration — only shown for CRM-sourced campaigns */}
+          {(campaign as any).leadSource === "crm" && (
             <CrmIntegrationCard campaignId={campaignId} />
           )}
 
