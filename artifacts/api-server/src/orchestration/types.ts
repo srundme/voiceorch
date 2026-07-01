@@ -535,6 +535,12 @@ export interface SessionConfig {
    *  When set, the opening greeting is generated from the memory-injected system prompt
    *  (recognition-style) instead of speaking the static scripted greeting verbatim. */
   isReturningCaller?: boolean;
+  /** Carrier answer/bridge time (epoch ms), captured at the telephony answer
+   *  webhook. When set, the recording timeline is anchored here so the gap
+   *  between carrier answer and the first media frame is padded as leading
+   *  silence — aligning the recording clock with what the caller heard live.
+   *  Absent for webcall (no carrier answer gap). */
+  answeredAt?: number;
   /** When set, the session does NOT run the conversation pipeline. Instead it waits for
    *  the answering machine's outgoing greeting to end — detected acoustically via inbound
    *  VAD (sustained silence after speech ≈ the record beep) — then speaks `message` once

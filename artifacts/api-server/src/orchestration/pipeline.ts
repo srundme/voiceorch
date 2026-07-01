@@ -340,6 +340,10 @@ export class OrchestrationPipeline {
 
   // Metrics
   private firstAudioSentAt: number | null = null;
+  // Carrier answer/bridge time (epoch ms) from the answer webhook, when known.
+  // Used only for the once-per-call answer→first-audio gap diagnostic.
+  private answeredAtMs: number | null = null;
+  private answerGapLogged = false;
   // Count of filler phrases played due to slow LLM response (>800 ms to first token)
   private fillerPlayedCount = 0;
 
@@ -520,6 +524,13 @@ export class OrchestrationPipeline {
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
+    // Anchor the recording clock to the carrier answer time (when known) so the
+    // gap between carrier answer and the first media frame is padded as leading
+    // silence — the recording then lines up with what the caller heard live.
+    if (config.answeredAt) {
+      this.answeredAtMs = config.answeredAt;
+      this.recording.anchorStart(config.answeredAt);
+    }
     this.voicemailDelivery = config.voicemailDelivery ?? null;
     this.bargeInCallback = config.onBargeIn ?? null;
     // P1-D: Per-agent VAD / barge-in tuning
@@ -1108,6 +1119,29 @@ export class OrchestrationPipeline {
   /** Returns the recording buffer so the caller (session.ts) can finalize it at call end. */
   getRecording(): RecordingBuffer {
     return this.recording;
+  }
+
+  /**
+   * Marks the first outbound audio chunk of a turn. On the very first outbound
+   * chunk of the whole call it also logs the carrier answer → first-audio gap
+   * (the dead-air latency the caller hears before the greeting), once per call,
+   * so the answer→media-connect delay can be measured from logs.
+   */
+  private markFirstAudioSent(): void {
+    if (this.firstAudioSentAt) return;
+    this.firstAudioSentAt = Date.now();
+    if (!this.answerGapLogged && this.answeredAtMs) {
+      this.answerGapLogged = true;
+      logger.info(
+        {
+          callId: this.config.callId,
+          answeredAt: this.answeredAtMs,
+          firstAudioSentAt: this.firstAudioSentAt,
+          answerToFirstAudioMs: this.firstAudioSentAt - this.answeredAtMs,
+        },
+        "Answer→first-audio gap (carrier answer to first outbound audio)",
+      );
+    }
   }
 
   /** Handles pre-processed audio returned by the audio worker pool. */
@@ -1750,7 +1784,7 @@ export class OrchestrationPipeline {
         while (!this.closed && !this.bargeInRequested) {
           if (queue.length > 0) {
             const chunk = queue.shift()!;
-            if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+            this.markFirstAudioSent();
             if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
             // Ambient mixing only applies to mulaw output; skip when sending raw PCM
             const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
@@ -1932,7 +1966,7 @@ export class OrchestrationPipeline {
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
           if (this.closed || this.bargeInRequested) break;
-          if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+          this.markFirstAudioSent();
           this.config.onAudioOut(out8k.slice(i, i + PCM_CHUNK));
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
           // the start grace + tail grace bound the self-echo window. A per-chunk
@@ -1947,7 +1981,7 @@ export class OrchestrationPipeline {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
           if (this.closed || this.bargeInRequested) break;
-          if (!this.firstAudioSentAt) this.firstAudioSentAt = Date.now();
+          this.markFirstAudioSent();
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
           this.config.onAudioOut(outChunk);

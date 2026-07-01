@@ -610,6 +610,12 @@ async function applyAmdGate(opts: {
  * Then applies P2-F routing rules → P2-E queue → P2-D IVR → P2-C recording.
  */
 router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
+  // Carrier answer/bridge time — captured the instant VoBiz hits the answer
+  // webhook (i.e. the callee answered). Threaded into the WS URL (?ans=...) so
+  // the session anchors BOTH the call duration clock and the recording timeline
+  // to the real answer instant rather than media-stream connect, which arrives
+  // several seconds later (answer → return XML → open WS → start → createSession).
+  const answeredAtMs = Date.now();
   const wsBaseUrl = getWsBaseUrl(req);
   const httpBase  = getHttpBaseUrl(req);
 
@@ -706,6 +712,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     buildVoicemailStreamXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
       campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
+      answeredAt: answeredAtMs,
     }),
   });
   if (amdHandled) return;
@@ -758,6 +765,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
       campaignLeadId, from: inboundFrom, to: inboundTo, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
       cbId: answerCbId,
+      answeredAt: answeredAtMs,
     })
   );
 });
@@ -809,8 +817,12 @@ router.get("/webhooks/vobiz/ivr", async (req, res): Promise<void> => {
   }
 
   const wsBase = getWsBaseUrl(req);
+  // After the IVR digit the AI stream is about to open, so the greeting the
+  // caller hears starts now — anchor the recording/duration clock here (the
+  // pre-menu answer time would count the menu interaction as agent dead air).
+  const answeredAtMs = Date.now();
   res.set("Content-Type", "text/xml").send(
-    getVobizAnswerXML(wsBase, targetAgentId, platformTelephony, { campaignLeadId, callDirection, corr }),
+    getVobizAnswerXML(wsBase, targetAgentId, platformTelephony, { campaignLeadId, callDirection, corr, answeredAt: answeredAtMs }),
   );
 });
 

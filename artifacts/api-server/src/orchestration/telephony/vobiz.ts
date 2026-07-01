@@ -82,6 +82,13 @@ export async function handleVobizWebSocket(
    * resumeContext from the originating call and inject it into the session.
    */
   callbackId?: number,
+  /**
+   * Carrier answer/bridge time (epoch ms) captured at the HTTP answer webhook
+   * and threaded here via the WS URL (?ans=...). Forwarded to createSession to
+   * anchor both the call duration clock and the recording timeline, so the gap
+   * between carrier answer and this media-stream connect is counted and padded.
+   */
+  urlAnsweredAt?: number,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -206,6 +213,7 @@ export async function handleVobizWebSocket(
             resumeContext: priorResumeContext,
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
+            answeredAt: urlAnsweredAt,
             onAudioOut: (audio: Buffer) => {
               stopSilence();            // first real audio → drop silence immediately
               sendAudioToVobiz(audio);
@@ -303,7 +311,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number; answeredAt?: number } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -331,6 +339,10 @@ export function getVobizAnswerXML(
   if (opts.corr) qsParts.push(`corr=${encodeURIComponent(opts.corr)}`);
   // Embed cbId so the WS handler can load prior call's resumeContext for inject.
   if (opts.cbId) qsParts.push(`cbId=${opts.cbId}`);
+  // Carrier answer/bridge time (epoch ms) captured at the answer webhook. The WS
+  // handler forwards it to createSession so the call duration clock and recording
+  // timeline are anchored to the actual answer instant, not media-stream connect.
+  if (opts.answeredAt) qsParts.push(`ans=${opts.answeredAt}`);
   const qs = qsParts.length ? `?${qsParts.join("&")}` : "";
   const wsUrl = `${wsBaseUrl}/api/ws/vobiz/${agentId}${qs}`;
   // XML-escape the URL before embedding in the <Stream> text node.  Bare "&" in

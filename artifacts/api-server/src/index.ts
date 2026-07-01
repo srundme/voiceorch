@@ -119,6 +119,19 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   const vobizCallUuid     = qs.get("callUuid") ?? undefined;
   const vobizCorrToken    = qs.get("corr")     ?? undefined;
   const vobizCallbackId   = qs.has("cbId") ? (parseInt(qs.get("cbId")!, 10) || undefined) : undefined;
+  // Carrier answer/bridge time (epoch ms) captured at the answer webhook and
+  // threaded here via ?ans=... so the session anchors duration + recording to
+  // the actual answer instant, not media-stream connect. The value is attacker-
+  // controllable (query param), so clamp it to a sane window: a real answer→WS
+  // gap is a few seconds, never > a couple minutes, and never in the future.
+  // Anything outside the window is dropped → falls back to session-creation time.
+  const vobizAnsweredAt   = (() => {
+    if (!qs.has("ans")) return undefined;
+    const v = parseInt(qs.get("ans")!, 10);
+    const now = Date.now();
+    if (!Number.isFinite(v) || v <= 0 || v > now + 5_000 || v < now - 120_000) return undefined;
+    return v;
+  })();
   const voicemailDelivery = qs.get("vm") === "1";
   // dir=out is appended by every outbound dial site (calls/campaign/callback/meta)
   // so the WS handler keys caller memory off the dialed party, not the shared
@@ -185,7 +198,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                        break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId); break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

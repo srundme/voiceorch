@@ -74,6 +74,17 @@ const BYTES_PER_SAMPLE = 2; // LINEAR16
  */
 const DEFAULT_GAP_RESYNC_MS = 120;
 
+/**
+ * Hard cap (ms) on the silence inserted in a single append — for leading-anchor
+ * padding OR a genuine idle-gap re-sync. A real answer→first-media gap is a few
+ * seconds and a real conversational pause is at most tens of seconds; anything
+ * larger implies a bad/forged timeline anchor (`startMs`) rather than actual
+ * dead air. Capping the per-append pad prevents a malformed anchor from driving
+ * an unbounded `Buffer.alloc` (memory-exhaustion DoS) while leaving all normal
+ * padding untouched. 5 min comfortably exceeds any legitimate single gap.
+ */
+const MAX_PAD_MS = 300_000;
+
 /** Per-track capture state. */
 interface Track {
   chunks: Buffer[];
@@ -103,6 +114,22 @@ export class RecordingBuffer {
     this.gapResyncMs = gapResyncMs;
   }
 
+  /**
+   * Anchor the shared recording timeline to an explicit wall-clock instant
+   * (epoch ms) instead of the first chunk seen. Used to align the recording
+   * clock with the carrier's actual answer/bridge time so the gap between
+   * carrier answer and the first media frame is padded as leading silence — the
+   * recording then matches what the caller heard live (the greeting lands at the
+   * same offset instead of at t=0). Must be called BEFORE any chunk is appended.
+   * No-op once the timeline is already anchored (idempotent) or when the value
+   * is not finite.
+   */
+  anchorStart(epochMs: number): void {
+    if (this.startMs === null && Number.isFinite(epochMs)) {
+      this.startMs = epochMs;
+    }
+  }
+
   /** Byte offset on the shared timeline corresponding to `now`. */
   private timelineBytes(now: number): number {
     if (this.startMs === null) this.startMs = now;
@@ -124,7 +151,8 @@ export class RecordingBuffer {
     const idleMs = isFirstWrite ? Infinity : now - track.lastWriteMs!;
 
     if ((isFirstWrite || idleMs >= this.gapResyncMs) && target > track.bytes) {
-      const pad = target - track.bytes;
+      const maxPad = Math.round((MAX_PAD_MS / 1000) * this.sampleRate) * BYTES_PER_SAMPLE;
+      const pad = Math.min(target - track.bytes, maxPad);
       track.chunks.push(Buffer.alloc(pad));
       track.bytes += pad;
     }

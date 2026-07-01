@@ -22,12 +22,13 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/services/batchScheduler.ts",
-  "artifacts/api-server/src/services/retryEngine.ts",
-  "artifacts/api-server/src/routes/campaign-batches.ts",
+  "artifacts/api-server/src/orchestration/recorder.ts",
+  "artifacts/api-server/src/orchestration/types.ts",
+  "artifacts/api-server/src/orchestration/pipeline.ts",
+  "artifacts/api-server/src/orchestration/session.ts",
+  "artifacts/api-server/src/orchestration/telephony/vobiz.ts",
+  "artifacts/api-server/src/index.ts",
   "artifacts/api-server/src/routes/webhooks.ts",
-  "artifacts/dashboard/src/pages/campaigns/[id]/batches/[batchId].tsx",
-  "artifacts/dashboard/src/pages/campaigns/[id].tsx",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -64,7 +65,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: sync batch & campaign status to real execution state (auto-complete + reopen)`,
+      message: `fix: anchor call duration + recording clock to carrier answer time (VoBiz)`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

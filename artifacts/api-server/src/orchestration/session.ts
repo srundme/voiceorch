@@ -97,6 +97,13 @@ export async function createSession(params: {
   toNumber: string;
   fromNumber: string;
   externalCallId?: string;
+  /** Carrier answer/bridge time (epoch ms) captured at the telephony answer
+   *  webhook. Anchors BOTH the call duration clock (session.startedAt) and the
+   *  recording timeline so the gap between carrier answer and media-stream
+   *  connect is included in the reported duration and padded as leading silence
+   *  in the recording. Omitted for webcall (no carrier answer gap) — falls back
+   *  to session-creation time. */
+  answeredAt?: number;
   /** Opaque per-call correlation token minted at outbound dial time (calls.ts) and
    *  threaded through the answer webhook → WS handler. When set, the pre-created
    *  outbound exec_* call record is matched by `metadata.corrToken` and updated in
@@ -958,6 +965,8 @@ export async function createSession(params: {
       : undefined,
     // Returning caller (>=1 prior completed call) → memory-informed recognition opening
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
+    // Carrier answer time — anchors the recording clock (see SessionConfig).
+    answeredAt: params.answeredAt,
     onTranscript: (speaker, text) => {
       logger.debug({ callId: callRecord.id, speaker, text: text.slice(0, 80) }, "Transcript");
       // Forward to the transport (browser webcall renders a live transcript).
@@ -1188,7 +1197,10 @@ export async function createSession(params: {
     callId: callRecord.id,
     agentId: params.agentId,
     pipeline,
-    startedAt: new Date(),
+    // Anchor the duration clock to the carrier answer time when known, so the
+    // gap between carrier answer and media-stream connect/session creation is
+    // counted. Falls back to now for webcall (no carrier answer gap).
+    startedAt: params.answeredAt ? new Date(params.answeredAt) : new Date(),
     metricsAcc,
     get wasTransferred() { return wasTransferred; },
     get transferredTo() { return transferredTo; },
@@ -1360,7 +1372,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   void removeSession(sessionId, session.callId);
 
   const endedAt = new Date();
-  const durationSeconds = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
+  // Clamp to non-negative: startedAt is anchored to the carrier answer time,
+  // which (after ingress validation) can be up to a few seconds in the future
+  // for a very short call, so guard the subtraction against a negative result.
+  const durationSeconds = Math.max(0, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000));
   const transcript = session.pipeline.getTranscript();
 
   const { metricsAcc } = session;
