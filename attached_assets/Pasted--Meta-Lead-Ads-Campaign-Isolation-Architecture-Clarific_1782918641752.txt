@@ -1,0 +1,101 @@
+# Meta Lead Ads – Campaign Isolation Architecture (Clarification)
+
+Before we proceed further with the Meta Lead Ads implementation, I need to understand how the current implementation handles multiple campaigns and isolates incoming leads.
+
+## Use Case
+
+Consider an agency owner using SnapServe AI.
+
+The agency manages multiple clients and is running multiple Meta Lead Ads campaigns simultaneously.
+
+Example:
+
+### Campaign 1
+
+Campaign Name: Education Admissions
+
+Lead Source: Meta Lead Ads
+
+Assigned Agent: Education AI Agent
+
+Assigned Phone Number: +91 XXXXXXXX01
+
+---
+
+### Campaign 2
+
+Campaign Name: AI Course
+
+Lead Source: Meta Lead Ads
+
+Assigned Agent: AI Course Sales Agent
+
+Assigned Phone Number: +91 XXXXXXXX02
+
+---
+
+### Campaign 3
+
+Campaign Name: Paint Shop
+
+Lead Source: Meta Lead Ads
+
+Assigned Agent: Paint Shop Sales Agent
+
+Assigned Phone Number: +91 XXXXXXXX03
+
+---
+
+Each campaign has its own:
+
+- Meta Lead Form
+- AI Agent
+- Phone Number
+- Prompt
+- Voice Configuration
+- Call Workflow
+
+All three campaigns are active at the same time.
+
+---
+
+## My Question
+
+How is the current Meta integration isolating these campaigns?
+
+For example:
+
+A customer submits the **AI Course** Meta Lead Form.
+
+How does SnapServe determine that this lead belongs to the **AI Course Campaign** and not the Education or Paint Shop campaigns?
+
+What is currently being used as the mapping key?
+
+For example:
+
+- Meta Form ID?
+- Page ID?
+- Webhook Token?
+- Campaign ID?
+- Page Access Token?
+- Any other identifier?
+
+---
+
+## I need to understand the current implementation.
+
+Please explain:
+
+1. How an incoming Meta webhook is mapped to the correct Campaign.
+2. How multiple Meta campaigns can coexist without conflicts.
+3. Whether each Campaign has its own webhook or whether one webhook receives all Meta events.
+4. If one webhook receives all events, how does the backend identify the correct Campaign?
+5. What database mapping is currently maintained between:
+   - Campaign
+   - Meta Page
+   - Meta Lead Form
+   - Webhook
+6. If two campaigns use the same Meta Business account, how are they isolated?
+7. Is the current implementation scalable for agencies managing dozens of client campaigns?
+
+I want to understand the existing architecture before making any UI or workflow changes.
