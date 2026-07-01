@@ -22,12 +22,6 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/recorder.ts",
-  "artifacts/api-server/src/orchestration/types.ts",
-  "artifacts/api-server/src/orchestration/pipeline.ts",
-  "artifacts/api-server/src/orchestration/session.ts",
-  "artifacts/api-server/src/orchestration/telephony/vobiz.ts",
-  "artifacts/api-server/src/index.ts",
   "artifacts/api-server/src/routes/webhooks.ts",
 ];
 
@@ -65,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix: anchor call duration + recording clock to carrier answer time (VoBiz)`,
+      message: `fix(vobiz): canonicalize inbound To (trunk-0/national) so number->agent lookup matches E.164`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

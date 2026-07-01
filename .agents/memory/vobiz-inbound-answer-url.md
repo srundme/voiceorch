@@ -15,6 +15,19 @@ answer_url — i.e. non-2xx, timeout, or unreachable host. It is DISTINCT from
 which layer failed.
 
 ## Root causes (in observed likelihood order)
+0. **CONFIRMED (from a real Railway inbound log): `To` arrives in national trunk-0 form**
+   — VoBiz can deliver the dialed number as a leading-`0` national string with NO country
+   code (e.g. `0XXXXXXXXXX`), while `phone_numbers.number` stores the E.164 form
+   (`+91XXXXXXXXXX`). A To→agent lookup that only tries `To` and `+To` MISSES the row →
+   **400** → this hangup cause → caller hears busy. **This is why probing looked healthy:**
+   diagnostic curls used the bare-CC / `+CC` form, which DID resolve, so ONLY real
+   carrier-delivered trunk-0 calls failed — you cannot reproduce it with a hand-typed E.164 To.
+   **Durable rule:** resolve the inbound number against a candidate set that includes the
+   raw value, its +/no-+ flip, AND `canonicalizeCallerKey(To)` both bare and `+`-prefixed
+   (the same canonical helper caller-memory uses — drops trunk `0`, applies default CC via
+   `CALLER_ID_DEFAULT_CC`/`_NATIONAL_LEN`), then match with `inArray`. Never assume the
+   carrier sends E.164. `phone_numbers.number` is written from provisioning's `e164`, so a
+   destination has exactly one stored representation → no ambiguous multi-row match.
 1. **Number not assigned to an agent** — inbound answer URL carries no `?agentId=`;
    it resolves the agent purely by the dialed To number in `phone_numbers`. If the row
    is missing or `agent_id` is NULL → the webhook returns **400 "Agent not configured

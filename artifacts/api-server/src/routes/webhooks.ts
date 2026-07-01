@@ -4,8 +4,8 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
-import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable } from "@workspace/db";
-import { eq, sql, and, gte } from "drizzle-orm";
+import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, canonicalizeCallerKey } from "@workspace/db";
+import { eq, sql, and, gte, inArray } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
 import { logger } from "../lib/logger.js";
@@ -639,16 +639,27 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   if (!agentId) {
     const toRaw: string = String(req.body?.To ?? req.body?.to ?? "").trim();
     if (toRaw) {
-      // VoBiz may send the number with or without the '+' prefix; try both forms
-      // so the DB lookup succeeds regardless of carrier normalisation.
-      const toWithPlus    = toRaw.startsWith("+") ? toRaw : `+${toRaw}`;
-      const toWithoutPlus = toRaw.startsWith("+") ? toRaw.slice(1) : toRaw;
+      // VoBiz delivers the dialed number in several shapes across carriers/routes:
+      // E.164 with '+' ("+<CC><national>"), bare with country code ("<CC><national>"),
+      // or — the one that used to silently miss — national trunk format with a
+      // leading '0' and NO country code ("0<national>"). The DB stores the E.164
+      // form, so we build every candidate: raw, the +/no-+ flip, and the canonical
+      // form (`canonicalizeCallerKey` drops the trunk 0 and adds the default CC),
+      // both with and without a leading '+'. Matching any one resolves the agent.
+      const candidates = new Set<string>();
+      const addCandidate = (v: string | null | undefined): void => {
+        const s = (v ?? "").trim();
+        if (s) candidates.add(s);
+      };
+      addCandidate(toRaw);
+      addCandidate(toRaw.startsWith("+") ? toRaw.slice(1) : `+${toRaw}`);
+      const canonTo = canonicalizeCallerKey(toRaw); // "0<national>" -> "<CC><national>"
+      addCandidate(canonTo);
+      if (canonTo) addCandidate(`+${canonTo}`);
       const [pn] = await db
         .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
         .from(phoneNumbersTable)
-        .where(
-          sql`${phoneNumbersTable.number} IN (${toWithPlus}, ${toWithoutPlus})`
-        );
+        .where(inArray(phoneNumbersTable.number, [...candidates]));
       if (pn?.agentId) {
         agentId = pn.agentId;
         platformTelephony = true;
