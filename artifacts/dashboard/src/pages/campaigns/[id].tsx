@@ -5,11 +5,12 @@ import {
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
   useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
+  getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
 } from "@workspace/api-client-react";
 import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQueries } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
@@ -1007,6 +1008,38 @@ export default function CampaignDetailPage() {
     ? formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })
     : "—";
 
+  // ── Campaign "finished" detection (UI-only) ───────────────────────────────
+  // A campaign is finished when it has at least one batch, every batch is in a
+  // terminal state (completed/stopped), no queued leads await a batch, and no
+  // scheduled retries remain across the campaign. Instant-trigger campaigns are
+  // always-on intake and never show the badge.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isInstantTrigger = (campaign as any)?.triggerMode === "instant";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const queuedLeadsCount: number = (campaign as any)?.queuedLeadsCount ?? 0;
+  const allBatchesTerminal =
+    totalBatches > 0 &&
+    (batches?.every(b => (b.status as string) === "completed" || b.status === "stopped") ?? false);
+  const preFinished = !isInstantTrigger && allBatchesTerminal && queuedLeadsCount === 0;
+
+  // Only fetch per-batch analytics (for pending-retry counts) once the cheap
+  // pre-conditions hold, so we don't fan out queries on every campaign view.
+  const batchAnalyticsQueries = useQueries({
+    queries: (preFinished ? batches ?? [] : []).map(b => ({
+      ...getGetBatchAnalyticsQueryOptions(campaignId, b.id),
+    })),
+  });
+  const allAnalyticsLoaded =
+    preFinished &&
+    batchAnalyticsQueries.length > 0 &&
+    batchAnalyticsQueries.every(q => q.data != null);
+  const pendingRetriesTotal = batchAnalyticsQueries.reduce(
+    (sum, q) => sum + (q.data?.stats.pendingRetries ?? 0),
+    0,
+  );
+  const campaignFinished =
+    preFinished && allAnalyticsLoaded && pendingRetriesTotal === 0;
+
   // Overall progress: leads processed vs imported. While running with no
   // progress yet, show "Tracking..." instead of a bare 0%.
   const overallPct = imported > 0 ? Math.round((called / imported) * 100) : 0;
@@ -1120,6 +1153,12 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {campaignFinished ? (
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
+              </span>
+            ) : (
+              <>
             {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" && (
               <Button size="sm" className="h-8 text-xs gap-1.5"
                 onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
@@ -1184,6 +1223,8 @@ export default function CampaignDetailPage() {
                 </DropdownMenu>
               )
             }
+              </>
+            )}
           </div>
         </div>
 

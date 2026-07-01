@@ -11,7 +11,7 @@ import { useRoute, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useUpdateCampaignBatch, useRedialBatchNoPickup,
-  useRetryCampaignLead,
+  useRetryCampaignLead, useGetBatchAnalytics,
   getListCampaignBatchesQueryKey,
   getListBatchLeadsQueryKey,
 } from "@workspace/api-client-react";
@@ -22,7 +22,7 @@ import {
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
   TrendingUp, Bell, PhoneIncoming,
   Eye, Database, RefreshCw,
-  User, Search, X,
+  User, Search, X, CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
@@ -450,6 +450,19 @@ export default function BatchWorkspacePage() {
 
   const batchStatus = header?.batch.status ?? "draft";
 
+  // Batch analytics — used to know whether any scheduled retries are still pending.
+  const { data: batchAnalytics } = useGetBatchAnalytics(campaignId, batchId, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { refetchInterval: 10000 } as any,
+  });
+
+  // "Finished" = backend marked the batch completed AND no scheduled retries remain.
+  // Only then are the Start/Pause/Stop/Redial controls pointless → show a badge instead.
+  const finished =
+    batchStatus === "completed" &&
+    batchAnalytics != null &&
+    (batchAnalytics.stats.pendingRetries ?? 0) === 0;
+
   async function handleStart() {
     setIsStarting(true);
     try {
@@ -558,26 +571,34 @@ export default function BatchWorkspacePage() {
 
           {/* Controls */}
           <div className="flex items-center gap-2 ml-auto">
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={batchStatus === "running" || update.isPending || isStarting}
-              onClick={() => void handleStart()}>
-              <Play className="h-3.5 w-3.5" /> Start
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
-              disabled={batchStatus !== "running" || update.isPending}
-              onClick={() => void handleControl("paused")}>
-              <Pause className="h-3.5 w-3.5" /> Pause
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-red-500/20 text-red-600 hover:bg-red-500/5"
-              disabled={batchStatus === "stopped" || update.isPending}
-              onClick={() => void handleControl("stopped")}>
-              <Square className="h-3.5 w-3.5" /> Stop
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
-              disabled={batchStatus === "running" || redial.isPending}
-              onClick={() => void handleRedialAll()}>
-              <RotateCcw className="h-3.5 w-3.5" /> Redial
-            </Button>
+            {finished ? (
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Batch Completed
+              </span>
+            ) : (
+              <>
+                <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={batchStatus === "running" || update.isPending || isStarting}
+                  onClick={() => void handleStart()}>
+                  <Play className="h-3.5 w-3.5" /> Start
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+                  disabled={batchStatus !== "running" || update.isPending}
+                  onClick={() => void handleControl("paused")}>
+                  <Pause className="h-3.5 w-3.5" /> Pause
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-red-500/20 text-red-600 hover:bg-red-500/5"
+                  disabled={batchStatus === "stopped" || update.isPending}
+                  onClick={() => void handleControl("stopped")}>
+                  <Square className="h-3.5 w-3.5" /> Stop
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5"
+                  disabled={batchStatus === "running" || redial.isPending}
+                  onClick={() => void handleRedialAll()}>
+                  <RotateCcw className="h-3.5 w-3.5" /> Redial
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
