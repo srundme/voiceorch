@@ -382,6 +382,17 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
     }
   }
 
+  // ── Meta "Send to My Server" test ping ───────────────────────────────────
+  // Meta's test button sends { "sample": { "field": "leadgen", ... } } with no
+  // "object"/"entry" structure. Detect and acknowledge without creating a lead.
+  if ((body as Record<string, unknown>)["sample"] !== undefined &&
+      ((body as Record<string, unknown>)["sample"] as Record<string, unknown>)?.["field"] === "leadgen") {
+    logger.info({ campaignId: campaign.id }, "Meta test ping received — not ingested as lead");
+    touchWebhookStatus(campaign.id, "ok");
+    res.json({ received: true, mode: "meta_test_ping" });
+    return;
+  }
+
   // ── Capture for listen mode (sample capture — not a real lead) ───────────
   // If an active listen session is waiting, capture this payload and return
   // early WITHOUT creating a lead or scheduling a call. This ensures test
@@ -413,6 +424,10 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
         for (const fd of fieldData as Array<{ name: string; values: string[] }>) {
           metaFlat[fd.name] = fd.values?.[0] ?? "";
         }
+
+        // Remap Meta's standard field names to the generic keys extractLeadFields expects
+        if (!("phone" in metaFlat) && "phone_number" in metaFlat) metaFlat["phone"] = metaFlat["phone_number"]!;
+        if (!("name"  in metaFlat) && "full_name"    in metaFlat) metaFlat["name"]  = metaFlat["full_name"]!;
 
         const { phone, name, email, leadData } = extractLeadFields(metaFlat, campaign.fieldMappings as Record<string, string>);
 
