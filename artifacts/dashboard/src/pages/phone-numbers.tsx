@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, Wrench } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -642,6 +642,31 @@ export default function PhoneNumbersPage() {
   const [routingTarget, setRoutingTarget] = useState<PhoneNumber | null>(null);
 
   const kycCompleted = kycData?.kycStatus === "completed";
+  const [fixingWebhookId, setFixingWebhookId] = useState<number | null>(null);
+
+  async function handleFixWebhook(n: PhoneNumber) {
+    setFixingWebhookId(n.id);
+    try {
+      const token = localStorage.getItem("voiceorch:session");
+      const resp = await fetch(`/api/phone-numbers/${n.id}/configure-webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({})) as { error?: string };
+        toast({ title: "Fix failed", description: body.error ?? `HTTP ${resp.status}`, variant: "destructive" });
+      } else {
+        toast({ title: "Inbound routing fixed", description: `${n.number} is now linked to our webhook in VoBiz.` });
+      }
+    } catch {
+      toast({ title: "Network error", description: "Could not reach the server.", variant: "destructive" });
+    } finally {
+      setFixingWebhookId(null);
+    }
+  }
 
   // Handle return from KYC redirect
   useEffect(() => {
@@ -812,6 +837,19 @@ export default function PhoneNumbersPage() {
                       <GitFork className="h-3 w-3" /> Rules
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                    title="Re-link this number's inbound webhook in VoBiz (fixes 'not linked with any application' errors)"
+                    onClick={() => handleFixWebhook(n)}
+                    disabled={fixingWebhookId === n.id}
+                  >
+                    {fixingWebhookId === n.id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <Wrench className="h-3 w-3" />
+                    }
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

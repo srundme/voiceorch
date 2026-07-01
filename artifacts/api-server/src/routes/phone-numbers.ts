@@ -117,6 +117,48 @@ async function purchaseVobizNumber(
   return data.number;
 }
 
+/**
+ * Configure inbound webhook on a Vobiz-owned number so that incoming calls
+ * are routed to our voice webhook instead of returning "not linked with any
+ * application".  Uses the Plivo-compatible Number update endpoint (POST to
+ * an individual resource = Plivo convention for updates).
+ * Logs a warning on failure but never throws — purchase should succeed even
+ * if this auxiliary step fails.
+ */
+async function configureVobizNumberWebhook(
+  authId: string,
+  authToken: string,
+  e164: string,
+): Promise<void> {
+  const webhookBase = (process.env["WEBHOOK_BASE_URL"] ?? "").replace(/\/$/, "");
+  if (!webhookBase) {
+    // In local dev WEBHOOK_BASE_URL may be absent; skip silently
+    return;
+  }
+  const e164Path = e164.startsWith("+") ? e164.slice(1) : e164;
+  const url = `${VOBIZ_ACCOUNT_BASE}/${authId}/Number/${encodeURIComponent(e164Path)}/`;
+  const body = {
+    answer_url:    `${webhookBase}/api/webhooks/vobiz/voice`,
+    answer_method: "POST",
+    hangup_url:    `${webhookBase}/api/webhooks/vobiz/status`,
+    hangup_method: "POST",
+  };
+  try {
+    const resp = await fetch(url, {
+      method:  "POST",
+      headers: vobizHeaders(authId, authToken),
+      body:    JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      // Non-fatal: log so the operator can fix manually, but don't block purchase
+      console.warn(`configureVobizNumberWebhook: Vobiz returned ${resp.status} for ${e164}: ${err}`);
+    }
+  } catch (err) {
+    console.warn(`configureVobizNumberWebhook: network error for ${e164}:`, err);
+  }
+}
+
 /** Release a number back to Vobiz inventory. */
 async function releaseVobizNumber(
   authId: string,
@@ -312,6 +354,10 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     description:  `Phone number ${number} purchased${totalCents > 0 ? ` (₹${(totalCents / 100).toFixed(0)})` : ""}`,
   });
 
+  // 4. Configure inbound answer URL on VoBiz so incoming calls reach our webhook.
+  //    Non-fatal — purchase record is already saved even if this step fails.
+  await configureVobizNumberWebhook(authId!, authToken!, number);
+
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased and provisioned");
   res.status(201).json(await enrichNumber(row));
 });
@@ -344,6 +390,33 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
   });
 
   res.json(AssignPhoneNumberResponse.parse(await enrichNumber(row)));
+});
+
+// ── POST /phone-numbers/:id/configure-webhook ─────────────────────────────────
+// Idempotent repair: re-pushes the inbound answer URL to VoBiz for numbers
+// that were purchased before auto-configuration was added.
+
+router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [row] = await db
+    .select()
+    .from(phoneNumbersTable)
+    .where(and(eq(phoneNumbersTable.id, id), eq(phoneNumbersTable.userId, clerkId)));
+  if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }
+
+  const { authId, authToken, configured } = getPlatformVobizCreds();
+  if (!configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
+
+  const webhookBase = (process.env["WEBHOOK_BASE_URL"] ?? "").replace(/\/$/, "");
+  if (!webhookBase) { res.status(503).json({ error: "WEBHOOK_BASE_URL not configured." }); return; }
+
+  await configureVobizNumberWebhook(authId!, authToken!, row.number);
+
+  req.log.info({ number: row.number, userId: clerkId }, "Vobiz inbound webhook reconfigured");
+  res.json({ ok: true, number: row.number, answerUrl: `${webhookBase}/api/webhooks/vobiz/voice` });
 });
 
 // ── DELETE /phone-numbers/:id ─────────────────────────────────────────────────
