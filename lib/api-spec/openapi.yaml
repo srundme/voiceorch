@@ -2104,6 +2104,10 @@ paths:
                   type: string
                   enum: [ignore, skip, reject_with_report]
                   default: skip
+                countryCode:
+                  type: string
+                  default: "IN"
+                  description: "ISO 3166-1 alpha-2 country code used to normalise bare national phone numbers. Defaults to IN."
       responses:
         "200":
           description: Validation preview
@@ -8905,6 +8909,10 @@ components:
           type: boolean
           default: false
           description: "If true, set batch to running immediately after import"
+        countryCode:
+          type: string
+          default: "IN"
+          description: "ISO 3166-1 alpha-2 country code used to normalise bare national phone numbers (e.g. IN, US, GB). Defaults to IN."
 
     CampaignBatchUpdate:
       type: object

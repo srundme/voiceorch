@@ -95,6 +95,7 @@ interface WizardState {
   scheduledStartAt: string | null;
   scheduledEndAt: string | null;
   autoStart: boolean;
+  phoneCountryCode: string;
 }
 
 const INITIAL_STATE: WizardState = {
@@ -123,6 +124,7 @@ const INITIAL_STATE: WizardState = {
   scheduledStartAt: null,
   scheduledEndAt: null,
   autoStart: false,
+  phoneCountryCode: "IN",
 };
 
 const STEP_DEFS = [
@@ -1071,6 +1073,39 @@ function Step3({
           </div>
         )}
 
+        {/* Country code selector — sets default country for normalising bare national numbers */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Phone Number Country</label>
+          <p className="text-xs text-muted-foreground">
+            Applied to numbers without a country prefix (e.g. 8904887300 → +91… for India).
+            Numbers starting with + or 00 are passed through unchanged.
+          </p>
+          <Select
+            value={state.phoneCountryCode}
+            onValueChange={v => setState({ phoneCountryCode: v })}
+          >
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select country" />
+            </SelectTrigger>
+            <SelectContent>
+              {([
+                ["IN", "India (IN)"],
+                ["US", "United States (US)"],
+                ["GB", "United Kingdom (GB)"],
+                ["AU", "Australia (AU)"],
+                ["CA", "Canada (CA)"],
+                ["DE", "Germany (DE)"],
+                ["FR", "France (FR)"],
+                ["SG", "Singapore (SG)"],
+                ["AE", "UAE (AE)"],
+                ["ZA", "South Africa (ZA)"],
+              ] as [string, string][]).map(([code, label]) => (
+                <SelectItem key={code} value={code}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {campaignLeadSource !== "csv" && crmSection}
 
         {campaignLeadSource !== "csv" && importConn && (
@@ -1492,6 +1527,7 @@ function Step5({
           leads:        state.csvRows,
           fieldMapping: { phone: state.fieldMapping["phone"] ?? "phone" },
           policy:       state.duplicatePolicy,
+          countryCode:  state.phoneCountryCode,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -2003,6 +2039,7 @@ function Step8({
           scheduledStartAt:   state.scheduledStartAt ?? undefined,
           scheduledEndAt:     state.scheduledEndAt ?? undefined,
           autoStart:          state.autoStart,
+          countryCode:        state.phoneCountryCode,
         },
       });
       onLaunchSuccess(batch);
@@ -2048,6 +2085,7 @@ function Step8({
         <SummarySection title="Execution">
           <DetailRow label="Max Attempts"    value={String(state.maxAttempts)} />
           <DetailRow label="Retry Delay"     value={`${state.retryDelayMinutes}m`} />
+          <DetailRow label="Phone Country"   value={state.phoneCountryCode} />
           {state.timezone && <DetailRow icon={<Globe className="w-3.5 h-3.5" />} label="Timezone" value={state.timezone} />}
           {state.businessHoursStart != null && state.businessHoursEnd != null && (
             <DetailRow label="Business Hours" value={`${state.businessHoursStart}:00 – ${state.businessHoursEnd}:00`} />

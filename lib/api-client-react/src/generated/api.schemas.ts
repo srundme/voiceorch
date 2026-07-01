@@ -2394,6 +2394,8 @@ export interface CampaignBatchCreate {
   duplicatePolicy?: CampaignBatchCreateDuplicatePolicy;
   /** If true, set batch to running immediately after import */
   autoStart?: boolean;
+  /** ISO 3166-1 alpha-2 country code used to normalise bare national phone numbers (e.g. IN, US, GB). Defaults to IN. */
+  countryCode?: string;
 }
 
 export type CampaignBatchUpdateStatus = typeof CampaignBatchUpdateStatus[keyof typeof CampaignBatchUpdateStatus];
@@ -4919,6 +4921,8 @@ export type ValidateLeadsBody = {
   leads?: ValidateLeadsBodyLeadsItem[];
   fieldMapping?: ValidateLeadsBodyFieldMapping;
   policy?: ValidateLeadsBodyPolicy;
+  /** ISO 3166-1 alpha-2 country code used to normalise bare national phone numbers. Defaults to IN. */
+  countryCode?: string;
 };
 
 export type ListBatchLeadsParams = {

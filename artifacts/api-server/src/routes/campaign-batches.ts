@@ -9,8 +9,28 @@ import { eq, and, count, desc, inArray, sql, isNull } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
 import { reopenCampaignIfCompleted } from "../services/batchScheduler.js";
 import { normalizePhone as normalizePhoneSimple } from "../lib/phone-normalize.js";
-import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG } from "../services/phone-normalization.js";
+import { normalizePhone as normalizePhoneService, INDIA_PHONE_CONFIG, type WorkspacePhoneConfig } from "../services/phone-normalization.js";
+
+// ISO 3166-1 alpha-2 → WorkspacePhoneConfig for phone normalisation
+const COUNTRY_PHONE_CONFIGS: Record<string, WorkspacePhoneConfig> = {
+  IN: { defaultCountryCode: "91", nationalDigitLength: 10 },
+  US: { defaultCountryCode: "1",  nationalDigitLength: 10 },
+  CA: { defaultCountryCode: "1",  nationalDigitLength: 10 },
+  GB: { defaultCountryCode: "44", nationalDigitLength: 10 },
+  AU: { defaultCountryCode: "61", nationalDigitLength: 9  },
+  DE: { defaultCountryCode: "49", nationalDigitLength: 10 },
+  FR: { defaultCountryCode: "33", nationalDigitLength: 9  },
+  SG: { defaultCountryCode: "65", nationalDigitLength: 8  },
+  AE: { defaultCountryCode: "971", nationalDigitLength: 9 },
+  ZA: { defaultCountryCode: "27", nationalDigitLength: 9  },
+};
+
+function getPhoneConfig(countryCode?: string | null): WorkspacePhoneConfig {
+  if (!countryCode) return INDIA_PHONE_CONFIG;
+  return COUNTRY_PHONE_CONFIGS[countryCode.toUpperCase()] ?? INDIA_PHONE_CONFIG;
+}
 import { isOnDnc } from "../lib/dnc-check.js";
+
 import {
   checkDuplicate, createImportSummary,
   type DuplicatePolicy, type DuplicateReportEntry,
@@ -209,6 +229,7 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     businessHoursEnd?: number;
     maxDailyCalls?: number;
     autoStart?: boolean;
+    countryCode?: string;
   };
 
   if (!body.name?.trim()) { res.status(400).json({ error: "Batch name required" }); return; }
@@ -264,7 +285,7 @@ router.post("/campaigns/:id/batches", async (req, res): Promise<void> => {
     if (!rawPhone) { invalidPhones++; continue; }
 
     // Normalize using the comprehensive service
-    const normResult = normalizePhoneService(rawPhone, INDIA_PHONE_CONFIG);
+    const normResult = normalizePhoneService(rawPhone, getPhoneConfig(body.countryCode));
     if (!normResult.valid || !normResult.normalized) {
       invalidPhones++;
       errorEntries.push({
@@ -399,6 +420,7 @@ router.post("/campaigns/:id/validate-leads", async (req, res): Promise<void> => 
     leads?: Record<string, string>[];
     fieldMapping?: Record<string, string>;
     policy?: DuplicatePolicy;
+    countryCode?: string;
   };
 
   const leads       = Array.isArray(body.leads) ? body.leads : [];
@@ -443,7 +465,7 @@ router.post("/campaigns/:id/validate-leads", async (req, res): Promise<void> => 
       continue;
     }
 
-    const normResult = normalizePhoneService(rawPhone, INDIA_PHONE_CONFIG);
+    const normResult = normalizePhoneService(rawPhone, getPhoneConfig(body.countryCode));
 
     let isDuplicate = false;
     if (normResult.valid && normResult.normalized) {

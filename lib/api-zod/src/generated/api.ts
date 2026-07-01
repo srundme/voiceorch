@@ -2495,6 +2495,7 @@ export const createCampaignBatchBodyMaxAttemptsDefault = 1;
 export const createCampaignBatchBodyRetryDelayMinutesDefault = 60;
 export const createCampaignBatchBodyDuplicatePolicyDefault = `skip`;
 export const createCampaignBatchBodyAutoStartDefault = false;
+export const createCampaignBatchBodyCountryCodeDefault = `IN`;
 
 export const CreateCampaignBatchBody = zod.object({
   "name": zod.string(),
@@ -2515,7 +2516,8 @@ export const CreateCampaignBatchBody = zod.object({
   "businessHoursEnd": zod.number().optional(),
   "maxDailyCalls": zod.number().optional(),
   "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(createCampaignBatchBodyDuplicatePolicyDefault),
-  "autoStart": zod.boolean().default(createCampaignBatchBodyAutoStartDefault).describe('If true, set batch to running immediately after import')
+  "autoStart": zod.boolean().default(createCampaignBatchBodyAutoStartDefault).describe('If true, set batch to running immediately after import'),
+  "countryCode": zod.string().default(createCampaignBatchBodyCountryCodeDefault).describe('ISO 3166-1 alpha-2 country code used to normalise bare national phone numbers (e.g. IN, US, GB). Defaults to IN.')
 })
 
 
@@ -2527,11 +2529,13 @@ export const ValidateLeadsParams = zod.object({
 })
 
 export const validateLeadsBodyPolicyDefault = `skip`;
+export const validateLeadsBodyCountryCodeDefault = `IN`;
 
 export const ValidateLeadsBody = zod.object({
   "leads": zod.array(zod.record(zod.string(), zod.string())).optional(),
   "fieldMapping": zod.record(zod.string(), zod.string()).optional(),
-  "policy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(validateLeadsBodyPolicyDefault)
+  "policy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(validateLeadsBodyPolicyDefault),
+  "countryCode": zod.string().default(validateLeadsBodyCountryCodeDefault).describe('ISO 3166-1 alpha-2 country code used to normalise bare national phone numbers. Defaults to IN.')
 })
 
 export const ValidateLeadsResponse = zod.object({
