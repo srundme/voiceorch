@@ -246,6 +246,13 @@
       "when": 1784500000000,
       "tag": "0034_zoho_webhook_config",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784600000000,
+      "tag": "0035_crm_columns_catchup",
+      "breakpoints": true
     }
   ]
 }
