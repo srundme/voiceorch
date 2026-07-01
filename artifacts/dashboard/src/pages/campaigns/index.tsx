@@ -35,7 +35,7 @@ import {
   Pencil, Trash2, Users, CalendarDays,
   CheckCircle2, PlayCircle, PauseCircle, XCircle,
   Target, Layers, ArrowRight,
-  Globe, Zap, Upload, Instagram,
+  Globe, Zap, Upload, Instagram, Loader2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -907,21 +907,27 @@ export default function CampaignsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Campaign | null>(null);
   const [deleting, setDeleting] = useState<Campaign | null>(null);
+  const [deleteNameInput, setDeleteNameInput] = useState("");
+  const [deletingCamp, setDeletingCamp] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
   const deleteMutation = useDeleteCampaign();
   const { data: campaigns, isLoading } = useListCampaigns();
 
   async function handleDelete() {
-    if (!deleting) return;
+    if (!deleting || deleteNameInput.trim() !== deleting.name) return;
+    setDeletingCamp(true);
     try {
       await deleteMutation.mutateAsync({ id: deleting.id });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign deleted" });
     } catch {
-      toast({ title: "Error", description: "Failed to delete campaign", variant: "destructive" });
+      toast({ title: "Failed to delete campaign", variant: "destructive" });
+    } finally {
+      setDeletingCamp(false);
+      setDeleting(null);
+      setDeleteNameInput("");
     }
-    setDeleting(null);
   }
 
   const { data: queueData } = useGetPlatformAnalyticsQueue();
@@ -1029,7 +1035,7 @@ export default function CampaignsPage() {
                 key={c.id}
                 campaign={c}
                 onEdit={setEditing}
-                onDelete={setDeleting}
+                onDelete={(c) => { setDeleteNameInput(""); setDeleting(c); }}
               />
             ))
           )}
@@ -1049,25 +1055,60 @@ export default function CampaignsPage() {
         activeCampaigns={campaigns ?? []}
       />
 
-      <AlertDialog open={!!deleting} onOpenChange={v => { if (!v) setDeleting(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{deleting?.name}</strong> and all its leads. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+      <Dialog open={!!deleting} onOpenChange={v => { if (!v) { setDeleting(null); setDeleteNameInput(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-500">
+              <Trash2 className="h-4 w-4" /> Delete Campaign
+            </DialogTitle>
+            <DialogDescription className="text-left pt-1">
+              This will permanently delete <strong className="text-foreground">{deleting?.name}</strong> along
+              with all its batches, leads, call records, and configuration.
+              This action <strong className="text-foreground">cannot be undone</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/[0.06] px-3 py-2.5 text-xs text-red-600">
+              All leads, call history, batches, and settings for this campaign will be erased.
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Type <span className="font-mono font-semibold text-foreground">{deleting?.name}</span> to confirm
+              </Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder={deleting?.name}
+                value={deleteNameInput}
+                onChange={e => setDeleteNameInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && deleteNameInput.trim() === deleting?.name) {
+                    void handleDelete();
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" className="h-8 text-xs"
+              onClick={() => { setDeleting(null); setDeleteNameInput(""); }}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteNameInput.trim() !== deleting?.name || deletingCamp}
               onClick={() => void handleDelete()}
             >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              {deletingCamp
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deleting…</>
+                : <><Trash2 className="h-3.5 w-3.5" /> Delete Campaign</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
