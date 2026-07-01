@@ -756,7 +756,18 @@ router.post("/crm/webhook/zoho/:connectionId", async (req, res): Promise<void> =
     // Flat body — treat the whole payload as a single lead
     leads = [body];
   } else {
-    leads = [];
+    // D) query-string params — Zoho "Body Type: None" sends Module Parameters
+    //    as query-string keys appended to the POST URL (req.query), not in body.
+    //    Filter out routing/auth params before treating the rest as lead fields.
+    const reserved = new Set(["secret", "connectionId"]);
+    const qData = Object.fromEntries(
+      Object.entries(req.query as Record<string, unknown>).filter(([k]) => !reserved.has(k)),
+    );
+    if (qData["Mobile"] ?? qData["Phone"] ?? qData["phone"] ?? qData["mobile"] ?? qData["id"]) {
+      leads = [qData];
+    } else {
+      leads = [];
+    }
   }
 
   if (leads.length === 0) {
