@@ -22,7 +22,7 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/routes/webhooks.ts",
+  "artifacts/api-server/src/orchestration/pipeline.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -59,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(vobiz): canonicalize inbound To (trunk-0/national) so number->agent lookup matches E.164`,
+      message: `fix(pipeline): keepalive watchdog fills outbound gaps during TTS first-byte/stalls so agent+ambient never go dead (VoBiz 4010)`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

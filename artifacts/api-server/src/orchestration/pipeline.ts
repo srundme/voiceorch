@@ -259,6 +259,18 @@ export class OrchestrationPipeline {
    * of leaving the line completely dead while the LLM produces its next chunk.
    */
   private isSendingTtsAudio = false;
+  /**
+   * Wall-clock timestamp (ms) of the last REAL TTS/greeting audio frame written
+   * to the carrier via onAudioOut. The ambientInterval watchdog uses this to
+   * detect a dead outbound channel: whenever no real audio frame has gone out
+   * for KEEPALIVE_FILL_GAP_MS, it fills the gap with ambient (or VoBiz keepalive
+   * zeros) EVEN while a sentence is nominally "in progress" — covering the TTS
+   * first-byte wait and any mid-stream stall where the drain queue empties.
+   * Without this, the pump is paused (isSendingTtsAudio=true) AND the drain sits
+   * idle (queue empty), so agent voice and ambient go dead together, and a gap
+   * past ~2 s makes VoBiz drop the call (hangup 4010).
+   */
+  private lastTtsFrameAt = 0;
   private bargeInRequested = false;
   private bargeInCallback: (() => void) | null;
   // Require N consecutive speech frames before triggering barge-in to avoid
@@ -684,8 +696,23 @@ export class OrchestrationPipeline {
       const KEEPALIVE_FRAME_MS      = 20;
       const VOBIZ_SILENCE_SAMPLES   = (8000 * KEEPALIVE_FRAME_MS) / 1000; // 160 @ 8 kHz
       const vobizSilenceFrame       = Buffer.alloc(VOBIZ_SILENCE_SAMPLES * 2, 0); // PCM16-LE zeros
+      const KEEPALIVE_FILL_GAP_MS   = 60; // watchdog: fill any outbound gap > ~3 frames
+      // 60 ms (3 frame-times) not 20/40: normal Node timer jitter/GC can delay a
+      // healthy 20 ms-paced TTS frame past ~40 ms, and we do NOT want the pump to
+      // inject a stray ambient frame mid-speech. 60 ms is comfortably below both a
+      // perceptible dead window and VoBiz's ~2 s inactivity drop (hangup 4010).
       this.ambientInterval = setInterval(() => {
-        if (!this.closed && !this.isSendingTtsAudio) {
+        // Send a fill frame when the agent is not actively streaming TTS
+        // (!isSendingTtsAudio → the between-sentences gap), OR when a sentence is
+        // nominally in progress but NO real audio frame has gone out for
+        // KEEPALIVE_FILL_GAP_MS — i.e. the TTS first-byte wait or a mid-stream
+        // stall where the drain queue empties. Without this second clause the
+        // pump is paused AND the drain sits idle, so agent voice and ambient go
+        // dead together and VoBiz drops the call after ~2 s (hangup 4010).
+        // During healthy streaming a real frame lands every ~20 ms, so the gap
+        // stays under the threshold and the pump skips (no double-send).
+        const gapMs = Date.now() - this.lastTtsFrameAt;
+        if (!this.closed && (!this.isSendingTtsAudio || gapMs >= KEEPALIVE_FILL_GAP_MS)) {
           if (this.ambientStream) {
             // Emit the encoding the call actually consumes: raw 8 kHz PCM for
             // web calls (rawPcmOutput), mulaw for telephony. Sending mulaw bytes
@@ -1791,6 +1818,7 @@ export class OrchestrationPipeline {
               ? this.ambientStream.mixIntoMulaw(chunk)
               : chunk;
             this.config.onAudioOut(outChunk);
+            this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
             // NOTE: do NOT re-arm the echo-grace window per chunk here. The start
             // grace is armed once before playback begins (covers the sidetone/echo
             // settle for the opening words) and the tail grace is re-armed at
@@ -1968,6 +1996,7 @@ export class OrchestrationPipeline {
           if (this.closed || this.bargeInRequested) break;
           this.markFirstAudioSent();
           this.config.onAudioOut(out8k.slice(i, i + PCM_CHUNK));
+          this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
           // the start grace + tail grace bound the self-echo window. A per-chunk
           // re-arm would span the whole sentence and block mid-sentence barge-in.
@@ -1985,6 +2014,7 @@ export class OrchestrationPipeline {
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
           this.config.onAudioOut(outChunk);
+          this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
           // Do NOT re-arm echo grace per chunk (see the drain-loop note above):
           // start grace + tail grace bound the self-echo window; a per-chunk
           // re-arm would span the whole sentence and block mid-sentence barge-in.
