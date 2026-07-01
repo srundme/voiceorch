@@ -236,6 +236,38 @@ async function fetchTokenOptEnabled(): Promise<boolean> {
   return _tokenOptEnabled;
 }
 
+/**
+ * True for transient/momentary LLM provider errors that are worth retrying on
+ * the SAME provider before falling back or failing the call. Covers HTTP 429 /
+ * 5xx and common network faults. Providers (Google/OpenAI/etc.) surface these
+ * as "503 Service Unavailable", "high demand", "overloaded", "try again later",
+ * rate limits, or socket/DNS/timeout errors — all typically resolved by a quick
+ * retry. Deterministic 4xx (bad request, auth, quota-exhausted) are NOT retried.
+ */
+function isRetryableLlmError(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
+  if (!msg) return false;
+  if (/\b(429|500|502|503|504)\b/.test(msg)) return true;
+  return (
+    msg.includes("service unavailable") ||
+    msg.includes("high demand") ||
+    msg.includes("overloaded") ||
+    msg.includes("try again") ||
+    msg.includes("temporarily") ||
+    msg.includes("rate limit") ||
+    msg.includes("too many requests") ||
+    msg.includes("timeout") ||
+    msg.includes("timed out") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("enotfound") ||
+    msg.includes("eai_again") ||
+    msg.includes("socket hang up") ||
+    msg.includes("fetch failed") ||
+    msg.includes("network error")
+  );
+}
+
 export class OrchestrationPipeline {
   private config: SessionConfig;
   private agent: AgentConfig;
@@ -3263,6 +3295,32 @@ export class OrchestrationPipeline {
       },
     });
 
+    // 1 initial + up to 2 same-provider retries for transient (503/429/5xx/network)
+    // errors, so a momentary provider blip no longer drops the whole call.
+    const MAX_LLM_ATTEMPTS = 3;
+    let llmErr: unknown = null;
+    for (let llmAttempt = 1; llmAttempt <= MAX_LLM_ATTEMPTS; llmAttempt++) {
+    if (llmAttempt > 1) {
+      // Only reachable when the previous attempt threw a RETRYABLE error BEFORE
+      // streaming any token (llmFirstTokenAt === null): no LLM-derived sentence
+      // was enqueued to TTS, so restarting the stream cleanly cannot double-speak
+      // the model's reply. Reset per-attempt stream + tool state defensively.
+      llmResponse = "";
+      pendingText  = "";
+      triggeredToolName = null;
+      triggeredToolArgs = {};
+      await new Promise<void>((r) => setTimeout(r, 300 * (llmAttempt - 1)));
+      logWarningEvent(this.logFn, EXEC_COMPONENTS.LLM, "LLM Retry", ["llm_retry"], {
+        provider: this.agent.llmProvider,
+        retryCount: llmAttempt - 1,
+        detail: {
+          event: "LLM Retry (same provider, transient error)",
+          provider: this.agent.llmProvider,
+          attempt: llmAttempt,
+          error: toReadableError(llmErr, "LLM error"),
+        },
+      });
+    }
     try {
       await this.llm.chat(
         historyForLlm,
@@ -3361,8 +3419,24 @@ export class OrchestrationPipeline {
             }
       );
       _agnostTurn?.end(llmResponse);
-    } catch (llmErr) {
+      llmErr = null;
+      break;
+    } catch (err) {
+      llmErr = err;
       if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+      // Same-provider retry for transient errors, ONLY before any token has
+      // streamed (llmFirstTokenAt === null) — otherwise a retry would double-speak
+      // the reply. Google/OpenAI 503/429/5xx spikes are usually momentary; a quick
+      // retry beats dropping the whole call. The ambient/keepalive pump keeps the
+      // line alive during the (sub-second) retry window.
+      if (llmAttempt < MAX_LLM_ATTEMPTS && llmFirstTokenAt === null && isRetryableLlmError(err)) {
+        continue;
+      }
+      break;
+    }
+    } // end LLM attempt loop
+
+    if (llmErr) {
       _agnostTurn?.end(String(llmErr), false);
       // P0-B: LLM fallback — if primary failed before producing any tokens, retry with fallback adapter
       if (this.fallbackLlm && llmFirstTokenAt === null) {

@@ -26,6 +26,7 @@
 - [Drizzle bootstrap migration gap](drizzle-bootstrap-migration-gap.md) — bootstrapMigrationJournal seeds old migrations without running SQL; new tables/columns MUST have a new migration file with a fresh `when` timestamp
 - [Drizzle migration when-timestamp ordering](drizzle-migration-when-ordering.md) — migrate() skips any migration whose `when` ≤ the last applied migration's `created_at`; out-of-order `when` permanently skips the migration silently
 - [LLM fallback chain pattern](llm-fallback-pattern.md) — fallbackLlm initialised at call start in pipeline.ts; fires only when primary throws AND llmFirstTokenAt===null; webcall reads raw agent row for fallback fields (cast as any)
+- [LLM transient-error same-provider retry](llm-transient-retry.md) — bounded retry (3 attempts, backoff) on 503/429/5xx/network BEFORE fallback/fatal; gated on llmFirstTokenAt===null so a momentary provider blip no longer drops the call
 - [TTS final-words clipping](tts-tail-drain.md) — last words cut off on teardown; telephony=sleep before onCallEnd, web=send silence frames; re-arm echo-grace at EVERY playback exit, not just main loops
 - [Object Storage on Railway](object-storage-railway.md) — Replit Object Storage absent in Railway prod; recordings now in Postgres bytea, ambient still GCS-bound
 - [Ambient inaudible on real calls = carrier DTX](ambient-telephony-dtx.md) — web works→config flows; fix is channel continuity (no zero-frame gaps) + moving bed, NOT louder volume

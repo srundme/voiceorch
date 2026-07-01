@@ -59,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(pipeline): keepalive watchdog fills outbound gaps during TTS first-byte/stalls so agent+ambient never go dead (VoBiz 4010)`,
+      message: `fix(pipeline): bounded same-provider LLM retry on transient 503/429/5xx/network errors before token stream, so a momentary Gemini/provider blip no longer drops the whole call (call 1296)`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

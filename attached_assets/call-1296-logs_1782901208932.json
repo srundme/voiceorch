@@ -1,0 +1,1134 @@
+[
+  {
+    "id": 63967,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.324Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "New Agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "abf838c5-ec62-4ea4-92e9-d35ffeb86e0a"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1296,
+      "sessionId": "live-1296",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-01T10:16:30.296Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 63974,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "New Agent",
+        "caller_number": "917971442376",
+        "date": "Wednesday, July 1, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To inquire about redeeming Gala Fit coins or to seek further assistance with the Galaxy Health Insurance App\n📊 SENTIMENT ARC: 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• has_galaxy_health_insurance_app: no  [today]\n• policy_start_date: 01/10/2023  [today]\n• policy_type: Galaxy Marvel  [today]\n• policy_holder: yes  [today]\n\nRECENT EPISODES:\n[today] 😐 The agent from Galaxy Health Insurance reviewed the benefits of using the Galaxy Health Insurance App, including accessing policy details a"
+    },
+    "metadata": null
+  },
+  {
+    "id": 63973,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthik",
+        "callCount": 3
+      },
+      "factCount": 5,
+      "facts": {
+        "has_galaxy_health_insurance_app": "no",
+        "policy_start_date": "01/10/2023",
+        "policy_type": "Galaxy Marvel",
+        "policy_holder": "yes",
+        "name": "Karthik"
+      },
+      "recentCallsCount": 2
+    },
+    "metadata": null
+  },
+  {
+    "id": 63970,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 63968,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 63971,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 63969,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "abf838c5-ec62-4ea4-92e9-d35ffeb86e0a"
+    }
+  },
+  {
+    "id": 63972,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:30.325Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "dcf5e2af82ed",
+      "promptLength": 30221,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To inquire about redeeming Gala Fit coins or to seek further assistance with the Ga"
+    }
+  },
+  {
+    "id": 63976,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:31.774Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 63975,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:31.774Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 63977,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:32.968Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1200,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 5,
+      "firstByteMs": 413
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1200
+    }
+  },
+  {
+    "id": 63978,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:32.968Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 0,
+      "durationMs": 1201
+    }
+  },
+  {
+    "id": 63979,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:40.081Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 63,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63980,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:40.216Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. Respond in clear, plain English ONLY for this entire response. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, or any other language — the caller has explicitly asked for English. Do not mix Hindi or regional words into your reply. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Wednesday, July 1, 2026 at 3:46 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To inquire about redeeming Gala Fit coins or to seek fu",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63981,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:41.166Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 960,
+      "turnNumber": 1,
+      "durationMs": 960
+    }
+  },
+  {
+    "id": 63982,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:41.273Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63983,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:41.273Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello Karthik sir."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63984,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:41.295Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 960,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Hello Karthik sir. I'm Varsha calling from Galaxy Health Insurance.\n\nYou recently took the Galaxy Marvel policy, right? We're happy to have you as part of the Galaxy family. This call is being recorded for security purposes, okay?"
+    },
+    "metadata": {
+      "inputTokens": 7630,
+      "outputTokens": 52,
+      "model": "gemini-2.5-flash-lite",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63985,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:42.810Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1538,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 43234,
+      "textLength": 18,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1538
+    }
+  },
+  {
+    "id": 63987,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:42.810Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1351,
+      "turnNumber": 1,
+      "durationMs": 1538
+    }
+  },
+  {
+    "id": 63986,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:42.810Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63988,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:42.810Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I'm Varsha calling from Galaxy Health Insurance."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63989,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:46.351Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3533,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 48,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3533
+    }
+  },
+  {
+    "id": 63990,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:46.351Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 1,
+      "durationMs": 3535
+    }
+  },
+  {
+    "id": 63991,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:46.351Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63992,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:46.353Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You recently took the Galaxy Marvel policy, right?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63993,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:49.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3408,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99554,
+      "textLength": 50,
+      "firstByteMs": 285
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3408
+    }
+  },
+  {
+    "id": 63996,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:49.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3111,
+      "turnNumber": 1,
+      "durationMs": 3408
+    }
+  },
+  {
+    "id": 63995,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:49.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "We're happy to have you as part of the Galaxy family."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63994,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:49.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63997,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:52.788Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 1,
+      "durationMs": 3035
+    }
+  },
+  {
+    "id": 63998,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:52.788Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3034,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 53,
+      "firstByteMs": 132
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3034
+    }
+  },
+  {
+    "id": 63999,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:54.778Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "என்ன இருக்குங்க bro?",
+      "endDetectToFinalMs": 86,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64000,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:54.782Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Wednesday, July 1, 2026 at 3:46 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To inquire about redeeming Gala Fit coins or to seek further assistance with the Galaxy Health Insurance App\n📊 SENTIMENT A",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64001,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:55.934Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1155,
+      "turnNumber": 2,
+      "durationMs": 1155
+    }
+  },
+  {
+    "id": 64002,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:57.015Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64003,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:57.017Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "[TTS reminder: Use appropriate emotion tag.]\n\n[filler] சரிங்க, உங்க policy கூட Gala Fit ன்னு ஒரு wellness program இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64004,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:16:57.277Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1155,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[TTS reminder: Use appropriate emotion tag.]\n\n[filler] சரிங்க, உங்க policy கூட Gala Fit ன்னு ஒரு wellness program இருக்கு. இது வெறும் insurance இல்ல, நீங்க healthy-யா இருக்கவும் ஹெல்ப் பண்ணும். நீங்க நடக்கறது, நல்லா தூங்கறது மாதிரி சின்ன சின்ன விஷயம் பண்ணாலே போதும், Wellness Coins சம்பாதிக்கலாம். அந்த coins வெச்சு policy renewal அப்ப discount கூட வாங்கிக்கலாம்."
+    },
+    "metadata": {
+      "inputTokens": 7695,
+      "outputTokens": 258,
+      "model": "gemini-2.5-flash-lite",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64006,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:01.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3831,
+      "turnNumber": 2,
+      "durationMs": 4238
+    }
+  },
+  {
+    "id": 64007,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:01.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4236,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 122594,
+      "textLength": 122,
+      "firstByteMs": 274
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 4236
+    }
+  },
+  {
+    "id": 64008,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:01.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64005,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:01.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இது வெறும் insurance இல்ல, நீங்க healthy-யா இருக்கவும் ஹெல்ப் பண்ணும்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64012,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:04.922Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3670,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 109794,
+      "textLength": 70,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 3670
+    }
+  },
+  {
+    "id": 64011,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:04.922Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3431,
+      "turnNumber": 2,
+      "durationMs": 3670
+    }
+  },
+  {
+    "id": 64009,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:04.922Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64010,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:04.922Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க நடக்கறது, நல்லா தூங்கறது மாதிரி சின்ன சின்ன விஷயம் பண்ணாலே போதும், Wellness Coins சம்பாதிக்கலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64015,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:10.853Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5921,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 181474,
+      "textLength": 103,
+      "firstByteMs": 138
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 5921
+    }
+  },
+  {
+    "id": 64014,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:10.853Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5671,
+      "turnNumber": 2,
+      "durationMs": 5922
+    }
+  },
+  {
+    "id": 64013,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:10.853Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64016,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:10.853Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அந்த coins வெச்சு policy renewal அப்ப discount கூட வாங்கிக்கலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 64017,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:15.198Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4352,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 130274,
+      "textLength": 65,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 4352
+    }
+  },
+  {
+    "id": 64018,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:15.199Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4071,
+      "turnNumber": 2,
+      "durationMs": 4353
+    }
+  },
+  {
+    "id": 64019,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:24.688Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "நல்லா இருக்கீங்களா?",
+      "endDetectToFinalMs": 148,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 64020,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:24.709Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Wednesday, July 1, 2026 at 3:47 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: To inquire about redeeming Gala Fit coins or to seek further assistance with the Galaxy Health Insurance App\n📊 SENTIMENT A",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 64021,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:25.692Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "error",
+    "latencyMs": 999,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "error": "LLM error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse: [503 Service Unavailable] This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.",
+      "turnNumber": 3,
+      "errorMessage": "LLM error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse: [503 Service Unavailable] This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+    }
+  },
+  {
+    "id": 64022,
+    "callId": 1296,
+    "agentId": 59,
+    "ts": "2026-07-01T10:17:25.705Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "error",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "failed",
+        "reasonLabel": "Call failed due to an error",
+        "component": "LLM",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": "LLM error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse: [503 Service Unavailable] This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.",
+        "expected": false,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Error",
+        "durationSeconds": 56,
+        "turns": 2,
+        "lastComponent": "LLM",
+        "lastUserTranscript": "நல்லா இருக்கீங்களா?",
+        "lastAgentResponse": "[TTS reminder: Use appropriate emotion tag.]\n\n[filler] சரிங்க, உங்க policy கூட Gala Fit ன்னு ஒரு wellness program இருக்கு. இது வெறும் insurance இல்ல, நீங்க healthy-யா இருக்கவும் ஹெல்ப் பண்ணும். நீங்க நடக்கறது, நல்லா தூங்கறது மாதிரி சின்ன சின்ன விஷயம் பண்ணாலே போதும், Wellness Coins சம்பாதிக்கலாம். அந்த coins வெச்சு policy renewal அப்ப discount கூட வாங்கிக்கலாம்.",
+        "recordingStatus": null,
+        "warningCount": 0,
+        "errorCount": 1,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 56,
+      "turns": 2,
+      "errorMessage": "LLM error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse: [503 Service Unavailable] This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."
+    }
+  }
+]
