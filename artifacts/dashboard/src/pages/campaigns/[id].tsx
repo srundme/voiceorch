@@ -211,7 +211,8 @@ function CrmIntegrationCard({ campaignId, triggerMode }: { campaignId: number; t
       </div>
 
       {/* Instant Trigger — only shown for instant-trigger CRM campaigns */}
-      {triggerMode !== "batch" && <div className="space-y-2">
+      {triggerMode !== "batch" && (
+      <div className="space-y-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Activity className="w-3 h-3 text-blue-400 shrink-0" />
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Instant Trigger</p>
@@ -328,7 +329,8 @@ function CrmIntegrationCard({ campaignId, triggerMode }: { campaignId: number; t
             </Button>
           </div>
         )}
-      </div>}
+      </div>
+      )}
 
       {/* Import & Batch — only shown for batch-mode CRM campaigns */}
       {triggerMode !== "instant" && (
