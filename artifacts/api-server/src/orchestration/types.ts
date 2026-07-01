@@ -265,6 +265,10 @@ export interface AgentConfig {
    *  final transcript so the per-turn LLM instruction follows the caller's language.
    *  False → strict single-language enforcement (default). */
   languageAutoDetect: boolean;
+  /** When true, an explicit caller request to switch to English is honored even in
+   *  strict single-language mode (languageAutoDetect=false): the pipeline latches
+   *  English and injects a per-turn OVERRIDE so the LLM replies in English. */
+  autoSwitchToEnglish: boolean;
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
   webhookUrl: string | null;

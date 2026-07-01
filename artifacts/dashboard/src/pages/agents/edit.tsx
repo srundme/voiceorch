@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch, useFieldArray } from "react-hook-form";
-import { agentFormSchema, type AgentFormValues } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm, type AgentFormValues } from "./edit.schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -317,7 +317,7 @@ export default function AgentEdit() {
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "",
-      promptVariables: [], vadSilenceMs: 250, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
+      promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "",
       autoSwitchToEnglish: false,
       machineDetectionMode: "disabled", voicemailAction: "hangup",
@@ -531,10 +531,12 @@ export default function AgentEdit() {
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
       autoSwitchToEnglish:      ((agent as any).agentConfig?.autoSwitchToEnglish as boolean | undefined) ?? false,
+      languageAutoDetect:       ((agent as any).agentConfig?.languageAutoDetect as boolean | undefined) ?? false,
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode as string | undefined) as AgentFormValues["machineDetectionMode"] ?? "disabled",
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction as string | undefined) as AgentFormValues["voicemailAction"] ?? "hangup",
       voicemailMessage:         ((agent as any).agentConfig?.voicemailMessage as string | undefined) ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
-      tools: (agent.tools ?? []) as AgentFormValues["tools"],
+      voicemailLeadInSeconds:   ((agent as any).agentConfig?.voicemailLeadInSeconds as number | undefined) ?? 2,
+      tools: hydrateToolsForForm(agent.tools ?? []),
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       recordingEnabled: (agent as any).agentConfig?.recordingEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
@@ -547,6 +549,16 @@ export default function AgentEdit() {
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
+      startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
+      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0,
+      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0,
+      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0,
+      stopSpeakingNumWords:    ((agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined)       ?? 0,
+      stopSpeakingVoiceSecs:   ((agent as any).agentConfig?.stopSpeakingPlan?.voiceSeconds as number | undefined)   ?? 0.2,
+      stopSpeakingBackOffSecs: ((agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds as number | undefined) ?? 1,
+      complianceIrdai: ((agent as any).agentConfig?.compliance?.irdai as boolean | undefined) ?? false,
+      complianceDpdp:  ((agent as any).agentConfig?.compliance?.dpdp  as boolean | undefined) ?? false,
+      complianceTrai:  ((agent as any).agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
       autoRedialDelayMinutes: ((agent as any).agentConfig?.autoRedial?.delayMinutes as number | undefined) ?? 2,
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,

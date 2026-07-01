@@ -832,7 +832,11 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
   }
 
   const [provRow] = await db.select().from(providersTable)
-    .where(eq(providersTable.providerName, "vobiz")).limit(1);
+    .where(and(
+      eq(providersTable.providerName, "vobiz"),
+      eq(providersTable.userId, agent.userId!),
+      eq(providersTable.isActive, true),
+    )).limit(1);
   if (!provRow) {
     res.status(400).json({ error: 'No VoBiz provider configured. Add one on the Providers page.' });
     return;
@@ -861,7 +865,9 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
       id, type, target.trim(), handoffMsg, xmlCallbackUrl, authId, provRow.apiKey,
     );
     if (!transferred) {
-      req.log.warn({ callId: id }, "Transfer: no external call ID — call may be inbound without externalCallId");
+      req.log.warn({ callId: id }, "Transfer: no external call ID — cannot redirect (inbound call without externalCallId)");
+      res.status(409).json({ error: "Transfer could not be initiated — call is not connected to the telephony provider yet." });
+      return;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

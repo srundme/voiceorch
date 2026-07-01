@@ -71,7 +71,7 @@ describe("buildUpdateAgentPayload", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
     if (!result.success) return;
     expect(result.data.asrProvider).toBe("assemblyai");
-    expect(result.data.llmProvider).toBe("google");
+    expect(result.data.llmProvider).toBe("qwen");
     expect(result.data.ttsProvider).toBe("cartesia");
   });
 

@@ -325,6 +325,7 @@ export async function createSession(params: {
     // the [STRICT LANGUAGE RULE], and TTS instead of contradicting them (call 548).
     language: agent.asrLanguage || agent.language || null,
     languageAutoDetect: isMultilingual,
+    autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
     backchannelingEnabled: agent.backchannelingEnabled ?? false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     webhookUrl: agent.webhookUrl ?? null,
@@ -1007,14 +1008,21 @@ export async function createSession(params: {
       // AI-to-AI transfer: agent: prefix means transfer to another agent
       if (to.startsWith("agent:")) {
         const targetAgentId = parseInt(to.slice(6), 10);
-        logger.info({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer detected — skipping telephony redirect");
-        // Future: swap pipeline to new agent; for now telephony redirect is skipped
-        // so the caller stays on the line while the same agent continues.
-        wasTransferred = true;
-        transferredTo = to;
-        void patchSessionMeta(sessionId, { wasTransferred: true, transferredTo: to }, redisTtl);
-        void patchSessionMeta(sessionId, { transferType: "agent", targetAgentId }, redisTtl);
-        return true;
+        // Agent-to-agent (AI→AI) handoff is NOT implemented. This previously returned
+        // true and ended the call, so the caller was dropped into dead air whenever the
+        // LLM (or an IVR option) picked an agent transfer. Report failure instead so the
+        // pipeline keeps the current agent talking to the caller.
+        logger.warn({ callId: callRecord.id, targetAgentId }, "Agent-to-agent transfer requested but not implemented — refusing (call continues with current agent)");
+        logExec(EXEC_COMPONENTS.Tool, "system", {
+          status: "error",
+          metadata: {
+            event:   "Transfer Failed",
+            reason:  "agent_transfer_not_implemented",
+            target:  to,
+            message: "Agent-to-agent transfer is not supported",
+          },
+        });
+        return false;
       }
 
       // Execute the actual provider-level call redirect
@@ -1129,6 +1137,25 @@ export async function createSession(params: {
             xmlUrl = `${baseUrl}/api/webhooks/vobiz/transfer-xml?target=${encodeURIComponent(to)}${callerIdQs}`;
           }
           await transferVobizCall({ authId, authToken, callUuid: params.externalCallId, xmlUrl, callDirection: params.callDirection });
+        } else {
+          // Unknown / unsupported telephony provider. We optimistically set
+          // wasTransferred=true before the provider branch (to win the WS-close race),
+          // so undo it here and report failure instead of silently ending the call in
+          // dead air.
+          wasTransferred = false;
+          transferredTo = null;
+          void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
+          logger.warn({ callId: callRecord.id, provider: tprov ?? "unknown" }, "Transfer: unsupported telephony provider — cannot redirect (call continues)");
+          logExec(EXEC_COMPONENTS.Tool, "system", {
+            status: "error",
+            metadata: {
+              event:    "Transfer Failed",
+              reason:   "unsupported_provider",
+              provider: tprov ?? "unknown",
+              target:   to,
+            },
+          });
+          return false;
         }
         // suppress unused-import warnings for builders not used via direct call
         void buildTwilioWarmTransferTwiML; void buildPlivoWarmTransferXml; void buildVobizWarmTransferXml;

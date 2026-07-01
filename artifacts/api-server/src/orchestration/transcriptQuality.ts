@@ -128,6 +128,16 @@ const SEMANTIC_INTERRUPT_PATTERNS: RegExp[] = [
   /\bsay that again\b/i,
   /\bdobara\b/i,                   // Hindi: again
   /\bphir se\b/i,                  // Hindi: once more
+
+  // Tamil / Tanglish stop + language-switch cues
+  /\b(english|inglish)\s*(la|le|ah|a)?\s*(pesu|pesunga|pesanum|pannunga|pannalam)\b/i,
+  /\b(wait|stop)\s*(pannunga|pannalam|pannu)\b/i,
+  /நிறுத்த/u,
+  /காத்து/u,
+  /போதும்/u,
+  /இல்லை\s*,?\s*(அது|அப்படி|இல்ல)/u,
+  /\bseri\s+seri\b/i,
+  /\bok\s+ok\b/i,
 ];
 
 /**

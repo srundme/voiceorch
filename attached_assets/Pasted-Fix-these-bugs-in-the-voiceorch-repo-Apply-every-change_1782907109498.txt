@@ -1,0 +1,149 @@
+Fix these bugs in the voiceorch repo. Apply every change below, rebuild the api-server, and restart it when done (orchestration code does not hot-reload).
+
+Call problems I'm seeing (Agent 59, VoBiz inbound, Tamil)
+On every inbound call:
+
+~6 seconds of dead air at the start — no greeting, no ambient
+Barge-in / interruption does not work — I can't talk over the agent
+Heavy latency on every turn
+Sarvam STT is inaccurate; when I ask for English the agent stays in Tamil
+Root causes in code:
+
+Returning callers trigger an LLM greeting with the full 31k system prompt instead of a short one
+A self-echo gate blocks caller audio from reaching Sarvam STT unless energy > 1200, so barge-in never fires
+greetingEchoHoldUntil blocks barge-in for the full greeting (~7s)
+autoSwitchToEnglish is not wired into pipeline AgentConfig, so English requests are ignored in strict Tamil mode
+Changes to make
+1. artifacts/api-server/src/orchestration/pipeline.ts
+Add near the top (after existing constants):
+
+const GREETING_ECHO_HOLD_CAP_MS = 3000;
+function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string): string {
+  const memoryMatch = fullSystemPrompt.match(
+    /=== CALLER MEMORY[\s\S]*?=====================================/,
+  );
+  const memoryBlock = memoryMatch?.[0] ?? "";
+  const langName = LANG_DISPLAY_NAMES[language] ?? language;
+  const parts = [
+    memoryBlock,
+    `[LANGUAGE] Respond ONLY in ${langName}.`,
+    "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.",
+  ].filter(Boolean);
+  return parts.join("\n\n");
+}
+In handleProcessedAudio() streaming STT path — DELETE this entire block:
+
+if (
+  this.config.telephonyProvider !== "webcall" &&
+  (this.isPlaying || Date.now() < this.bargeInHoldUntil) &&
+  !hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)
+) {
+  this.logSelfEchoDrop();
+  return;
+}
+Replace with a comment: carrier echo is filtered on the transcript side via isSelfEcho, not by starving STT.
+
+In greet() — replace the greeting LLM system prompt:
+
+Instead of passing the full this.agent.systemPrompt, use buildCompactGreetingPrompt(...) with only the caller-memory block
+Log greetingLlmMs and promptChars after the greeting LLM call
+Cap greeting echo hold:
+
+// Change FROM:
+this.greetingEchoHoldUntil = Date.now() + estGreetMs + CARRIER_ECHO_LATENCY_MS;
+// TO:
+this.greetingEchoHoldUntil = Date.now() + Math.min(
+  estGreetMs + CARRIER_ECHO_LATENCY_MS,
+  GREETING_ECHO_HOLD_CAP_MS,
+);
+Language / English switch — in streaming STT final transcript handler:
+
+Run detectExplicitLanguageRequest(text) even when languageAutoDetect is false, if autoSwitchToEnglish is true and request is en-IN
+Latch requestedLangLatch and set currentLang when caller explicitly asks for English
+In processTurn() lang guard — add before the ABSOLUTE RULE else branch:
+
+If requestedLangLatch === "en-IN" OR (autoSwitchToEnglish && currentLang === "en-IN"), inject [LANGUAGE RULE — OVERRIDE] telling LLM to respond in English and ignore STRICT LANGUAGE RULE
+In detectExplicitLanguageRequest() — extend detection:
+
+Add inglish, Tamil script ஆங்கிலம்|இங்கிலிஷ், can you to request verbs, pesu|pesunga|pesanum|pannunga|pannalam for Tanglish
+executeTransferAgent() — fix stub:
+
+await onCallTransfer, return error string to LLM if false, only call onCallEnd() on success
+In tool handler: return await this.executeTransferAgent(tool, args)
+IVR agent transfer — fix false success:
+
+Await onCallTransfer, only return true if it succeeded; otherwise log warning and continue with AI
+2. artifacts/api-server/src/orchestration/transcriptQuality.ts
+Add Tamil/Tanglish patterns to SEMANTIC_INTERRUPT_PATTERNS:
+
+/\b(english|inglish)\s*(la|le|ah|a)?\s*(pesu|pesunga|pesanum|pannunga|pannalam)\b/i,
+/\b(wait|stop)\s*(pannunga|pannalam|pannu)\b/i,
+/நிறுத்த/u,
+/காத்து/u,
+/போதும்/u,
+/இல்லை\s*,?\s*(அது|அப்படி|இல்ல)/u,
+/\bseri\s+seri\b/i,
+/\bok\s+ok\b/i,
+3. artifacts/api-server/src/orchestration/types.ts
+Add to AgentConfig interface:
+
+autoSwitchToEnglish: boolean;
+4. artifacts/api-server/src/orchestration/session.ts
+Load autoSwitchToEnglish in agentConfig build:
+
+autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
+transfer_agent stub — change from returning true to:
+
+logger.warn(..., "Agent-to-agent transfer requested but not yet implemented");
+logExec(..., status: "error", reason: "agent_transfer_not_implemented");
+return false;
+After vobiz transfer branch — add else for unsupported providers:
+
+} else {
+  wasTransferred = false;
+  transferredTo = null;
+  void patchSessionMeta(sessionId, { wasTransferred: false, transferredTo: null }, redisTtl);
+  logger.warn(..., "Transfer: unsupported telephony provider");
+  return false;
+}
+5. artifacts/api-server/src/routes/webhooks.ts (~line 739)
+ .where(sql`agent_id = ${agentId} AND status = 'active'`);
+ .where(sql`agent_id = ${agentId} AND status = 'in_progress'`);
+6. artifacts/api-server/src/routes/calls.ts
+VoBiz provider query — scope to agent owner:
+
+.where(and(
+  eq(providersTable.providerName, "vobiz"),
+  eq(providersTable.userId, agent.userId),
+  eq(providersTable.isActive, true),
+))
+After triggerTransfer() — if !transferred, return 409 instead of continuing:
+
+if (!transferred) {
+  res.status(409).json({ error: "Transfer could not be initiated — call is not connected to the telephony provider yet." });
+  return;
+}
+7. artifacts/api-server/src/orchestration/telephony/twilio.ts and plivo.ts
+Copy the VoBiz sessionEndedBeforeReady pattern from vobiz.ts:
+
+Add let sessionEndedBeforeReady = false
+On stop/close/error when sessionId is null, set sessionEndedBeforeReady = true
+After createSession returns, if sessionEndedBeforeReady, call endSession immediately
+In onCallEnd, skip ws.close() if sess?.wasTransferred
+8. artifacts/dashboard/src/pages/agents/edit.schema.ts
+Add hydrateToolsForForm() — converts API JSON Schema webhook parameters back to the form array shape (paramName, dataType, paramDescription, required).
+
+9. artifacts/dashboard/src/pages/agents/edit.tsx
+Import hydrateToolsForForm from edit.schema
+In form.reset(): add missing fields — languageAutoDetect, voicemailLeadInSeconds, all startSpeaking* and stopSpeaking* fields, complianceIrdai/Dpdp/Trai
+Use hydrateToolsForForm(agent.tools ?? []) instead of raw tools
+Fix defaultValues.vadSilenceMs from 250 to 350
+10. artifacts/dashboard/src/pages/agents/builder.tsx
+Import hydrateToolsForForm
+Load webhookSecret always from agentConfig (not only when URL is HTTPS)
+Add autoSwitchToEnglish to defaultValues and form.reset()
+Add autoRedialEnabled/DelayMinutes/MaxAttempts to defaultValues
+Use hydrateToolsForForm for tools
+Fix error handler: if (Object.keys(mapped).length > 0) not if (mapped)
+11. artifacts/dashboard/src/pages/agents/edit.test.ts
+Change expectation: expect(result.data.llmProvider).toBe("qwen") (was incorrectly "google")

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ASR_MODELS, LLM_MODELS, TTS_MODELS, getModelError } from "@/lib/agent-providers";
+import type { AgentTool } from "@workspace/api-client-react";
 
 export const agentFormSchema = z.object({
   name:              z.string().min(1, "Name is required"),
@@ -119,3 +120,35 @@ export const agentFormSchema = z.object({
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
+
+type AgentFormTool = NonNullable<AgentFormValues["tools"]>[number];
+type AgentFormToolParam = NonNullable<AgentFormTool["parameters"]>[number];
+
+type WebhookParameterSchema = {
+  type?: string;
+  properties?: Record<string, { type?: string; description?: string }>;
+  required?: string[];
+};
+
+/**
+ * Inverse of the webhook-tool serialization in buildUpdateAgentPayload: converts
+ * API tools (whose webhook `parameters` are in JSON Schema shape) back into the
+ * form array shape. Non-webhook tools pass through unchanged.
+ */
+export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[] {
+  return tools.map((tool) => {
+    if (tool.type !== "webhook") {
+      return tool as unknown as AgentFormTool;
+    }
+    const { parameters, ...toolRest } = tool as AgentTool & { parameters?: WebhookParameterSchema };
+    const properties = parameters?.properties ?? {};
+    const requiredKeys = parameters?.required ?? [];
+    const formParameters: AgentFormToolParam[] = Object.entries(properties).map(([key, prop]) => ({
+      paramName: key,
+      dataType: (prop?.type ?? "string") as AgentFormToolParam["dataType"],
+      paramDescription: prop?.description ?? "",
+      required: requiredKeys.includes(key),
+    }));
+    return { ...toolRest, parameters: formParameters } as unknown as AgentFormTool;
+  });
+}

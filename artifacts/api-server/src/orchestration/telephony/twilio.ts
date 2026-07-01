@@ -44,6 +44,10 @@ export async function handleTwilioWebSocket(
   let sessionId: string | null = null;
   let streamSid: string | null = null;
   let callSid: string | null = null;
+  // True when Twilio sent "stop"/closed the socket while createSession was still
+  // awaiting. sessionId was null then so endSession was skipped — detect it and end
+  // the session as soon as sessionId is assigned so the record isn't stuck in_progress.
+  let sessionEndedBeforeReady = false;
 
   function sendAudioToTwilio(audio: Buffer): void {
     if (!streamSid || ws.readyState !== ws.OPEN) return;
@@ -121,7 +125,16 @@ export async function handleTwilioWebSocket(
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
             onAudioOut: sendAudioToTwilio,
-            onCallEnd: () => ws.close(),
+            onCallEnd: () => {
+              // Do NOT close the WS if the call was transferred — the provider is
+              // redirecting the leg to the human agent; a close frame aborts it.
+              const sess = sessionId ? getSession(sessionId) : null;
+              if (sess?.wasTransferred) {
+                logger.info({ sessionId }, "Twilio onCallEnd: skipping ws.close() — call is being transferred");
+                return;
+              }
+              ws.close();
+            },
             onBargeIn: () => {
               // Clear any audio Twilio has buffered but not yet played
               if (streamSid && ws.readyState === ws.OPEN) {
@@ -130,7 +143,12 @@ export async function handleTwilioWebSocket(
             },
           });
           sessionId = sid;
-          logger.info({ sessionId, callSid, agentId }, "Twilio session started");
+          if (sessionEndedBeforeReady) {
+            logger.warn({ sessionId, agentId }, "Twilio session ended before setup completed — ending immediately");
+            await endSession(sessionId);
+          } else {
+            logger.info({ sessionId, callSid, agentId }, "Twilio session started");
+          }
         } catch (err) {
           logger.error(
             { err, agentId, externalCallId: callSid, streamSid, provider: "twilio", reason: toReadableError(err, "Twilio session setup failed") },
@@ -156,6 +174,7 @@ export async function handleTwilioWebSocket(
       case "stop":
         logger.info({ sessionId }, "Twilio stream stopped");
         if (sessionId) await endSession(sessionId);
+        else sessionEndedBeforeReady = true;
         break;
     }
   });
@@ -166,6 +185,8 @@ export async function handleTwilioWebSocket(
       endSession(sessionId).catch((err: unknown) =>
         logger.error({ sessionId, err }, "Twilio WS close: endSession failed"),
       );
+    } else {
+      sessionEndedBeforeReady = true;
     }
   });
 
@@ -175,6 +196,8 @@ export async function handleTwilioWebSocket(
       failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
         logger.error({ sessionId, err: e }, "Twilio WS error: failSession failed"),
       );
+    } else {
+      sessionEndedBeforeReady = true;
     }
   });
 }

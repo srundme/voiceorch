@@ -760,7 +760,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     const [countRow] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(callsTable)
-      .where(sql`agent_id = ${agentId} AND status = 'active'`);
+      .where(sql`agent_id = ${agentId} AND status = 'in_progress'`);
     if ((countRow?.n ?? 0) >= maxConcurrent) {
       const holdPart = holdUrl
         ? `\n  <Play loop="10">${escapeXml(holdUrl)}</Play>`

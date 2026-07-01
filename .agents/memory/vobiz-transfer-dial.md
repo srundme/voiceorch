@@ -40,6 +40,13 @@ hanging with a dead AI stream. `triggerTransfer` runs outside `createSession`'s
 closure, so the session object exposes a `setTransferred(to)` method to flip the
 in-memory flag from outside.
 
+**Cross-provider invariant:** the `onCallEnd` guard is NOT vobiz-only. EVERY
+telephony transport's `onCallEnd` must `skip ws.close()` when
+`getSession(sessionId)?.wasTransferred` — `twilio.ts` and `plivo.ts` share the
+exact same media-stream stop/close race, so a bare `onCallEnd: () => ws.close()`
+there silently aborts provider transfers. Any NEW transport adapter must mirror
+this or its transfers will drop the caller.
+
 ## Other VoBiz transfer facts (confirmed)
 - Transfer endpoint is `POST /Call/{uuid}/` (NO `/Transfer/` suffix) with
   `X-Auth-ID`/`X-Auth-Token` headers (not Basic auth) → 202 on success.

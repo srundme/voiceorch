@@ -31,7 +31,7 @@ import type { AgentVersion } from "@workspace/api-client-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { agentFormSchema } from "./edit.schema";
+import { agentFormSchema, hydrateToolsForForm } from "./edit.schema";
 import { buildUpdateAgentPayload, StagedPromptEditor } from "./edit";
 import type { AgentFormValues } from "./edit";
 import { Button } from "@/components/ui/button";
@@ -4315,6 +4315,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
       tools: [], genderDetectionEnabled: false, recordingEnabled: true, languageAutoDetect: false,
+      autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 1.5, startSpeakingOnNumberSecs: 0.5,
       stopSpeakingNumWords: 0, stopSpeakingVoiceSecs: 0.2, stopSpeakingBackOffSecs: 1,
@@ -4332,6 +4333,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
+      autoRedialEnabled: false,
+      autoRedialDelayMinutes: 2,
+      autoRedialMaxAttempts: 3,
     },
   });
 
@@ -4360,7 +4364,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       backchannelingEnabled:    agent.backchannelingEnabled ?? true,
       backchannelingFrequency:  agent.backchannelingFrequency ?? 0.5,
       webhookUrl:               (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? agent.webhookUrl : "",
-      webhookSecret:            (agent.webhookUrl && agent.webhookUrl.startsWith("https://")) ? ((agent as any).agentConfig?.webhookSecret ?? "") : "",
+      webhookSecret:            (agent as any).agentConfig?.webhookSecret ?? "",
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
@@ -4374,10 +4378,11 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction ?? "hangup") as AgentFormValues["voicemailAction"],
       voicemailMessage:         (agent as any).agentConfig?.voicemailMessage ?? "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds:   (agent as any).agentConfig?.voicemailLeadInSeconds ?? 2,
-      tools:                    (agent.tools ?? []) as AgentFormValues["tools"],
+      tools:                    hydrateToolsForForm(agent.tools ?? []),
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
+      autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
       startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0,
       startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 0,
@@ -4424,7 +4429,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         toast({ title: "Saved", description: `${data.name} updated.` });
       } catch (err) {
         const mapped = mapApiErrors(err);
-        if (mapped) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
+        if (Object.keys(mapped).length > 0) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
         toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
       }
     },

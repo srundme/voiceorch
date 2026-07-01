@@ -23,7 +23,17 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "artifacts/api-server/src/orchestration/pipeline.ts",
+  "artifacts/api-server/src/orchestration/session.ts",
+  "artifacts/api-server/src/orchestration/types.ts",
+  "artifacts/api-server/src/orchestration/transcriptQuality.ts",
+  "artifacts/api-server/src/orchestration/telephony/twilio.ts",
+  "artifacts/api-server/src/orchestration/telephony/plivo.ts",
   "artifacts/api-server/src/routes/webhooks.ts",
+  "artifacts/api-server/src/routes/calls.ts",
+  "artifacts/dashboard/src/pages/agents/edit.schema.ts",
+  "artifacts/dashboard/src/pages/agents/edit.tsx",
+  "artifacts/dashboard/src/pages/agents/builder.tsx",
+  "artifacts/dashboard/src/pages/agents/edit.test.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -60,7 +70,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(voice): repair broken live outbound VoBiz calls (dead air + helicopter + barge-in). (1) webhooks.ts: distrust VoBiz's synchronous AMD machine flag — it false-positives on live humans and routed answered calls into voicemail-delivery mode (~12s dead air + a dropped voicemail message; call 1320). Add trustMachineFlag (default true, Twilio/Plivo unchanged); VoBiz passes false so a machine verdict is logged/persisted but NOT enacted, opening the normal AI stream. (2) pipeline.ts: raise keepalive watchdog fill threshold 60ms→500ms so the pump no longer injects silence/ambient frames into live speech on ordinary streaming jitter (the chopping "helicopter"); still fills genuine stalls well under VoBiz's 2s 4010 drop. (3) pipeline.ts: narrow the streaming-STT input self-echo gate to the per-sentence echo-grace + greeting-grace window instead of isPlaying||bargeInHoldUntil (which muted Sarvam for the whole reply → loud-shout-only barge-in); residual echo is still rejected at the transcript level by isSelfEcho()/tail-echo guard, restoring normal-volume interruptions`,
+      message: `fix(voice): Agent 59 VoBiz inbound Tamil — dead air, barge-in, latency, English-switch, transfers, provider scope, form hydration (11-file spec). pipeline.ts: fix caller-memory trailer regex (={20,}; the 37-'=' trailer never matched the old 40-'=' pattern); build the greeting via buildCompactGreetingPrompt(systemPrompt, currentLang||sttConfig.language||language||"en-IN")+substituteSalutation (+greetingLlmMs/promptChars log); cap greetingEchoHoldUntil via Math.min(...,GREETING_ECHO_HOLD_CAP_MS=3000); honour explicit mid-call English requests when autoSwitchToEnglish — detectExplicitLanguageRequest on the final transcript latches en-IN and sets currentLang, with the OVERRIDE branch ahead of the ABSOLUTE-RULE language block; make executeTransferAgent return Promise<string|undefined> so tool + IVR paths only report success (and only fire onCallEnd) when the redirect actually happened; remove the now-dead input-level self-echo gate helper. session.ts: thread autoSwitchToEnglish into AgentConfig; stub agent→agent transfer (warn+logExec(agent_transfer_not_implemented)+return false) and add an explicit unsupported-provider else (wasTransferred=false, patchSessionMeta, warn, logExec, return false) so unimplemented transfers fail loudly and keep the call alive. calls.ts: scope the telephony-provider lookup to (providerName, userId, isActive=true); return 409 when a transfer has no external call ID instead of silently succeeding. twilio.ts + plivo.ts: mirror vobiz's sessionEndedBeforeReady guard so a stop/close/error during createSession still ends the session (no rows stuck in_progress). transcriptQuality.ts + types.ts: supporting types/quality tweaks. dashboard agents (edit.schema.ts/edit.tsx/builder.tsx/edit.test.ts): fix agent-form hydration so saved values populate on edit.`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

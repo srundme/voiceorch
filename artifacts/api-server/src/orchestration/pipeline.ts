@@ -149,6 +149,32 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
   "ar-EG": "Arabic", "ru-RU": "Russian",
 };
 
+const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so the
+                                          // caller can barge in within ~3s of the greeting
+                                          // start even if the estimated greeting is long —
+                                          // never lock the caller out of interrupting.
+
+/**
+ * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
+ * triggering a greeting generated against the full ~31k-token system prompt, adding
+ * seconds of latency (and cost) before the first word. The opening line only needs the
+ * caller-memory block (so it can greet a returning caller by name/context) plus a
+ * language + one-sentence-length instruction — nothing else.
+ */
+function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string): string {
+  const memoryMatch = fullSystemPrompt.match(
+    /=== CALLER MEMORY[\s\S]*?={20,}/,
+  );
+  const memoryBlock = memoryMatch?.[0] ?? "";
+  const langName = LANG_DISPLAY_NAMES[language] ?? language;
+  const parts = [
+    memoryBlock,
+    `[LANGUAGE] Respond ONLY in ${langName}.`,
+    "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.",
+  ].filter(Boolean);
+  return parts.join("\n\n");
+}
+
 /**
  * Detect the dominant BCP-47 language from the Unicode script of a transcript.
  * Sarvam STT does NOT return a detected language in its callback, so we infer it
@@ -336,13 +362,6 @@ export class OrchestrationPipeline {
   // (content-based self-echo rejection — additive to the time-window tail-echo
   // guard). Entries expire so stale agent speech can't suppress later caller input.
   private recentAgentSpeech: Array<{ tokens: Set<string>; estEndAt: number }> = [];
-  // Input-level self-echo gate (carrier / Live Call path only): counts streaming-STT
-  // frames dropped because they are the low-level carrier echo of our own TTS during
-  // playback, and throttles the log line so the suppression is observable without
-  // flooding. Reset on each emitted log line.
-  private selfEchoDropCount = 0;
-  private lastSelfEchoDropLogAt = 0;
-
   // Voicemail-delivery mode (Vobiz AMD leave_message). When set, the conversation
   // pipeline is bypassed: inbound audio only drives greeting-end detection and
   // deliverVoicemail() speaks the configured message once the machine's greeting ends.
@@ -546,23 +565,6 @@ export class OrchestrationPipeline {
       if (matched / tokens.length >= SELF_ECHO_MIN_OVERLAP) return true;
     }
     return false;
-  }
-
-  /** Throttled log for the input-level self-echo gate. Records how many frames were
-   *  dropped at the recognizer feed because they were the agent's own carrier echo
-   *  during playback, emitting at most one line per second so a multi-second greeting
-   *  doesn't flood the logs. */
-  private logSelfEchoDrop(): void {
-    this.selfEchoDropCount++;
-    const now = Date.now();
-    if (now - this.lastSelfEchoDropLogAt >= 1000) {
-      logger.info(
-        { callId: this.config.callId, droppedFrames: this.selfEchoDropCount },
-        "Streaming STT: gating self-echo frames at input during agent playback (half-duplex)",
-      );
-      this.lastSelfEchoDropLogAt = now;
-      this.selfEchoDropCount = 0;
-    }
   }
 
   constructor(config: SessionConfig) {
@@ -898,6 +900,21 @@ export class OrchestrationPipeline {
               }
               this.currentLang = detected;
               if (!detected.startsWith("en-")) this.lastNonEnglishLang = detected;
+            }
+          } else if (this.agent.autoSwitchToEnglish) {
+            // Strict single-language mode, but the operator enabled "auto switch to
+            // English". Honor an EXPLICIT caller request for English (only) — latch it
+            // so it sticks, and flip currentLang so the per-turn OVERRIDE guard fires.
+            const requested = detectExplicitLanguageRequest(text);
+            if (requested === "en-IN") {
+              if (this.requestedLangLatch !== "en-IN") {
+                logger.info(
+                  { callId: this.config.callId, text: text.slice(0, 60) },
+                  "autoSwitchToEnglish: caller requested English — latched",
+                );
+              }
+              this.requestedLangLatch = "en-IN";
+              this.currentLang = "en-IN";
             }
           }
           // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
@@ -1239,31 +1256,15 @@ export class OrchestrationPipeline {
       // recognizer, gets transcribed as a phantom caller turn that restarts/interrupts
       // the greeting (call 772).
       //
-      // SCOPE: drop below-threshold frames ONLY during the fresh-audio echo window —
-      // the per-sentence 600 ms grace (bargeInSentenceStartAt + bargeInEchoGraceMs) and,
-      // carrier path only, the full-greeting grace (greetingEchoHoldUntil, too long for
-      // the 600 ms window). This MIRRORS the streaming-transcript barge-in grace so the
-      // input feed and the detector agree. It deliberately does NOT gate on isPlaying ||
-      // bargeInHoldUntil: bargeInHoldUntil is extended to the WHOLE sentence length in
-      // _playSentenceImpl, so that condition muted Sarvam for the entire reply and made
-      // normal-volume interruptions impossible ("loud-shout-only" barge-in regression).
-      // After the grace window, frames flow to the recognizer and residual carrier echo
-      // is rejected at the TRANSCRIPT level — the content-based isSelfEcho() guard and
-      // the post-playback tail-echo time guard in handleStreamingTranscript() discard
-      // any transcript that matches the agent's own recent speech (call 772 protection
-      // preserved), while genuine caller words pass through and trigger barge-in.
-      // A frame whose energy exceeds the barge-in threshold is a genuinely loud caller
-      // and still passes through even inside the grace window. Web calls rely on browser
-      // AEC and keep full-duplex, so the gate is restricted to telephonyProvider !== "webcall".
-      if (
-        this.config.telephonyProvider !== "webcall" &&
-        (Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
-          Date.now() < this.greetingEchoHoldUntil) &&
-        !hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)
-      ) {
-        this.logSelfEchoDrop();
-        return;
-      }
+      // INPUT-LEVEL SELF-ECHO GATE REMOVED (barge-in regression, calls 772→1320):
+      // We no longer drop below-threshold frames here. Gating the STT INPUT feed during
+      // agent speech starved Sarvam of caller audio for the whole reply, so only a shout
+      // could interrupt — normal-volume barge-in was impossible. Carrier echo is filtered
+      // on the TRANSCRIPT side instead: the content-based isSelfEcho() guard + the
+      // post-playback tail-echo time guard in handleStreamingTranscript() discard any
+      // transcript that matches the agent's own recent speech (call 772 protection
+      // preserved), while genuine caller words always reach the recognizer and can
+      // interrupt at normal volume.
 
       // KB prefetch: fire on the first frame of a new speech segment so the lookup
       // runs during the utterance rather than after STT resolves.
@@ -1509,7 +1510,19 @@ export class OrchestrationPipeline {
           // placeholder (session.ts deliberately skips it). Detection has not fired
           // at greeting time, so resolve it to the neutral salutation here — never
           // send the raw token to the greeting LLM (it would echo it literally).
-          const greetingSystemPrompt = `${this.substituteSalutation(this.agent.systemPrompt, this.salutationFor(null))}\n\n[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.`;
+          // COMPACT greeting prompt: only the caller-memory block + a language and a
+          // one-sentence instruction. Generating the opener against the full ~31k-token
+          // system prompt added seconds of latency (and cost) before the first word.
+          // Language falls back to the STT language, NOT agent.language (which defaults
+          // to en-US even for e.g. a Tamil agent) so the opener is in the right language.
+          const greetingSystemPrompt = this.substituteSalutation(
+            buildCompactGreetingPrompt(
+              this.agent.systemPrompt,
+              this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN",
+            ),
+            this.salutationFor(null),
+          );
+          const _greetLlmStartAt = Date.now();
           await this.llm.chat(
             greetingTrigger, greetingSystemPrompt,
             (token) => { greeting += token; },
@@ -1521,6 +1534,10 @@ export class OrchestrationPipeline {
                 this.llmOutputTokensTotal += usage.outputTokens;
               },
             }
+          );
+          logger.info(
+            { callId: this.config.callId, greetingLlmMs: Date.now() - _greetLlmStartAt, promptChars: greetingSystemPrompt.length },
+            "Greeting LLM completed",
           );
         } catch (llmErr) {
           // Recoverable: a transient greeting-LLM failure must NOT drop the call
@@ -1562,7 +1579,12 @@ export class OrchestrationPipeline {
       // AEC and must keep mid-greeting interruptibility, so this is telephony-only.
       if (this.config.telephonyProvider !== "webcall") {
         const estGreetMs = Math.round(greeting.length * 70);
-        this.greetingEchoHoldUntil = Date.now() + estGreetMs + CARRIER_ECHO_LATENCY_MS;
+        // Cap the hold so a long estimated greeting can't lock the caller out of
+        // barging in for more than ~3s after the greeting starts.
+        this.greetingEchoHoldUntil = Date.now() + Math.min(
+          estGreetMs + CARRIER_ECHO_LATENCY_MS,
+          GREETING_ECHO_HOLD_CAP_MS,
+        );
       }
       this.isPlaying = true;
       try {
@@ -2189,7 +2211,7 @@ export class OrchestrationPipeline {
     } else if (tool.type === "transfer_warm") {
       return await this.executeTransferWarm(tool, args);
     } else if (tool.type === "transfer_agent") {
-      await this.executeTransferAgent(tool, args);
+      return await this.executeTransferAgent(tool, args);
     } else if (tool.type === "webhook") {
       await this.executeWebhookTool(tool, args);
     } else if (tool.type === "send_sms") {
@@ -2654,12 +2676,19 @@ export class OrchestrationPipeline {
     return undefined;
   }
 
-  private async executeTransferAgent(tool: AgentTool & { type: "transfer_agent" }, _args: Record<string, unknown>): Promise<void> {
+  private async executeTransferAgent(tool: AgentTool & { type: "transfer_agent" }, _args: Record<string, unknown>): Promise<string | undefined> {
     const targetAgentId = tool.targetAgentId;
     logger.info({ callId: this.config.callId, targetAgentId }, "Executing transfer_agent");
 
-    // Notify session layer with agent: prefix (session.ts will handle AI-to-AI handoff)
-    this.config.onCallTransfer?.(`agent:${targetAgentId}`);
+    // Notify session layer with agent: prefix (session.ts handles AI-to-AI handoff).
+    // Only end THIS call if the handoff actually succeeded — if it's unsupported or
+    // fails, report the failure back to the LLM so it keeps talking to the caller
+    // instead of the call going dead after a no-op transfer.
+    const ok = (await this.config.onCallTransfer?.(`agent:${targetAgentId}`)) ?? false;
+    if (!ok) {
+      logger.warn({ callId: this.config.callId, targetAgentId }, "transfer_agent: handoff failed/unsupported — returning error to LLM");
+      return "transfer_failed: unable to transfer to the requested agent right now";
+    }
     this.config.onCallEnd();
 
     // Write lead transfer DB
@@ -2669,6 +2698,7 @@ export class OrchestrationPipeline {
       transferTo: `agent:${targetAgentId}`,
       type: "agent",
     });
+    return undefined;
   }
 
   // ── Core turn logic ───────────────────────────────────────────────────────────
@@ -2922,6 +2952,19 @@ export class OrchestrationPipeline {
             `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
             `EXACTLY as written in your instructions; never translate or transliterate them.`;
         }
+      } else if (this.requestedLangLatch === "en-IN" || (this.agent.autoSwitchToEnglish && this.currentLang === "en-IN")) {
+        // Strict single-language mode, but the caller explicitly asked for English and
+        // the operator enabled auto-switch-to-English. Override the ABSOLUTE RULE for
+        // this reply so the agent actually answers in English instead of staying locked
+        // to its base language.
+        langGuard =
+          `[LANGUAGE RULE — OVERRIDE] The caller has explicitly requested English. ` +
+          `Respond in clear, plain English ONLY for this entire response. ` +
+          `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
+          `Tamil, Hindi, Hinglish, or any other language — the caller has asked for English. ` +
+          `Do not mix other languages into your reply. ` +
+          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+          `EXACTLY as written in your instructions; never translate or transliterate them.`;
       } else {
         langGuard =
           `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
@@ -4348,9 +4391,15 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId, digit, label: opt?.label ?? "(unknown)" }, "IVR digit received");
 
     if (opt?.targetAgentId !== undefined) {
-      this.config.onCallTransfer?.(`agent:${opt.targetAgentId}`);
-      logger.info({ callId: this.config.callId, targetAgentId: opt.targetAgentId }, "IVR: call transferred to agent");
-      return true;
+      // Only treat the IVR selection as a real transfer if the handoff actually
+      // succeeded. A false/unsupported result must NOT return true (which would stop
+      // the pipeline and leave the caller in dead air) — fall through to the AI instead.
+      const ok = (await this.config.onCallTransfer?.(`agent:${opt.targetAgentId}`)) ?? false;
+      if (ok) {
+        logger.info({ callId: this.config.callId, targetAgentId: opt.targetAgentId }, "IVR: call transferred to agent");
+        return true;
+      }
+      logger.warn({ callId: this.config.callId, targetAgentId: opt.targetAgentId }, "IVR: agent transfer failed/unsupported — continuing with AI");
     }
 
     // No transfer — append the selection to the system prompt so the LLM knows
@@ -4612,7 +4661,7 @@ function detectExplicitLanguageRequest(text: string): string | null {
   const t = text.toLowerCase();
 
   // Language mentions (romanised + Devanagari).
-  const mentionsEn = /\benglish\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी/i.test(text);
+  const mentionsEn = /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கிலம்|இங்கிலிஷ்/i.test(text);
   const mentionsHi = /\bhindi\b|हिन्दी|हिंदी/i.test(text);
   if (!mentionsEn && !mentionsHi) return null;
 
@@ -4621,6 +4670,8 @@ function detectExplicitLanguageRequest(text: string): string | null {
   // ignored. Cues: a request/switch verb, "in/to <lang>", or "<lang> me/mein".
   const hasRequestVerb =
     /\b(speak|speaking|talk|talking|say|reply|respond|answer|continue|switch|change|use|prefer|please)\b/.test(t) ||
+    /\bcan\s+you\b/.test(t) ||
+    /\b(pesu|pesunga|pesanum|pannunga|pannalam)\b/.test(t) ||
     /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t);
   const hasInLang =
     /\b(in|into|to)\s+(english|hindi)\b/.test(t) ||

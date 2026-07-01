@@ -45,6 +45,10 @@ export async function handlePlivoWebSocket(
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
+  // True when Plivo sent "stop"/closed the socket while createSession was still
+  // awaiting. sessionId was null then so endSession was skipped — detect it and end
+  // the session as soon as sessionId is assigned so the record isn't stuck in_progress.
+  let sessionEndedBeforeReady = false;
 
   function sendAudioToPlivo(audio: Buffer): void {
     if (ws.readyState !== ws.OPEN) return;
@@ -124,11 +128,25 @@ export async function handlePlivoWebSocket(
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
             onAudioOut: sendAudioToPlivo,
-            onCallEnd: () => ws.close(),
+            onCallEnd: () => {
+              // Do NOT close the WS if the call was transferred — the provider is
+              // redirecting the leg to the human agent; a close frame aborts it.
+              const sess = sessionId ? getSession(sessionId) : null;
+              if (sess?.wasTransferred) {
+                logger.info({ sessionId }, "Plivo onCallEnd: skipping ws.close() — call is being transferred");
+                return;
+              }
+              ws.close();
+            },
             onBargeIn: sendBargeIn,
           });
           sessionId = sid;
-          logger.info({ sessionId, agentId }, "Plivo session started");
+          if (sessionEndedBeforeReady) {
+            logger.warn({ sessionId, agentId }, "Plivo session ended before setup completed — ending immediately");
+            await endSession(sessionId);
+          } else {
+            logger.info({ sessionId, agentId }, "Plivo session started");
+          }
         } catch (err) {
           logger.error(
             { err, agentId, externalCallId: callId, streamId, provider: "plivo", reason: toReadableError(err, "Plivo session setup failed") },
@@ -150,6 +168,7 @@ export async function handlePlivoWebSocket(
 
       case "stop":
         if (sessionId) await endSession(sessionId);
+        else sessionEndedBeforeReady = true;
         break;
     }
   });
@@ -159,6 +178,8 @@ export async function handlePlivoWebSocket(
       endSession(sessionId).catch((err: unknown) =>
         logger.error({ sessionId, err }, "Plivo WS close: endSession failed"),
       );
+    } else {
+      sessionEndedBeforeReady = true;
     }
   });
 
@@ -168,6 +189,8 @@ export async function handlePlivoWebSocket(
       failSession(sessionId, toReadableError(err, "Telephony error")).catch((e: unknown) =>
         logger.error({ sessionId, err: e }, "Plivo WS error: failSession failed"),
       );
+    } else {
+      sessionEndedBeforeReady = true;
     }
   });
 }
