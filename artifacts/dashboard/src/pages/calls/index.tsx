@@ -4,10 +4,10 @@ import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import { format, parseISO } from "date-fns";
 import {
   Search, Phone, Mic, Cpu, Volume2, DollarSign,
-  Filter, Calendar, Headphones, BarChart3, Download, X,
+  Filter, Calendar, Headphones, Download, X,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
-  UserCheck, Users, TrendingUp, Activity, Globe, Eye,
+  UserCheck, Users, TrendingUp, Globe, Eye,
   PhoneOff, PhoneMissed, Megaphone,
 } from "lucide-react";
 import {
@@ -457,7 +457,7 @@ export default function CallsList() {
 
           {/* Stats Row */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               <MiniStat
                 label="Total Calls"
                 value={String(stats.total)}
@@ -472,11 +472,6 @@ export default function CallsList() {
                 label="Failed"
                 value={String(stats.failed)}
                 icon={<AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
-              />
-              <MiniStat
-                label="In Progress"
-                value={String(stats.inProgress)}
-                icon={<Activity className="h-3.5 w-3.5 text-blue-500" />}
               />
               <MiniStat
                 label="Avg Duration"
@@ -602,74 +597,6 @@ export default function CallsList() {
               </Button>
             </div>
 
-            <div className="shrink-0">
-              <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => navigate("/app/analytics")}>
-                <BarChart3 className="h-3.5 w-3.5" /> Analytics
-              </Button>
-            </div>
-
-            <div className="shrink-0 flex flex-wrap items-center gap-1.5">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground/60">
-                <span>Per page</span>
-                <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
-                  <SelectTrigger className="h-8 w-[70px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[25, 50, 100, 200].map(s => (
-                      <SelectItem key={s} value={String(s)}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => goToPage(safePage - 1)}
-                disabled={safePage <= 1}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums">
-                Page {safePage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => goToPage(safePage + 1)}
-                disabled={safePage >= totalPages}
-                aria-label="Next page"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-              <Input
-                type="number"
-                min={1}
-                max={totalPages}
-                placeholder="#"
-                className="h-8 w-14 text-xs"
-                value={pageInput}
-                onChange={(e) => setPageInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleJumpToPage();
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={handleJumpToPage}
-              >
-                Go
-              </Button>
-            </div>
-
             {hasActiveFilters && (
               <div className="shrink-0">
                 <Button
@@ -682,10 +609,6 @@ export default function CallsList() {
                 </Button>
               </div>
             )}
-
-            <div className="ml-auto shrink-0 text-[10px] text-muted-foreground/40 pl-2">
-              {filteredCalls.length} call{filteredCalls.length !== 1 ? "s" : ""}
-            </div>
           </div>
         </div>
 
@@ -839,6 +762,69 @@ export default function CallsList() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex flex-wrap items-center justify-end gap-1.5 py-3">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground/60">
+              <span>Per page</span>
+              <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                <SelectTrigger className="h-8 w-[70px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[25, 50, 100, 200].map(s => (
+                    <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => goToPage(safePage - 1)}
+              disabled={safePage <= 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums">
+              Page {safePage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => goToPage(safePage + 1)}
+              disabled={safePage >= totalPages}
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+            <Input
+              type="number"
+              min={1}
+              max={totalPages}
+              placeholder="#"
+              className="h-8 w-14 text-xs"
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleJumpToPage();
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={handleJumpToPage}
+            >
+              Go
+            </Button>
           </div>
         </div>
 
