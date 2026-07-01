@@ -1,0 +1,979 @@
+[
+  {
+    "id": 63625,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.776Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "New Agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "abf838c5-ec62-4ea4-92e9-d35ffeb86e0a"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1285,
+      "sessionId": "a99a6107-9b9a-4db0-b5e2-1472effbf4e0",
+      "callType": "Live Call",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-01T09:39:28.731Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 63626,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthik",
+        "callCount": 2
+      },
+      "factCount": 5,
+      "facts": {
+        "has_galaxy_health_insurance_app": "no",
+        "policy_start_date": "01/10/2023",
+        "policy_type": "Galaxy Marvel",
+        "policy_holder": "yes",
+        "name": "Karthik"
+      },
+      "recentCallsCount": 1
+    },
+    "metadata": null
+  },
+  {
+    "id": 63627,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 63630,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 63629,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "07971442376",
+        "from_number": "6383653279",
+        "agent_name": "New Agent",
+        "caller_number": "6383653279",
+        "date": "Wednesday, July 1, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 2  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\nKNOWN FACTS:\n• has_galaxy_health_insurance_app: no  [today]\n• policy_start_date: 01/10/2023  [today]\n• policy_type: Galaxy Marvel  [today]\n• policy_holder: yes  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, was contacted by an agent from Galaxy Health Insurance regarding his policy details and the benefits of using the Galaxy Health Insurance App. The agent explained the features of the app, including a wellness program called Gala Fit, and how it can help Karthik stay healthy"
+    },
+    "metadata": null
+  },
+  {
+    "id": 63628,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "abf838c5-ec62-4ea4-92e9-d35ffeb86e0a"
+    }
+  },
+  {
+    "id": 63631,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash-lite"
+    }
+  },
+  {
+    "id": 63632,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:28.777Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "65f4ccf9656d",
+      "promptLength": 30350,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 2  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\nKNOWN FACTS:\n• has_galaxy_health_insurance_app: no  [today]\n• policy_start_date: 01/10/2023  "
+    }
+  },
+  {
+    "id": 63634,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:29.926Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 63633,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:29.926Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, it looks like we got cut off. நீங்க ஆப்ப இன்ஸ்டால் பண்ணதுக்கு அப்புறம், உங்க பாலிசி details, coverage, benefits எல்லாமே அதுல பாத்துக்கலாம். தனியா பேப்பர்ஸ் தேடவோ, இல்ல us இன்சூரன்ஸ் கம்பெனிக்கு call பண்ணவோ தேவையில்லை."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 63636,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:43.576Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 13651,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 411874,
+      "textLength": 224,
+      "firstByteMs": 368
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 13651
+    }
+  },
+  {
+    "id": 63635,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:43.576Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 12871,
+      "turnNumber": 0,
+      "durationMs": 13653
+    }
+  },
+  {
+    "id": 63637,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:44.990Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஒரு நேர் இருங்க hello hello",
+      "endDetectToFinalMs": 114,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63638,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:45.107Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash-lite",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n[CURRENT DATE & TIME] Wednesday, July 1, 2026 at 3:09 PM GMT+5:30 (Asia/Kolkata)\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 2  |  Last: today  |  ⚠️ LAST CALL DROPPED\n\nKNOWN FACTS:\n• has_galaxy_health_insurance_app: no  [today]\n• policy_start_date: 01/10/2023  [today]\n• policy_type: Galaxy Marvel  [t",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63639,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:39:56.525Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 11422,
+      "turnNumber": 1,
+      "durationMs": 11422
+    }
+  },
+  {
+    "id": 63640,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:02.365Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63641,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:02.365Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரிங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63642,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:02.906Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 11422,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரிங்க. ஆப் இன்ஸ்டால் பண்ணதுக்கு அப்புறம், உங்க பாலிசி details, coverage, benefits எல்லாமே அதுல பாத்துக்கலாம். தனியா பேப்பர்ஸ் தேடவோ, இல்ல us இன்சூரன்ஸ் கம்பெனிக்கு call பண்ணவோ தேவையில்லை.\n\nஅடுத்ததா, இதுல doctor consultation feature இருக்கு. அது தினமும் ten AM-ல இருந்து eight PM வரைக்கும் available. கூடவே, blood test, full body check-up கூட app லயே book பண்ணிக்கலாம்.\n\nஇதுல ஏதாவது doubt இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 7787,
+      "outputTokens": 158,
+      "model": "gemini-2.5-flash-lite",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63643,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:03.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 770,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 7,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 770
+    }
+  },
+  {
+    "id": 63644,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:03.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 1,
+      "durationMs": 772
+    }
+  },
+  {
+    "id": 63645,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:03.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63646,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:03.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஆப் இன்ஸ்டால் பண்ணதுக்கு அப்புறம், உங்க பாலிசி details, coverage, benefits எல்லாமே அதுல பாத்துக்கலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63649,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:09.713Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 6576,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 196834,
+      "textLength": 102,
+      "firstByteMs": 275
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 6576
+    }
+  },
+  {
+    "id": 63647,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:09.713Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6151,
+      "turnNumber": 1,
+      "durationMs": 6577
+    }
+  },
+  {
+    "id": 63648,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:09.713Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "தனியா பேப்பர்ஸ் தேடவோ, இல்ல us இன்சூரன்ஸ் கம்பெனிக்கு call பண்ணவோ தேவையில்லை."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63650,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:09.713Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63653,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:14.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63652,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:14.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4782,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 143074,
+      "textLength": 77,
+      "firstByteMs": 160
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 4782
+    }
+  },
+  {
+    "id": 63651,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:14.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4471,
+      "turnNumber": 1,
+      "durationMs": 4783
+    }
+  },
+  {
+    "id": 63654,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:14.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அடுத்ததா, இதுல doctor consultation feature இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63656,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:18.091Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3594,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 107234,
+      "textLength": 51,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3594
+    }
+  },
+  {
+    "id": 63655,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:18.091Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3351,
+      "turnNumber": 1,
+      "durationMs": 3595
+    }
+  },
+  {
+    "id": 63658,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:18.091Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63657,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:18.091Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அது தினமும் ten AM-ல இருந்து eight PM வரைக்கும் available."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63659,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:21.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3323,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99554,
+      "textLength": 58,
+      "firstByteMs": 138
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 3323
+    }
+  },
+  {
+    "id": 63662,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:21.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3111,
+      "turnNumber": 1,
+      "durationMs": 3324
+    }
+  },
+  {
+    "id": 63660,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:21.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63661,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:21.415Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "கூடவே, blood test, full body check-up கூட app லயே book பண்ணிக்கலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63663,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.398Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 63664,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.401Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2985,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 143074,
+      "textLength": 68,
+      "firstByteMs": 256
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2985
+    }
+  },
+  {
+    "id": 63665,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.401Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 4471,
+      "turnNumber": 1,
+      "durationMs": 2985
+    }
+  },
+  {
+    "id": 63666,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.416Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இதுல ஏதாவது doubt இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63667,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.416Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 63668,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.457Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 53,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 26,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 53
+    }
+  },
+  {
+    "id": 63669,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.457Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 0,
+      "turnNumber": 1,
+      "durationMs": 54
+    }
+  },
+  {
+    "id": 63670,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.486Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1285"
+    }
+  },
+  {
+    "id": 63671,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.486Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1285"
+    }
+  },
+  {
+    "id": 63672,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:24.518Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "completed",
+        "reasonLabel": "Conversation completed",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Completed",
+        "durationSeconds": 57,
+        "turns": 1,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "ஒரு நேர் இருங்க hello hello",
+        "lastAgentResponse": "சரிங்க. ஆப் இன்ஸ்டால் பண்ணதுக்கு அப்புறம், உங்க பாலிசி details, coverage, benefits எல்லாமே அதுல பாத்துக்கலாம். தனியா பேப்பர்ஸ் தேடவோ, இல்ல us இன்சூரன்ஸ் கம்பெனிக்கு call பண்ணவோ தேவையில்லை.\n\nஅடுத்ததா, இதுல doctor consultation feature இருக்கு. அது தினமும் ten AM-ல இருந்து eight PM வரைக்கும் available. கூடவே, blood test, full body check-up கூட app லயே book பண்ணிக்கலாம்.\n\nஇதுல ஏதாவது doubt இருக்கா?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 57,
+      "turns": 1,
+      "avgSttMs": null,
+      "avgLlmMs": null,
+      "avgTtsMs": null
+    }
+  },
+  {
+    "id": 63673,
+    "callId": 1285,
+    "agentId": 59,
+    "ts": "2026-07-01T09:40:25.194Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false
+    }
+  }
+]
