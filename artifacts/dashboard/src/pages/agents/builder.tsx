@@ -74,6 +74,7 @@ import {
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
+import { GeneratePromptSheet } from "./generate-prompt-sheet";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
 
@@ -295,6 +296,7 @@ type CardSection = "transcriber" | "model" | "voice";
 
 function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
   const [openCard, setOpenCard] = useState<CardSection | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
   const [, navigate] = useLocation();
   const userProviderNames = useUserProviderNames();
 
@@ -386,8 +388,17 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const toggle = (c: CardSection) => setOpenCard(prev => prev === c ? null : c);
 
+  const agentName = form.watch("name") as string | undefined;
+
   return (
     <div className="flex h-full overflow-hidden">
+      <GeneratePromptSheet
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        defaultAgentName={agentName ?? agent?.name ?? ""}
+        defaultLanguage={language ?? "en-US"}
+        onApply={(prompt) => form.setValue("systemPrompt", prompt, { shouldDirty: true })}
+      />
 
       {/* ── Left: Vapi-style config ──────────────────────────────────────────── */}
       <div className="relative flex-1 overflow-y-auto min-w-0 border-r border-border/50">
@@ -717,6 +728,16 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">System Prompt</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2 gap-1 text-primary hover:bg-primary/5"
+                onClick={() => setGenerateOpen(true)}
+              >
+                <Sparkles className="w-2.5 h-2.5" />
+                Generate
+              </Button>
             </div>
             <FormField control={form.control} name="systemPrompt" render={({ field }) => (
               <FormItem className="space-y-0">
@@ -759,11 +780,36 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
 function PromptTab({ form }: { form: any }) {
   const { fields: pvFields, append: pvAppend, remove: pvRemove } = useFieldArray({ control: form.control, name: "promptVariables" });
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const agentName  = form.watch("name")     as string | undefined;
+  const agentLang  = form.watch("language") as string | undefined;
+
   return (
     <div className="relative flex flex-col h-full p-6 gap-4 overflow-y-auto">
+      <GeneratePromptSheet
+        open={generateOpen}
+        onOpenChange={setGenerateOpen}
+        defaultAgentName={agentName ?? ""}
+        defaultLanguage={agentLang ?? "en-US"}
+        onApply={(prompt) => {
+          form.setValue("systemPrompt", prompt, { shouldDirty: true });
+        }}
+      />
       <FormField control={form.control} name="systemPrompt" render={({ field }) => (
         <FormItem className="flex-1 flex flex-col space-y-2">
-          <FormLabel className="text-sm font-semibold">System Prompt</FormLabel>
+          <div className="flex items-center justify-between">
+            <FormLabel className="text-sm font-semibold">System Prompt</FormLabel>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5 hover:text-primary"
+              onClick={() => setGenerateOpen(true)}
+            >
+              <Sparkles className="w-3 h-3" />
+              Generate with AI
+            </Button>
+          </div>
           <FormControl>
             <Textarea className="flex-1 min-h-[320px] font-mono text-sm resize-none leading-relaxed" placeholder="You are a helpful voice assistant…" {...field} />
           </FormControl>
