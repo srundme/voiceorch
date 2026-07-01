@@ -1820,28 +1820,43 @@ function Step7({
       </div>
 
       <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Scheduling</p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Start Date & Time</Label>
-            <Input
-              type="datetime-local"
-              value={state.scheduledStartAt ?? ""}
-              onChange={e => setState({ scheduledStartAt: e.target.value || null })}
-              className="h-9 text-xs"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">End Date & Time</Label>
-            <Input
-              type="datetime-local"
-              value={state.scheduledEndAt ?? ""}
-              onChange={e => setState({ scheduledEndAt: e.target.value || null })}
-              className="h-9 text-xs"
-            />
-          </div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Schedule Batch</p>
+        <p className="text-xs text-muted-foreground -mt-2">When do you want to run this batch?</p>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Run At</Label>
+          <Input
+            type="datetime-local"
+            value={state.scheduledStartAt ?? ""}
+            onChange={e => setState({ scheduledStartAt: e.target.value || null })}
+            className="h-9 text-xs"
+          />
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "Run in 10 Minutes", minutes: 10 },
+            { label: "Run in 30 Minutes", minutes: 30 },
+            { label: "Run in 1 Hour",     minutes: 60 },
+          ].map(({ label, minutes }) => (
+            <button
+              key={minutes}
+              type="button"
+              onClick={() => {
+                const d = new Date(Date.now() + minutes * 60 * 1000);
+                const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                  .toISOString()
+                  .slice(0, 16);
+                setState({ scheduledStartAt: local });
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3 pt-1 border-t border-border">
           <Switch
             id="autostart"
             checked={state.autoStart}
@@ -1929,11 +1944,12 @@ function Step8({
             <DetailRow label="Max Attempts"    value={String(state.maxAttempts)} />
             <DetailRow label="Retry Delay"     value={`${state.retryDelayMinutes}m`} />
             {state.timezone && <DetailRow icon={<Globe className="w-3.5 h-3.5" />} label="Timezone" value={state.timezone} />}
-            <DetailRow
-              icon={<Play className="w-3.5 h-3.5 text-emerald-400" />}
-              label="Auto-start"
-              value={state.autoStart ? "Yes — starts immediately" : "No — stays in Draft"}
-            />
+            {state.scheduledStartAt
+              ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Run At" value={new Date(state.scheduledStartAt).toLocaleString()} />
+              : state.autoStart
+                ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Start" value="Immediately after import" />
+                : <DetailRow label="Start" value="Manual — stays in Draft" />
+            }
           </SummarySection>
         </div>
 
@@ -2036,11 +2052,12 @@ function Step8({
           {state.businessHoursStart != null && state.businessHoursEnd != null && (
             <DetailRow label="Business Hours" value={`${state.businessHoursStart}:00 – ${state.businessHoursEnd}:00`} />
           )}
-          <DetailRow
-            icon={<Play className="w-3.5 h-3.5 text-emerald-400" />}
-            label="Auto-start"
-            value={state.autoStart ? "Yes — starts immediately" : "No — stays in Draft"}
-          />
+          {state.scheduledStartAt
+            ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Run At" value={new Date(state.scheduledStartAt).toLocaleString()} />
+            : state.autoStart
+              ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Start" value="Immediately after import" />
+              : <DetailRow label="Start" value="Manual — stays in Draft" />
+          }
         </SummarySection>
 
         {Object.values(state.fieldMapping).some(Boolean) && (
