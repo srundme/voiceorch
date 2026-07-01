@@ -137,6 +137,11 @@ const BARGE_IN_ECHO_CALIBRATION_MS = Number(process.env.BARGE_IN_ECHO_CALIBRATIO
 // the estimate is still empty (≈ one sentence's calibration window to warm up).
 const BARGE_IN_ECHO_FLOOR_MIN_SAMPLES = Number(process.env.BARGE_IN_ECHO_FLOOR_MIN_SAMPLES ?? 10);
 const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 8); // ~160 ms of sustained above-bar speech to fire (streaming path)
+// Browser webcall: the browser's hardware/OS AEC already cancels the agent's own TTS before the
+// audio reaches the pipeline, so the telephony anti-echo bar (1200) is unnecessary and too high
+// for a typical browser mic. Use a lower threshold so a normal speaking volume can interrupt.
+// Env-tunable; a user-configured bargeInEnergyThreshold BELOW this value is still honoured.
+const BARGE_IN_WEBCALL_AEC_THRESHOLD = Number(process.env.BARGE_IN_WEBCALL_AEC_THRESHOLD ?? 400);
 // ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
 // On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
 // AFTER the time-based echo-grace windows expire, so STT finalizes it as a
@@ -1319,6 +1324,9 @@ export class OrchestrationPipeline {
     // no echo, so the configured Energy Threshold is honoured unchanged (a caller
     // speaking into a gap must interrupt at their normal level, not an echo-inflated one).
     const useAdaptive = streamingCarrier && this.isSendingTtsAudio;
+    // Webcall path: browser AEC cancels agent echo before it reaches us.
+    // Used to apply a lower threshold and enable the streaming frame-count cap.
+    const isWebcallStreaming = !respectHoldUntil && this.config.telephonyProvider === "webcall";
 
     const now = Date.now();
     if (
@@ -1366,6 +1374,13 @@ export class OrchestrationPipeline {
         Math.min(echoBar, BARGE_IN_ADAPTIVE_MAX_THRESHOLD),
       );
     }
+    // Webcall AEC path: browser already cancelled the echo so the telephony anti-echo
+    // bar (default 1200) is unnecessary. Lower to BARGE_IN_WEBCALL_AEC_THRESHOLD so a
+    // normal-volume browser mic can actually trigger a barge-in. A user-configured
+    // bargeInEnergyThreshold that is already lower than the AEC threshold is honoured.
+    if (isWebcallStreaming && effectiveThreshold > BARGE_IN_WEBCALL_AEC_THRESHOLD) {
+      effectiveThreshold = BARGE_IN_WEBCALL_AEC_THRESHOLD;
+    }
 
     // Periodic diagnostic so the exact echo/voice/threshold numbers for a line are
     // visible in the logs (throttled to ~once/700 ms while the agent is playing).
@@ -1379,6 +1394,18 @@ export class OrchestrationPipeline {
           configuredThreshold: this.bargeInEnergyThreshold, frames: this.bargeInSpeechFrames,
         },
         "energy barge-in monitor",
+      );
+    }
+    // Equivalent diagnostic for the webcall (AEC) streaming path.
+    if (isWebcallStreaming && now - this.lastEnergyMonitorLogAt >= 700) {
+      this.lastEnergyMonitorLogAt = now;
+      logger.info(
+        {
+          callId: this.config.callId, currentRms: Math.round(frameRms(pcm8k)),
+          effectiveThreshold: Math.round(effectiveThreshold),
+          configuredThreshold: this.bargeInEnergyThreshold, frames: this.bargeInSpeechFrames,
+        },
+        "webcall energy barge-in monitor",
       );
     }
 
@@ -1395,11 +1422,13 @@ export class OrchestrationPipeline {
       let effectiveMinFrames = this.stopSpeakingPlanConfigured
         ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
         : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 2) * 20);
-      // The streaming carrier path caps the frame requirement: Sarvam never finalizes
+      // All streaming STT paths (telephony carrier AND webcall) cap the frame
+      // requirement at BARGE_IN_STREAMING_MIN_FRAMES (~160 ms). Sarvam never finalizes
       // transcripts DURING talk-over, so energy is the ONLY real-time barge-in signal
-      // and must be responsive. ~160 ms of sustained above-bar speech is enough; the
-      // adaptive bar (not a long frame count) is what rejects the echo.
-      if (useAdaptive) {
+      // and must be responsive. The adaptive bar (telephony) / AEC (webcall) is what
+      // rejects the echo — a long frame count is not the right tool for that.
+      // Batch path (respectHoldUntil) keeps its own extended frame count.
+      if (!respectHoldUntil) {
         effectiveMinFrames = Math.max(
           BARGE_IN_MIN_FRAMES,
           Math.min(effectiveMinFrames, BARGE_IN_STREAMING_MIN_FRAMES),
