@@ -741,10 +741,26 @@ router.post("/crm/webhook/zoho/:connectionId", async (req, res): Promise<void> =
   }
 
   const body = req.body as Record<string, unknown>;
-  const leads = Array.isArray(body["leads"]) ? (body["leads"] as Array<Record<string, unknown>>) : [];
+
+  // Normalise the payload — Zoho sends different shapes depending on how the
+  // webhook is configured:
+  //   A) { "leads": [ { ... } ] }   — array (Zoho Functions / User-Defined body)
+  //   B) { "leads": { ... } }        — single object wrapped under "leads" key
+  //   C) flat body { "Mobile": ..., "First_Name": ... }  — Workflow Rule default
+  let leads: Array<Record<string, unknown>>;
+  if (Array.isArray(body["leads"])) {
+    leads = body["leads"] as Array<Record<string, unknown>>;
+  } else if (body["leads"] && typeof body["leads"] === "object") {
+    leads = [body["leads"] as Record<string, unknown>];
+  } else if (body["Mobile"] ?? body["Phone"] ?? body["phone"] ?? body["mobile"]) {
+    // Flat body — treat the whole payload as a single lead
+    leads = [body];
+  } else {
+    leads = [];
+  }
 
   if (leads.length === 0) {
-    logger.info({ connectionId }, "Zoho webhook payload has no leads array — nothing to process");
+    logger.info({ connectionId, body }, "Zoho webhook payload has no recognisable leads — nothing to process");
     return;
   }
 

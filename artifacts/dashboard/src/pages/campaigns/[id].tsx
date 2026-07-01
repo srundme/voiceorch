@@ -153,6 +153,7 @@ function CrmIntegrationCard({ campaignId }: { campaignId: number }) {
   const [selectedConnId, setSelectedConnId] = useState<number | "">("");
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [regenSaving, setRegenSaving] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   if (crmConns.length === 0) return null;
 
@@ -253,6 +254,56 @@ function CrmIntegrationCard({ campaignId }: { campaignId: number }) {
                 </div>
                 <p className="text-[10px] text-amber-400">Copy this secret now — it won&apos;t be shown again</p>
               </>
+            )}
+
+            {/* Zoho setup guide */}
+            {conn.provider === "zoho" && conn.hasWebhookSecret && (
+              <div className="border-t border-border/40 pt-2 mt-1">
+                <button
+                  type="button"
+                  className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                  onClick={() => setShowGuide(g => !g)}
+                >
+                  {showGuide ? "▾" : "▸"} How to set this up in Zoho CRM
+                </button>
+                {showGuide && (
+                  <div className="mt-2 space-y-2 text-[11px] text-muted-foreground leading-relaxed">
+                    <p className="font-semibold text-foreground/80">Zoho CRM → Workflow Rule setup</p>
+                    <ol className="space-y-1.5 list-none">
+                      {[
+                        <>In Zoho CRM, click the <strong className="text-foreground">⚙️ Setup</strong> icon (top-right) → <strong className="text-foreground">Automation → Workflow Rules</strong></>,
+                        <>Click <strong className="text-foreground">Create Rule</strong>. Module: <strong className="text-foreground">Leads</strong>. Give it a name like &quot;SnapServe Auto-Call&quot;</>,
+                        <>Trigger: <strong className="text-foreground">A record action is performed</strong> → tick <strong className="text-foreground">Create</strong> (fires when a new lead is added)</>,
+                        <>Under <strong className="text-foreground">Actions</strong>, click <strong className="text-foreground">+</strong> → choose <strong className="text-foreground">Webhook</strong> → Create new</>,
+                        <>Set <strong className="text-foreground">Method: POST</strong>, <strong className="text-foreground">URL Type: JSON</strong><br />
+                          <span>Paste this URL:</span>
+                          <div className="mt-1 flex items-center gap-2 bg-background rounded border border-border px-2 py-1 font-mono text-[10px] text-foreground">
+                            <span className="flex-1 truncate">{webhookUrlFor(conn)}</span>
+                            <CopyButton text={webhookUrlFor(conn)} />
+                          </div>
+                        </>,
+                        <>Add a <strong className="text-foreground">Custom Header</strong>:<br />
+                          Name: <code className="text-foreground bg-muted px-1 rounded">X-Zoho-Webhook-Secret</code>&nbsp;&nbsp;
+                          Value: <em>your secret (generated above)</em>
+                        </>,
+                        <>Under <strong className="text-foreground">Body</strong>, choose <strong className="text-foreground">User Defined</strong> and paste:
+                          <div className="mt-1 bg-background rounded border border-border p-2 font-mono text-[10px] text-foreground whitespace-pre overflow-x-auto">{`{\n  "leads": [{\n    "id": "\${Leads.Lead ID}",\n    "First_Name": "\${Leads.First Name}",\n    "Last_Name": "\${Leads.Last Name}",\n    "Mobile": "\${Leads.Mobile}",\n    "Phone": "\${Leads.Phone}",\n    "Email": "\${Leads.Email}",\n    "Company": "\${Leads.Company}"\n  }]\n}`}</div>
+                          <button type="button" className="mt-0.5 text-blue-400 hover:text-blue-300 text-[10px]"
+                            onClick={() => void navigator.clipboard.writeText(`{\n  "leads": [{\n    "id": "\${Leads.Lead ID}",\n    "First_Name": "\${Leads.First Name}",\n    "Last_Name": "\${Leads.Last Name}",\n    "Mobile": "\${Leads.Mobile}",\n    "Phone": "\${Leads.Phone}",\n    "Email": "\${Leads.Email}",\n    "Company": "\${Leads.Company}"\n  }]\n}`)}>
+                            Copy body template
+                          </button>
+                        </>,
+                        <>Save the webhook. Back on the rule, click <strong className="text-foreground">Save</strong> then <strong className="text-foreground">Activate</strong>. Done — every new lead in Zoho will now trigger an instant call from this campaign.</>,
+                      ].map((step, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="shrink-0 w-4 h-4 rounded-full bg-blue-500/15 text-blue-400 flex items-center justify-center text-[10px] font-bold mt-0.5">{i + 1}</span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         ))}
