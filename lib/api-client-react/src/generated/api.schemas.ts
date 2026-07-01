@@ -2244,6 +2244,7 @@ export type CampaignBatchLeadSource = typeof CampaignBatchLeadSource[keyof typeo
 export const CampaignBatchLeadSource = {
   csv: 'csv',
   meta: 'meta',
+  meta_ads: 'meta_ads',
   webhook: 'webhook',
 } as const;
 
@@ -2293,6 +2294,7 @@ export type CampaignBatchCreateLeadSource = typeof CampaignBatchCreateLeadSource
 export const CampaignBatchCreateLeadSource = {
   csv: 'csv',
   meta: 'meta',
+  meta_ads: 'meta_ads',
   webhook: 'webhook',
 } as const;
 

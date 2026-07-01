@@ -805,6 +805,7 @@ function Step3({
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedMeta, setCopiedMeta] = useState<string | null>(null);
   const [importConn, setImportConn] = useState<CrmConnection | null>(null);
   const { data: campaign } = useGetCampaign(campaignId, {
     query: { queryKey: getGetCampaignQueryKey(campaignId) },
@@ -1152,10 +1153,86 @@ function Step3({
     );
   }
 
-  // Meta form ──────────────────────────────────────────────────────────────────
+  // Meta Ads ──────────────────────────────────────────────────────────────────
+  const metaWebhookUrl  = `${window.location.origin}${BASE}/api/webhooks/lead/${campaign?.webhookToken ?? ""}`;
+  const metaVerifyToken = campaign?.webhookToken ?? "";
+  function copyMeta(text: string, key: string) {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopiedMeta(key);
+      setTimeout(() => setCopiedMeta(null), 1500);
+    });
+  }
+
   return (
     <div className="space-y-5 max-w-xl">
-      <MetaFormStep toast={toast} />
+      <div>
+        <h2 className="text-lg font-semibold">Meta Lead Ads Setup</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Your campaign webhook already accepts Meta Lead Ads — no extra access token needed.
+          Paste the URL and verify token into Meta Business Manager and subscribe to <code className="bg-muted px-1 rounded text-[11px]">leadgen</code> events.
+        </p>
+      </div>
+
+      {/* Webhook URL */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Webhook URL</Label>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 text-xs bg-muted/50 border border-border px-3 py-2 rounded-lg font-mono truncate">
+            {metaWebhookUrl}
+          </code>
+          <button
+            type="button"
+            onClick={() => copyMeta(metaWebhookUrl, "url")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            {copiedMeta === "url" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Verify token */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">Verify Token</Label>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 text-xs bg-muted/50 border border-border px-3 py-2 rounded-lg font-mono truncate">
+            {metaVerifyToken}
+          </code>
+          <button
+            type="button"
+            onClick={() => copyMeta(metaVerifyToken, "token")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            {copiedMeta === "token" ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Setup guide */}
+      <div className="bg-muted/20 border border-border rounded-xl p-4 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Setup in Meta Business Manager</p>
+        <ol className="space-y-2.5">
+          {[
+            <>Go to <strong className="text-foreground">Meta Business Suite → Integrations → Leads Centre → Webhooks</strong></>,
+            <>Click <strong className="text-foreground">Add Subscription</strong> — paste the <strong className="text-foreground">Webhook URL</strong> and <strong className="text-foreground">Verify Token</strong> from above</>,
+            <>Click <strong className="text-foreground">Verify and Save</strong>, then subscribe to the <code className="bg-muted px-1 rounded text-[10px]">leadgen</code> field event</>,
+            <>Submit a test lead from your ad form — an outbound call fires automatically within seconds</>,
+          ].map((step, i) => (
+            <li key={i} className="flex gap-2.5 text-xs text-muted-foreground leading-relaxed">
+              <span className="shrink-0 w-4 h-4 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-bold mt-0.5">{i + 1}</span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {/* Field mapping note */}
+      <div className="flex items-start gap-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2.5">
+        <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+        <p className="text-xs text-blue-300 leading-relaxed">
+          Meta sends <code className="bg-blue-500/15 px-1 rounded">phone_number</code>, <code className="bg-blue-500/15 px-1 rounded">full_name</code>, and <code className="bg-blue-500/15 px-1 rounded">email</code> automatically — no field mapping required.
+        </p>
+      </div>
+
       {campaignLeadSource !== "csv" && crmSection}
       {campaignLeadSource !== "csv" && importConn && (
         <CrmImportDialog
@@ -1886,8 +1963,8 @@ function Step8({
 
   async function handleLaunch() {
     try {
-      const leadSourceValue: "csv" | "meta" | "webhook" =
-        effectiveType === "meta_form" ? "meta" : effectiveType === "webhook" ? "webhook" : "csv";
+      const leadSourceValue: "csv" | "meta_ads" | "webhook" =
+        effectiveType === "meta_form" ? "meta_ads" : effectiveType === "webhook" ? "webhook" : "csv";
 
       const batch = await createBatch.mutateAsync({
         id: campaignId,

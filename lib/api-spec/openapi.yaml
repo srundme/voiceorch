@@ -8711,7 +8711,7 @@ components:
           enum: [draft, running, paused, stopped]
         leadSource:
           type: string
-          enum: [csv, meta, webhook]
+          enum: [csv, meta, meta_ads, webhook]
         leadSourceId:
           type: integer
           nullable: true
@@ -8782,7 +8782,7 @@ components:
           type: string
         leadSource:
           type: string
-          enum: [csv, meta, webhook]
+          enum: [csv, meta, meta_ads, webhook]
           default: csv
         leadSourceId:
           type: integer

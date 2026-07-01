@@ -36,7 +36,7 @@ import {
   Phone, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
-  KeyRound, Link2, Link2Off, Loader2,
+  KeyRound, Link2, Link2Off, Loader2, Instagram,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
@@ -1155,6 +1155,11 @@ export default function CampaignDetailPage() {
                   <FileText className="h-3 w-3" /> csv
                 </span>
               )}
+              {(campaign as any).leadSource === "meta_ads" && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-400 border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 rounded-md">
+                  <Instagram className="h-3 w-3" /> Meta Ads
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1277,7 +1282,17 @@ export default function CampaignDetailPage() {
 
           {/* Webhook Intake URL — only for webhook/Meta intake campaigns */}
           {campaign.webhookToken && (campaign as any).leadSource !== "csv" && (
-            <WebhookIntakeCard webhookUrl={webhookUrl} />
+            <>
+              <WebhookIntakeCard webhookUrl={webhookUrl} />
+              {(campaign as any).leadSource === "meta_ads" && (
+                <div className="flex items-center gap-2 -mt-2 px-1">
+                  <Instagram className="h-3 w-3 text-purple-400 shrink-0" />
+                  <p className="text-xs text-muted-foreground/60">
+                    This URL also accepts Meta Lead Ads webhooks automatically.
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {/* CRM Integration — instant trigger + import/batch (hidden for CSV campaigns) */}
