@@ -62,21 +62,26 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// IP-based rate limiting (outer shield) — skip exempt paths
+// Validate the platform session token (Bearer or ?token=) and populate
+// req.clerkUserId / req.sessionPayload before rate limiting + routing so the
+// IP rate limiter can skip authenticated users and the auth rate limiter can
+// key on the user id.
+app.use(attachSession);
+
+// Detect active admin impersonation sessions and register per-action audit hooks.
+app.use(detectImpersonation);
+
+// IP-based rate limiting (outer shield) — skip exempt paths and authenticated
+// requests. Authenticated users are already covered by authRateLimit (500/min),
+// so the tighter IP cap (100/min) would fire first and produce spurious 429s for
+// normal multi-page dashboard usage with TanStack Query auto-refetch.
 app.use((req, res, next) => {
-  if (isRateLimitExempt(req.url)) {
+  if (isRateLimitExempt(req.url) || (req as any).clerkUserId) {
     next();
   } else {
     ipRateLimit(req, res, next);
   }
 });
-
-// Validate the platform session token (Bearer or ?token=) and populate
-// req.clerkUserId / req.sessionPayload before rate limiting + routing.
-app.use(attachSession);
-
-// Detect active admin impersonation sessions and register per-action audit hooks.
-app.use(detectImpersonation);
 
 // Auth-based rate limiting (inner shield, after session is attached) — skip exempt paths
 app.use((req, res, next) => {
