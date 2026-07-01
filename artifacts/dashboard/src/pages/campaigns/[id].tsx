@@ -905,6 +905,237 @@ function WebhookIntakeCard({ webhookUrl }: { webhookUrl: string }) {
   );
 }
 
+// ── Meta Integration Card ─────────────────────────────────────────────────────
+
+type MetaValidationError = {
+  receivedFormId: string;
+  expectedFormId: string | null;
+  receivedPageId?: string | null;
+  expectedPageId?: string | null;
+  webhookToken: string;
+  timestamp: string;
+  reason: string;
+};
+
+type MetaCampaignProps = {
+  webhookToken: string;
+  lastWebhookAt?: string | null;
+  lastWebhookStatus?: string | null;
+  sourceFormId?: string | null;
+  sourcePageId?: string | null;
+  lastValidationError?: MetaValidationError | null;
+};
+
+function MetaIntegrationCard({
+  campaignId,
+  campaign,
+}: {
+  campaignId: number;
+  campaign: MetaCampaignProps;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const update = useUpdateCampaign();
+
+  const [formId,  setFormId]  = useState(campaign.sourceFormId ?? "");
+  const [pageId,  setPageId]  = useState(campaign.sourcePageId ?? "");
+  const [editing, setEditing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+
+  useEffect(() => {
+    setFormId(campaign.sourceFormId ?? "");
+    setPageId(campaign.sourcePageId ?? "");
+  }, [campaign.sourceFormId, campaign.sourcePageId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await update.mutateAsync({
+        id: campaignId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { sourceFormId: formId.trim() || null, sourcePageId: pageId.trim() || null } as any,
+      });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      setEditing(false);
+      toast({ title: "Meta Integration saved" });
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setFormId(campaign.sourceFormId ?? "");
+    setPageId(campaign.sourcePageId ?? "");
+  };
+
+  const lastErr    = campaign.lastValidationError;
+  const hasErr     = !!lastErr;
+  const isConfigured = !!campaign.sourceFormId;
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Instagram className="h-4 w-4 text-purple-400" />
+          <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Meta Lead Ads Integration</p>
+        </div>
+        {!editing && (
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground"
+            onClick={() => setEditing(true)}>
+            <Settings className="h-3 w-3" /> Configure
+          </Button>
+        )}
+      </div>
+
+      {/* Validation error banner */}
+      {hasErr && (
+        <div className="flex items-start gap-3 px-3 py-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.08]">
+          <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-amber-600 mb-0.5">Form ID Mismatch Detected</p>
+            <p className="text-xs text-muted-foreground/70">
+              Incoming Meta lead received from an unexpected Lead Form. Please verify your Meta Ads Manager configuration.
+            </p>
+            <div className="mt-2 space-y-0.5 font-mono text-[10px] text-muted-foreground/60">
+              <p>Received: <span className="text-foreground/80">{lastErr!.receivedFormId}</span></p>
+              {lastErr!.expectedFormId && (
+                <p>Expected: <span className="text-foreground/80">{lastErr!.expectedFormId}</span></p>
+              )}
+              <p>Reason: <span className="text-foreground/70 font-sans">{lastErr!.reason}</span></p>
+              <p className="text-muted-foreground/40">
+                {new Date(lastErr!.timestamp).toLocaleString(undefined, {
+                  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                })}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status strip */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
+          <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/40 mb-1">Webhook Status</p>
+          {campaign.lastWebhookStatus === "ok" && !hasErr ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500">
+              <CheckCircle2 className="h-3 w-3" /> Connected
+            </span>
+          ) : campaign.lastWebhookStatus === "error" || hasErr ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-500">
+              <AlertCircle className="h-3 w-3" /> Validation Error
+            </span>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/50">Awaiting first event</span>
+          )}
+        </div>
+        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
+          <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/40 mb-1">Last Lead Received</p>
+          <span className="text-[10px] text-muted-foreground/70">
+            {campaign.lastWebhookAt
+              ? new Date(campaign.lastWebhookAt).toLocaleString(undefined, {
+                  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                })
+              : "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* Form ID configuration */}
+      {!editing ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/40">Validation</p>
+            <span className={cn(
+              "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border",
+              isConfigured
+                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                : "bg-muted/50 text-muted-foreground/50 border-border",
+            )}>
+              {isConfigured
+                ? <><CheckCircle2 className="h-2.5 w-2.5" /> Form ID set</>
+                : "Not configured — all leads accepted"}
+            </span>
+          </div>
+          {isConfigured && (
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground/50 w-20 shrink-0">Form ID</span>
+                <span className="font-mono text-[10px] text-foreground/80 truncate">{campaign.sourceFormId}</span>
+              </div>
+              {campaign.sourcePageId && (
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground/50 w-20 shrink-0">Page ID</span>
+                  <span className="font-mono text-[10px] text-foreground/80 truncate">{campaign.sourcePageId}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {!isConfigured && (
+            <p className="text-[10px] text-muted-foreground/40">
+              Set a Meta Lead Form ID to reject webhooks from misconfigured forms.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Meta Lead Form ID <span className="text-red-400 text-[10px]">(required for validation)</span>
+            </Label>
+            <Input
+              className="h-8 text-xs font-mono"
+              placeholder="e.g. 123456789012345"
+              value={formId}
+              onChange={e => setFormId(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground/50">
+              Found in Meta Ads Manager → Lead Ads → Your Form → Form ID.
+              Webhooks with a different form_id will be rejected before a lead is created.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Meta Page ID <span className="text-muted-foreground/40 text-[10px]">(optional)</span>
+            </Label>
+            <Input
+              className="h-8 text-xs font-mono"
+              placeholder="e.g. 987654321098765"
+              value={pageId}
+              onChange={e => setPageId(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground/50">
+              Found in your Facebook Page Settings → About. Adds a second layer of validation.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={handleCancel}>
+              Cancel
+            </Button>
+            {isConfigured && (
+              <Button
+                size="sm" variant="ghost"
+                className="h-7 text-xs text-muted-foreground/40 hover:text-red-500 ml-auto"
+                onClick={() => { setFormId(""); setPageId(""); }}
+              >
+                Clear IDs
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Campaign summary KPI card (mirrors the Batch Workspace KpiCard) ───────────
 
 function KpiCard({ icon, label, value, color }: {
@@ -1285,12 +1516,7 @@ export default function CampaignDetailPage() {
             <>
               <WebhookIntakeCard webhookUrl={webhookUrl} />
               {(campaign as any).leadSource === "meta_ads" && (
-                <div className="flex items-center gap-2 -mt-2 px-1">
-                  <Instagram className="h-3 w-3 text-purple-400 shrink-0" />
-                  <p className="text-xs text-muted-foreground/60">
-                    This URL also accepts Meta Lead Ads webhooks automatically.
-                  </p>
-                </div>
+                <MetaIntegrationCard campaignId={campaignId} campaign={campaign as unknown as MetaCampaignProps} />
               )}
             </>
           )}

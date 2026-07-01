@@ -18,7 +18,7 @@
 
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { db, campaignsTable, campaignLeadsTable, campaignBatchesTable, leadTimelineTable, agentsTable } from "@workspace/db";
+import { db, campaignsTable, campaignLeadsTable, campaignBatchesTable, leadTimelineTable, agentsTable, type CampaignValidationError } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -336,6 +336,29 @@ function touchWebhookStatus(campaignId: number, status: "ok" | "error"): void {
     .catch((err: unknown) => logger.warn({ err, campaignId }, "Failed to update webhook status"));
 }
 
+/**
+ * Record a form/page-id validation failure on the campaign row.
+ * Sets lastWebhookStatus="error" and persists the audit detail in lastValidationError.
+ * Fire-and-forget — does not block the webhook response.
+ */
+function touchValidationError(campaignId: number, error: CampaignValidationError): void {
+  db.update(campaignsTable)
+    .set({ lastWebhookAt: new Date(), lastWebhookStatus: "error", lastValidationError: error })
+    .where(eq(campaignsTable.id, campaignId))
+    .catch((err: unknown) => logger.warn({ err, campaignId }, "Failed to persist validation error"));
+}
+
+/**
+ * Clear any stored validation error after a fully-valid webhook is processed.
+ * Fire-and-forget — does not block the webhook response.
+ */
+function clearValidationError(campaignId: number): void {
+  db.update(campaignsTable)
+    .set({ lastWebhookAt: new Date(), lastWebhookStatus: "ok", lastValidationError: null })
+    .where(eq(campaignsTable.id, campaignId))
+    .catch((err: unknown) => logger.warn({ err, campaignId }, "Failed to clear validation error"));
+}
+
 // ── GET /api/webhooks/lead/:token — Instagram Meta verification ────────────
 router.get("/webhooks/lead/:token", publicCors, (req, res): void => {
   const mode      = req.query["hub.mode"]         as string | undefined;
@@ -408,6 +431,9 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
   // ── Detect Instagram Lead Ads format ─────────────────────────────────────
   if (body["object"] === "page" && Array.isArray(body["entry"])) {
     // Meta leadgen webhook — iterate entries/changes
+    let anyValidationFailed = false;
+    let anyLeadAccepted     = false;
+
     for (const entry of body["entry"] as Array<Record<string, unknown>>) {
       const changes = Array.isArray(entry["changes"]) ? entry["changes"] : [];
       for (const change of changes as Array<Record<string, unknown>>) {
@@ -415,6 +441,56 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
 
         const value = change["value"] as Record<string, unknown> | undefined;
         if (!value) continue;
+
+        // ── Layer-2: source form/page validation ──────────────────────────
+        // Validate that this webhook change belongs to the campaign's configured
+        // Lead Form (and optionally Page). Reject the change if either mismatches.
+        const incomingFormId = value["form_id"] != null ? String(value["form_id"]) : null;
+        const incomingPageId = value["page_id"] != null ? String(value["page_id"]) : null;
+
+        if (campaign.sourceFormId) {
+          if (!incomingFormId || incomingFormId !== campaign.sourceFormId) {
+            const err: CampaignValidationError = {
+              receivedFormId: incomingFormId ?? "(missing)",
+              expectedFormId: campaign.sourceFormId,
+              receivedPageId: incomingPageId,
+              expectedPageId: campaign.sourcePageId ?? null,
+              webhookToken:   token,
+              timestamp:      new Date().toISOString(),
+              reason:         !incomingFormId
+                ? "Meta webhook missing form_id"
+                : `form_id mismatch — received: ${incomingFormId}, expected: ${campaign.sourceFormId}`,
+            };
+            logger.warn(
+              { campaignId: campaign.id, ...err },
+              "Meta form_id validation failed — lead rejected",
+            );
+            touchValidationError(campaign.id, err);
+            anyValidationFailed = true;
+            continue;
+          }
+        }
+
+        // Optional page_id validation (only when both are configured and present)
+        if (campaign.sourcePageId && incomingPageId && incomingPageId !== campaign.sourcePageId) {
+          const err: CampaignValidationError = {
+            receivedFormId: incomingFormId ?? "(missing)",
+            expectedFormId: campaign.sourceFormId ?? null,
+            receivedPageId: incomingPageId,
+            expectedPageId: campaign.sourcePageId,
+            webhookToken:   token,
+            timestamp:      new Date().toISOString(),
+            reason:         `page_id mismatch — received: ${incomingPageId}, expected: ${campaign.sourcePageId}`,
+          };
+          logger.warn(
+            { campaignId: campaign.id, ...err },
+            "Meta page_id validation failed — lead rejected",
+          );
+          touchValidationError(campaign.id, err);
+          anyValidationFailed = true;
+          continue;
+        }
+        // ── End of source validation ──────────────────────────────────────
 
         const leadgenId = String(value["leadgen_id"] ?? "");
         const fieldData = Array.isArray(value["field_data"]) ? value["field_data"] : [];
@@ -445,10 +521,20 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
           source:         "instagram_ads",
           externalLeadId: leadgenId || null,
         }).catch((err: unknown) => logger.error({ err, campaignId: campaign.id }, "Failed to process Instagram lead"));
+
+        anyLeadAccepted = true;
       }
     }
 
-    touchWebhookStatus(campaign.id, "ok");
+    // Clear stored validation error only when at least one lead was accepted with
+    // no failures in this batch (i.e. config is now correct).
+    if (anyLeadAccepted && !anyValidationFailed) {
+      clearValidationError(campaign.id);
+    } else if (!anyValidationFailed) {
+      touchWebhookStatus(campaign.id, "ok");
+    }
+    // If anyValidationFailed=true, touchValidationError already persisted the error.
+
     res.json({ received: true });
     return;
   }

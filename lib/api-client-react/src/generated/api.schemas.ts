@@ -1927,6 +1927,30 @@ export const CampaignTriggerMode = {
   batch: 'batch',
 } as const;
 
+/**
+ * Status of the most recent webhook event.
+ */
+export type CampaignLastWebhookStatus = typeof CampaignLastWebhookStatus[keyof typeof CampaignLastWebhookStatus] | null;
+
+
+export const CampaignLastWebhookStatus = {
+  ok: 'ok',
+  error: 'error',
+} as const;
+
+/**
+ * Most recent form_id mismatch audit record. Null when no validation failures have occurred.
+ */
+export type CampaignLastValidationError = {
+  receivedFormId?: string;
+  expectedFormId?: string | null;
+  receivedPageId?: string | null;
+  expectedPageId?: string | null;
+  webhookToken?: string;
+  timestamp?: string;
+  reason?: string;
+} | null;
+
 export interface Campaign {
   id: number;
   name: string;
@@ -1955,6 +1979,16 @@ export interface Campaign {
   businessHoursEnd?: number | null;
   /** IANA timezone for businessHoursStart/End evaluation. Defaults to Asia/Kolkata when absent. */
   timezone?: string | null;
+  /** Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn't match are rejected before lead creation. */
+  sourceFormId?: string | null;
+  /** Expected page/account ID from the source platform (e.g. Meta page_id). Optional second validation field. */
+  sourcePageId?: string | null;
+  /** Timestamp of the most recent webhook event (any status). */
+  lastWebhookAt?: string | null;
+  /** Status of the most recent webhook event. */
+  lastWebhookStatus?: CampaignLastWebhookStatus;
+  /** Most recent form_id mismatch audit record. Null when no validation failures have occurred. */
+  lastValidationError?: CampaignLastValidationError;
   createdAt: string;
   updatedAt: string;
 }
@@ -2099,6 +2133,10 @@ export interface CampaignUpdate {
   businessHoursEnd?: number | null;
   /** IANA timezone for businessHoursStart/End evaluation. */
   timezone?: string | null;
+  /** Expected lead-form ID from the source platform (e.g. Meta form_id). */
+  sourceFormId?: string | null;
+  /** Expected page/account ID from the source platform (e.g. Meta page_id). */
+  sourcePageId?: string | null;
 }
 
 export type CampaignLeadLeadData = {[key: string]: string};

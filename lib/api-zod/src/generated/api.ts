@@ -2063,6 +2063,19 @@ export const ListCampaignsResponseItem = zod.object({
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
+  "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn\'t match are rejected before lead creation.'),
+  "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
+  "lastWebhookAt": zod.coerce.date().nullish().describe('Timestamp of the most recent webhook event (any status).'),
+  "lastWebhookStatus": zod.enum(['ok', 'error']).nullish().describe('Status of the most recent webhook event.'),
+  "lastValidationError": zod.object({
+  "receivedFormId": zod.string().optional(),
+  "expectedFormId": zod.string().nullish(),
+  "receivedPageId": zod.string().nullish(),
+  "expectedPageId": zod.string().nullish(),
+  "webhookToken": zod.string().optional(),
+  "timestamp": zod.coerce.date().optional(),
+  "reason": zod.string().optional()
+}).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2134,6 +2147,19 @@ export const GetCampaignResponse = zod.object({
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
+  "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn\'t match are rejected before lead creation.'),
+  "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
+  "lastWebhookAt": zod.coerce.date().nullish().describe('Timestamp of the most recent webhook event (any status).'),
+  "lastWebhookStatus": zod.enum(['ok', 'error']).nullish().describe('Status of the most recent webhook event.'),
+  "lastValidationError": zod.object({
+  "receivedFormId": zod.string().optional(),
+  "expectedFormId": zod.string().nullish(),
+  "receivedPageId": zod.string().nullish(),
+  "expectedPageId": zod.string().nullish(),
+  "webhookToken": zod.string().optional(),
+  "timestamp": zod.coerce.date().optional(),
+  "reason": zod.string().optional()
+}).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -2162,7 +2188,9 @@ export const UpdateCampaignBody = zod.object({
   "isActive": zod.boolean().optional(),
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction.'),
-  "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.')
+  "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.'),
+  "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id).'),
+  "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id).')
 })
 
 export const updateCampaignResponseConcurrentCallLimitDefault = 10;
@@ -2190,6 +2218,19 @@ export const UpdateCampaignResponse = zod.object({
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
+  "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn\'t match are rejected before lead creation.'),
+  "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
+  "lastWebhookAt": zod.coerce.date().nullish().describe('Timestamp of the most recent webhook event (any status).'),
+  "lastWebhookStatus": zod.enum(['ok', 'error']).nullish().describe('Status of the most recent webhook event.'),
+  "lastValidationError": zod.object({
+  "receivedFormId": zod.string().optional(),
+  "expectedFormId": zod.string().nullish(),
+  "receivedPageId": zod.string().nullish(),
+  "expectedPageId": zod.string().nullish(),
+  "webhookToken": zod.string().optional(),
+  "timestamp": zod.coerce.date().optional(),
+  "reason": zod.string().optional()
+}).nullish().describe('Most recent form_id mismatch audit record. Null when no validation failures have occurred.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

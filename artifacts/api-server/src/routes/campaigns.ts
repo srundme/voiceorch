@@ -104,6 +104,11 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     businessHoursStart:    row.businessHoursStart ?? null,
     businessHoursEnd:      row.businessHoursEnd ?? null,
     timezone:              row.timezone ?? null,
+    sourceFormId:          row.sourceFormId ?? null,
+    sourcePageId:          row.sourcePageId ?? null,
+    lastValidationError:   row.lastValidationError ?? null,
+    lastWebhookAt:         row.lastWebhookAt?.toISOString() ?? null,
+    lastWebhookStatus:     row.lastWebhookStatus ?? null,
     createdAt:             row.createdAt.toISOString(),
     updatedAt:             row.updatedAt.toISOString(),
   };

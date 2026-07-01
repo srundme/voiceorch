@@ -1,0 +1,323 @@
+# Enhancement: Strengthen Meta Lead Ads Campaign Isolation
+
+The current architecture is good and should remain the foundation of the Meta Lead Ads integration.
+
+I do **NOT** want to change the existing routing mechanism.
+
+The webhook token should continue to be the primary routing key.
+
+However, I want to add a second layer of validation to make the integration production-ready and prevent accidental campaign misconfiguration.
+
+---
+
+# Current Architecture
+
+Current flow:
+
+Meta Lead Form
+
+↓
+
+Webhook URL
+
+↓
+
+/api/webhooks/lead/:webhookToken
+
+↓
+
+Find Campaign using webhookToken
+
+↓
+
+Create Lead
+
+↓
+
+Trigger AI Call
+
+This architecture should remain unchanged.
+
+---
+
+# Problem
+
+Currently, the webhook token is the **only** validation.
+
+Example:
+
+Campaign A
+
+Education
+
+Webhook
+
+token-A
+
+Expected Form
+
+Education Admission Form
+
+---
+
+Campaign B
+
+AI Course
+
+Webhook
+
+token-B
+
+Expected Form
+
+AI Course Form
+
+If an agency accidentally configures:
+
+AI Course Form
+
+↓
+
+Webhook URL
+
+token-A
+
+SnapServe will still accept the webhook because the token is valid.
+
+The result:
+
+- Wrong Campaign
+- Wrong AI Agent
+- Wrong Prompt
+- Wrong Outbound Number
+- Wrong Campaign Analytics
+
+The system currently has no way to detect this configuration mistake.
+
+---
+
+# Required Enhancement
+
+Keep the webhook token as the routing key.
+
+Add a second validation layer.
+
+For every Meta campaign, store:
+
+- Meta Page ID (optional but recommended)
+- Meta Lead Form ID (required)
+
+These values should be stored as part of the Campaign Meta Integration.
+
+---
+
+# Incoming Webhook Flow
+
+New processing flow:
+
+Incoming Webhook
+
+↓
+
+Resolve Campaign using webhookToken
+
+↓
+
+Read payload.form_id
+
+↓
+
+Compare payload.form_id with configured Meta Form ID
+
+↓
+
+If Match
+
+↓
+
+Continue processing
+
+↓
+
+Create Lead
+
+↓
+
+Trigger AI Call
+
+↓
+
+Update Campaign
+
+---
+
+If Not Match
+
+↓
+
+Reject Request
+
+↓
+
+Do NOT create Lead
+
+↓
+
+Log Validation Failure
+
+↓
+
+Display Integration Warning
+
+---
+
+# Validation Rules
+
+Validation 1
+
+Webhook Token
+
+Purpose:
+
+Resolve the Campaign.
+
+Validation 2
+
+Meta Lead Form ID
+
+Purpose:
+
+Ensure the webhook actually belongs to the configured campaign.
+
+Validation 3 (Future Ready)
+
+Meta Page ID
+
+If available, validate that the webhook belongs to the expected Page.
+
+This can be optional for now but should be supported by the data model.
+
+---
+
+# Error Handling
+
+If validation fails:
+
+Do NOT process the lead.
+
+Create an audit log entry.
+
+Store:
+
+- Campaign ID
+- Received Form ID
+- Expected Form ID
+- Webhook Token
+- Timestamp
+- Validation Failure Reason
+
+Display inside Campaign Integration:
+
+"Incoming Meta lead received from an unexpected Lead Form. Please verify your Meta configuration."
+
+This should help users identify configuration mistakes quickly.
+
+---
+
+# Campaign Integration Page
+
+Extend the Meta Integration section to display:
+
+Connection Status
+
+Meta Page
+
+Meta Lead Form
+
+Webhook Status
+
+Last Validation
+
+Last Lead Received
+
+Validation Status
+
+This provides users with clear visibility into their integration health.
+
+---
+
+# Database Changes
+
+Extend the Campaign Meta Integration model with:
+
+- source_page_id
+- source_form_id
+
+Avoid naming them "expected_form_id" or "expected_page_id".
+
+These fields should remain generic enough to support future integrations like:
+
+- Meta Lead Ads
+- Google Lead Forms
+- LinkedIn Lead Gen
+- TikTok Lead Ads
+
+The architecture should remain extensible.
+
+---
+
+# Future-Proof Design
+
+The webhook token remains the routing key.
+
+The source_form_id becomes the validation key.
+
+This creates a two-layer validation model:
+
+Layer 1
+
+Campaign Routing
+
+↓
+
+Webhook Token
+
+Layer 2
+
+Source Validation
+
+↓
+
+Meta Lead Form ID
+
+This provides better security and prevents accidental cross-campaign lead routing.
+
+---
+
+# Important
+
+Do NOT change:
+
+- Existing webhook endpoints
+- Campaign routing
+- Lead processing
+- Batch creation
+- AI calling flow
+
+Only enhance the validation layer while keeping the current architecture intact.
+
+---
+
+# Goal
+
+Maintain the simplicity of the existing implementation while making it more reliable and production-ready.
+
+The final implementation should:
+
+- Continue using webhook-token routing.
+- Validate incoming Meta Form IDs before accepting leads.
+- Reject incorrectly configured webhooks.
+- Prevent cross-campaign lead bleed.
+- Preserve the existing Campaign → Batch → Lead → AI Call architecture.
+- Be extensible for future lead sources without requiring architectural changes.
+```

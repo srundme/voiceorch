@@ -28,6 +28,16 @@ export type OperationalOutcome =
   | "dnc_blocked"
   | "failed";
 
+export type CampaignValidationError = {
+  receivedFormId: string;
+  expectedFormId: string | null;
+  receivedPageId?: string | null;
+  expectedPageId?: string | null;
+  webhookToken: string;
+  timestamp: string;
+  reason: string;
+};
+
 export const campaignsTable = pgTable("campaigns", {
   id:                   serial("id").primaryKey(),
   userId:               text("user_id").notNull(),
@@ -53,6 +63,15 @@ export const campaignsTable = pgTable("campaigns", {
   timezone:             text("timezone"),
   businessHoursStart:   integer("business_hours_start"),
   businessHoursEnd:     integer("business_hours_end"),
+  // ── Source validation (layer-2 isolation) ─────────────────────────────────
+  // sourceFormId: the expected lead-form ID from the source platform (e.g. Meta form_id).
+  // Incoming webhooks whose form_id doesn't match are rejected before lead creation.
+  // Generic naming keeps this reusable for LinkedIn, TikTok, Google Lead Forms etc.
+  sourceFormId:         text("source_form_id"),
+  sourcePageId:         text("source_page_id"),
+  // lastValidationError: stores the most recent form_id mismatch audit record.
+  // Null = no validation failures since last successful lead or form cleared.
+  lastValidationError:  json("last_validation_error").$type<CampaignValidationError | null>(),
   createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
