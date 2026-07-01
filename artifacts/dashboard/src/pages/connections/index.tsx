@@ -1153,21 +1153,67 @@ export function CrmImportDialog({
     (existingLeadsPage?.leads ?? []).map((l: { phone: string }) => l.phone.replace(/\D/g, "").slice(-10)),
   );
 
-  function isAlreadyImported(contactPhone: string | null | undefined): boolean {
-    if (!contactPhone) return false;
-    const normalized = contactPhone.replace(/\D/g, "").slice(-10);
-    return existingPhones.has(normalized);
+  // ── Client-side phone normalizer (mirrors server phone-normalization.ts, India config) ──
+  function clientNormalizePhone(raw: string | null | undefined): { normalized: string | null; valid: boolean } {
+    if (!raw || typeof raw !== "string") return { normalized: null, valid: false };
+    const hasLeadingPlus = raw.trimStart().startsWith("+");
+    const stripped  = raw.replace(/[\s\-().]/g, "").replace(/[^\d+]/g, "");
+    const digitsOnly = stripped.replace(/\+/g, "");
+    if (hasLeadingPlus || stripped.startsWith("+")) {
+      if (digitsOnly.length < 7 || digitsOnly.length > 15) return { normalized: null, valid: false };
+      return { normalized: "+" + digitsOnly, valid: true };
+    }
+    if (digitsOnly.startsWith("00")) {
+      const w = digitsOnly.slice(2);
+      if (w.length < 7 || w.length > 15) return { normalized: null, valid: false };
+      return { normalized: "+" + w, valid: true };
+    }
+    const CC = "91", NL = 10;
+    if (digitsOnly.length === NL)                                 return { normalized: "+" + CC + digitsOnly, valid: true };
+    if (digitsOnly.startsWith(CC) && digitsOnly.slice(CC.length).length === NL)
+                                                                  return { normalized: "+" + digitsOnly, valid: true };
+    if (digitsOnly.startsWith("0") && digitsOnly.length === NL + 1)
+                                                                  return { normalized: "+" + CC + digitsOnly.slice(1), valid: true };
+    return { normalized: null, valid: false };
+  }
+
+  function isAlreadyImported(normalizedPhone: string | null | undefined): boolean {
+    if (!normalizedPhone) return false;
+    const tail = normalizedPhone.replace(/\D/g, "").slice(-10);
+    return existingPhones.has(tail);
   }
 
   // Validation summary — computed from selected contacts + field mapping (used in steps 3 & 6)
   const selectedContacts = contacts.filter(c => selected.has(c.id));
   const phoneField       = fieldMapping["phone"] ?? "phone";
-  const withPhone        = selectedContacts.filter(c => {
-    const ph = ((c.rawFields as Record<string, string> | undefined)?.[phoneField] ?? c.phone ?? "").trim();
-    return ph.length > 0;
+
+  // Per-contact validation rows: raw phone → normalized → status
+  type ContactValidation = {
+    contact: typeof selectedContacts[0];
+    raw: string;
+    normalized: string | null;
+    hasRaw: boolean;
+    validFormat: boolean;
+    alreadyImported: boolean;
+  };
+  const validationRows: ContactValidation[] = selectedContacts.map(c => {
+    const raw = ((c.rawFields as Record<string, string> | undefined)?.[phoneField] ?? c.phone ?? "").trim();
+    const hasRaw = raw.length > 0;
+    const { normalized, valid } = hasRaw ? clientNormalizePhone(raw) : { normalized: null, valid: false };
+    return {
+      contact: c,
+      raw,
+      normalized,
+      hasRaw,
+      validFormat: valid,
+      alreadyImported: isAlreadyImported(normalized),
+    };
   });
-  const withoutPhone          = selectedContacts.length - withPhone.length;
-  const alreadyImportedCount  = withPhone.filter(c => isAlreadyImported(c.phone)).length;
+
+  const withPhone           = validationRows.filter(r => r.validFormat);
+  const withoutPhone        = validationRows.filter(r => !r.hasRaw).length;
+  const invalidPhoneCount   = validationRows.filter(r => r.hasRaw && !r.validFormat).length;
+  const alreadyImportedCount = withPhone.filter(r => r.alreadyImported).length;
 
   const allTimezones: string[] = (() => {
     try { return Intl.supportedValuesOf("timeZone") as string[]; }
@@ -1199,8 +1245,8 @@ export function CrmImportDialog({
 
   const handleImport = async () => {
     if (!campaignId) return;
-    const toImport = contacts.filter(c => selected.has(c.id));
-    if (toImport.length === 0) return;
+    // Only send contacts with a valid normalized phone (skips no-phone + invalid format)
+    if (withPhone.length === 0) return;
     setImporting(true);
     try {
       // Persist updated field mapping to the connection before importing
@@ -1210,13 +1256,13 @@ export function CrmImportDialog({
         id: connection.id,
         data: {
           campaignId,
-          contacts: toImport.map(c => ({
-            id:        c.id,
-            phone:     c.phone,
-            name:      c.name ?? null,
-            email:     c.email ?? null,
-            company:   c.company ?? null,
-            rawFields: (c.rawFields ?? {}) as Record<string, string>,
+          contacts: withPhone.map(r => ({
+            id:        r.contact.id,
+            phone:     r.normalized!,       // E.164 normalized phone
+            name:      r.contact.name ?? null,
+            email:     r.contact.email ?? null,
+            company:   r.contact.company ?? null,
+            rawFields: (r.contact.rawFields ?? {}) as Record<string, string>,
           })),
           fieldMapping,
           duplicatePolicy,
@@ -1491,16 +1537,23 @@ export function CrmImportDialog({
 
         {/* ── Step 3: Validation Preview ────────────────────────────────────── */}
         {step === 3 && (
-          <div className="space-y-4">
+          <div className="space-y-3">
+            {/* Count summary */}
             <div className="bg-muted/30 border border-border rounded-xl p-4">
-              <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="grid grid-cols-4 gap-2 text-center">
                 <div>
                   <p className="text-2xl font-bold">{selectedContacts.length}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Selected</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-emerald-400">{withPhone.length}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Ready to import</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Ready</p>
+                </div>
+                <div>
+                  <p className={cn("text-2xl font-bold", invalidPhoneCount > 0 ? "text-red-400" : "text-muted-foreground")}>
+                    {invalidPhoneCount}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Invalid format</p>
                 </div>
                 <div>
                   <p className={cn("text-2xl font-bold", withoutPhone > 0 ? "text-amber-400" : "text-muted-foreground")}>
@@ -1511,15 +1564,23 @@ export function CrmImportDialog({
               </div>
             </div>
 
+            {/* Alerts */}
             {withPhone.length === 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                 <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-red-400">
-                  No contacts have a phone number under the mapped "{phoneField}" field. Go back and adjust the field mapping.
+                  No contacts have a valid phone under the mapped "{phoneField}" field. Go back and adjust the field mapping.
                 </p>
               </div>
             )}
-
+            {invalidPhoneCount > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-red-400 font-medium">{invalidPhoneCount} contacts</span> have an unrecognized phone format and will be skipped. Ensure numbers are 10-digit Indian or include a country code.
+                </p>
+              </div>
+            )}
             {alreadyImportedCount > 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                 <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
@@ -1529,38 +1590,47 @@ export function CrmImportDialog({
               </div>
             )}
 
+            {/* Row preview with normalization */}
             <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-muted/40 border-b border-border">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                  Row preview — phone normalization + duplicate detection
+                </p>
+              </div>
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-border bg-muted/40">
+                  <tr className="border-b border-border bg-muted/20">
                     <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Name</th>
-                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Phone</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Phone (raw)</th>
+                    <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Normalized</th>
                     <th className="text-left px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedContacts.slice(0, 6).map(c => {
-                    const ph = ((c.rawFields as Record<string, string> | undefined)?.[phoneField] ?? c.phone ?? "").trim();
-                    const hasPhone = ph.length > 0;
-                    const already = isAlreadyImported(c.phone);
-                    return (
-                      <tr key={c.id} className="border-b border-border/50 last:border-0">
-                        <td className="px-3 py-2 truncate max-w-[120px]">{c.name ?? "—"}</td>
-                        <td className="px-3 py-2 font-mono text-muted-foreground text-[10px]">{ph || "—"}</td>
-                        <td className="px-3 py-2">
-                          {!hasPhone
-                            ? <span className="text-amber-400">No phone</span>
-                            : already
-                              ? <span className="text-amber-400">Already imported</span>
-                              : <span className="text-emerald-400">Ready</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {selectedContacts.length > 6 && (
+                  {validationRows.slice(0, 8).map(r => (
+                    <tr key={r.contact.id} className="border-b border-border/50 last:border-0">
+                      <td className="px-3 py-2 truncate max-w-[90px]">{r.contact.name ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground text-[10px]">{r.raw || "—"}</td>
+                      <td className="px-3 py-2 font-mono text-[10px]">
+                        {r.normalized
+                          ? <span className="text-emerald-400 font-semibold">{r.normalized}</span>
+                          : <span className="text-muted-foreground/50">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {!r.hasRaw
+                          ? <span className="text-amber-400 text-[10px]">No phone</span>
+                          : !r.validFormat
+                            ? <span className="text-red-400 text-[10px]">Invalid format</span>
+                            : r.alreadyImported
+                              ? <span className="text-amber-400 text-[10px]">Already imported</span>
+                              : <span className="text-emerald-400 text-[10px]">Ready</span>}
+                      </td>
+                    </tr>
+                  ))}
+                  {validationRows.length > 8 && (
                     <tr>
-                      <td colSpan={3} className="px-3 py-2 text-center text-muted-foreground">
-                        +{selectedContacts.length - 6} more
+                      <td colSpan={4} className="px-3 py-2 text-center text-[10px] text-muted-foreground">
+                        +{validationRows.length - 8} more contacts
                       </td>
                     </tr>
                   )}
@@ -1724,8 +1794,8 @@ export function CrmImportDialog({
                   <p className="text-[10px] text-muted-foreground">Will import</p>
                 </div>
                 <div>
-                  <p className={cn("text-lg font-bold", withoutPhone > 0 ? "text-amber-400" : "text-muted-foreground")}>
-                    {withoutPhone}
+                  <p className={cn("text-lg font-bold", (withoutPhone + invalidPhoneCount) > 0 ? "text-amber-400" : "text-muted-foreground")}>
+                    {withoutPhone + invalidPhoneCount}
                   </p>
                   <p className="text-[10px] text-muted-foreground">Skipped</p>
                 </div>
