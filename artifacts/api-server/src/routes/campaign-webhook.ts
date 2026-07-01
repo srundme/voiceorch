@@ -184,6 +184,15 @@ async function insertLeadAndSchedule(opts: {
     return;
   }
 
+  // Guard: stopped campaigns must not ingest or dispatch new leads.
+  if (campaign.status === "stopped") {
+    logger.info(
+      { campaignId: opts.campaignId, source: opts.source, phone: opts.phone },
+      "Webhook lead rejected — campaign is stopped",
+    );
+    throw new Error("Campaign is stopped and no longer accepting leads");
+  }
+
   const normalized = normalizePhone(opts.phone);
 
   // DNC check
@@ -313,12 +322,16 @@ async function insertLeadAndSchedule(opts: {
  */
 export function isWithinBusinessHours(
   campaign: {
-    businessHoursStart?: number | null;
-    businessHoursEnd?:   number | null;
-    timezone?:           string | null;
+    isCallingHoursEnabled?: boolean;
+    businessHoursStart?:    number | null;
+    businessHoursEnd?:      number | null;
+    timezone?:              string | null;
   },
   fallbackTz: string,
 ): boolean {
+  // When calling-hours toggle is OFF, ignore the schedule entirely (24/7)
+  if (campaign.isCallingHoursEnabled === false) return true;
+
   const start = campaign.businessHoursStart;
   const end   = campaign.businessHoursEnd;
   if (start == null || end == null) return true; // no restriction — dial any time

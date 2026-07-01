@@ -97,6 +97,8 @@ function CampaignStatusBadge({ status }: { status: string }) {
     active:    { label: "Active",    dot: "bg-emerald-500" },
     paused:    { label: "Paused",    dot: "bg-amber-500" },
     completed: { label: "Completed", dot: "bg-blue-500" },
+    stopped:   { label: "Stopped",   dot: "bg-red-500" },
+    listening: { label: "Idle / Listening", dot: "bg-sky-500" },
     archived:  { label: "Archived",  dot: "bg-muted-foreground/20" },
   };
   const cfg = map[status] ?? { label: status, dot: "bg-muted-foreground/40" };

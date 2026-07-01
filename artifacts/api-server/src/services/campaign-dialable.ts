@@ -24,13 +24,14 @@
  */
 
 /** Campaign statuses that mean "do not dial / do not refill". */
-export const NON_DIALABLE_CAMPAIGN_STATUSES = new Set<string>(["paused", "completed", "cancelled"]);
+export const NON_DIALABLE_CAMPAIGN_STATUSES = new Set<string>(["paused", "stopped", "completed", "cancelled"]);
 
 type DialableFields = {
-  status:             string | null;
-  businessHoursStart?: number | null;
-  businessHoursEnd?:   number | null;
-  timezone?:           string | null;
+  status:                  string | null;
+  isCallingHoursEnabled?:  boolean;
+  businessHoursStart?:     number | null;
+  businessHoursEnd?:       number | null;
+  timezone?:               string | null;
 };
 
 /**
@@ -45,6 +46,9 @@ type DialableFields = {
 export function isCampaignDialable(campaign: DialableFields | null | undefined): boolean {
   if (!campaign) return false;
   if (NON_DIALABLE_CAMPAIGN_STATUSES.has(campaign.status ?? "")) return false;
+
+  // When calling-hours are disabled, skip the business-hours check (24/7 dialing)
+  if (campaign.isCallingHoursEnabled === false) return true;
 
   const start = campaign.businessHoursStart;
   const end   = campaign.businessHoursEnd;

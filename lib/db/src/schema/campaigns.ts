@@ -63,6 +63,7 @@ export const campaignsTable = pgTable("campaigns", {
   timezone:             text("timezone"),
   businessHoursStart:   integer("business_hours_start"),
   businessHoursEnd:     integer("business_hours_end"),
+  isCallingHoursEnabled: boolean("is_calling_hours_enabled").notNull().default(true),
   // ── Source validation (layer-2 isolation) ─────────────────────────────────
   // sourceFormId: the expected lead-form ID from the source platform (e.g. Meta form_id).
   // Incoming webhooks whose form_id doesn't match are rejected before lead creation.

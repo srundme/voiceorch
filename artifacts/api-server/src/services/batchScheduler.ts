@@ -145,7 +145,7 @@ export async function evaluateBatchCompletion(batchId: number): Promise<boolean>
       .from(campaignLeadsTable)
       .where(and(
         eq(campaignLeadsTable.batchId, batchId),
-        eq(campaignLeadsTable.callStatus, "pending"),
+        inArray(campaignLeadsTable.callStatus, ["pending", "queued"]),
       ));
     const [activeRow] = await db.select({ count: sql<string>`count(*)` })
       .from(campaignLeadsTable)
@@ -209,6 +209,9 @@ export async function evaluateCampaignCompletion(campaignId: number): Promise<vo
     const [campaign] = await db.select().from(campaignsTable)
       .where(eq(campaignsTable.id, campaignId));
     if (!campaign) return;
+    // Continuous lead sources (webhook, meta_ads, crm) never auto-complete
+    const continuousSources = new Set(["webhook", "meta_ads", "crm"]);
+    if (continuousSources.has(campaign.leadSource ?? "")) return;
     if (campaign.status !== "active" && campaign.status !== "draft") return;
 
     const [openBatchRow] = await db.select({ count: sql<string>`count(*)` })
@@ -223,7 +226,7 @@ export async function evaluateCampaignCompletion(campaignId: number): Promise<vo
       .from(campaignLeadsTable)
       .where(and(
         eq(campaignLeadsTable.campaignId, campaignId),
-        inArray(campaignLeadsTable.callStatus, ["pending", "calling", "connected"]),
+        inArray(campaignLeadsTable.callStatus, ["pending", "queued", "calling", "connected"]),
       ));
     if (Number(activeLeadRow?.count ?? 0) > 0) return;
 
@@ -378,6 +381,9 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
       // NB: only call_status is written here. last_attempt_at is set by
       // fireCampaignCall at the moment a real dial is placed, so "Last Activity"
       // reflects an actual outbound attempt and never a mere pre-claim.
+      // Claim both "pending" (new/batch leads) and "queued" (arrived outside hours).
+      // "queued" is prioritized (alphabetically comes before "pending") so leads
+      // that have been waiting are dialled first when the calling window opens.
       const claimed = await db.execute<{ id: number }>(sql`
         UPDATE campaign_leads
         SET call_status = 'calling'
@@ -385,17 +391,17 @@ async function doRefillCampaignConcurrency(campaignId: number): Promise<void> {
           SELECT id FROM campaign_leads
           WHERE campaign_id = ${campaign.id}
             AND batch_id = ${batch.id}
-            AND call_status = 'pending'
+            AND call_status IN ('pending', 'queued')
             AND NOT EXISTS (
               SELECT 1 FROM call_retries cr
               WHERE cr.lead_id = campaign_leads.id
                 AND cr.status = 'pending'
                 AND cr.scheduled_at > now()
             )
-          ORDER BY id
+          ORDER BY call_status, id
           LIMIT ${slots}
         )
-        AND call_status = 'pending'
+        AND call_status IN ('pending', 'queued')
         RETURNING id
       `);
 

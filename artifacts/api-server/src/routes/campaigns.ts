@@ -104,6 +104,7 @@ function toCampaign(row: typeof campaignsTable.$inferSelect) {
     triggerMode:           row.triggerMode ?? "batch",
     businessHoursStart:    row.businessHoursStart ?? null,
     businessHoursEnd:      row.businessHoursEnd ?? null,
+    isCallingHoursEnabled: row.isCallingHoursEnabled,
     timezone:              row.timezone ?? null,
     sourceFormId:              row.sourceFormId ?? null,
     sourcePageId:              row.sourcePageId ?? null,
@@ -219,6 +220,9 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     return;
   }
 
+  const leadSource = (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv";
+  const isContinuous = ["webhook", "meta_ads", "crm"].includes(leadSource);
+
   const [campaign] = await db.insert(campaignsTable).values({
     userId,
     name:                parsed.data.name,
@@ -230,9 +234,11 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     callDelaySeconds:    parsed.data.callDelaySeconds,
     maxAttempts:         parsed.data.maxAttempts,
     retryDelayMinutes:   parsed.data.retryDelayMinutes,
-    leadSource:          (parsed.data as Record<string, unknown>)["leadSource"] as string ?? "csv",
-    triggerMode:         (parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch",
+    leadSource,
+    triggerMode:         isContinuous ? "instant" : ((parsed.data as Record<string, unknown>)["triggerMode"] as string ?? "batch"),
     webhookToken:        randomUUID(),
+    status:              isContinuous ? "active" : "draft",
+    isActive:            isContinuous,
   }).returning();
 
   if (dpdpEnabled && consentBasis) {
@@ -297,8 +303,10 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   }
 
   // If toggling isActive, also sync status field
-  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, ...rest } = parsed.data as typeof parsed.data & { metaPageAccessToken?: string | null };
+  const { fieldMappings: rawMappings, metaPageAccessToken: rawMetaToken, isCallingHoursEnabled, ...rest } = parsed.data as typeof parsed.data & { metaPageAccessToken?: string | null };
   const updateData: Partial<typeof campaignsTable.$inferInsert> = { ...rest };
+  // isCallingHoursEnabled is boolean (not nullable in schema); treat null as "leave unchanged"
+  if (isCallingHoursEnabled != null) updateData.isCallingHoursEnabled = isCallingHoursEnabled;
   if (rawMappings) updateData.fieldMappings = rawMappings as CampaignFieldMappings;
   // Encrypt the Meta Page Access Token at rest (same pattern as provider API keys).
   // null clears the stored token; undefined means "not provided — leave unchanged".

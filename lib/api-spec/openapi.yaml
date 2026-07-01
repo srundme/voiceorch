@@ -8357,7 +8357,7 @@ components:
           nullable: true
         status:
           type: string
-          enum: [draft, active, paused]
+          enum: [draft, active, paused, stopped, completed]
         webhookToken:
           type: string
         fieldMappings:
@@ -8402,6 +8402,10 @@ components:
           type: integer
           nullable: true
           description: "Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM."
+        isCallingHoursEnabled:
+          type: boolean
+          description: "When false, the calling hours schedule is ignored and the campaign dials 24/7. The schedule is preserved for re-enabling."
+          default: true
         timezone:
           type: string
           nullable: true
@@ -8562,7 +8566,7 @@ components:
           type: integer
         status:
           type: string
-          enum: [draft, active, paused]
+          enum: [draft, active, paused, stopped, completed]
         leadSource:
           type: string
           enum: [csv, webhook, meta_ads, crm]
@@ -8594,6 +8598,10 @@ components:
           type: integer
           nullable: true
           description: "Hour of day (0–23) when calling stops (exclusive). Null = no restriction."
+        isCallingHoursEnabled:
+          type: boolean
+          nullable: true
+          description: "When false, the calling hours schedule is ignored and the campaign dials 24/7. The schedule is preserved for re-enabling."
         timezone:
           type: string
           nullable: true

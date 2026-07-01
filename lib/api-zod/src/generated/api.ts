@@ -2041,13 +2041,14 @@ export const CompleteOnboardingResponse = zod.object({
 export const listCampaignsResponseConcurrentCallLimitDefault = 10;
 export const listCampaignsResponseLeadSourceDefault = `csv`;
 export const listCampaignsResponseTriggerModeDefault = `batch`;
+export const listCampaignsResponseIsCallingHoursEnabledDefault = true;
 
 export const ListCampaignsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "agentId": zod.number().nullish(),
-  "status": zod.enum(['draft', 'active', 'paused']),
+  "status": zod.enum(['draft', 'active', 'paused', 'stopped', 'completed']),
   "webhookToken": zod.string(),
   "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables'),
   "fromNumber": zod.string().nullish(),
@@ -2062,6 +2063,7 @@ export const ListCampaignsResponseItem = zod.object({
   "triggerMode": zod.enum(['instant', 'batch']).default(listCampaignsResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
+  "isCallingHoursEnabled": zod.boolean().default(listCampaignsResponseIsCallingHoursEnabledDefault).describe('When false, the calling hours schedule is ignored and the campaign dials 24\/7. The schedule is preserved for re-enabling.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
   "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn\'t match are rejected before lead creation.'),
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
@@ -2126,13 +2128,14 @@ export const GetCampaignParams = zod.object({
 export const getCampaignResponseConcurrentCallLimitDefault = 10;
 export const getCampaignResponseLeadSourceDefault = `csv`;
 export const getCampaignResponseTriggerModeDefault = `batch`;
+export const getCampaignResponseIsCallingHoursEnabledDefault = true;
 
 export const GetCampaignResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "agentId": zod.number().nullish(),
-  "status": zod.enum(['draft', 'active', 'paused']),
+  "status": zod.enum(['draft', 'active', 'paused', 'stopped', 'completed']),
   "webhookToken": zod.string(),
   "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables'),
   "fromNumber": zod.string().nullish(),
@@ -2147,6 +2150,7 @@ export const GetCampaignResponse = zod.object({
   "triggerMode": zod.enum(['instant', 'batch']).default(getCampaignResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
+  "isCallingHoursEnabled": zod.boolean().default(getCampaignResponseIsCallingHoursEnabledDefault).describe('When false, the calling hours schedule is ignored and the campaign dials 24\/7. The schedule is preserved for re-enabling.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
   "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn\'t match are rejected before lead creation.'),
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),
@@ -2178,7 +2182,7 @@ export const UpdateCampaignBody = zod.object({
   "name": zod.string().optional(),
   "description": zod.string().optional(),
   "agentId": zod.number().optional(),
-  "status": zod.enum(['draft', 'active', 'paused']).optional(),
+  "status": zod.enum(['draft', 'active', 'paused', 'stopped', 'completed']).optional(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).optional(),
   "triggerMode": zod.enum(['instant', 'batch']).optional(),
   "fieldMappings": zod.record(zod.string(), zod.string()).optional().describe('Maps lead source field names to roles.'),
@@ -2190,6 +2194,7 @@ export const UpdateCampaignBody = zod.object({
   "isActive": zod.boolean().optional(),
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction.'),
+  "isCallingHoursEnabled": zod.boolean().nullish().describe('When false, the calling hours schedule is ignored and the campaign dials 24\/7. The schedule is preserved for re-enabling.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.'),
   "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id).'),
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id).'),
@@ -2199,13 +2204,14 @@ export const UpdateCampaignBody = zod.object({
 export const updateCampaignResponseConcurrentCallLimitDefault = 10;
 export const updateCampaignResponseLeadSourceDefault = `csv`;
 export const updateCampaignResponseTriggerModeDefault = `batch`;
+export const updateCampaignResponseIsCallingHoursEnabledDefault = true;
 
 export const UpdateCampaignResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "agentId": zod.number().nullish(),
-  "status": zod.enum(['draft', 'active', 'paused']),
+  "status": zod.enum(['draft', 'active', 'paused', 'stopped', 'completed']),
   "webhookToken": zod.string(),
   "fieldMappings": zod.record(zod.string(), zod.string()).describe('Maps lead source field names to roles: phone (required), name, email, and any custom fields passed as prompt variables'),
   "fromNumber": zod.string().nullish(),
@@ -2220,6 +2226,7 @@ export const UpdateCampaignResponse = zod.object({
   "triggerMode": zod.enum(['instant', 'batch']).default(updateCampaignResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
   "businessHoursStart": zod.number().nullish().describe('Hour of day (0–23) when calling starts. Null = no restriction. E.g. 9 = 9 AM in the campaign timezone.'),
   "businessHoursEnd": zod.number().nullish().describe('Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM.'),
+  "isCallingHoursEnabled": zod.boolean().default(updateCampaignResponseIsCallingHoursEnabledDefault).describe('When false, the calling hours schedule is ignored and the campaign dials 24\/7. The schedule is preserved for re-enabling.'),
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation. Defaults to Asia\/Kolkata when absent.'),
   "sourceFormId": zod.string().nullish().describe('Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn\'t match are rejected before lead creation.'),
   "sourcePageId": zod.string().nullish().describe('Expected page\/account ID from the source platform (e.g. Meta page_id). Optional second validation field.'),

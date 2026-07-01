@@ -1217,7 +1217,7 @@ export default function CampaignDetailPage() {
       await update.mutateAsync({
         id: campaignId,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data: { businessHoursStart: start, businessHoursEnd: end, timezone: hoursTz } as any,
+        data: { businessHoursStart: start, businessHoursEnd: end, timezone: hoursTz, isCallingHoursEnabled: hoursEnabled } as any,
       });
       await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
       setEditingHours(false);
@@ -1227,7 +1227,24 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function handleStatusChange(status: "active" | "paused" | "draft") {
+  async function handleClearSchedule() {
+    try {
+      await update.mutateAsync({
+        id: campaignId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { businessHoursStart: null, businessHoursEnd: null, timezone: null, isCallingHoursEnabled: true } as any,
+      });
+      await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
+      setHoursStart("");
+      setHoursEnd("");
+      setHoursTz("Asia/Kolkata");
+      toast({ title: "Schedule cleared — 24/7 dialing" });
+    } catch {
+      toast({ title: "Failed to clear schedule", variant: "destructive" });
+    }
+  }
+
+  async function handleStatusChange(status: "active" | "paused" | "draft" | "stopped") {
     try {
       await update.mutateAsync({ id: campaignId, data: { status } });
       await qc.invalidateQueries({ queryKey: getGetCampaignQueryKey(campaignId) });
@@ -1254,6 +1271,7 @@ export default function CampaignDetailPage() {
   const [hoursStart, setHoursStart] = useState<string>("");
   const [hoursEnd,   setHoursEnd]   = useState<string>("");
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
+  const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1262,6 +1280,7 @@ export default function CampaignDetailPage() {
     setHoursStart(d.businessHoursStart != null ? String(d.businessHoursStart) : "");
     setHoursEnd  (d.businessHoursEnd   != null ? String(d.businessHoursEnd)   : "");
     setHoursTz   (d.timezone ?? "Asia/Kolkata");
+    setHoursEnabled(d.isCallingHoursEnabled !== false);
   }, [campaign]);
 
   const webhookUrl = campaign
@@ -1273,6 +1292,8 @@ export default function CampaignDetailPage() {
   const called      = analytics?.called      ?? campaign?.calledLeads ?? 0;
   const failed      = analytics?.failed      ?? 0;
   const hasCsvSource = batches?.some(b => b.leadSource === "csv") ?? false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isContinuous = ["webhook", "meta_ads", "crm"].includes((campaign as any)?.leadSource ?? "");
 
   // ── Campaign-level summary metrics ────────────────────────────────────────
   const totalBatches     = batches?.length ?? 0;
@@ -1420,14 +1441,14 @@ export default function CampaignDetailPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
               <StatusBadge status={
-                // Reflect real execution state: if any batch is actively running,
-                // show "active" regardless of the persisted campaign.status (covers
-                // both a draft campaign whose batch auto-started and the brief
-                // window before an auto-completed campaign is reopened). Otherwise
-                // trust the campaign's own status (completed / paused / etc).
-                batches?.some(b => b.status === "running")
-                  ? "active"
-                  : campaign.status
+                // For continuous (webhook/meta_ads/crm) campaigns with no active
+                // batches, show "listening" to indicate the campaign is alive
+                // and accepting leads but idle.
+                isContinuous && activeBatches === 0 && campaign.status === "active"
+                  ? "listening"
+                  : batches?.some(b => b.status === "running")
+                    ? "active"
+                    : campaign.status
               } />
             </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -1461,77 +1482,46 @@ export default function CampaignDetailPage() {
             >
               <Trash2 className="h-4 w-4" />
             </Button>
-            {campaignFinished ? (
+            {/* Continuous campaigns never show "finished" badge — they are always-on pipelines */}
+            {!isContinuous && campaignFinished && (
               <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
               </span>
-            ) : (
-              <>
-            {(campaign as unknown as Record<string, unknown>)["triggerMode"] !== "instant" && (
+            )}
+            {/* CSV campaigns: Create Batch button + dropdown controls */}
+            {(!isContinuous || campaign.status === "draft") && (
               <Button size="sm" className="h-8 text-xs gap-1.5"
                 onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/new`)}>
                 <Plus className="h-3.5 w-3.5" /> Create Batch
               </Button>
             )}
-            {/* Instant trigger: Activate button for draft campaigns */}
-            {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant"
-              && campaign.status === "draft" && (
+            {/* Stopped continuous campaign → Activate button */}
+            {isContinuous && campaign.status === "stopped" && (
               <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => void handleStatusChange("active")}>
                 <Zap className="h-3.5 w-3.5" /> Activate
               </Button>
             )}
-            {/* Instant trigger campaigns get inline Pause / Resume / Stop buttons */}
-            {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant"
-              ? (campaign.status === "active" || campaign.status === "paused") && (
-                <div className="flex items-center gap-1.5">
-                  {campaign.status === "active" && (
-                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
-                      onClick={() => void handleStatusChange("paused")}>
-                      <PauseCircle className="h-3.5 w-3.5" /> Pause
-                    </Button>
-                  )}
-                  {campaign.status === "paused" && (
-                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
-                      onClick={() => void handleStatusChange("active")}>
-                      <PlayCircle className="h-3.5 w-3.5" /> Resume
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-red-500 border-red-500/40 hover:bg-red-500/10"
-                    onClick={() => void handleStatusChange("draft")}>
-                    <XCircle className="h-3.5 w-3.5" /> Stop
+            {/* Pause / Resume / Stop for all campaigns */}
+            {(campaign.status === "active" || campaign.status === "paused") && (
+              <div className="flex items-center gap-1.5">
+                {campaign.status === "active" && (
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
+                    onClick={() => void handleStatusChange("paused")}>
+                    <PauseCircle className="h-3.5 w-3.5" /> Pause
                   </Button>
-                </div>
-              )
-              : (campaign.status === "active" || campaign.status === "paused") && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="outline" className="h-8 w-8">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40">
-                    {campaign.status === "active" && (
-                      <DropdownMenuItem className="text-amber-600 gap-2"
-                        onClick={() => void handleStatusChange("paused")}>
-                        <PauseCircle className="h-4 w-4" /> Pause
-                      </DropdownMenuItem>
-                    )}
-                    {campaign.status === "paused" && (
-                      <DropdownMenuItem className="text-emerald-600 gap-2"
-                        onClick={() => void handleStatusChange("active")}>
-                        <PlayCircle className="h-4 w-4" /> Resume
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem className="text-red-500 gap-2"
-                      onClick={() => void handleStatusChange("draft")}>
-                      <XCircle className="h-4 w-4" /> Stop
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )
-            }
-              </>
+                )}
+                {campaign.status === "paused" && (
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+                    onClick={() => void handleStatusChange("active")}>
+                    <PlayCircle className="h-3.5 w-3.5" /> Resume
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-red-500 border-red-500/40 hover:bg-red-500/10"
+                  onClick={() => void handleStatusChange("stopped")}>
+                  <XCircle className="h-3.5 w-3.5" /> Stop
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -1602,16 +1592,24 @@ export default function CampaignDetailPage() {
                   <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">Calling Hours</p>
                 </div>
                 {!editingHours && (
-                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground"
-                    onClick={() => setEditingHours(true)}>
-                    <Settings className="h-3 w-3" /> Configure
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground"
+                      onClick={() => setEditingHours(true)}>
+                      <Settings className="h-3 w-3" /> Configure
+                    </Button>
+                  </div>
                 )}
               </div>
               {!editingHours ? (
                 <div>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {(campaign as any).businessHoursStart != null && (campaign as any).businessHoursEnd != null ? (
+                  {(campaign as any).isCallingHoursEnabled === false ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted border border-border text-xs font-mono text-muted-foreground">
+                        24/7 — Calling Hours Disabled
+                      </span>
+                    </div>
+                  ) : (campaign as any).businessHoursStart != null && (campaign as any).businessHoursEnd != null ? (
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs font-mono text-sky-400">
                         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -1626,53 +1624,83 @@ export default function CampaignDetailPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Start (hour, 0–23)</Label>
-                      <select
-                        value={hoursStart}
-                        onChange={e => setHoursStart(e.target.value)}
-                        className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
-                      >
-                        <option value="">— no restriction —</option>
-                        {Array.from({ length: 24 }, (_, h) => (
-                          <option key={h} value={String(h)}>{formatHour(h)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">End (exclusive, 0–23)</Label>
-                      <select
-                        value={hoursEnd}
-                        onChange={e => setHoursEnd(e.target.value)}
-                        className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
-                      >
-                        <option value="">— no restriction —</option>
-                        {Array.from({ length: 24 }, (_, h) => (
-                          <option key={h} value={String(h)}>{formatHour(h)}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Timezone</Label>
-                    <select
-                      value={hoursTz}
-                      onChange={e => setHoursTz(e.target.value)}
-                      className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                  {/* Toggle */}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-foreground font-medium">Enable Calling Hours</Label>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={hoursEnabled}
+                      onClick={() => setHoursEnabled(v => !v)}
+                      className={cn(
+                        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                        hoursEnabled ? "bg-emerald-500" : "bg-muted-foreground/30"
+                      )}
                     >
-                      {COMMON_TZ.map(tz => (
-                        <option key={tz.value} value={tz.value}>{tz.label}</option>
-                      ))}
-                    </select>
+                      <span
+                        className={cn(
+                          "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                          hoursEnabled ? "translate-x-5" : "translate-x-1"
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {/* Schedule fields (disabled when toggle OFF) */}
+                  <div className={cn("space-y-3", !hoursEnabled && "opacity-50 pointer-events-none")}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Start (hour, 0–23)</Label>
+                        <select
+                          value={hoursStart}
+                          onChange={e => setHoursStart(e.target.value)}
+                          className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                        >
+                          <option value="">— no restriction —</option>
+                          {Array.from({ length: 24 }, (_, h) => (
+                            <option key={h} value={String(h)}>{formatHour(h)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">End (exclusive, 0–23)</Label>
+                        <select
+                          value={hoursEnd}
+                          onChange={e => setHoursEnd(e.target.value)}
+                          className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                        >
+                          <option value="">— no restriction —</option>
+                          {Array.from({ length: 24 }, (_, h) => (
+                            <option key={h} value={String(h)}>{formatHour(h)}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Timezone</Label>
+                      <select
+                        value={hoursTz}
+                        onChange={e => setHoursTz(e.target.value)}
+                        className="w-full h-8 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                      >
+                        {COMMON_TZ.map(tz => (
+                          <option key={tz.value} value={tz.value}>{tz.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground/50">
                     Leads arriving outside this window are queued and dialled automatically when the window opens.
-                    Clear both fields to allow 24/7 dialling.
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <Button size="sm" className="h-7 text-xs" onClick={() => void handleSaveBusinessHours()}>Save</Button>
                     <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingHours(false)}>Cancel</Button>
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {(campaign as any).businessHoursStart != null && (campaign as any).businessHoursEnd != null && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 ml-auto"
+                        onClick={() => { void handleClearSchedule(); }}>
+                        Clear Schedule
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

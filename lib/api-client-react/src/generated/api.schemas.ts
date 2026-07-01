@@ -1896,6 +1896,8 @@ export const CampaignStatus = {
   draft: 'draft',
   active: 'active',
   paused: 'paused',
+  stopped: 'stopped',
+  completed: 'completed',
 } as const;
 
 /**
@@ -1977,6 +1979,8 @@ export interface Campaign {
   businessHoursStart?: number | null;
   /** Hour of day (0–23) when calling stops (exclusive). Null = no restriction. E.g. 19 = stop at 7 PM. */
   businessHoursEnd?: number | null;
+  /** When false, the calling hours schedule is ignored and the campaign dials 24/7. The schedule is preserved for re-enabling. */
+  isCallingHoursEnabled?: boolean;
   /** IANA timezone for businessHoursStart/End evaluation. Defaults to Asia/Kolkata when absent. */
   timezone?: string | null;
   /** Expected lead-form ID from the source platform (e.g. Meta form_id). When set, incoming webhooks whose form_id doesn't match are rejected before lead creation. */
@@ -2089,6 +2093,8 @@ export const CampaignUpdateStatus = {
   draft: 'draft',
   active: 'active',
   paused: 'paused',
+  stopped: 'stopped',
+  completed: 'completed',
 } as const;
 
 export type CampaignUpdateLeadSource = typeof CampaignUpdateLeadSource[keyof typeof CampaignUpdateLeadSource];
@@ -2133,6 +2139,8 @@ export interface CampaignUpdate {
   businessHoursStart?: number | null;
   /** Hour of day (0–23) when calling stops (exclusive). Null = no restriction. */
   businessHoursEnd?: number | null;
+  /** When false, the calling hours schedule is ignored and the campaign dials 24/7. The schedule is preserved for re-enabling. */
+  isCallingHoursEnabled?: boolean | null;
   /** IANA timezone for businessHoursStart/End evaluation. */
   timezone?: string | null;
   /** Expected lead-form ID from the source platform (e.g. Meta form_id). */

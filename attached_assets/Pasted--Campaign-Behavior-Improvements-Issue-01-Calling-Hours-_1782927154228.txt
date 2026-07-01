@@ -1,0 +1,126 @@
+# Campaign Behavior Improvements
+
+## Issue 01: Calling Hours Toggle
+
+Currently, Calling Hours can be configured at the Campaign level. However, once a Calling Hours schedule is saved, there is no way for the user to disable or clear it.
+
+### Expected Behavior
+
+- Add a toggle to enable or disable Calling Hours.
+- When the toggle is **ON**, the configured business hours should be enforced.
+- When the toggle is **OFF**, Calling Hours should be ignored and the campaign should operate 24/7.
+- The previously configured schedule should be preserved in the background, so if the user enables the toggle again, the same schedule is restored without requiring reconfiguration.
+- Also provide a **Clear Schedule** option if the user wants to permanently remove the configured business hours.
+
+---
+
+## Issue 02: Website/Form-Based Campaign Lifecycle
+
+Website and Form-based campaigns are **continuous lead sources**, unlike CSV imports.
+
+These campaigns should **never automatically move to the "Completed" status** after processing existing leads.
+
+### Expected Behavior
+
+The campaign should always remain active and continue listening for new leads from its configured source.
+
+Example sources:
+
+- Website Forms
+- Meta Lead Ads
+- CRM Webhooks
+- Public Webhooks
+- Landing Page Forms
+
+If no leads are currently available, the campaign should simply remain in an **Idle / Listening** state while waiting for new incoming leads.
+
+---
+
+### Calling Hours Behavior
+
+If a new lead arrives outside configured business hours:
+
+- The lead should **not** be discarded.
+- The lead should immediately be added to the campaign queue with a status such as **Queued** or **Waiting for Business Hours**.
+- When the next business window begins, queued leads should be processed automatically.
+- Queued leads should be prioritized before processing newly arriving leads.
+- Throughout this process, the campaign must continue listening for additional incoming leads.
+
+The campaign should never stop accepting new leads simply because it is outside business hours.
+
+---
+
+## Campaign Control Buttons
+
+Currently, users can manually activate Website/Form-based campaigns.
+
+This behavior should be updated.
+
+### Expected Behavior
+
+After a Website/Form-based campaign is configured successfully:
+
+- The campaign should automatically remain in the **Active / Listening** state.
+- Users should not need to manually activate it after each batch of leads.
+
+Users should only have the following control options:
+
+### Pause
+
+- Temporarily stop processing outbound calls.
+- Continue accepting and storing incoming leads.
+- Resume processing when the user clicks **Resume**.
+
+### Stop
+
+- Stop accepting new leads.
+- Stop outbound calling.
+- Disconnect the campaign from active processing.
+- The campaign status becomes **Stopped**.
+
+Once a campaign is stopped, the primary action button should change to:
+
+**Activate**
+
+Clicking **Activate** should:
+
+- Re-enable webhook/listener processing.
+- Resume accepting new incoming leads.
+- Continue using the existing campaign configuration.
+- No additional setup should be required.
+
+---
+
+## Desired Campaign Lifecycle
+
+Website / Form Campaign
+
+↓
+
+Active (Listening)
+
+↓
+
+New Lead Arrives
+
+↓
+
+Within Business Hours?
+
+├── Yes → Trigger AI Call Immediately
+│
+└── No → Add Lead to Queue
+
+↓
+
+Next Business Window Opens
+
+↓
+
+Process Queued Leads (Priority)
+
+↓
+
+Continue Listening for New Leads
+
+This ensures Website, Meta Ads, CRM, and Webhook campaigns behave like always-on lead ingestion pipelines rather than one-time import campaigns.
