@@ -3,7 +3,7 @@ import { diffWords, diffWordsWithSpace } from "diff";
 import { useLocation, useParams } from "wouter";
 import {
   Bot, Plus, Search, Phone, Mic, Brain, Webhook, PhoneForwarded,
-  Save, MoreHorizontal, Power, Trash2, Settings, FileText, Wrench,
+  Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
@@ -19,7 +19,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
-  useListAgents, useGetAgent, useUpdateAgent, useToggleAgent, useDeleteAgent,
+  useListAgents, useGetAgent, useUpdateAgent, useDeleteAgent,
   useCreateAgent, useInitiateOutboundCall, getListAgentsQueryKey, getGetAgentQueryKey,
   useListCalendars, customFetch,
   useListKnowledgeSources, useRunToolTest, useListAmbientSounds, useListEventTypes,
@@ -54,7 +54,7 @@ import {
 import { Label } from "@/components/ui/label";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -4293,7 +4293,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     query: { queryKey: getGetAgentQueryKey(agentId) },
   });
   const updateAgent = useUpdateAgent();
-  const toggleAgent = useToggleAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
 
@@ -4468,16 +4467,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     }
   );
 
-  const handleToggle = async () => {
-    try {
-      await toggleAgent.mutateAsync({ id: agentId });
-      queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
-      queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-    } catch (err) {
-      toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
-    }
-  };
-
   const handleDelete = async () => {
     const agentName = form.getValues("name") || "this agent";
     if (!confirm(`Delete "${agentName}"? This cannot be undone.`)) return;
@@ -4563,11 +4552,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
               <Button size="icon" variant="ghost" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleToggle}>
-                <Power className="h-3.5 w-3.5 mr-2" />
-                {agent.status === "active" ? "Deactivate" : "Activate"}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
                 <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Agent
               </DropdownMenuItem>
