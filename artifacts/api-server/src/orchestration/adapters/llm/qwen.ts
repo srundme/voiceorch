@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
@@ -33,13 +33,15 @@ const SCHEDULING_TOOL_NAME_PATTERNS = [
 export class QwenLLM implements LLMAdapter {
   private client: OpenAI;
   private model: string;
+  private maxTokens: number | undefined;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
       apiKey,
       baseURL: "https://api.groq.com/openai/v1",
     });
-    this.model = model?.trim() || DEFAULT_MODEL;
+    this.model     = model?.trim() || DEFAULT_MODEL;
+    this.maxTokens = genParams?.maxTokens ?? undefined;
   }
 
   async chat(
@@ -80,9 +82,14 @@ export class QwenLLM implements LLMAdapter {
     const voiceSystemPrompt = `/no_think\n${systemPrompt}`;
 
     const stream = await this.client.chat.completions.create({
-      model: this.model,
-      stream: true,
+      model:          this.model,
+      stream:         true,
       stream_options: { include_usage: true },
+      // service_tier:"on_demand" guarantees dedicated LPU resources — no queueing
+      // delays — which is critical for voice turn latency.
+      service_tier:   "on_demand" as any,
+      // Capping output tokens reduces Decoding Time (Total = TTFT + OutputTok/Speed + net)
+      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
       messages: [
         { role: "system", content: voiceSystemPrompt },
         ...toOpenAIMessages(messages),

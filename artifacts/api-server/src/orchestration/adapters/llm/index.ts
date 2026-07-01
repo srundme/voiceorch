@@ -27,11 +27,11 @@ export function createLLMAdapter(
     case "openai":
       return new OpenAILLM(apiKey, model);
     case "groq":
-      return new GroqLLM(apiKey, model);
+      return new GroqLLM(apiKey, model, genParams);
     case "google":
       return new GoogleLLM(apiKey, model);
     case "gemini":
-      return new QwenLLM(apiKey, model);
+      return new QwenLLM(apiKey, model, genParams);
     case "sarvam":
       return new SarvamLLM(apiKey, model, genParams, callId);
     case "deepseek":
@@ -44,7 +44,7 @@ export function createLLMAdapter(
     case "cohere":
       return new CohereLLM(apiKey, model);
     case "qwen":
-      return new QwenLLM(apiKey, model);
+      return new QwenLLM(apiKey, model, genParams);
     case "ultravox":
       return new UltravoxLLM(apiKey, model, baseUrl);
     default:
