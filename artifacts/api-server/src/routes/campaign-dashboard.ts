@@ -13,7 +13,7 @@ import {
   callBookingsTable,
 } from "@workspace/db";
 import { eq, and, gte, lt, inArray, count, desc } from "drizzle-orm";
-import { decryptKey } from "../lib/encryption.js";
+import { decryptKey } from "../lib/crypto.js";
 
 const router = Router();
 
