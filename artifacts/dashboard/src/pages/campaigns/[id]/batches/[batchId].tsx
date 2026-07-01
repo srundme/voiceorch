@@ -5,7 +5,7 @@
  * Keeps existing controls (Start / Pause / Stop / Redial) intact.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { TablePagination } from "@/components/table-pagination";
 import { useRoute, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,16 +22,91 @@ import {
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
   TrendingUp, Bell, PhoneIncoming,
   Eye, Database, RefreshCw,
-  User, Search, X, CheckCircle2,
+  User, Search, X, CheckCircle2, Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+// ── useCountdown ──────────────────────────────────────────────────────────────
+// Returns live { days, hours, minutes, seconds, expired } ticking every second.
+// Returns null when targetIso is null/undefined or already in the past on mount.
+
+type Countdown = { days: number; hours: number; minutes: number; seconds: number; expired: boolean };
+
+function useCountdown(targetIso: string | null | undefined): Countdown | null {
+  const [tick, setTick] = useState(0);
+  const ref = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!targetIso) return;
+    ref.current = setInterval(() => setTick(t => t + 1), 1000);
+    return () => { if (ref.current) clearInterval(ref.current); };
+  }, [targetIso]);
+
+  if (!targetIso) return null;
+  const diff = new Date(targetIso).getTime() - Date.now();
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
+  const totalSec = Math.floor(diff / 1000);
+  const days    = Math.floor(totalSec / 86400);
+  const hours   = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  // tick is read to force re-render each second
+  void tick;
+  return { days, hours, minutes, seconds, expired: false };
+}
+
+// ── ScheduledCountdownBanner ──────────────────────────────────────────────────
+
+function ScheduledCountdownBanner({
+  scheduledStartAt,
+  onExpired,
+}: {
+  scheduledStartAt: string;
+  onExpired: () => void;
+}) {
+  const cd = useCountdown(scheduledStartAt);
+  const expiredRef = useRef(false);
+
+  useEffect(() => {
+    if (cd?.expired && !expiredRef.current) {
+      expiredRef.current = true;
+      onExpired();
+    }
+  }, [cd?.expired, onExpired]);
+
+  if (!cd) return null;
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const timeStr = cd.days > 0
+    ? `${cd.days}d ${pad(cd.hours)}:${pad(cd.minutes)}:${pad(cd.seconds)}`
+    : `${pad(cd.hours)}:${pad(cd.minutes)}:${pad(cd.seconds)}`;
+
+  return (
+    <div className="mx-5 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-center gap-4 shrink-0">
+      <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-500/15 shrink-0">
+        <Clock className="h-4 w-4 text-amber-500" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-amber-600/80 uppercase tracking-wider mb-0.5">Scheduled — launches in</p>
+        <p className="text-2xl font-bold tabular-nums tracking-tight text-amber-500 leading-none">{timeStr}</p>
+        <p className="text-xs text-muted-foreground/50 mt-0.5">
+          {format(new Date(scheduledStartAt), "EEEE, MMM d 'at' h:mm a")}
+        </p>
+      </div>
+      <div className="shrink-0 text-right hidden sm:block">
+        <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider font-semibold">You can still</p>
+        <p className="text-xs text-muted-foreground/60 font-medium">Start early ↑</p>
+      </div>
+    </div>
+  );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -607,6 +682,16 @@ export default function BatchWorkspacePage() {
           </div>
         </div>
       </div>
+
+      {/* ── Scheduled countdown banner ───────────────────────────────────── */}
+      {batchStatus === "draft" && header?.batch.scheduledStartAt && (
+        <ScheduledCountdownBanner
+          scheduledStartAt={header.batch.scheduledStartAt}
+          onExpired={() => {
+            void qc.invalidateQueries({ queryKey: ["batch-ws-header", campaignId, batchId] });
+          }}
+        />
+      )}
 
       {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
       <div className="px-5 py-3 shrink-0">

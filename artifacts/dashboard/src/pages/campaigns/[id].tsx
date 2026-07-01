@@ -738,6 +738,44 @@ function CreateBatchWizard({
 
 // ── Batch row ────────────────────────────────────────────────────────────────
 
+// ── ScheduledChip ─────────────────────────────────────────────────────────────
+// Shows clock icon + formatted date. When launch is ≤24 h away, turns amber
+// and shows a live "in Xh Ym" countdown ticking every minute.
+
+function ScheduledChip({ scheduledStartAt }: { scheduledStartAt: string | null | undefined }) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!scheduledStartAt) return;
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, [scheduledStartAt]);
+  void tick;
+
+  if (!scheduledStartAt) return null;
+  const target = new Date(scheduledStartAt);
+  const diffMs = target.getTime() - Date.now();
+  if (diffMs <= 0) return null;
+
+  const within24h = diffMs < 86_400_000;
+  const totalMin  = Math.floor(diffMs / 60_000);
+  const h         = Math.floor(totalMin / 60);
+  const m         = totalMin % 60;
+  const inLabel   = h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
+
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md border font-medium",
+      within24h
+        ? "bg-amber-500/10 text-amber-500 border-amber-500/25"
+        : "bg-muted/40 text-muted-foreground/60 border-border/60",
+    )}>
+      <Clock className="h-2.5 w-2.5" />
+      {format(target, "MMM d, HH:mm")}
+      {within24h && <span className="opacity-80 ml-0.5 font-normal">· {inLabel}</span>}
+    </span>
+  );
+}
+
 function BatchRow({ batch, index, campaignId, onDelete }: {
   batch: CampaignBatch; index: number; campaignId: number; onDelete: (b: CampaignBatch) => void;
 }) {
@@ -770,9 +808,7 @@ function BatchRow({ batch, index, campaignId, onDelete }: {
         <div className="flex items-center gap-3 text-xs text-muted-foreground/50">
           <span className="flex items-center gap-1"><Users className="h-3 w-3" />{batch.totalLeads} leads</span>
           <span>{batch.calledLeads} called ({calledPct}%)</span>
-          {batch.scheduledStartAt && (
-            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(batch.scheduledStartAt), "MMM d, HH:mm")}</span>
-          )}
+          <ScheduledChip scheduledStartAt={batch.scheduledStartAt} />
         </div>
       </div>
       <div className="hidden sm:flex items-center gap-2 w-28">
@@ -841,6 +877,9 @@ function BatchKpiCard({ batch, index, campaignId }: {
               <span className="text-xs text-muted-foreground/30 flex items-center gap-1">
                 <Clock className="h-2.5 w-2.5" />{lastActivity}
               </span>
+            )}
+            {batch.status === "draft" && (
+              <ScheduledChip scheduledStartAt={batch.scheduledStartAt} />
             )}
           </div>
         </div>
