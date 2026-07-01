@@ -7,6 +7,15 @@ import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// ── Draggable launcher constants ──────────────────────────────────────────────
+const BUTTON_SIZE = 56; // h-14 w-14
+const EDGE_MARGIN = 24; // default 1.5rem inset (bottom-6 right-6)
+const VIEWPORT_PADDING = 8; // min gap from viewport edges when clamping
+const PANEL_W = 420;
+const PANEL_H = 580;
+const POS_STORAGE_KEY = "voiceorch:assistantPos";
+const DRAG_THRESHOLD = 5; // px of movement before an interaction counts as a drag
+
 type Phase = "idle" | "listening" | "thinking" | "speaking" | "applying" | "error";
 
 interface ProposalChange {
@@ -142,6 +151,55 @@ export function VoiceAssistant() {
   const [applyingId, setApplyingId] = useState<number | null>(null);
   const [greeted, setGreeted] = useState(false);
   const [error, setError] = useState("");
+
+  // ── Draggable launcher position ─────────────────────────────────────────────
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const raw = localStorage.getItem(POS_STORAGE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as { x?: unknown; y?: unknown };
+        if (typeof p.x === "number" && typeof p.y === "number") {
+          return { x: p.x, y: p.y };
+        }
+      }
+    } catch { /* ignore malformed storage */ }
+    return {
+      x: window.innerWidth - BUTTON_SIZE - EDGE_MARGIN,
+      y: window.innerHeight - BUTTON_SIZE - EDGE_MARGIN,
+    };
+  });
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+  } | null>(null);
+
+  const clampButtonPos = useCallback((x: number, y: number) => {
+    const maxX = Math.max(VIEWPORT_PADDING, window.innerWidth - BUTTON_SIZE - VIEWPORT_PADDING);
+    const maxY = Math.max(VIEWPORT_PADDING, window.innerHeight - BUTTON_SIZE - VIEWPORT_PADDING);
+    return {
+      x: Math.min(Math.max(VIEWPORT_PADDING, x), maxX),
+      y: Math.min(Math.max(VIEWPORT_PADDING, y), maxY),
+    };
+  }, []);
+
+  // Persist position across reloads.
+  useEffect(() => {
+    try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* ignore */ }
+  }, [pos]);
+
+  // Keep the button on-screen when the viewport is resized.
+  useEffect(() => {
+    function onResize() {
+      setPos((p) => clampButtonPos(p.x, p.y));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampButtonPos]);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
@@ -344,7 +402,59 @@ export function VoiceAssistant() {
     setOpen(false);
   }
 
+  // ── Drag handlers for the floating launcher ─────────────────────────────────
+  function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: pos.x,
+      origY: pos.y,
+      moved: false,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (!d.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      d.moved = true;
+      setDragging(true);
+    }
+    if (d.moved) {
+      setPos(clampButtonPos(d.origX + dx, d.origY + dy));
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLButtonElement>) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (d.moved) {
+      setDragging(false);
+    } else {
+      // A tap/click without meaningful movement opens the panel.
+      void handleOpen();
+    }
+  }
+
   const isBusy = phase === "thinking" || phase === "speaking" || phase === "applying";
+
+  // Anchor the open panel to the button's bottom-right corner, clamped on-screen.
+  const panelPos = (() => {
+    const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - PANEL_W - VIEWPORT_PADDING);
+    const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - PANEL_H - VIEWPORT_PADDING);
+    return {
+      left: Math.min(Math.max(VIEWPORT_PADDING, pos.x + BUTTON_SIZE - PANEL_W), maxLeft),
+      top: Math.min(Math.max(VIEWPORT_PADDING, pos.y + BUTTON_SIZE - PANEL_H), maxTop),
+    };
+  })();
 
   // ── Suggested prompts ─────────────────────────────────────────────────────
   const suggestions = [
@@ -359,10 +469,18 @@ export function VoiceAssistant() {
       {/* ── Floating button ──────────────────────────────────────────────────── */}
       {!open && (
         <button
-          onClick={() => void handleOpen()}
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 active:scale-95"
-          style={{ background: "linear-gradient(135deg,#1e293b 0%,#334155 100%)" }}
-          title="Open Orcha AI assistant"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95"
+          style={{
+            left: pos.x,
+            top: pos.y,
+            background: "linear-gradient(135deg,#1e293b 0%,#334155 100%)",
+            touchAction: "none",
+            cursor: dragging ? "grabbing" : "grab",
+          }}
+          title="Open Orcha AI assistant · drag to move"
         >
           <Bot className="h-6 w-6 text-white" />
           <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
@@ -375,8 +493,8 @@ export function VoiceAssistant() {
       {/* ── Assistant panel ───────────────────────────────────────────────────── */}
       {open && (
         <div
-          className="fixed bottom-6 right-6 z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
-          style={{ width: 420, height: 580, background: "#0f172a", border: "1px solid #1e293b" }}
+          className="fixed z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+          style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, height: PANEL_H, background: "#0f172a", border: "1px solid #1e293b" }}
         >
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 py-3 border-b shrink-0" style={{ borderColor: "#1e293b" }}>
