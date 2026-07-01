@@ -4,14 +4,14 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile",
     "watchPatterns": [
-      "/artifacts/api-server/**",
-      "/artifacts/dashboard/**",
-      "/artifacts/admin/**",
-      "/artifacts/snapserve-book/**",
-      "/lib/**",
-      "/pnpm-lock.yaml",
-      "/pnpm-workspace.yaml",
-      "/Dockerfile"
+      "artifacts/api-server/**",
+      "artifacts/dashboard/**",
+      "artifacts/admin/**",
+      "artifacts/snapserve-book/**",
+      "lib/**",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "Dockerfile"
     ]
   },
   "deploy": {
