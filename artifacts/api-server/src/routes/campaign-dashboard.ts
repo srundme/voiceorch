@@ -40,7 +40,11 @@ function computeHealth(c: typeof campaignsTable.$inferSelect, now: Date): Health
   if (!c.agentId) return "no_agent";
   if (!c.fromNumber) return "no_number";
   if (c.lastValidationError) return "validation_error";
-  if (["webhook", "meta_ads", "crm"].includes(c.leadSource)) {
+  const needsWebhook =
+    c.leadSource === "webhook" ||
+    c.leadSource === "meta_ads" ||
+    (c.leadSource === "crm" && (c.triggerMode ?? "batch") === "instant");
+  if (needsWebhook) {
     if (!c.lastWebhookAt) return "webhook_offline";
     const staleMs = now.getTime() - c.lastWebhookAt.getTime();
     if (staleMs > 60 * 60 * 1000) return "webhook_offline"; // > 1 hour
