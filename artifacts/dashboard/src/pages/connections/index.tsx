@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListConnections,
@@ -34,7 +34,7 @@ import {
   Zap, Sheet, Radio, X, ChevronDown, ChevronRight,
   ArrowRight, ExternalLink, Lock, RefreshCw, Eye, EyeOff,
   Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2, Search,
-  Activity, KeyRound,
+  Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -810,6 +810,8 @@ function WebhookRow({
 
 // ── Webhook Table ─────────────────────────────────────────────────────────────
 
+const WEBHOOK_PAGE_SIZE = 5;
+
 function WebhookTable({
   connections,
   onRefresh,
@@ -819,24 +821,40 @@ function WebhookTable({
   onRefresh: () => void;
   newEventIds: Set<number>;
 }) {
-  const [search, setSearch] = useState("");
+  const [search,   setSearch]   = useState("");
+  // "asc" = oldest first, "desc" = newest first (default)
+  const [dateSort, setDateSort] = useState<"asc" | "desc">("desc");
+  const [page,     setPage]     = useState(1);
 
-  const filtered = connections.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase())
+  // Reset to page 1 when search/sort changes
+  useEffect(() => { setPage(1); }, [search, dateSort]);
+
+  const filtered = useMemo(() =>
+    connections.filter(c => c.name.toLowerCase().includes(search.toLowerCase())),
+    [connections, search],
   );
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (a.status === "connected" && b.status !== "connected") return -1;
-    if (b.status === "connected" && a.status !== "connected") return 1;
-    const aTs = a.lastEventAt ? new Date(a.lastEventAt).getTime() : 0;
-    const bTs = b.lastEventAt ? new Date(b.lastEventAt).getTime() : 0;
-    if (bTs !== aTs) return bTs - aTs;
-    return a.name.localeCompare(b.name);
-  });
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      // Connected / active always first regardless of date sort
+      const aActive = a.status === "connected";
+      const bActive = b.status === "connected";
+      if (aActive && !bActive) return -1;
+      if (bActive && !aActive) return 1;
+      // Then sort by createdAt
+      const aTs = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTs = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateSort === "desc" ? bTs - aTs : aTs - bTs;
+    });
+  }, [filtered, dateSort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / WEBHOOK_PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages);
+  const pageRows   = sorted.slice((safePage - 1) * WEBHOOK_PAGE_SIZE, safePage * WEBHOOK_PAGE_SIZE);
 
   return (
     <div className="space-y-2">
-      {connections.length > 5 && (
+      {connections.length > WEBHOOK_PAGE_SIZE && (
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <input
@@ -850,20 +868,29 @@ function WebhookTable({
       )}
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
+        {/* Table header */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-border/50 bg-muted/30">
           <div className="w-7 shrink-0" />
           <div className="flex-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Campaign</div>
           <div className="hidden sm:block flex-1 max-w-[220px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Webhook URL</div>
           <div className="hidden md:block w-28 text-right text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Last Event</div>
+          {/* Date sort toggle */}
+          <button
+            onClick={() => setDateSort(d => d === "desc" ? "asc" : "desc")}
+            className="hidden md:flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+            title={dateSort === "desc" ? "Newest first — click for oldest first" : "Oldest first — click for newest first"}
+          >
+            {dateSort === "desc" ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+          </button>
           <div className="w-[100px] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground text-right">Actions</div>
         </div>
 
-        {sorted.length === 0 ? (
+        {pageRows.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
             {search ? `No campaigns match "${search}"` : "No webhook connections yet"}
           </div>
         ) : (
-          sorted.map(c => (
+          pageRows.map(c => (
             <WebhookRow
               key={c.id}
               connection={c}
@@ -874,14 +901,37 @@ function WebhookTable({
         )}
       </div>
 
-      {sorted.length > 0 && (
-        <p className="text-[10px] text-muted-foreground pl-1">
+      {/* Footer: count + pagination */}
+      <div className="flex items-center justify-between pl-1">
+        <p className="text-[10px] text-muted-foreground">
           {search && filtered.length !== connections.length
             ? `${filtered.length} of ${connections.length} webhooks`
             : `${connections.length} webhook${connections.length !== 1 ? "s" : ""}`}
           {" — "}one per campaign, auto-created
         </p>
-      )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              disabled={safePage <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="h-6 w-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            >
+              <ChevronLeft className="w-3 h-3" />
+            </button>
+            <span className="text-[10px] text-muted-foreground tabular-nums px-1">
+              {safePage} / {totalPages}
+            </span>
+            <button
+              disabled={safePage >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              className="h-6 w-6 flex items-center justify-center rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            >
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1996,13 +2046,15 @@ function CrmConnectorSection() {
                               {conn.lastError.slice(0, 60)}
                             </span>
                           )}
-                          <Button
-                            size="sm" variant="outline"
-                            className="h-6 px-2 text-[10px] ml-auto"
-                            onClick={() => setImportConn(conn)}
-                          >
-                            Import Contacts
-                          </Button>
+                          {conn.provider !== "zoho" && (
+                            <Button
+                              size="sm" variant="outline"
+                              className="h-6 px-2 text-[10px] ml-auto"
+                              onClick={() => setImportConn(conn)}
+                            >
+                              Import Contacts
+                            </Button>
+                          )}
                         </div>
                       ))}
                       {isConnected && (
