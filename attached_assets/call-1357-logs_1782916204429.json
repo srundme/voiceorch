@@ -1,0 +1,2128 @@
+[
+  {
+    "id": 67740,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.424Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "New Agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "abf838c5-ec62-4ea4-92e9-d35ffeb86e0a"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1357,
+      "sessionId": "live-1357",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-01T14:28:06.404Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 67739,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.424Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "New Agent",
+        "caller_number": "917971442376",
+        "date": "Wednesday, July 1, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, received a welcome call from Galaxy Health Insurance regarding his purchased policy and was introduced to the wellness program called Gala Fit. Karthik seemed unsure about the program and decided to call back later for more information.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\""
+    },
+    "metadata": null
+  },
+  {
+    "id": 67741,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.424Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthik",
+        "callCount": 10
+      },
+      "factCount": 3,
+      "facts": {
+        "company_name": "Galaxy Health Insurance",
+        "policy_purchased": "Galaxy Marvel",
+        "name": "Karthik"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 67742,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.424Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 67743,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.424Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 67745,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.440Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 67744,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.440Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "5363f8d856ed",
+      "promptLength": 29547,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPIS"
+    }
+  },
+  {
+    "id": 67746,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:06.440Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "abf838c5-ec62-4ea4-92e9-d35ffeb86e0a"
+    }
+  },
+  {
+    "id": 67747,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:07.156Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம் கார்த்திக், நீங்கள் காலையில் எங்களுடன் பேசிய கேள்விகளுக்கான விடைகளைக் கண்டுபிடித்தீர்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 67748,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:07.156Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 67749,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:12.623Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5470,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 155874,
+      "textLength": 97,
+      "firstByteMs": 488
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 5470
+    }
+  },
+  {
+    "id": 67750,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:12.623Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4871,
+      "turnNumber": 0,
+      "durationMs": 5471
+    }
+  },
+  {
+    "id": 67751,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:15.830Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "and speak in English.",
+      "endDetectToFinalMs": 131,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 67752,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:15.836Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 67753,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:16.418Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 587,
+      "turnNumber": 1,
+      "durationMs": 587
+    }
+  },
+  {
+    "id": 67754,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:16.616Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 587,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "அப்போ, நீங்கள் காலையில் கேட்ட கேள்விகளுக்கு பதில் கிடைத்ததா?"
+    },
+    "metadata": {
+      "inputTokens": 8357,
+      "outputTokens": 82,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 67755,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:16.717Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 67756,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:16.717Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அப்போ, நீங்கள் காலையில் கேட்ட கேள்விகளுக்கு பதில் கிடைத்ததா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 67757,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:20.744Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3671,
+      "turnNumber": 1,
+      "durationMs": 4028
+    }
+  },
+  {
+    "id": 67758,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:20.744Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4027,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117474,
+      "textLength": 60,
+      "firstByteMs": 263
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 4027
+    }
+  },
+  {
+    "id": 67759,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:24.257Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Yes",
+      "endDetectToFinalMs": 144,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67760,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:24.369Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67761,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:25.124Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 757,
+      "turnNumber": 2,
+      "durationMs": 757
+    }
+  },
+  {
+    "id": 67762,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:25.446Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67763,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:25.446Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நன்றி, அப்போ நீங்கள் Galaxy Marvel பாலிசியை வாங்கியிருப்பதால்"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67764,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:25.619Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 757,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "நன்றி, அப்போ நீங்கள் Galaxy Marvel பாலிசியை வாங்கியிருப்பதால், உங்களுக்கு Gala Fit வெல்னஸ் ப்ரோகிராம் கிடைக்கிறது, அதைப் பற்றி சொல்ல விரும்புகிறேன்."
+    },
+    "metadata": {
+      "inputTokens": 8398,
+      "outputTokens": 169,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67765,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:29.077Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3431,
+      "turnNumber": 2,
+      "durationMs": 3630
+    }
+  },
+  {
+    "id": 67766,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:29.077Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு Gala Fit வெல்னஸ் ப்ரோகிராம் கிடைக்கிறது"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67768,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:29.077Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67767,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:29.077Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3630,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 109794,
+      "textLength": 61,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 3630
+    }
+  },
+  {
+    "id": 67769,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:31.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2471,
+      "turnNumber": 2,
+      "durationMs": 2616
+    }
+  },
+  {
+    "id": 67770,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:31.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2616,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79074,
+      "textLength": 50,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 2616
+    }
+  },
+  {
+    "id": 67772,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:31.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67771,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:31.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அதைப் பற்றி சொல்ல விரும்புகிறேன்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 67773,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:34.088Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2394,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 33,
+      "firstByteMs": 253
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 2394
+    }
+  },
+  {
+    "id": 67774,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:34.088Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 2,
+      "durationMs": 2395
+    }
+  },
+  {
+    "id": 67775,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:37.555Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "English",
+      "endDetectToFinalMs": 85,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67776,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:37.658Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67777,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:38.986Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1331,
+      "turnNumber": 3,
+      "durationMs": 1331
+    }
+  },
+  {
+    "id": 67779,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:39.329Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, அப்போ நாங்கள் Gala Fit பற்றி பேசலாம்"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67778,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:39.329Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67780,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:39.331Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1331,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, அப்போ நாங்கள் Gala Fit பற்றி பேசலாம், அது உங்களுக்கு என்ன பயன்களை அளிக்கிறது என்பதை அறிந்துகொள்வோம்."
+    },
+    "metadata": {
+      "inputTokens": 8663,
+      "outputTokens": 132,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67781,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:42.489Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3159,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 41,
+      "firstByteMs": 138
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 3159
+    }
+  },
+  {
+    "id": 67783,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:42.489Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 3,
+      "durationMs": 3159
+    }
+  },
+  {
+    "id": 67784,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:42.489Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67782,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:42.489Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அது உங்களுக்கு என்ன பயன்களை அளிக்கிறது என்பதை அறிந்துகொள்வோம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 67786,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:45.646Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 3,
+      "durationMs": 3158
+    }
+  },
+  {
+    "id": 67785,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:45.646Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3158,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 62,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 3158
+    }
+  },
+  {
+    "id": 67787,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:47.425Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஒரு நிமிஷம் ஒரு நிமிஷம் இருங்க",
+      "endDetectToFinalMs": 222,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67788,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:47.543Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67789,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:48.328Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 789,
+      "turnNumber": 4,
+      "durationMs": 789
+    }
+  },
+  {
+    "id": 67791,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:48.616Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, Gala Fit என்பது ஒரு வெல்னஸ் ப்ரோகிராம்"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67790,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:48.616Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67792,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:48.689Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 789,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, Gala Fit என்பது ஒரு வெல்னஸ் ப்ரோகிராம், இதில் பல்வேறு நடவடிக்கைகள் இருக்கின்றன, அவற்றைப் பற்றி நாங்கள் ஒன்றாக பார்ப்போம்."
+    },
+    "metadata": {
+      "inputTokens": 8804,
+      "outputTokens": 160,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67793,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:52.032Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3415,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 102114,
+      "textLength": 43,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 3415
+    }
+  },
+  {
+    "id": 67794,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:52.032Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3191,
+      "turnNumber": 4,
+      "durationMs": 3415
+    }
+  },
+  {
+    "id": 67796,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:52.032Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67795,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:52.032Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இதில் பல்வேறு நடவடிக்கைகள் இருக்கின்றன"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67797,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:54.434Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2231,
+      "turnNumber": 4,
+      "durationMs": 2399
+    }
+  },
+  {
+    "id": 67798,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:54.434Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67800,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:54.434Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2399,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 71394,
+      "textLength": 38,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 2399
+    }
+  },
+  {
+    "id": 67799,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:54.434Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அவற்றைப் பற்றி நாங்கள் ஒன்றாக பார்ப்போம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 67801,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:57.084Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2652,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79074,
+      "textLength": 41,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 2652
+    }
+  },
+  {
+    "id": 67802,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:28:57.084Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2471,
+      "turnNumber": 4,
+      "durationMs": 2653
+    }
+  },
+  {
+    "id": 67803,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:02.826Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Yes",
+      "endDetectToFinalMs": 72,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67804,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:02.930Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67805,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:03.788Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 861,
+      "turnNumber": 5,
+      "durationMs": 861
+    }
+  },
+  {
+    "id": 67806,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:04.072Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அப்போ, நீங்கள் இந்த Gala Fit ப்ரோகிராமில் பங்கேற்கும்போது"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67807,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:04.072Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67808,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:04.286Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 861,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "அப்போ, நீங்கள் இந்த Gala Fit ப்ரோகிராமில் பங்கேற்கும்போது, நீங்கள் Wellness Coins என்றழைக்கப்படும் நன்மை புள்ளிகளை சம்பாதிக்கலாம், அதை பற்றி தெரிந்துகொள்ள விரும்புகிறீர்களா?"
+    },
+    "metadata": {
+      "inputTokens": 9002,
+      "outputTokens": 206,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67809,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:07.919Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3846,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 114914,
+      "textLength": 57,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 3846
+    }
+  },
+  {
+    "id": 67812,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:07.919Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3591,
+      "turnNumber": 5,
+      "durationMs": 3847
+    }
+  },
+  {
+    "id": 67811,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:07.919Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்கள் Wellness Coins என்றழைக்கப்படும் நன்மை புள்ளிகளை சம்பாதிக்கலாம்"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67810,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:07.919Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67815,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:11.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3710,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 109794,
+      "textLength": 70,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 3710
+    }
+  },
+  {
+    "id": 67814,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:11.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3431,
+      "turnNumber": 5,
+      "durationMs": 3710
+    }
+  },
+  {
+    "id": 67813,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:11.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67816,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:11.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அதை பற்றி தெரிந்துகொள்ள விரும்புகிறீர்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 67817,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:14.561Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2932,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89314,
+      "textLength": 42,
+      "firstByteMs": 149
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 2932
+    }
+  },
+  {
+    "id": 67818,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:14.561Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2791,
+      "turnNumber": 5,
+      "durationMs": 2932
+    }
+  },
+  {
+    "id": 67819,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:16.368Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "1 minute இருங்க bro, line-ல இருங்க.",
+      "endDetectToFinalMs": 200,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 67820,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:16.370Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 12,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 67821,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:17.315Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 947,
+      "turnNumber": 6,
+      "durationMs": 947
+    }
+  },
+  {
+    "id": 67822,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:17.580Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 947,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நன்மை புள்ளிகளை சம்பாதிக்க, நீங்கள் என்ன செய்ய வேண்டும் என்பதை அறிந்து கொள்ளலாம்."
+    },
+    "metadata": {
+      "inputTokens": 9290,
+      "outputTokens": 115,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 67823,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:17.633Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 67824,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:17.633Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நன்மை புள்ளிகளை சம்பாதிக்க"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 67825,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:18.946Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 5,
+      "threshold": 1,
+      "turnNumber": 6,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 67827,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:18.952Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1319,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 31,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1319
+    }
+  },
+  {
+    "id": 67826,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:18.952Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "சரிங்க bro. Bro ஒரு நிமிஷம் இருங்க bro",
+      "endDetectToFinalMs": 314,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67828,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:18.952Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2551,
+      "turnNumber": 6,
+      "durationMs": 1319,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 67829,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:19.057Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: Karthik  |  Calls: 10  |  Last: today\n\nKNOWN FACTS:\n• company_name: Galaxy Health Insurance  [today]\n• policy_purchased: Galaxy Marvel  [today]\n\nRECENT EPISODES:\n[today] 😐 The caller, Karthik, re",
+      "historyLength": 14,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67830,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:19.316Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 67831,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:19.433Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1357"
+    }
+  },
+  {
+    "id": 67832,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:19.433Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1357"
+    }
+  },
+  {
+    "id": 67833,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:19.466Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 73,
+        "turns": 6,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "சரிங்க bro. Bro ஒரு நிமிஷம் இருங்க bro",
+        "lastAgentResponse": "சரி, நன்மை புள்ளிகளை சம்பாதிக்க, நீங்கள் என்ன செய்ய வேண்டும் என்பதை அறிந்து கொள்ளலாம்.",
+        "recordingStatus": "saved",
+        "warningCount": 2,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 73,
+      "turns": 6,
+      "avgSttMs": 0,
+      "avgLlmMs": 879,
+      "avgTtsMs": 1350
+    }
+  },
+  {
+    "id": 67834,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:19.680Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 628,
+      "turnNumber": 7,
+      "durationMs": 628
+    }
+  },
+  {
+    "id": 67835,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.101Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67836,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.101Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அப்போ, நீங்கள் தினமும் ஐந்தாயிரம் படிகள் நடப்பது"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67838,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.152Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 51,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 48,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 51
+    }
+  },
+  {
+    "id": 67837,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.152Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 0,
+      "turnNumber": 7,
+      "durationMs": 51
+    }
+  },
+  {
+    "id": 67839,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.228Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 628,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "அப்போ, நீங்கள் தினமும் ஐந்தாயிரம் படிகள் நடப்பது, ஏழு மணி தூக்கம் இருப்பது போன்ற நடவடிக்கைகளை மேற்கொள்வதன் மூலம் இந்த நன்மை புள்ளிகளை சம்பாதிக்கலாம்."
+    },
+    "metadata": {
+      "inputTokens": 9358,
+      "outputTokens": 205,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67841,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.329Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஏழு மணி தூக்கம் இருப்பது போன்ற நடவடிக்கைகளை மேற்கொள்வதன் மூலம் இந்த நன்மை புள்ளிகளை சம்பாதிக்கலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67840,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.329Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 67842,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.379Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 0,
+      "turnNumber": 7,
+      "durationMs": 51
+    }
+  },
+  {
+    "id": 67843,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.379Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 51,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 99,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 51
+    }
+  },
+  {
+    "id": 67844,
+    "callId": 1357,
+    "agentId": 59,
+    "ts": "2026-07-01T14:29:20.506Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]

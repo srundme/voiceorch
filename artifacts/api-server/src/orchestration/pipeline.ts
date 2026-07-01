@@ -945,16 +945,21 @@ export class OrchestrationPipeline {
               this.currentLang = detected;
               if (!detected.startsWith("en-")) this.lastNonEnglishLang = detected;
             }
-          } else if (this.agent.autoSwitchToEnglish) {
-            // Strict single-language mode, but the operator enabled "auto switch to
-            // English". Honor an EXPLICIT caller request for English (only) — latch it
-            // so it sticks, and flip currentLang so the per-turn OVERRIDE guard fires.
+          } else {
+            // Strict single-language mode — still honor an EXPLICIT caller request
+            // to switch to English. Without this the caller saying "speak in English"
+            // is silently ignored because languageAutoDetect=false skips the latch
+            // entirely, and the ABSOLUTE RULE stays locked forever.
+            // autoSwitchToEnglish being false/absent is intentional — it controls
+            // whether English is the default fallback, NOT whether explicit requests
+            // are respected. A caller who explicitly says "speak English" must always
+            // be heard, regardless of agent config.
             const requested = detectExplicitLanguageRequest(text);
             if (requested === "en-IN") {
               if (this.requestedLangLatch !== "en-IN") {
                 logger.info(
                   { callId: this.config.callId, text: text.slice(0, 60) },
-                  "autoSwitchToEnglish: caller requested English — latched",
+                  "Strict mode: caller requested English — latching (overrides ABSOLUTE RULE this call)",
                 );
               }
               this.requestedLangLatch = "en-IN";
