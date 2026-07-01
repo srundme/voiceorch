@@ -17,7 +17,7 @@ import {
   customFetch,
 } from "@workspace/api-client-react";
 import type { Connection, CrmConnection, CrmContact } from "@workspace/api-client-react";
-import { useListCampaigns, useListAgents } from "@workspace/api-client-react";
+import { useListCampaigns } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ import {
   Zap, Sheet, Radio, X, ChevronDown, ChevronRight,
   ArrowRight, ExternalLink, Lock, RefreshCw, Eye, EyeOff,
   Phone, User, Mail, Loader2, Check, Link2, Link2Off, Building2, Code2, Search,
-  Activity, KeyRound, Save,
+  Activity, KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -1068,158 +1068,6 @@ function ZapierMakeRecipe({ firstWebhookUrl }: { firstWebhookUrl: string }) {
   );
 }
 
-// ── Zoho Webhook Config Panel ─────────────────────────────────────────────────
-
-function ZohoWebhookConfigPanel({ conn, onSaved }: { conn: CrmConnection; onSaved: () => void }) {
-  const { toast }          = useToast();
-  const updateMut          = useUpdateCrmConnection();
-  const { data: campaigns = [] } = useListCampaigns();
-  // Fetch agents belonging to the user for the override picker
-  const { data: agents = [] } = useListAgents();
-
-  const [campaignId,  setCampaignId]  = useState<number | "">(conn.webhookCampaignId ?? "");
-  const [agentId,     setAgentId]     = useState<number | "">(conn.webhookAgentId ?? "");
-  const [secretReveal, setSecretReveal] = useState(false);
-  const [freshSecret,  setFreshSecret]  = useState<string | null>(null);
-  const [saving,       setSaving]       = useState(false);
-
-  const webhookUrl = `${window.location.origin}${BASE}/api/crm/webhook/zoho/${conn.id}`;
-
-  const handleRegenerate = async () => {
-    setSaving(true);
-    try {
-      const result = await updateMut.mutateAsync({ id: conn.id, data: { regenerateSecret: true } });
-      const secret = (result as typeof result & { webhookSecret?: string }).webhookSecret;
-      if (secret) setFreshSecret(secret);
-      onSaved();
-      toast({ title: "New webhook secret generated — copy it now" });
-    } catch {
-      toast({ title: "Failed to regenerate secret", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateMut.mutateAsync({
-        id: conn.id,
-        data: {
-          webhookCampaignId: campaignId === "" ? null : Number(campaignId),
-          webhookAgentId:    agentId    === "" ? null : Number(agentId),
-        },
-      });
-      onSaved();
-      toast({ title: "Webhook config saved" });
-    } catch {
-      toast({ title: "Failed to save", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const displaySecret = freshSecret ?? (conn.hasWebhookSecret ? "••••••••••••••••••••••••" : null);
-
-  return (
-    <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 p-3 space-y-3">
-      <div className="flex items-center gap-1.5">
-        <Activity className="w-3 h-3 text-blue-400 shrink-0" />
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Auto-dial new leads (Webhook)</p>
-      </div>
-
-      <p className="text-[10px] text-muted-foreground">
-        Configure a Zoho Automation webhook pointing to the URL below — new leads will be dialled immediately in the selected campaign.
-      </p>
-
-      {/* Webhook URL */}
-      <div className="space-y-1">
-        <p className="text-[10px] font-medium text-muted-foreground">Webhook URL</p>
-        <div className="flex items-center gap-2 bg-background rounded border border-border px-2 py-1.5">
-          <code className="text-[11px] font-mono text-foreground flex-1 truncate">{webhookUrl}</code>
-          <CopyButton text={webhookUrl} />
-        </div>
-      </div>
-
-      {/* Secret */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-medium text-muted-foreground">Webhook Secret</p>
-          <Button
-            size="sm" variant="ghost"
-            className="h-6 px-2 text-[10px] text-muted-foreground"
-            disabled={saving}
-            onClick={handleRegenerate}
-          >
-            <KeyRound className="w-3 h-3 mr-1" />
-            {conn.hasWebhookSecret ? "Regenerate" : "Generate Secret"}
-          </Button>
-        </div>
-        {displaySecret ? (
-          <div className="flex items-center gap-2 bg-background rounded border border-border px-2 py-1.5">
-            <code className="text-[11px] font-mono text-foreground flex-1 truncate">
-              {secretReveal || freshSecret ? (freshSecret ?? "••••••••••••••••") : displaySecret}
-            </code>
-            {freshSecret && <CopyButton text={freshSecret} />}
-            {conn.hasWebhookSecret && !freshSecret && (
-              <button
-                onClick={() => setSecretReveal(v => !v)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                {secretReveal ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-              </button>
-            )}
-          </div>
-        ) : (
-          <p className="text-[10px] text-muted-foreground italic">No secret set — generate one to secure this endpoint</p>
-        )}
-        {freshSecret && (
-          <p className="text-[10px] text-amber-400">Copy this secret now — it won&apos;t be shown again</p>
-        )}
-      </div>
-
-      {/* Campaign picker */}
-      <div className="space-y-1">
-        <p className="text-[10px] font-medium text-muted-foreground">Auto-dial Campaign</p>
-        <select
-          value={campaignId}
-          onChange={e => setCampaignId(e.target.value ? Number(e.target.value) : "")}
-          className="w-full h-8 text-xs rounded border border-border bg-background px-2 text-foreground focus:outline-none focus:border-primary"
-        >
-          <option value="">— none (leads received but not dialled) —</option>
-          {(campaigns as { id: number; name: string }[]).map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Agent override picker */}
-      <div className="space-y-1">
-        <p className="text-[10px] font-medium text-muted-foreground">
-          Agent Override <span className="font-normal text-muted-foreground/70">(optional — uses campaign&apos;s agent if blank)</span>
-        </p>
-        <select
-          value={agentId}
-          onChange={e => setAgentId(e.target.value ? Number(e.target.value) : "")}
-          className="w-full h-8 text-xs rounded border border-border bg-background px-2 text-foreground focus:outline-none focus:border-primary"
-        >
-          <option value="">— use campaign default —</option>
-          {(agents as { id: number; name: string }[]).map(a => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" disabled={saving} onClick={handleSave} className="h-7 px-3 text-xs">
-          {saving ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Save className="w-3 h-3 mr-1.5" />}
-          Save
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ── CRM Import Dialog — two-step wizard ───────────────────────────────────────
 // Step 1: pick campaign + optional list/view filter + select contacts
 // Step 2: map CRM raw fields → agent variables + writeback config → import
@@ -1605,6 +1453,7 @@ function CrmConnectorSection() {
   const qc = useQueryClient();
   const { data: connections = [], isLoading, refetch } = useListCrmConnections();
   const deleteMut = useDeleteCrmConnection();
+  const [importConn, setImportConn] = useState<CrmConnection | null>(null);
 
   // After OAuth redirect back to /app/connections#crm-connected=<provider>,
   // the query cache is stale (page never unmounted). Detect the hash and force
@@ -1644,6 +1493,7 @@ function CrmConnectorSection() {
   };
 
   return (
+    <>
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -1683,32 +1533,37 @@ function CrmConnectorSection() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{provider.description}</p>
 
-                      {/* Show connected accounts + Zoho webhook panel */}
+                      {/* Show connected accounts with import action */}
                       {activeConns.map(conn => (
-                        <div key={conn.id}>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Building2 className="w-3 h-3 text-muted-foreground shrink-0" />
-                            <span className="text-xs text-foreground">{conn.accountName ?? conn.accountId}</span>
-                            {conn.lastSyncAt && (
-                              <span className="text-[10px] text-muted-foreground">
-                                · Synced {format(new Date(conn.lastSyncAt), "MMM d, HH:mm")}
-                              </span>
-                            )}
-                            {conn.lastError && (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-red-400">
-                                <AlertCircle className="w-2.5 h-2.5" />
-                                {conn.lastError.slice(0, 60)}
-                              </span>
-                            )}
-                          </div>
-                          {provider.id === "zoho" && (
-                            <ZohoWebhookConfigPanel
-                              conn={conn}
-                              onSaved={async () => { await qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() }); }}
-                            />
+                        <div key={conn.id} className="mt-2 flex items-center gap-2 flex-wrap">
+                          <Building2 className="w-3 h-3 text-muted-foreground shrink-0" />
+                          <span className="text-xs text-foreground">{conn.accountName ?? conn.accountId}</span>
+                          {conn.lastSyncAt && (
+                            <span className="text-[10px] text-muted-foreground">
+                              · Synced {format(new Date(conn.lastSyncAt), "MMM d, HH:mm")}
+                            </span>
                           )}
+                          {conn.lastError && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-red-400">
+                              <AlertCircle className="w-2.5 h-2.5" />
+                              {conn.lastError.slice(0, 60)}
+                            </span>
+                          )}
+                          <Button
+                            size="sm" variant="outline"
+                            className="h-6 px-2 text-[10px] ml-auto"
+                            onClick={() => setImportConn(conn)}
+                          >
+                            Import Contacts
+                          </Button>
                         </div>
                       ))}
+                      {isConnected && (
+                        <p className="mt-2 text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                          <Activity className="w-3 h-3" />
+                          To set up instant webhook triggers, open the Campaign and use its CRM Integration section.
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1744,6 +1599,15 @@ function CrmConnectorSection() {
       )}
 
     </section>
+
+    {importConn && (
+      <CrmImportDialog
+        connection={importConn}
+        open={true}
+        onClose={() => setImportConn(null)}
+      />
+    )}
+  </>
   );
 }
 

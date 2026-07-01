@@ -5,8 +5,10 @@ import {
   useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
   useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
+  useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
 } from "@workspace/api-client-react";
-import type { CampaignBatch } from "@workspace/api-client-react";
+import type { CampaignBatch, CrmConnection } from "@workspace/api-client-react";
+import { CrmImportDialog } from "../connections";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -33,6 +35,7 @@ import {
   Phone, Globe, Building2, Zap, ListFilter, Plus,
   PhoneIncoming, ArrowRightLeft, Radio, Ban,
   TrendingUp, DollarSign, Target, MoreVertical, Eye,
+  KeyRound, Link2, Link2Off, Loader2,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 import { TablePagination } from "@/components/table-pagination";
@@ -134,6 +137,174 @@ function CopyButton({ text }: { text: string }) {
       className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
+  );
+}
+
+// ── CRM Integration Card ──────────────────────────────────────────────────────
+
+function CrmIntegrationCard({ campaignId }: { campaignId: number }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: crmConns = [] } = useListCrmConnections();
+  const updateMut = useUpdateCrmConnection();
+
+  const [importConn, setImportConn] = useState<CrmConnection | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [selectedConnId, setSelectedConnId] = useState<number | "">("");
+  const [freshSecret, setFreshSecret] = useState<string | null>(null);
+  const [regenSaving, setRegenSaving] = useState(false);
+
+  if (crmConns.length === 0) return null;
+
+  const linkedConns = crmConns.filter(c => c.webhookCampaignId === campaignId);
+
+  const webhookUrlFor = (conn: CrmConnection) =>
+    `${window.location.origin}${BASE}/api/crm/webhook/${conn.provider}/${conn.id}`;
+
+  const handleLink = async () => {
+    if (!selectedConnId) return;
+    setLinking(true);
+    try {
+      await updateMut.mutateAsync({ id: Number(selectedConnId), data: { webhookCampaignId: campaignId } });
+      await qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() });
+      toast({ title: "CRM linked — new leads will auto-dial this campaign" });
+      setSelectedConnId("");
+    } catch {
+      toast({ title: "Failed to link CRM", variant: "destructive" });
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleUnlink = async (conn: CrmConnection) => {
+    try {
+      await updateMut.mutateAsync({ id: conn.id, data: { webhookCampaignId: null } });
+      await qc.invalidateQueries({ queryKey: getListCrmConnectionsQueryKey() });
+      toast({ title: "CRM trigger unlinked" });
+    } catch {
+      toast({ title: "Failed to unlink", variant: "destructive" });
+    }
+  };
+
+  const handleRegenSecret = async (conn: CrmConnection) => {
+    setRegenSaving(true);
+    try {
+      const result = await updateMut.mutateAsync({ id: conn.id, data: { regenerateSecret: true } });
+      const secret = (result as typeof result & { webhookSecret?: string }).webhookSecret;
+      if (secret) setFreshSecret(secret);
+      toast({ title: "New webhook secret generated — copy it now" });
+    } catch {
+      toast({ title: "Failed to regenerate secret", variant: "destructive" });
+    } finally {
+      setRegenSaving(false);
+    }
+  };
+
+  return (
+    <>
+    <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Link2 className="h-4 w-4 text-muted-foreground/50" />
+        <p className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">CRM Integration</p>
+      </div>
+
+      {/* Instant Trigger */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Activity className="w-3 h-3 text-blue-400 shrink-0" />
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Instant Trigger</p>
+          <span className="text-[10px] text-muted-foreground/60">— auto-dial new CRM leads the moment they arrive</span>
+        </div>
+
+        {linkedConns.map(conn => (
+          <div key={conn.id} className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                <Building2 className="w-3 h-3 text-muted-foreground" />
+                {conn.accountName ?? conn.provider} <span className="text-muted-foreground font-normal">({conn.provider})</span>
+              </span>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300 shrink-0"
+                onClick={() => void handleUnlink(conn)}>
+                <Link2Off className="w-3 h-3 mr-1" /> Unlink
+              </Button>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-medium text-muted-foreground">Webhook URL — paste into your CRM automation</p>
+              <div className="flex items-center gap-2 bg-background rounded border border-border px-2 py-1.5">
+                <code className="text-[11px] font-mono text-foreground flex-1 truncate">{webhookUrlFor(conn)}</code>
+                <CopyButton text={webhookUrlFor(conn)} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-medium text-muted-foreground">
+                Webhook Secret{conn.hasWebhookSecret && <span className="ml-1 text-emerald-400">✓ configured</span>}
+              </p>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-muted-foreground"
+                disabled={regenSaving} onClick={() => void handleRegenSecret(conn)}>
+                <KeyRound className="w-3 h-3 mr-1" />
+                {conn.hasWebhookSecret ? "Regenerate" : "Generate Secret"}
+              </Button>
+            </div>
+            {freshSecret && (
+              <>
+                <div className="flex items-center gap-2 bg-background rounded border border-border px-2 py-1.5">
+                  <code className="text-[11px] font-mono text-foreground flex-1 truncate">{freshSecret}</code>
+                  <CopyButton text={freshSecret} />
+                </div>
+                <p className="text-[10px] text-amber-400">Copy this secret now — it won&apos;t be shown again</p>
+              </>
+            )}
+          </div>
+        ))}
+
+        {linkedConns.length === 0 && (
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedConnId}
+              onChange={e => setSelectedConnId(e.target.value ? Number(e.target.value) : "")}
+              className="flex-1 h-8 text-xs rounded border border-border bg-background px-2 text-foreground focus:outline-none focus:border-primary"
+            >
+              <option value="">— select a connected CRM account —</option>
+              {crmConns.map(c => (
+                <option key={c.id} value={c.id}>{c.accountName ?? c.provider} ({c.provider})</option>
+              ))}
+            </select>
+            <Button size="sm" className="h-8 text-xs gap-1.5 shrink-0"
+              disabled={!selectedConnId || linking} onClick={() => void handleLink()}>
+              {linking ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+              Link
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Import & Batch */}
+      <div className="border-t border-border/60 pt-3 space-y-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Users className="w-3 h-3 text-emerald-400 shrink-0" />
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import & Batch</p>
+          <span className="text-[10px] text-muted-foreground/60">— pull contacts from your CRM into a new batch</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {crmConns.map(conn => (
+            <Button key={conn.id} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+              onClick={() => setImportConn(conn)}>
+              Import from {conn.accountName ?? conn.provider}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {importConn && (
+      <CrmImportDialog
+        connection={importConn}
+        open={true}
+        onClose={() => setImportConn(null)}
+        defaultCampaignId={campaignId}
+      />
+    )}
+    </>
   );
 }
 
@@ -1011,6 +1182,9 @@ export default function CampaignDetailPage() {
           {campaign.webhookToken && (campaign as any).leadSource !== "csv" && (
             <WebhookIntakeCard webhookUrl={webhookUrl} />
           )}
+
+          {/* CRM Integration — instant trigger + import/batch */}
+          <CrmIntegrationCard campaignId={campaignId} />
 
           {/* Calling Hours — instant trigger campaigns only */}
           {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant" && (
