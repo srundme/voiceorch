@@ -19,6 +19,7 @@ import Voices from "@/pages/voices";
 import PlatformSettings from "@/pages/settings";
 import DpdpPage from "@/pages/dpdp";
 import PromptTemplatePage from "@/pages/prompt-template";
+import SystemPromptTemplatesPage from "@/pages/system-prompt-templates";
 import AllAgentsPage from "@/pages/all-agents";
 import AdminAgentEdit from "@/pages/admin-agent-edit";
 import SchedulingPage from "@/pages/scheduling";
@@ -93,6 +94,7 @@ function Router() {
       <ProtectedRoute path="/usage/alerts" component={AlertsPage} />
 
       <ProtectedRoute path="/prompt-template" component={PromptTemplatePage} />
+      <ProtectedRoute path="/system-prompt-templates" component={SystemPromptTemplatesPage} />
       <ProtectedRoute path="/all-agents" component={AllAgentsPage} />
       <ProtectedRoute path="/scheduling" component={SchedulingPage} />
       <ProtectedRoute path="/gcal-connections" component={GcalConnectionsPage} />

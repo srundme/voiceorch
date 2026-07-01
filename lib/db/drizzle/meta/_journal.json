@@ -281,6 +281,13 @@
       "when": 1785000000000,
       "tag": "0039_campaign_calling_hours_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1785100000000,
+      "tag": "0040_system_prompt_templates",
+      "breakpoints": true
     }
   ]
 }

@@ -24,6 +24,7 @@ export * from "./provider-allocations";
 export * from "./admin-alerts";
 export * from "./alert-notification-log";
 export * from "./prompt-templates";
+export * from "./system-prompt-templates";
 export * from "./api-keys";
 export * from "./meta";
 export * from "./call-transfers";
