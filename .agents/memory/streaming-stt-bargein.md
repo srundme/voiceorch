@@ -26,15 +26,33 @@ but interruption does nothing."
   (`bargeInSentenceStartAt + bargeInEchoGraceMs`) and `greetingEchoHoldUntil`,
   matching the streaming transcript barge-in.
 
-**Anti-echo floor:** no-AEC carriers echo the agent's own TTS back with real
-energy, so a very low configured Energy Threshold (users set ~200) will
-false-trigger. During `isSendingTtsAudio` on non-webcall providers the streaming
-path raises the bar to `max(configured, ~1200)`. Apply this floor ONLY where
-there is no full-sentence hold (i.e. the streaming path), or you silently
-desensitise batch too. `isSendingTtsAudio` also spans the TTS first-byte/synthesis
-wait (no echo yet), so if soft-spoken callers still can't interrupt, narrow the
-floor to actual outbound-audio windows or lower it toward ~900 — never back to
-200 on a no-AEC carrier.
+**Anti-echo bar — a FIXED number is unsolvable; self-calibrate per call.** No-AEC
+carriers echo the agent's own TTS back with real energy, so a low configured
+Energy Threshold (users set ~200, below the ~300 VAD gate) self-triggers on the
+echo. But a fixed floor (we tried `max(configured, 1200)`) is ALSO wrong: on a
+normal-volume caller 1200 is too high and energy barge-in fires ~never (call 1356:
+only one near-shout fired all call). The echo level is **line-specific**, so the
+only robust fix is to MEASURE it per call:
+- `playbackEchoFloor` = asymmetric EMA (rise slow ~0.05 / fall fast ~0.3) of the
+  inbound frame RMS. Bar during active TTS =
+  `max(configured, min(echoFloor × 1.6, MAX~2500))`.
+- **Sample the floor ONLY in the first ~250 ms after each line starts** (inside the
+  echo-grace early-return). Human reaction to talk over THIS line is >~300 ms, so
+  those frames are near-certainly pure echo, not the caller. Sampling the whole
+  grace window (or any below-bar frame) lets a caller who barges in early poison
+  the floor against themselves — a normal caller is BELOW the bar (that's the bug),
+  so below-bar frames must NEVER feed the floor.
+- Trust the learned floor only after ~10 samples; before that use a conservative
+  cold-start fallback (~1200) so echo can't self-trigger on frame 1.
+- Adaptive applies ONLY while `isSendingTtsAudio` (that's the only time echo
+  exists); between sentences honour the configured threshold. Clamp caps only the
+  echo-derived boost at MAX — a user threshold above MAX is never lowered.
+- Streaming path also caps min-frames (~8, ~160 ms) since energy is the ONLY
+  real-time signal there.
+All knobs env-tunable (`BARGE_IN_ADAPTIVE_ECHO_MARGIN`, `_MAX_THRESHOLD`,
+`_ECHO_FLOOR_RISE/FALL_ALPHA`, `_ECHO_CALIBRATION_MS`, `_ECHO_FLOOR_MIN_SAMPLES`,
+`_STREAMING_MIN_FRAMES`). Watch the throttled `energy barge-in monitor` log
+(currentRms/echoFloor/effectiveThreshold) to tune from real calls.
 
 ## The other half: never gate the STT INPUT feed during agent speech
 

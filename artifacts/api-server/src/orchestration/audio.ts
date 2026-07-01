@@ -271,16 +271,19 @@ export function estimatePitch(pcm8k: Buffer): number {
 }
 
 // ── Energy-based voice activity detection: returns true if audio contains speech
-export function hasSpeechEnergy(pcmBuffer: Buffer, threshold = 300): boolean {
-  if (pcmBuffer.length < 2) return false;
+export function frameRms(pcmBuffer: Buffer): number {
+  if (pcmBuffer.length < 2) return 0;
   let sumSq = 0;
   const samples = pcmBuffer.length / 2;
   for (let i = 0; i < samples; i++) {
     const s = pcmBuffer.readInt16LE(i * 2);
     sumSq += s * s;
   }
-  const rms = Math.sqrt(sumSq / samples);
-  return rms > threshold;
+  return Math.sqrt(sumSq / samples);
+}
+
+export function hasSpeechEnergy(pcmBuffer: Buffer, threshold = 300): boolean {
+  return frameRms(pcmBuffer) > threshold;
 }
 
 // Build a minimal WAV header for PCM data (for REST-based STT APIs)

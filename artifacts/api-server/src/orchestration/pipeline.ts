@@ -10,7 +10,7 @@ import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
-import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy } from "./audio.js";
+import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
@@ -105,14 +105,38 @@ const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after pl
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
                                          // loud frame can't cut the agent off, even when a Stop
                                          // Speaking Plan configures very low sensitivity.
-const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // On a no-AEC carrier the agent's own TTS is
-                                         // echoed back with real energy WHILE it is actively streaming
-                                         // (isSendingTtsAudio). Require at least this RMS during active
-                                         // TTS send before an energy frame counts toward barge-in, so
-                                         // the returning echo can't self-trigger an interruption. The
-                                         // caller's intentional speech comfortably clears this bar. A
-                                         // very low configured Energy Threshold (e.g. 200) is honoured
-                                         // as-is on webcall (AEC present) and between sentences.
+const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // COLD-START fallback only. On a no-AEC carrier
+                                         // the agent's own TTS echoes back with real energy WHILE it is
+                                         // playing, so a naive low threshold (e.g. the user's 200, which is
+                                         // even below the ~300 VAD speech-gate) self-triggers on the echo.
+                                         // A single FIXED number is wrong, though: the echo level is
+                                         // line-specific. We now MEASURE the echo floor per call (see
+                                         // playbackEchoFloor) and set the bar to echoFloor × margin. This
+                                         // constant is used only before enough echo has been observed.
+// ── Adaptive (self-calibrating) energy barge-in for the streaming-STT carrier path ──
+// The barge-in bar during active TTS = max(configuredThreshold, measuredEchoFloor × MARGIN),
+// clamped to [configured, MAX]. This lets a NORMAL-volume caller interrupt on a quiet line
+// (echoFloor low → bar near the configured threshold) while still rejecting a LOUD echo on a
+// bad line (echoFloor high → bar rises above it) — with no magic fixed number to guess.
+const BARGE_IN_ADAPTIVE_ECHO_MARGIN = Number(process.env.BARGE_IN_ADAPTIVE_ECHO_MARGIN ?? 1.6); // bar = echoFloor × this
+const BARGE_IN_ADAPTIVE_MAX_THRESHOLD = Number(process.env.BARGE_IN_ADAPTIVE_MAX_THRESHOLD ?? 2500); // ceiling on the echo-derived boost so a loud caller can always break through
+// Asymmetric EMA for the echo-floor estimate: rise SLOWLY (a brief loud sample barely
+// nudges the floor) but fall FAST (once the line quiets the floor recovers, so any
+// momentary over-estimate self-heals within a few frames rather than desensitising the
+// detector for the rest of the call).
+const BARGE_IN_ECHO_FLOOR_RISE_ALPHA = Number(process.env.BARGE_IN_ECHO_FLOOR_RISE_ALPHA ?? 0.05);
+const BARGE_IN_ECHO_FLOOR_FALL_ALPHA = Number(process.env.BARGE_IN_ECHO_FLOOR_FALL_ALPHA ?? 0.3);
+// The echo floor is sampled ONLY in this short window right after a line starts playing.
+// Human reaction time to decide to talk over THIS specific line is >~300 ms, so these
+// first frames are almost certainly pure returning echo — NOT the caller. Sampling only
+// here is what stops a caller who barges in early from poisoning the floor against
+// themselves (the failure mode a full-grace-window EMA would cause).
+const BARGE_IN_ECHO_CALIBRATION_MS = Number(process.env.BARGE_IN_ECHO_CALIBRATION_MS ?? 250);
+// Require this many echo samples before the learned floor is trusted; until then the
+// conservative cold-start fallback is used so returning echo can't self-trigger while
+// the estimate is still empty (≈ one sentence's calibration window to warm up).
+const BARGE_IN_ECHO_FLOOR_MIN_SAMPLES = Number(process.env.BARGE_IN_ECHO_FLOOR_MIN_SAMPLES ?? 10);
+const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 8); // ~160 ms of sustained above-bar speech to fire (streaming path)
 // ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
 // On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
 // AFTER the time-based echo-grace windows expire, so STT finalizes it as a
@@ -364,6 +388,18 @@ export class OrchestrationPipeline {
   // by its own returning echo, even at a 1-word interruption threshold. Expires
   // before the first listen, so it can never block a real caller barge-in later.
   private greetingEchoHoldUntil = 0;
+  // Self-calibrating echo floor (RMS) for the streaming-STT energy barge-in path.
+  // A rolling EMA of the inbound frame RMS measured WHILE the agent is playing but
+  // NOT (yet) accumulating a barge-in — i.e. it tracks the carrier's returning-echo
+  // level for THIS line. The active-TTS barge-in bar is derived from it, so a
+  // normal-volume caller can interrupt on a quiet line without a magic fixed floor.
+  private playbackEchoFloor = 0;
+  // Count of echo samples fed into playbackEchoFloor. The learned floor is only trusted
+  // once this reaches BARGE_IN_ECHO_FLOOR_MIN_SAMPLES; before that the conservative
+  // cold-start fallback bar is used so returning echo can't self-trigger on frame 1.
+  private playbackEchoFloorSamples = 0;
+  // Throttle for the periodic "energy barge-in monitor" diagnostic log line.
+  private lastEnergyMonitorLogAt = 0;
   // Rolling record of text the agent recently synthesized (oldest first), with the
   // time it was dispatched and its estimated playback end. The streaming-STT path
   // uses this to recognize the agent's OWN words echoing back via the carrier
@@ -1269,6 +1305,16 @@ export class OrchestrationPipeline {
     }
     if (!this.bargeInEnabled || !this.isPlaying || this.bargeInRequested) return;
 
+    // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
+    // extended-hold protection). Only here do we measure RMS / self-calibrate.
+    const streamingCarrier = !respectHoldUntil && this.config.telephonyProvider !== "webcall";
+    const currentRms = streamingCarrier ? frameRms(pcm8k) : 0;
+    // The adaptive anti-echo bar applies ONLY while we are ACTIVELY sending TTS — that
+    // is the only time the carrier is echoing our audio back. Between sentences there is
+    // no echo, so the configured Energy Threshold is honoured unchanged (a caller
+    // speaking into a gap must interrupt at their normal level, not an echo-inflated one).
+    const useAdaptive = streamingCarrier && this.isSendingTtsAudio;
+
     const now = Date.now();
     if (
       now < this.greetingEchoHoldUntil ||
@@ -1278,31 +1324,82 @@ export class OrchestrationPipeline {
       // Echo grace: suppress (and reset) while our own freshly started audio may
       // still be echoing back. greetingEchoHoldUntil covers the full opening line
       // on the carrier path; the per-sentence grace covers the start of each reply.
+      // Calibrate the echo floor ONLY in the brief post-start window (see
+      // BARGE_IN_ECHO_CALIBRATION_MS): those frames are near-certainly pure echo
+      // because the caller has not had time to react to THIS line yet. Sampling the
+      // WHOLE grace window would let a caller who barges in early poison the floor
+      // against themselves.
+      if (useAdaptive && now <= this.bargeInSentenceStartAt + BARGE_IN_ECHO_CALIBRATION_MS) {
+        this.updateEchoFloor(currentRms);
+      }
       this.bargeInSpeechFrames = 0;
       return;
     }
 
-    // On a no-AEC carrier the agent's own TTS echoes back with real energy WHILE it
-    // is actively streaming, so raise the bar during active TTS send to reject it.
-    // This floor applies ONLY to the streaming path (respectHoldUntil=false): the
-    // batch path already suppresses barge-in for the whole active-TTS sentence via
-    // its extended bargeInHoldUntil, so it keeps its configured threshold exactly
-    // (behaviour-preserving refactor). Between sentences (isSendingTtsAudio=false)
-    // and on webcall (AEC present) the configured Energy Threshold is honoured as-is.
-    const effectiveThreshold =
-      !respectHoldUntil && this.config.telephonyProvider !== "webcall" && this.isSendingTtsAudio
-        ? Math.max(this.bargeInEnergyThreshold, BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR)
-        : this.bargeInEnergyThreshold;
+    // Adaptive barge-in bar: on the streaming carrier path, sit just ABOVE the echo
+    // floor we measured for THIS line (echoFloor × margin), clamped to
+    // [configuredThreshold, MAX]. A quiet line → bar near the configured threshold →
+    // a normal-volume caller interrupts. A loud/echoey line → bar rises above the echo
+    // → no self-trigger. Before enough echo is seen, fall back to the conservative
+    // cold-start floor so we never self-interrupt on the first frames. The batch path
+    // (respectHoldUntil) and webcall (AEC) keep the configured threshold as-is.
+    let effectiveThreshold = this.bargeInEnergyThreshold;
+    if (useAdaptive) {
+      // Trust the learned floor only after enough echo samples; until then use the
+      // conservative cold-start fallback so returning echo can't self-trigger while the
+      // estimate is still empty/thin.
+      const floorReady = this.playbackEchoFloorSamples >= BARGE_IN_ECHO_FLOOR_MIN_SAMPLES;
+      const echoBar = floorReady
+        ? this.playbackEchoFloor * BARGE_IN_ADAPTIVE_ECHO_MARGIN
+        : BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR;
+      // Bar = at least the configured threshold, plus an echo-derived boost that is
+      // itself capped at MAX so a poisoned/loud echo estimate can never lift the bar
+      // beyond MAX. A user-configured threshold ABOVE MAX is still honoured (never
+      // silently lowered).
+      effectiveThreshold = Math.max(
+        this.bargeInEnergyThreshold,
+        Math.min(echoBar, BARGE_IN_ADAPTIVE_MAX_THRESHOLD),
+      );
+    }
 
-    if (hasSpeechEnergy(pcm8k, effectiveThreshold)) {
+    // Periodic diagnostic so the exact echo/voice/threshold numbers for a line are
+    // visible in the logs (throttled to ~once/700 ms while the agent is playing).
+    if (useAdaptive && now - this.lastEnergyMonitorLogAt >= 700) {
+      this.lastEnergyMonitorLogAt = now;
+      logger.info(
+        {
+          callId: this.config.callId, currentRms: Math.round(currentRms),
+          echoFloor: Math.round(this.playbackEchoFloor),
+          effectiveThreshold: Math.round(effectiveThreshold),
+          configuredThreshold: this.bargeInEnergyThreshold, frames: this.bargeInSpeechFrames,
+        },
+        "energy barge-in monitor",
+      );
+    }
+
+    const aboveBar = useAdaptive
+      ? currentRms > effectiveThreshold
+      : hasSpeechEnergy(pcm8k, effectiveThreshold);
+
+    if (aboveBar) {
       this.bargeInSpeechFrames++;
       // When a Stop Speaking Plan is configured, bargeInMinFrames is already derived
       // from Min Words / Min Voice Duration and is authoritative — don't apply the
       // non-UI wordsForInterruption×20 floor. Keep BARGE_IN_MIN_FRAMES as a floor so
       // a single loud frame can't fire.
-      const effectiveMinFrames = this.stopSpeakingPlanConfigured
+      let effectiveMinFrames = this.stopSpeakingPlanConfigured
         ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
         : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 2) * 20);
+      // The streaming carrier path caps the frame requirement: Sarvam never finalizes
+      // transcripts DURING talk-over, so energy is the ONLY real-time barge-in signal
+      // and must be responsive. ~160 ms of sustained above-bar speech is enough; the
+      // adaptive bar (not a long frame count) is what rejects the echo.
+      if (useAdaptive) {
+        effectiveMinFrames = Math.max(
+          BARGE_IN_MIN_FRAMES,
+          Math.min(effectiveMinFrames, BARGE_IN_STREAMING_MIN_FRAMES),
+        );
+      }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.bargeInRequested = true;
         this.bargeInCallback?.();
@@ -1312,12 +1409,14 @@ export class OrchestrationPipeline {
           metadata: {
             event: "Barge-in Detected", trigger: source, frames: this.bargeInSpeechFrames,
             effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
+            echoFloor: Math.round(this.playbackEchoFloor), currentRms: Math.round(currentRms),
           },
         });
         logger.info(
           {
             callId: this.config.callId, source, frames: this.bargeInSpeechFrames,
             effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
+            echoFloor: Math.round(this.playbackEchoFloor), currentRms: Math.round(currentRms),
           },
           "Barge-in detected (energy)",
         );
@@ -1326,13 +1425,37 @@ export class OrchestrationPipeline {
     } else {
       // Don't reset immediately on a single below-threshold frame — brief
       // inter-syllable pauses would otherwise kill an accumulating run. Only reset
-      // after 5 consecutive low-energy frames (~100 ms).
+      // after 5 consecutive low-energy frames (~100 ms). NOTE: we deliberately do NOT
+      // feed below-bar frames into the echo floor here. Because a normal caller can be
+      // BELOW the bar (that is the very bug we are fixing), treating below-bar frames as
+      // "echo" would let the caller's own voice raise the floor against themselves. The
+      // floor is learned ONLY from the caller-silent post-start calibration window.
       this.bargeInLowEnergyFrames++;
       if (this.bargeInLowEnergyFrames >= 5) {
         this.bargeInSpeechFrames = 0;
         this.bargeInLowEnergyFrames = 0;
       }
     }
+  }
+
+  /**
+   * Asymmetric EMA of the carrier's returning-echo RMS, sampled only during the brief
+   * caller-silent window right after each line starts (see the caller in tryEnergyBargeIn).
+   * Rises slowly and falls fast so a stray loud sample barely nudges the floor while a
+   * genuine drop in echo level recovers quickly. Seeds on the first sample and counts
+   * samples so the derived bar isn't trusted until the estimate is warm.
+   */
+  private updateEchoFloor(rms: number): void {
+    if (rms <= 0) return;
+    this.playbackEchoFloorSamples++;
+    if (this.playbackEchoFloor <= 0) {
+      this.playbackEchoFloor = rms;
+      return;
+    }
+    const alpha = rms > this.playbackEchoFloor
+      ? BARGE_IN_ECHO_FLOOR_RISE_ALPHA
+      : BARGE_IN_ECHO_FLOOR_FALL_ALPHA;
+    this.playbackEchoFloor = this.playbackEchoFloor * (1 - alpha) + rms * alpha;
   }
 
   /** Handles pre-processed audio returned by the audio worker pool. */

@@ -23,7 +23,47 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "artifacts/api-server/src/orchestration/pipeline.ts",
+  "artifacts/api-server/src/orchestration/audio.ts",
 ];
+
+const COMMIT_MESSAGE = [
+  "fix(voice): self-calibrating (adaptive) energy barge-in for streaming-STT telephony (Sarvam/VoBiz).",
+  "",
+  "Call 1356 proved the previous FIXED floor was wrong: the energy bar was pinned at",
+  "max(configuredThreshold, 1200) during active TTS, but a normal-volume caller's inbound RMS on",
+  "this VoBiz line never sustained 20 frames above 1200, so energy barge-in fired only ONCE all",
+  "call (a near-shouted 'call me'); every genuine interruption failed. Transcript barge-in can't",
+  "help either -- Sarvam endpoints on silence and only finalizes AFTER the agent's playback ends",
+  "(caller's 'what is wellness coin', spoken during 13:47:43-57, finalized at 13:48:02), so it is",
+  "structurally too late. A single fixed number is unsolvable because echo level is line-specific:",
+  "200 (the user's setting) sits below the ~300 VAD speech-gate and self-triggers on the agent's",
+  "own returning echo, while 1200 is too high for a normal voice.",
+  "",
+  "FIX: measure the carrier's returning-echo RMS PER CALL (playbackEchoFloor) and set the active-TTS",
+  "bar = max(configuredThreshold, min(echoFloor x MARGIN(1.6), MAX(2500))).",
+  "",
+  "Robustness (per architect review, since this deploys blind to prod):",
+  "(a) the floor is sampled ONLY in the first BARGE_IN_ECHO_CALIBRATION_MS(250ms) after each line",
+  "    starts -- human reaction to talk over THIS line is >~300ms, so those frames are",
+  "    near-certainly pure echo, NOT the caller; prevents a caller who barges in early from",
+  "    poisoning the floor against themselves.",
+  "(b) below-bar frames are NEVER fed to the floor (a normal caller can be below the bar -- that is",
+  "    the very bug being fixed).",
+  "(c) asymmetric EMA: rise slow (0.05) / fall fast (0.3) so a stray loud sample barely nudges it",
+  "    and any over-estimate self-heals within a few frames.",
+  "(d) the learned floor is trusted only after BARGE_IN_ECHO_FLOOR_MIN_SAMPLES(10) samples; until",
+  "    then the 1200 cold-start fallback is used so echo can't self-trigger on frame 1.",
+  "(e) adaptive applies ONLY while isSendingTtsAudio; between sentences the configured threshold is",
+  "    honoured unchanged.",
+  "(f) clamp only caps the echo-derived BOOST at MAX -- a user threshold above MAX is never",
+  "    silently lowered.",
+  "",
+  "Streaming path also caps min-frames at BARGE_IN_STREAMING_MIN_FRAMES(8, ~160ms) since energy is",
+  "now the only real-time signal. Adds a throttled 'energy barge-in monitor' log",
+  "(currentRms/echoFloor/effectiveThreshold/configured/frames) + echoFloor+currentRms on the",
+  "'Barge-in detected (energy)' record. All knobs env-tunable. Batch STT and webcall (AEC) paths",
+  "unchanged. Adds frameRms() to audio.ts.",
+].join("\n");
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
   const url = `https://api.github.com/repos/${OWNER}/${REPO}/${apiPath}`;
@@ -59,7 +99,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(voice): barge-in now works on streaming-STT telephony (Sarvam/VoBiz). Root cause: handleProcessedAudio() returned from the streaming-STT branch (this.streamSTT.sendAudio) BEFORE the batch energy/frame barge-in block, so streaming STT could only interrupt via a transcript — a semantic-interim keyword or a FINAL-transcript word-count. On telephony Sarvam rarely finalizes while the caller talks over the agent (it endpoints on silence), so ordinary interruptions ("actually…", "I have a question") never fired even though playback abort on bargeInRequested works. Fix: extract the energy detector into tryEnergyBargeIn(pcm8k, hasSpeech, source, respectHoldUntil) and call it on BOTH paths. Batch keeps respectHoldUntil=true (its extended bargeInHoldUntil spans the whole estimated sentence — fine for VAD-gated batch STT). Streaming passes respectHoldUntil=false so the full-sentence hold can't re-suppress it; it relies only on the per-sentence echo grace (bargeInSentenceStartAt+bargeInEchoGraceMs) + greetingEchoHoldUntil, matching the streaming transcript barge-in. Anti-echo: on a no-AEC carrier the agent's own TTS echoes back with real energy while actively streaming, so during isSendingTtsAudio on non-webcall providers the energy bar is raised to max(configuredThreshold, BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR=1200); webcall (AEC) and between-sentence gaps honour the configured Energy Threshold as-is. Min Words / Min Voice Duration still drive effectiveMinFrames. Adds an "energy"/"streaming_energy" Barge-in Detected log with frames+effectiveMinFrames+effectiveThreshold for tuning.`,
+      message: COMMIT_MESSAGE,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),
