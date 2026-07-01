@@ -1280,8 +1280,10 @@ export default function CampaignDetailPage() {
             <WebhookIntakeCard webhookUrl={webhookUrl} />
           )}
 
-          {/* CRM Integration — instant trigger + import/batch */}
-          <CrmIntegrationCard campaignId={campaignId} />
+          {/* CRM Integration — instant trigger + import/batch (hidden for CSV campaigns) */}
+          {(campaign as any).leadSource !== "csv" && (
+            <CrmIntegrationCard campaignId={campaignId} />
+          )}
 
           {/* Calling Hours — instant trigger campaigns only */}
           {(campaign as unknown as Record<string, unknown>)["triggerMode"] === "instant" && (

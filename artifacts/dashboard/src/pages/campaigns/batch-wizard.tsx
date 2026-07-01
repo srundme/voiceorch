@@ -1070,9 +1070,9 @@ function Step3({
           </div>
         )}
 
-        {crmSection}
+        {campaignLeadSource !== "csv" && crmSection}
 
-        {importConn && (
+        {campaignLeadSource !== "csv" && importConn && (
           <CrmImportDialog
             connection={importConn}
             open={!!importConn}
@@ -1133,9 +1133,9 @@ function Step3({
           </div>
         </div>
 
-        {crmSection}
+        {campaignLeadSource !== "csv" && crmSection}
 
-        {importConn && (
+        {campaignLeadSource !== "csv" && importConn && (
           <CrmImportDialog
             connection={importConn}
             open={!!importConn}
@@ -1156,8 +1156,8 @@ function Step3({
   return (
     <div className="space-y-5 max-w-xl">
       <MetaFormStep toast={toast} />
-      {crmSection}
-      {importConn && (
+      {campaignLeadSource !== "csv" && crmSection}
+      {campaignLeadSource !== "csv" && importConn && (
         <CrmImportDialog
           connection={importConn}
           open={!!importConn}

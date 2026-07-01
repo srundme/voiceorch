@@ -14,6 +14,7 @@ import {
   useImportCrmContacts,
   useUpdateCrmConnection,
   getListCrmConnectionsQueryKey,
+  useListCampaignLeads,
   customFetch,
 } from "@workspace/api-client-react";
 import type { Connection, CrmConnection, CrmContact } from "@workspace/api-client-react";
@@ -1124,6 +1125,22 @@ export function CrmImportDialog({
   const importMut     = useImportCrmContacts();
   const updateConnMut = useUpdateCrmConnection();
 
+  // Fetch existing leads for the selected campaign to detect previously imported contacts
+  const { data: existingLeadsPage } = useListCampaignLeads(
+    campaignId ?? 0,
+    { limit: 1000 },
+    { query: { enabled: open && !!campaignId, queryKey: ["crm-existing-leads", campaignId] } },
+  );
+  const existingPhones = new Set(
+    (existingLeadsPage?.leads ?? []).map((l: { phone: string }) => l.phone.replace(/\D/g, "").slice(-10)),
+  );
+
+  function isAlreadyImported(contactPhone: string | null | undefined): boolean {
+    if (!contactPhone) return false;
+    const normalized = contactPhone.replace(/\D/g, "").slice(-10);
+    return existingPhones.has(normalized);
+  }
+
   const toggleAll = () => {
     if (selected.size === contacts.length) setSelected(new Set());
     else setSelected(new Set(contacts.map(c => c.id)));
@@ -1305,6 +1322,7 @@ export function CrmImportDialog({
                   <div className="divide-y divide-border/50">
                     {contacts.map((c: CrmContact) => {
                       const isSelected = selected.has(c.id);
+                      const alreadyImported = isAlreadyImported(c.phone);
                       return (
                         <button
                           key={c.id}
@@ -1317,13 +1335,21 @@ export function CrmImportDialog({
                           className={cn(
                             "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors",
                             isSelected && "bg-primary/5",
+                            alreadyImported && "opacity-70",
                           )}
                         >
                           <div className={cn("w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors", isSelected ? "bg-primary border-primary" : "border-border")}>
                             {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate">{c.name ?? c.phone}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-medium truncate">{c.name ?? c.phone}</p>
+                              {alreadyImported && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                                  Already Imported
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-[10px] text-muted-foreground font-mono">{c.phone}</span>
                               {c.email && <span className="text-[10px] text-muted-foreground truncate">{c.email}</span>}
