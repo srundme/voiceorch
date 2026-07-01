@@ -17,7 +17,7 @@ import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioP
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
-import { DEFAULT_GOODBYE_MESSAGE, resolveGoodbyeMessage } from "./types.js";
+import { resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
 import { performance } from "perf_hooks";
@@ -2680,22 +2680,6 @@ export class OrchestrationPipeline {
       return;
     }
 
-    // ── End-call phrase detection ──
-    if (this.agent.endCallPhrases.length > 0) {
-      const lower = transcript.toLowerCase();
-      const matchedPhrase = this.agent.endCallPhrases.find(p => lower.includes(p.toLowerCase()));
-      if (matchedPhrase) {
-        logger.info({ callId: this.config.callId, transcript }, "End-call phrase detected — speaking goodbye then hanging up");
-        const goodbyeText =
-          this.agent.endCallPhrases[0]?.trim() || DEFAULT_GOODBYE_MESSAGE;
-        this.conversationHistory.push({ role: "assistant", content: goodbyeText });
-        this.config.onTranscript("agent", goodbyeText);
-        await this.speakRaw(goodbyeText);
-        this.config.onCallEnd();
-        return;
-      }
-    }
-
     // ── Build tool definitions from agent config ──
     const toolDefs = buildToolDefs(this.agent.tools);
     toolDefs.push(SCHEDULE_CALLBACK_TOOL_DEF);
@@ -3599,6 +3583,16 @@ export class OrchestrationPipeline {
 
     await playPromise;
 
+    // ── End-call phrase detection (agent-side) ──
+    // The agent finished speaking this turn; if it naturally used a configured
+    // End-Call Phrase in its own response, hang up now that playback + tail
+    // drain have completed (the final words are already out uncut).
+    if (this.agentSaidEndCallPhrase(spokenResponse)) {
+      logger.info({ callId: this.config.callId, response: spokenResponse.slice(0, 80) }, "Agent used end-call phrase — hanging up after playback");
+      this.config.onCallEnd();
+      return;
+    }
+
     // ── Inline function-tag execution (safety net for LLMs that emit <function=X> as text) ──
     // The streaming filter already prevented these tags from reaching TTS.
     // Now execute the first tag found so end_call / scheduling tools still fire.
@@ -4088,6 +4082,16 @@ export class OrchestrationPipeline {
       this.trackRepeat(spokenResponse);
       this.config.onTranscript("agent", spokenResponse);
       this.config.onConversationUpdate?.(this.conversationHistory);
+
+      // ── End-call phrase detection (agent-side) ──
+      // Same behavior as the normal turn: if the agent naturally used a
+      // configured End-Call Phrase in its post-tool-result response, hang up now
+      // that playback + tail drain (await playPromise, above) have completed.
+      if (this.agentSaidEndCallPhrase(spokenResponse)) {
+        logger.info({ callId: this.config.callId, response: spokenResponse.slice(0, 80) }, "Agent used end-call phrase after tool result — hanging up after playback");
+        this.config.onCallEnd();
+        return;
+      }
     }
 
     // ── Inline function-tag execution (safety net for LLMs that emit <function=X> as text) ──
@@ -4167,6 +4171,23 @@ export class OrchestrationPipeline {
     // immediately followed by onCallEnd(); drain the carrier's playout buffer so
     // the final words aren't clipped by teardown.
     await this.drainPlaybackTail();
+  }
+
+  /**
+   * True when the agent's own spoken text for a turn contains any configured
+   * End-Call Phrase (case-insensitive substring match). Used to hang up AFTER
+   * the agent naturally works one of these phrases into its closing sentence —
+   * the phrases describe "things the agent says when it's done", not caller
+   * commands. The check must run after the turn's playback has fully drained so
+   * the agent's final words are never clipped.
+   */
+  private agentSaidEndCallPhrase(spokenText: string): boolean {
+    if (!spokenText || this.agent.endCallPhrases.length === 0) return false;
+    const lower = spokenText.toLowerCase();
+    return this.agent.endCallPhrases.some(p => {
+      const phrase = p.trim().toLowerCase();
+      return phrase.length > 0 && lower.includes(phrase);
+    });
   }
 
   /**

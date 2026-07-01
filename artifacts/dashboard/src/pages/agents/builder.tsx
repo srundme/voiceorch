@@ -785,7 +785,7 @@ function PromptTab({ form }: { form: any }) {
           <FormItem>
             <FormLabel className="text-xs">End-Call Phrases (comma-separated)</FormLabel>
             <FormControl><Input placeholder="goodbye, bye, see you" className="h-8 text-xs" {...field} /></FormControl>
-            <FormDescription className="text-[10px]">Agent hangs up when caller says any of these</FormDescription>
+            <FormDescription className="text-[10px]">Agent hangs up after it says any of these phrases</FormDescription>
           </FormItem>
         )} />
       </div>

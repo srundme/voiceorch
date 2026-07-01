@@ -761,7 +761,7 @@ export default function AgentEdit() {
                         <FormControl>
                           <Input placeholder="goodbye, bye, have a great day, thank you for calling" {...field} />
                         </FormControl>
-                        <FormDescription>Comma-separated. Triggers automatic hangup when detected.</FormDescription>
+                        <FormDescription>Comma-separated. Agent hangs up after it says any of these phrases.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
