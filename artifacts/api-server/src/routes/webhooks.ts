@@ -613,6 +613,12 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   const wsBaseUrl = getWsBaseUrl(req);
   const httpBase  = getHttpBaseUrl(req);
 
+  // Diagnostic: log every inbound webhook hit so we can confirm VoBiz is calling us
+  req.log.info(
+    { body: req.body, query: req.query, host: req.headers["x-forwarded-host"] ?? req.hostname, wsBaseUrl },
+    "VoBiz voice webhook received"
+  );
+
   let agentId = parseInt(String(req.query["agentId"] ?? "0"), 10);
   // ?pt=1 is appended by the outbound call handler (calls.ts) when the call is
   // made through a platform-managed VoBiz number; parse it here so the WebSocket
