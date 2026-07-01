@@ -1083,7 +1083,7 @@ export function CrmImportDialog({
   open: boolean;
   onClose: () => void;
   defaultCampaignId?: number;
-  onImported?: (batchId: number, leadsCreated: number) => void;
+  onImported?: (batchId: number, leadsCreated: number, duplicatesFound: number, invalidPhones: number) => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1180,7 +1180,7 @@ export function CrmImportDialog({
           result.dncBlocked      ? `${result.dncBlocked} DNC blocked` : null,
         ].filter(Boolean).join(" · ") || undefined,
       });
-      onImported?.(result.batchId, result.leadsCreated);
+      onImported?.(result.batchId, result.leadsCreated, result.duplicatesFound ?? 0, result.invalidPhones ?? 0);
       onClose();
     } catch (err) {
       toast({ title: "Import failed", description: String(err), variant: "destructive" });

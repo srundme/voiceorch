@@ -63,11 +63,18 @@ interface ValidationPreviewResult {
 type DuplicatePolicy = "ignore" | "skip" | "reject_with_report";
 type SourceType = "csv" | "meta_form" | "webhook";
 
+interface CrmImportSummary {
+  leadsCreated: number;
+  duplicatesFound: number;
+  invalidPhones: number;
+}
+
 interface WizardState {
   batchName: string;
   batchDescription: string;
   sourceMode: "existing" | "new" | "crm";
   crmBatchId: number | null;
+  crmImportSummary: CrmImportSummary | null;
   selectedSource: LeadSource | null;
   newSourceType: SourceType;
   createdSource: LeadSource | null;
@@ -95,6 +102,7 @@ const INITIAL_STATE: WizardState = {
   batchDescription: "",
   sourceMode: "new",
   crmBatchId: null,
+  crmImportSummary: null,
   selectedSource: null,
   newSourceType: "webhook",
   createdSource: null,
@@ -316,7 +324,7 @@ function Step2({
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
   campaignId: number;
-  onCrmImported?: (batchId: number, leadsCreated: number) => void;
+  onCrmImported?: (batchId: number, summary: CrmImportSummary) => void;
 }) {
   const { data: sources = [], isLoading } = useListLeadSources({
     query: { queryKey: getListLeadSourcesQueryKey() },
@@ -497,10 +505,10 @@ function Step2({
           open={!!importConn}
           onClose={() => setImportConn(null)}
           defaultCampaignId={campaignId}
-          onImported={(batchId, leadsCreated) => {
+          onImported={(batchId, leadsCreated, duplicatesFound, invalidPhones) => {
             setState({ sourceMode: "crm", crmBatchId: batchId });
             setImportConn(null);
-            onCrmImported?.(batchId, leadsCreated);
+            onCrmImported?.(batchId, { leadsCreated, duplicatesFound, invalidPhones });
           }}
         />
       )}
@@ -792,7 +800,7 @@ function Step3({
   setState: (p: Partial<WizardState>) => void;
   campaignId: number;
   campaignLeadSource?: string | null;
-  onCrmImported?: (batchId: number, leadsCreated: number) => void;
+  onCrmImported?: (batchId: number, summary: CrmImportSummary) => void;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -970,10 +978,10 @@ function Step3({
             open={!!importConn}
             onClose={() => setImportConn(null)}
             defaultCampaignId={campaignId}
-            onImported={(batchId, leadsCreated) => {
+            onImported={(batchId, leadsCreated, duplicatesFound, invalidPhones) => {
               setState({ sourceMode: "crm", crmBatchId: batchId });
               setImportConn(null);
-              onCrmImported?.(batchId, leadsCreated);
+              onCrmImported?.(batchId, { leadsCreated, duplicatesFound, invalidPhones });
             }}
           />
         )}
@@ -1070,10 +1078,10 @@ function Step3({
             open={!!importConn}
             onClose={() => setImportConn(null)}
             defaultCampaignId={campaignId}
-            onImported={(batchId, leadsCreated) => {
+            onImported={(batchId, leadsCreated, duplicatesFound, invalidPhones) => {
               setState({ sourceMode: "crm", crmBatchId: batchId });
               setImportConn(null);
-              onCrmImported?.(batchId, leadsCreated);
+              onCrmImported?.(batchId, { leadsCreated, duplicatesFound, invalidPhones });
             }}
           />
         )}
@@ -1133,10 +1141,10 @@ function Step3({
             open={!!importConn}
             onClose={() => setImportConn(null)}
             defaultCampaignId={campaignId}
-            onImported={(batchId, leadsCreated) => {
+            onImported={(batchId, leadsCreated, duplicatesFound, invalidPhones) => {
               setState({ sourceMode: "crm", crmBatchId: batchId });
               setImportConn(null);
-              onCrmImported?.(batchId, leadsCreated);
+              onCrmImported?.(batchId, { leadsCreated, duplicatesFound, invalidPhones });
             }}
           />
         )}
@@ -1155,10 +1163,10 @@ function Step3({
           open={!!importConn}
           onClose={() => setImportConn(null)}
           defaultCampaignId={campaignId}
-          onImported={(batchId, leadsCreated) => {
+          onImported={(batchId, leadsCreated, duplicatesFound, invalidPhones) => {
             setState({ sourceMode: "crm", crmBatchId: batchId });
             setImportConn(null);
-            onCrmImported?.(batchId, leadsCreated);
+            onCrmImported?.(batchId, { leadsCreated, duplicatesFound, invalidPhones });
           }}
         />
       )}
@@ -1353,7 +1361,40 @@ function Step5({
   const { getToken } = useAuth();
 
   if (state.sourceMode === "crm") {
-    return <CrmPassthroughBanner title="Validation" />;
+    const s = state.crmImportSummary;
+    return (
+      <div className="space-y-5 max-w-xl">
+        <div>
+          <h2 className="text-lg font-semibold">Validation</h2>
+          <p className="text-sm text-muted-foreground mt-1">Results from your CRM import.</p>
+        </div>
+        {s ? (
+          <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="text-sm flex-1">Leads added</span>
+              <span className="text-sm font-semibold text-emerald-400">{s.leadsCreated}</span>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-sm flex-1">Duplicates skipped</span>
+              <span className="text-sm font-semibold text-amber-400">{s.duplicatesFound}</span>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3">
+              <X className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-sm flex-1">Invalid phone numbers</span>
+              <span className="text-sm font-semibold text-muted-foreground">{s.invalidPhones}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-muted/30 border border-border rounded-xl p-8 text-center">
+            <Shield className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No import summary available.</p>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">Click <strong>Next</strong> to set how duplicates should be handled in future imports.</p>
+      </div>
+    );
   }
 
   const effectiveType: SourceType =
@@ -1503,9 +1544,7 @@ function Step6({
   state: WizardState;
   setState: (p: Partial<WizardState>) => void;
 }) {
-  if (state.sourceMode === "crm") {
-    return <CrmPassthroughBanner title="Duplicate Handling" />;
-  }
+  // CRM: show policy choices just like CSV — the selection is stored and applies to future imports
 
   const policies: Array<{ value: DuplicatePolicy; label: string; desc: string }> = [
     { value: "ignore",             label: "Ignore",             desc: "Create the lead anyway but flag it as a duplicate. Agent still calls." },
@@ -2138,15 +2177,9 @@ export default function BatchWizardPage() {
   function goNext() {
     if (!canAdvance()) return;
 
-    // CRM: from step 2 after import → jump to Execution Rules (step 6)
-    if (state.sourceMode === "crm" && currentStep === 2) {
-      setCompleted(prev => new Set([...prev, 2, 3, 4, 5]));
-      setCurrentStep(6);
-      return;
-    }
-
-    // Step 2 (Source Config) → skip Variable Mapping + Validation for non-CSV
-    if (currentStep === 2) {
+    // Step 2 (Source Config) → skip Variable Mapping + Validation for non-CSV (but not for CRM,
+    // which walks through all steps so the user sees the import summary and chooses duplicate policy)
+    if (currentStep === 2 && state.sourceMode !== "crm") {
       const t = resolvedType();
       if (t !== "csv") {
         setCompleted(prev => new Set([...prev, 2, 3, 4]));
@@ -2160,14 +2193,9 @@ export default function BatchWizardPage() {
   }
 
   function goBack() {
-    // CRM: back from any middle/late step goes to step 2
-    if (state.sourceMode === "crm" && currentStep >= 3 && currentStep <= 6) {
-      setCurrentStep(2);
-      return;
-    }
-
     // Step 5 (Duplicate Policy) → back to step 2 for non-CSV (steps 3-4 were skipped)
-    if (currentStep === 5) {
+    // CRM is excluded — it walks through all steps so back goes 5→4→3→2 naturally
+    if (currentStep === 5 && state.sourceMode !== "crm") {
       const t = resolvedType();
       if (t !== "csv") {
         setCurrentStep(2);
@@ -2226,9 +2254,10 @@ export default function BatchWizardPage() {
               setState={setState}
               campaignId={campaignId}
               campaignLeadSource={campaignLeadSource}
-              onCrmImported={() => {
-                setCompleted(prev => new Set([...prev, 2, 3, 4, 5]));
-                setCurrentStep(6);
+              onCrmImported={(_batchId, summary) => {
+                setState({ crmImportSummary: summary });
+                setCompleted(prev => new Set([...prev, 2]));
+                setCurrentStep(3);
               }}
             />
           )}
