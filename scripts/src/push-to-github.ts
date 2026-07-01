@@ -23,17 +23,6 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "artifacts/api-server/src/orchestration/pipeline.ts",
-  "artifacts/api-server/src/orchestration/session.ts",
-  "artifacts/api-server/src/orchestration/types.ts",
-  "artifacts/api-server/src/orchestration/transcriptQuality.ts",
-  "artifacts/api-server/src/orchestration/telephony/twilio.ts",
-  "artifacts/api-server/src/orchestration/telephony/plivo.ts",
-  "artifacts/api-server/src/routes/webhooks.ts",
-  "artifacts/api-server/src/routes/calls.ts",
-  "artifacts/dashboard/src/pages/agents/edit.schema.ts",
-  "artifacts/dashboard/src/pages/agents/edit.tsx",
-  "artifacts/dashboard/src/pages/agents/builder.tsx",
-  "artifacts/dashboard/src/pages/agents/edit.test.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -70,7 +59,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(voice): Agent 59 VoBiz inbound Tamil — dead air, barge-in, latency, English-switch, transfers, provider scope, form hydration (11-file spec). pipeline.ts: fix caller-memory trailer regex (={20,}; the 37-'=' trailer never matched the old 40-'=' pattern); build the greeting via buildCompactGreetingPrompt(systemPrompt, currentLang||sttConfig.language||language||"en-IN")+substituteSalutation (+greetingLlmMs/promptChars log); cap greetingEchoHoldUntil via Math.min(...,GREETING_ECHO_HOLD_CAP_MS=3000); honour explicit mid-call English requests when autoSwitchToEnglish — detectExplicitLanguageRequest on the final transcript latches en-IN and sets currentLang, with the OVERRIDE branch ahead of the ABSOLUTE-RULE language block; make executeTransferAgent return Promise<string|undefined> so tool + IVR paths only report success (and only fire onCallEnd) when the redirect actually happened; remove the now-dead input-level self-echo gate helper. session.ts: thread autoSwitchToEnglish into AgentConfig; stub agent→agent transfer (warn+logExec(agent_transfer_not_implemented)+return false) and add an explicit unsupported-provider else (wasTransferred=false, patchSessionMeta, warn, logExec, return false) so unimplemented transfers fail loudly and keep the call alive. calls.ts: scope the telephony-provider lookup to (providerName, userId, isActive=true); return 409 when a transfer has no external call ID instead of silently succeeding. twilio.ts + plivo.ts: mirror vobiz's sessionEndedBeforeReady guard so a stop/close/error during createSession still ends the session (no rows stuck in_progress). transcriptQuality.ts + types.ts: supporting types/quality tweaks. dashboard agents (edit.schema.ts/edit.tsx/builder.tsx/edit.test.ts): fix agent-form hydration so saved values populate on edit.`,
+      message: `fix(voice): barge-in now works on streaming-STT telephony (Sarvam/VoBiz). Root cause: handleProcessedAudio() returned from the streaming-STT branch (this.streamSTT.sendAudio) BEFORE the batch energy/frame barge-in block, so streaming STT could only interrupt via a transcript — a semantic-interim keyword or a FINAL-transcript word-count. On telephony Sarvam rarely finalizes while the caller talks over the agent (it endpoints on silence), so ordinary interruptions ("actually…", "I have a question") never fired even though playback abort on bargeInRequested works. Fix: extract the energy detector into tryEnergyBargeIn(pcm8k, hasSpeech, source, respectHoldUntil) and call it on BOTH paths. Batch keeps respectHoldUntil=true (its extended bargeInHoldUntil spans the whole estimated sentence — fine for VAD-gated batch STT). Streaming passes respectHoldUntil=false so the full-sentence hold can't re-suppress it; it relies only on the per-sentence echo grace (bargeInSentenceStartAt+bargeInEchoGraceMs) + greetingEchoHoldUntil, matching the streaming transcript barge-in. Anti-echo: on a no-AEC carrier the agent's own TTS echoes back with real energy while actively streaming, so during isSendingTtsAudio on non-webcall providers the energy bar is raised to max(configuredThreshold, BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR=1200); webcall (AEC) and between-sentence gaps honour the configured Energy Threshold as-is. Min Words / Min Voice Duration still drive effectiveMinFrames. Adds an "energy"/"streaming_energy" Barge-in Detected log with frames+effectiveMinFrames+effectiveThreshold for tuning.`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

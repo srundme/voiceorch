@@ -105,6 +105,14 @@ const BARGE_IN_ECHO_GRACE_MS  = 600;    // Suppress barge-in for 600 ms after pl
 const BARGE_IN_MIN_FRAMES     = 3;      // Absolute floor on barge-in frames (~60 ms) so a single
                                          // loud frame can't cut the agent off, even when a Stop
                                          // Speaking Plan configures very low sensitivity.
+const BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR = 1200; // On a no-AEC carrier the agent's own TTS is
+                                         // echoed back with real energy WHILE it is actively streaming
+                                         // (isSendingTtsAudio). Require at least this RMS during active
+                                         // TTS send before an energy frame counts toward barge-in, so
+                                         // the returning echo can't self-trigger an interruption. The
+                                         // caller's intentional speech comfortably clears this bar. A
+                                         // very low configured Energy Threshold (e.g. 200) is honoured
+                                         // as-is on webcall (AEC present) and between sentences.
 // ── Content-based self-echo rejection (carrier echo on the Live Call path) ─────
 // On the Vobiz telephony path the carrier echoes the agent's own TTS back to us
 // AFTER the time-based echo-grace windows expire, so STT finalizes it as a
@@ -1225,6 +1233,108 @@ export class OrchestrationPipeline {
     }
   }
 
+  /**
+   * Energy-based barge-in detector shared by the batch-STT VAD path and the
+   * streaming-STT path. Counts consecutive caller frames whose RMS energy clears
+   * the (provider-aware) barge-in threshold and fires bargeInCallback() once the
+   * configured min-frames floor is reached.
+   *
+   * Why the streaming path needs this: streaming STT (Sarvam/Deepgram/Azure)
+   * previously returned from handleProcessedAudio() BEFORE the batch energy block,
+   * so barge-in could only fire via a transcript (semantic-interim keyword or a
+   * final-transcript word-count). On telephony with Sarvam the caller talking
+   * OVER the agent rarely yields a timely final (Sarvam finalizes on endpointing,
+   * which doesn't occur while the caller keeps talking), so ordinary interruptions
+   * ("actually…", "I have a question") never fired. This gives the streaming path a
+   * transcript-independent, energy-driven interrupt that matches the batch path.
+   *
+   * @param respectHoldUntil batch passes true (its bargeInHoldUntil is extended
+   *   through the whole estimated sentence, which is fine for VAD-gated batch STT).
+   *   Streaming passes false: the extended bargeInHoldUntil would suppress it for
+   *   the ENTIRE sentence and re-preserve the bug, so streaming relies only on the
+   *   per-sentence echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs) and the
+   *   greeting hold — mirroring the streaming transcript barge-in path.
+   */
+  private tryEnergyBargeIn(
+    pcm8k: Buffer,
+    hasSpeech: boolean,
+    source: "energy" | "streaming_energy",
+    respectHoldUntil: boolean,
+  ): void {
+    if (!hasSpeech) {
+      // genuine VAD silence — reset the accumulator
+      this.bargeInSpeechFrames = 0;
+      this.bargeInLowEnergyFrames = 0;
+      return;
+    }
+    if (!this.bargeInEnabled || !this.isPlaying || this.bargeInRequested) return;
+
+    const now = Date.now();
+    if (
+      now < this.greetingEchoHoldUntil ||
+      now < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
+      (respectHoldUntil && now < this.bargeInHoldUntil)
+    ) {
+      // Echo grace: suppress (and reset) while our own freshly started audio may
+      // still be echoing back. greetingEchoHoldUntil covers the full opening line
+      // on the carrier path; the per-sentence grace covers the start of each reply.
+      this.bargeInSpeechFrames = 0;
+      return;
+    }
+
+    // On a no-AEC carrier the agent's own TTS echoes back with real energy WHILE it
+    // is actively streaming, so raise the bar during active TTS send to reject it.
+    // This floor applies ONLY to the streaming path (respectHoldUntil=false): the
+    // batch path already suppresses barge-in for the whole active-TTS sentence via
+    // its extended bargeInHoldUntil, so it keeps its configured threshold exactly
+    // (behaviour-preserving refactor). Between sentences (isSendingTtsAudio=false)
+    // and on webcall (AEC present) the configured Energy Threshold is honoured as-is.
+    const effectiveThreshold =
+      !respectHoldUntil && this.config.telephonyProvider !== "webcall" && this.isSendingTtsAudio
+        ? Math.max(this.bargeInEnergyThreshold, BARGE_IN_TELEPHONY_ACTIVE_TTS_ENERGY_FLOOR)
+        : this.bargeInEnergyThreshold;
+
+    if (hasSpeechEnergy(pcm8k, effectiveThreshold)) {
+      this.bargeInSpeechFrames++;
+      // When a Stop Speaking Plan is configured, bargeInMinFrames is already derived
+      // from Min Words / Min Voice Duration and is authoritative — don't apply the
+      // non-UI wordsForInterruption×20 floor. Keep BARGE_IN_MIN_FRAMES as a floor so
+      // a single loud frame can't fire.
+      const effectiveMinFrames = this.stopSpeakingPlanConfigured
+        ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
+        : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 2) * 20);
+      if (this.bargeInSpeechFrames >= effectiveMinFrames) {
+        this.bargeInRequested = true;
+        this.bargeInCallback?.();
+        this.audioBuffer = [];
+        this.logExec("Agent", "system", {
+          status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
+          metadata: {
+            event: "Barge-in Detected", trigger: source, frames: this.bargeInSpeechFrames,
+            effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
+          },
+        });
+        logger.info(
+          {
+            callId: this.config.callId, source, frames: this.bargeInSpeechFrames,
+            effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
+          },
+          "Barge-in detected (energy)",
+        );
+      }
+      this.bargeInLowEnergyFrames = 0;
+    } else {
+      // Don't reset immediately on a single below-threshold frame — brief
+      // inter-syllable pauses would otherwise kill an accumulating run. Only reset
+      // after 5 consecutive low-energy frames (~100 ms).
+      this.bargeInLowEnergyFrames++;
+      if (this.bargeInLowEnergyFrames >= 5) {
+        this.bargeInSpeechFrames = 0;
+        this.bargeInLowEnergyFrames = 0;
+      }
+    }
+  }
+
   /** Handles pre-processed audio returned by the audio worker pool. */
   private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
     if (this.closed) return;
@@ -1276,6 +1386,11 @@ export class OrchestrationPipeline {
             return null;
           });
       }
+      // Energy-based barge-in for the streaming path (transcript-independent).
+      // respectHoldUntil=false: the extended bargeInHoldUntil spans the whole
+      // sentence and would re-preserve the "can't interrupt Sarvam" bug, so we
+      // rely only on the per-sentence echo grace + greeting hold (see helper).
+      this.tryEnergyBargeIn(pcm8k, hasSpeech, "streaming_energy", /* respectHoldUntil */ false);
       this.streamSTT.sendAudio(pcm16k);
       return;
     }
@@ -1285,61 +1400,10 @@ export class OrchestrationPipeline {
     if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
-    if (hasSpeech) {
-      this.resetHangupTimer();
-
-      if (this.bargeInEnabled && this.isPlaying && !this.bargeInRequested) {
-        const now = Date.now();
-        if (now < this.bargeInHoldUntil || now < this.greetingEchoHoldUntil) {
-          // Echo grace period: suppress barge-in for the first bargeInEchoGraceMs
-          // after playback starts to ignore phone sidetone / echo returning from Vobiz.
-          // greetingEchoHoldUntil additionally covers the full greeting + carrier echo
-          // latency (carrier path only) so the opening line survives its own echo.
-          this.bargeInSpeechFrames = 0;
-        } else if (hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)) {
-          // Only count frames that exceed the much-higher barge-in energy threshold
-          // (4× the normal VAD level) — intentional caller speech will clear this bar,
-          // but ambient noise, echo bleed, or background conversation won't.
-          this.bargeInSpeechFrames++;
-          // wordsForInterruption: each word ≈ 20 frames at 20ms/frame (150 wpm).
-          // When an explicit Stop Speaking Plan is configured, bargeInMinFrames is
-          // already derived from the configured Min Words / Min Voice Duration and is
-          // authoritative — do NOT apply the non-UI wordsForInterruption×20 floor, which
-          // would otherwise dominate and make the configured sensitivity have no effect.
-          // We still keep a sane minimum (BARGE_IN_MIN_FRAMES floor) so a single loud
-          // frame can't trigger a barge-in. Without a plan, retain the legacy floor.
-          const effectiveMinFrames = this.stopSpeakingPlanConfigured
-            ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
-            : Math.max(
-                this.bargeInMinFrames,
-                (this.agent.wordsForInterruption ?? 2) * 20,
-              );
-          if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-            this.bargeInRequested = true;
-            this.bargeInCallback?.();
-            this.audioBuffer = [];
-            this.logExec("Agent", "system", {
-              status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
-              metadata: { event: "Barge-in Detected", trigger: "energy", frames: this.bargeInSpeechFrames, effectiveMinFrames },
-            });
-            logger.info({ callId: this.config.callId, frames: this.bargeInSpeechFrames, effectiveMinFrames }, "Barge-in detected (batch STT)");
-          }
-          this.bargeInLowEnergyFrames = 0;
-        } else {
-          // Don't reset immediately on a single below-threshold frame — brief
-          // inter-syllable pauses would otherwise kill an accumulating run.
-          // Only reset after 5 consecutive low-energy frames (~100 ms).
-          this.bargeInLowEnergyFrames++;
-          if (this.bargeInLowEnergyFrames >= 5) {
-            this.bargeInSpeechFrames = 0;
-            this.bargeInLowEnergyFrames = 0;
-          }
-        }
-      }
-    } else {
-      this.bargeInSpeechFrames = 0; // genuine VAD silence — reset
-      this.bargeInLowEnergyFrames = 0;
-    }
+    if (hasSpeech) this.resetHangupTimer();
+    // respectHoldUntil=true: the batch path is VAD-gated and its extended
+    // bargeInHoldUntil (spanning the whole estimated sentence) is intentional here.
+    this.tryEnergyBargeIn(pcm8k, hasSpeech, "energy", /* respectHoldUntil */ true);
 
     if (this.isProcessing) return;
 
