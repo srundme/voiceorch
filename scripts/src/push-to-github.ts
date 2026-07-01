@@ -23,8 +23,7 @@ const BRANCH = "main";
 
 const FILES_TO_PUSH = [
   "artifacts/api-server/src/orchestration/pipeline.ts",
-  "artifacts/api-server/src/orchestration/adapters/llm/openai.ts",
-  "artifacts/api-server/src/orchestration/types.ts",
+  "artifacts/api-server/src/routes/webhooks.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -61,7 +60,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `perf(llm): stop the per-turn [CURRENT DATE & TIME] line from breaking OpenAI prompt cache — move dtInjection from the top of the system prompt to the very end (after the staged-prompt rebuild) so the ~7k-token static block (language rules + caller memory + tool guides) stays a byte-identical cacheable prefix; capture usage.prompt_tokens_details.cached_tokens in the OpenAI adapter and log per-turn cachedTokens + cacheHitRatio`,
+      message: `fix(voice): repair broken live outbound VoBiz calls (dead air + helicopter + barge-in). (1) webhooks.ts: distrust VoBiz's synchronous AMD machine flag — it false-positives on live humans and routed answered calls into voicemail-delivery mode (~12s dead air + a dropped voicemail message; call 1320). Add trustMachineFlag (default true, Twilio/Plivo unchanged); VoBiz passes false so a machine verdict is logged/persisted but NOT enacted, opening the normal AI stream. (2) pipeline.ts: raise keepalive watchdog fill threshold 60ms→500ms so the pump no longer injects silence/ambient frames into live speech on ordinary streaming jitter (the chopping "helicopter"); still fills genuine stalls well under VoBiz's 2s 4010 drop. (3) pipeline.ts: narrow the streaming-STT input self-echo gate to the per-sentence echo-grace + greeting-grace window instead of isPlaying||bargeInHoldUntil (which muted Sarvam for the whole reply → loud-shout-only barge-in); residual echo is still rejected at the transcript level by isSelfEcho()/tail-echo guard, restoring normal-volume interruptions`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

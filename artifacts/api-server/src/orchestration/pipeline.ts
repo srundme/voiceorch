@@ -728,11 +728,16 @@ export class OrchestrationPipeline {
       const KEEPALIVE_FRAME_MS      = 20;
       const VOBIZ_SILENCE_SAMPLES   = (8000 * KEEPALIVE_FRAME_MS) / 1000; // 160 @ 8 kHz
       const vobizSilenceFrame       = Buffer.alloc(VOBIZ_SILENCE_SAMPLES * 2, 0); // PCM16-LE zeros
-      const KEEPALIVE_FILL_GAP_MS   = 60; // watchdog: fill any outbound gap > ~3 frames
-      // 60 ms (3 frame-times) not 20/40: normal Node timer jitter/GC can delay a
-      // healthy 20 ms-paced TTS frame past ~40 ms, and we do NOT want the pump to
-      // inject a stray ambient frame mid-speech. 60 ms is comfortably below both a
-      // perceptible dead window and VoBiz's ~2 s inactivity drop (hangup 4010).
+      const KEEPALIVE_FILL_GAP_MS   = 500; // watchdog: only fill a GENUINE mid-sentence stall
+      // 500 ms, not 60 ms: at 60 ms the pump fired on ordinary streaming jitter / burst
+      // delivery (a streaming TTS provider does NOT hand us a frame every 20 ms — chunks
+      // arrive in bursts and the drain queue drains them), so it interleaved silence/
+      // ambient frames INTO live speech and produced a chopping "helicopter" artifact on
+      // the carrier. A real TTS underrun that risks VoBiz's ~2 s inactivity drop (hangup
+      // 4010) lasts far longer than jitter, so 500 ms only kicks in for a true stall while
+      // staying comfortably below the 2 s drop. Between-sentence gaps are still filled
+      // immediately via the !isSendingTtsAudio branch, and the first-byte/greeting dead
+      // air is still covered because lastTtsFrameAt starts at 0 (gap ≫ threshold).
       this.ambientInterval = setInterval(() => {
         // Send a fill frame when the agent is not actively streaming TTS
         // (!isSendingTtsAudio → the between-sentences gap), OR when a sentence is
@@ -1232,17 +1237,28 @@ export class OrchestrationPipeline {
       // Root fix for the greeting-startup delay: on the carrier path there is no
       // acoustic echo cancellation, so our own TTS is echoed back and, if fed to the
       // recognizer, gets transcribed as a phantom caller turn that restarts/interrupts
-      // the greeting (call 772). Stop forwarding the agent's own audio to STT while it
-      // is speaking, plus the post-playback tail window (bargeInHoldUntil, re-armed at
-      // playback end by armTailEchoGrace) that covers the closing word's returning echo.
-      // This is a SELECTIVE half-duplex gate, not a hard mute: a frame whose energy
-      // exceeds the barge-in threshold is a genuinely loud caller and still passes
-      // through so streaming-STT barge-in works mid-greeting; only the low-level
-      // carrier echo of our own TTS is dropped. Web calls rely on browser AEC and keep
-      // full-duplex, so the gate is restricted to telephonyProvider !== "webcall".
+      // the greeting (call 772).
+      //
+      // SCOPE: drop below-threshold frames ONLY during the fresh-audio echo window —
+      // the per-sentence 600 ms grace (bargeInSentenceStartAt + bargeInEchoGraceMs) and,
+      // carrier path only, the full-greeting grace (greetingEchoHoldUntil, too long for
+      // the 600 ms window). This MIRRORS the streaming-transcript barge-in grace so the
+      // input feed and the detector agree. It deliberately does NOT gate on isPlaying ||
+      // bargeInHoldUntil: bargeInHoldUntil is extended to the WHOLE sentence length in
+      // _playSentenceImpl, so that condition muted Sarvam for the entire reply and made
+      // normal-volume interruptions impossible ("loud-shout-only" barge-in regression).
+      // After the grace window, frames flow to the recognizer and residual carrier echo
+      // is rejected at the TRANSCRIPT level — the content-based isSelfEcho() guard and
+      // the post-playback tail-echo time guard in handleStreamingTranscript() discard
+      // any transcript that matches the agent's own recent speech (call 772 protection
+      // preserved), while genuine caller words pass through and trigger barge-in.
+      // A frame whose energy exceeds the barge-in threshold is a genuinely loud caller
+      // and still passes through even inside the grace window. Web calls rely on browser
+      // AEC and keep full-duplex, so the gate is restricted to telephonyProvider !== "webcall".
       if (
         this.config.telephonyProvider !== "webcall" &&
-        (this.isPlaying || Date.now() < this.bargeInHoldUntil) &&
+        (Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
+          Date.now() < this.greetingEchoHoldUntil) &&
         !hasSpeechEnergy(pcm8k, this.bargeInEnergyThreshold)
       ) {
         this.logSelfEchoDrop();

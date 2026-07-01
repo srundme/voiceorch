@@ -21,3 +21,17 @@ The dashboard writes the voicemail-detection setting in TWO incompatible shapes:
 - `applyAmdGate()` in webhooks.ts branches there: human/unknown/absent → open AI stream; machine → enact `voicemailAction` (leave_message=speak voicemailMessage+hangup / hangup default / continue=open stream). `unknown` is treated as human.
 - The three `/webhooks/{provider}/amd` routes are now persistence-only (204) — they no longer control flow.
 - `amd_result` (human/machine/unknown) persisted best-effort by matching `metadata::text LIKE %providerCallId%`.
+
+## VoBiz synchronous AMD is UNRELIABLE — never enact its machine verdict
+**Why:** VoBiz's synchronous machine flag false-positives on LIVE HUMANS. On a real
+answered call its "machine" verdict routed the caller into voicemail-delivery mode →
+~12 s of dead air while the pipeline "listened for the greeting end", then a dropped
+voicemail message. The human never heard the agent.
+
+**How to apply:** `applyAmdGate()` takes `trustMachineFlag` (default `true`). The
+VoBiz answer-webhook call site passes `trustMachineFlag:false`: a "machine" result is
+still persisted + logged (raw `MachineDetected`/`Machine`/`machine` fields logged for
+diagnosis) but NOT enacted — it falls through to open the normal AI stream as if the
+answer were human. Twilio/Plivo omit the param (default true) and keep their AMD
+behaviour. Tradeoff accepted: VoBiz voicemail-drop is effectively disabled until VoBiz
+AMD proves trustworthy. Do NOT "fix" this by re-trusting the VoBiz flag.

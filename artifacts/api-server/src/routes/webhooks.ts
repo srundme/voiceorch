@@ -565,12 +565,26 @@ async function applyAmdGate(opts: {
    *  open a media stream and deliver the full message after the greeting ends
    *  (acoustic cue) rather than overlapping the greeting on a fixed timer. */
   buildVoicemailStreamXml?: () => string;
+  /** VoBiz's synchronous machine flag is unreliable — it false-positives on live humans,
+   *  which routes a real answered call into voicemail-delivery mode (dead air + a dropped
+   *  voicemail message). VoBiz callers pass false so a "machine" result is logged/persisted
+   *  but NOT enacted; the normal AI stream is opened as if the answer were human. Twilio /
+   *  Plivo omit it (default true) and keep their AMD behaviour. */
+  trustMachineFlag?: boolean;
 }): Promise<boolean> {
-  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg, buildVoicemailStreamXml } = opts;
+  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg, buildVoicemailStreamXml, trustMachineFlag = true } = opts;
   if (result === null) return false; // AMD not requested — no behaviour change
   await persistAmdResult(providerCallId, result);
   log.info({ agentId, providerCallId, amdResult: result }, "AMD result on answer webhook");
   if (result !== "machine") return false; // human / unknown → open AI stream
+
+  // Untrusted provider AMD (VoBiz): a "machine" verdict here is too often a false
+  // positive on a live human, so do NOT enact the voicemail action. Persisted +
+  // logged above for diagnostics; fall through to open the normal AI stream.
+  if (!trustMachineFlag) {
+    log.info({ agentId, providerCallId }, "AMD machine flag NOT trusted (provider AMD unreliable) — opening AI stream instead of voicemail delivery");
+    return false;
+  }
 
   let cfg = preloadedCfg;
   if (!cfg) {
@@ -711,15 +725,25 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
 
   // ── AMD gating ───────────────────────────────────────────────────────────
   // Synchronous AMD (Vobiz Plivo-compatible API): the machine flag is delivered
-  // on this answer request. Branch before queue/IVR or opening the AI stream.
-  // For action="leave_message" we open a voicemail-delivery media stream (vm=1)
-  // so the full message is recorded after the greeting ends, not on a blind timer.
+  // on this answer request. VoBiz's machine detection is UNRELIABLE and false-
+  // positives on live humans (answered call → ~12 s dead air + a dropped voicemail
+  // message; call 1320), so we log the raw fields for diagnosis but pass
+  // trustMachineFlag:false — a "machine" verdict is NOT enacted and the normal AI
+  // stream is opened for whoever answered.
+  const rawMachineField = req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine;
+  if (rawMachineField !== undefined && rawMachineField !== null && rawMachineField !== "") {
+    req.log.info(
+      { agentId, MachineDetected: req.body?.MachineDetected, Machine: req.body?.Machine, machine: req.body?.machine },
+      "VoBiz raw machine-detection fields on answer webhook (flag NOT trusted for voicemail routing)",
+    );
+  }
   const amdHandled = await applyAmdGate({
     res, log: req.log, agentId,
     providerCallId: String(req.body?.CallUUID ?? req.body?.call_uuid ?? ""),
     result: parseMachineFlag(req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine),
     speakTag: "Speak",
     preloadedCfg: cfg,
+    trustMachineFlag: false,
     buildVoicemailStreamXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
       campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,

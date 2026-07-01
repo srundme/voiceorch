@@ -27,13 +27,18 @@ PCM/mulaw send loops), and change the pump guard to
 `!isSendingTtsAudio || (Date.now() - lastTtsFrameAt) >= KEEPALIVE_FILL_GAP_MS`.
 Now the pump ALSO fills any gap while a sentence is nominally in progress.
 
-**Why the threshold is 60ms (not 20/40):** healthy streaming lands a frame every
-~20ms so the gap stays under threshold and the pump stays skipped (no double-send /
-audible desync). But normal Node timer jitter / GC can delay a healthy frame past
-~40ms, so 40ms risks the pump injecting a stray ambient frame mid-speech. 60ms
-(3 frame-times) avoids that while staying far below both a perceptible dead window
-and the ~2s carrier drop. `lastTtsFrameAt` starts at 0 (epoch) so the very first
-greeting first-byte window sees a huge gap and the pump fills immediately — desired.
+**Why the threshold is ~500ms (60ms was too tight):** the value was originally 60ms
+on the theory that healthy streaming lands a frame every ~20ms so the gap stays under
+threshold. In practice real streaming TTS is BURSTY — provider chunks arrive with gaps
+of tens to a few hundred ms between frames — so 60ms constantly tripped and the pump
+interleaved silence/ambient frames INTO live speech, producing a rapid chopping stutter
+the user called a "helicopter" glitch. 500ms is loose enough to leave normal bursty
+playback untouched while still bridging a genuine mid-sentence stall (provider hang)
+long before the ~2s carrier drop. `lastTtsFrameAt` starts at 0 (epoch) so the very
+first greeting first-byte window sees a huge gap and the pump fills immediately —
+desired. **The balance to preserve:** aggressive enough to bridge a real stall before
+VoBiz's ~2s 4010 drop, loose enough not to chop bursty frames. Do NOT tighten it back
+toward the frame interval to "reduce dead air" — that reintroduces the helicopter.
 
 **How to apply:** any new outbound sender path (new TTS mode, new transport) must
 update `lastTtsFrameAt` on its real sends, or the watchdog will over-inject during

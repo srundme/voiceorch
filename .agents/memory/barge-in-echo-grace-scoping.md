@@ -27,3 +27,22 @@ loops) and web (`webcall.ts` process() streaming + buffered loops) in lockstep â
 a fix in one path without the other leaves phone or web un-interruptible. Tail
 protection stays via `armTailEchoGrace()` (telephony) and the tail-silence-drain
 grace extension `now + AUDIO_TAIL_SILENCE_MS + WEB_TAIL_ECHO_MARGIN_MS` (web).
+
+## The streaming-STT INPUT gate is a separate trap from the detector grace
+**Rule:** The gate that decides whether to even FORWARD caller audio frames to the
+streaming STT during agent speech must use the same narrow per-sentence window
+(`now < bargeInSentenceStartAt + bargeInEchoGraceMs || now < greetingEchoHoldUntil`),
+NOT `isPlaying || now < bargeInHoldUntil`.
+
+**Why:** `bargeInHoldUntil` is extended whole-sentence in `_playSentenceImpl`, and
+`isPlaying` is true for the entire reply. Gating the STT INPUT feed on either one
+starves Sarvam of caller audio for the whole utterance, so only a shout loud enough
+to trip the energy detector could interrupt â€” normal-volume barge-in silently died
+(regression). Residual carrier echo that slips through after the grace is still
+rejected downstream at the TRANSCRIPT level by the content-match `isSelfEcho()` +
+the post-playback tail-echo time guard, so narrowing the input gate is safe.
+
+**How to apply:** Keep the input gate and the detector grace on the SAME window.
+Never reintroduce `isPlaying`/`bargeInHoldUntil` into the input-forwarding path.
+The call-772 greeting-restart protection is preserved because `greetingEchoHoldUntil`
+still gates the full greeting and mid-greeting echo is caught by `isSelfEcho()`.
