@@ -135,10 +135,24 @@ if (frontendDistPath) {
 
   if (existsSync(distAbs)) {
     logger.info({ distAbs }, "Serving frontend static files");
-    app.use(express.static(distAbs));
+    // Hashed assets (JS/CSS) are immutable — cache them aggressively.
+    // index.html must NEVER be cached so browsers always fetch the latest
+    // asset references after a redeploy.
+    app.use(express.static(distAbs, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith("index.html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        }
+      },
+    }));
     // SPA fallback — send index.html for any non-/api, non-/admin-ui and
     // non-/snapserve-book route.
     app.get(/^\/(?!api|admin-ui|snapserve-book).*/, (_req, res) => {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.sendFile(path.join(distAbs, "index.html"));
     });
   } else {
