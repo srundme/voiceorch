@@ -32,6 +32,15 @@ function getPlatformVobizCreds() {
   return { authId, authToken, configured: !!(authId && authToken) };
 }
 
+/** Derive the public HTTPS base URL from the request (mirrors getHttpBaseUrl in webhooks.ts). */
+function deriveWebhookBase(req: import("express").Request): string {
+  const fixed = process.env["WEBHOOK_BASE_URL"];
+  if (fixed) return fixed.replace(/\/$/, "");
+  const host  = (req.headers["x-forwarded-host"] ?? req.hostname) as string;
+  const proto = (req.headers["x-forwarded-proto"] ?? "https") as string;
+  return `${proto}://${host}`;
+}
+
 // Vobiz Account API base — used for live inventory, purchase, and release.
 // Each call uses the platform master account (MA_) credentials.
 const VOBIZ_ACCOUNT_BASE = "https://api.vobiz.ai/api/v1/Account";
@@ -129,10 +138,10 @@ async function configureVobizNumberWebhook(
   authId: string,
   authToken: string,
   e164: string,
+  webhookBase: string,
 ): Promise<void> {
-  const webhookBase = (process.env["WEBHOOK_BASE_URL"] ?? "").replace(/\/$/, "");
   if (!webhookBase) {
-    // In local dev WEBHOOK_BASE_URL may be absent; skip silently
+    console.warn("configureVobizNumberWebhook: webhookBase is empty, skipping");
     return;
   }
   const e164Path = e164.startsWith("+") ? e164.slice(1) : e164;
@@ -356,7 +365,7 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
 
   // 4. Configure inbound answer URL on VoBiz so incoming calls reach our webhook.
   //    Non-fatal — purchase record is already saved even if this step fails.
-  await configureVobizNumberWebhook(authId!, authToken!, number);
+  await configureVobizNumberWebhook(authId!, authToken!, number, deriveWebhookBase(req));
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased and provisioned");
   res.status(201).json(await enrichNumber(row));
@@ -410,10 +419,8 @@ router.post("/phone-numbers/:id/configure-webhook", requireAuth, async (req, res
   const { authId, authToken, configured } = getPlatformVobizCreds();
   if (!configured) { res.status(503).json({ error: "Platform carrier credentials not configured." }); return; }
 
-  const webhookBase = (process.env["WEBHOOK_BASE_URL"] ?? "").replace(/\/$/, "");
-  if (!webhookBase) { res.status(503).json({ error: "WEBHOOK_BASE_URL not configured." }); return; }
-
-  await configureVobizNumberWebhook(authId!, authToken!, row.number);
+  const webhookBase = deriveWebhookBase(req);
+  await configureVobizNumberWebhook(authId!, authToken!, row.number, webhookBase);
 
   req.log.info({ number: row.number, userId: clerkId }, "Vobiz inbound webhook reconfigured");
   res.json({ ok: true, number: row.number, answerUrl: `${webhookBase}/api/webhooks/vobiz/voice` });
