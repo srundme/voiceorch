@@ -720,7 +720,7 @@ export default function CallsList() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-6 w-6 opacity-100 transition-opacity"
                           onClick={() => setSelectedCallId(call.id)}
                         >
                           <Eye className="h-3 w-3 text-muted-foreground/50" />
