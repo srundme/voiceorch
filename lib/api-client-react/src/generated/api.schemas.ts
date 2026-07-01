@@ -1942,7 +1942,7 @@ export interface Campaign {
   retryDelayMinutes: number;
   totalLeads: number;
   calledLeads: number;
-  /** Maximum concurrent calls allowed for this campaign */
+  /** Maximum concurrent calls allowed for this campaign (hard platform ceiling: 10) */
   concurrentCallLimit: number;
   isActive: boolean;
   /** Primary lead source for this campaign */

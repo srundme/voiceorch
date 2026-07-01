@@ -2038,7 +2038,7 @@ export const CompleteOnboardingResponse = zod.object({
 /**
  * @summary List all campaigns for the current user
  */
-export const listCampaignsResponseConcurrentCallLimitDefault = 20;
+export const listCampaignsResponseConcurrentCallLimitDefault = 10;
 export const listCampaignsResponseLeadSourceDefault = `csv`;
 export const listCampaignsResponseTriggerModeDefault = `batch`;
 
@@ -2056,7 +2056,7 @@ export const ListCampaignsResponseItem = zod.object({
   "retryDelayMinutes": zod.number(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
-  "concurrentCallLimit": zod.number().default(listCampaignsResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign'),
+  "concurrentCallLimit": zod.number().default(listCampaignsResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign (hard platform ceiling: 10)'),
   "isActive": zod.boolean(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).default(listCampaignsResponseLeadSourceDefault).describe('Primary lead source for this campaign'),
   "triggerMode": zod.enum(['instant', 'batch']).default(listCampaignsResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
@@ -2074,7 +2074,7 @@ export const ListCampaignsResponse = zod.array(ListCampaignsResponseItem)
  */
 export const createCampaignBodyLeadSourceDefault = `csv`;
 export const createCampaignBodyTriggerModeDefault = `batch`;
-export const createCampaignBodyConcurrentCallLimitDefault = 20;
+export const createCampaignBodyConcurrentCallLimitDefault = 10;
 export const createCampaignBodyCallDelaySecondsDefault = 5;
 export const createCampaignBodyMaxAttemptsDefault = 1;
 export const createCampaignBodyRetryDelayMinutesDefault = 60;
@@ -2109,7 +2109,7 @@ export const GetCampaignParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const getCampaignResponseConcurrentCallLimitDefault = 20;
+export const getCampaignResponseConcurrentCallLimitDefault = 10;
 export const getCampaignResponseLeadSourceDefault = `csv`;
 export const getCampaignResponseTriggerModeDefault = `batch`;
 
@@ -2127,7 +2127,7 @@ export const GetCampaignResponse = zod.object({
   "retryDelayMinutes": zod.number(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
-  "concurrentCallLimit": zod.number().default(getCampaignResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign'),
+  "concurrentCallLimit": zod.number().default(getCampaignResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign (hard platform ceiling: 10)'),
   "isActive": zod.boolean(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).default(getCampaignResponseLeadSourceDefault).describe('Primary lead source for this campaign'),
   "triggerMode": zod.enum(['instant', 'batch']).default(getCampaignResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),
@@ -2165,7 +2165,7 @@ export const UpdateCampaignBody = zod.object({
   "timezone": zod.string().nullish().describe('IANA timezone for businessHoursStart\/End evaluation.')
 })
 
-export const updateCampaignResponseConcurrentCallLimitDefault = 20;
+export const updateCampaignResponseConcurrentCallLimitDefault = 10;
 export const updateCampaignResponseLeadSourceDefault = `csv`;
 export const updateCampaignResponseTriggerModeDefault = `batch`;
 
@@ -2183,7 +2183,7 @@ export const UpdateCampaignResponse = zod.object({
   "retryDelayMinutes": zod.number(),
   "totalLeads": zod.number(),
   "calledLeads": zod.number(),
-  "concurrentCallLimit": zod.number().default(updateCampaignResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign'),
+  "concurrentCallLimit": zod.number().default(updateCampaignResponseConcurrentCallLimitDefault).describe('Maximum concurrent calls allowed for this campaign (hard platform ceiling: 10)'),
   "isActive": zod.boolean(),
   "leadSource": zod.enum(['csv', 'webhook', 'meta_ads', 'crm']).default(updateCampaignResponseLeadSourceDefault).describe('Primary lead source for this campaign'),
   "triggerMode": zod.enum(['instant', 'batch']).default(updateCampaignResponseTriggerModeDefault).describe('How calls are triggered. instant = dial immediately on lead arrival; batch = leads accumulate and are dialled when a batch is started manually.'),

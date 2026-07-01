@@ -53,7 +53,7 @@ export const usersAndAgents: Chapter = {
   // …
   apiKey: text("api_key").unique(),
   orgKey: text("org_key").unique(),
-  concurrentLimit: integer("concurrent_limit").notNull().default(15),
+  concurrentLimit: integer("concurrent_limit").notNull().default(10),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   // …
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -86,9 +86,9 @@ export const usersAndAgents: Chapter = {
         },
         {
           lines: "10",
-          label: "concurrentLimit: integer(…).default(15)",
+          label: "concurrentLimit: integer(…).default(10)",
           explanation:
-            "A per-user cap on simultaneous live calls. Defaulting to 15 keeps a single account from monopolising the orchestration engine.",
+            "A per-user cap on simultaneous live calls. Defaulting to 10 keeps a single account from monopolising the orchestration engine.",
         },
       ],
     },

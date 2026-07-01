@@ -268,8 +268,8 @@ export default function UserDetail() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-mono">{user.concurrentLimit ?? 15}</div>
-                <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => { setNewConcurrentLimit(String(user.concurrentLimit ?? 15)); setConcurrentModal(true); }}>
+                <div className="text-2xl font-bold font-mono">{user.concurrentLimit ?? 10}</div>
+                <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => { setNewConcurrentLimit(String(user.concurrentLimit ?? 10)); setConcurrentModal(true); }}>
                   Set Limit
                 </Button>
               </CardContent>

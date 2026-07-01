@@ -163,7 +163,7 @@ export async function createSession(params: {
     throw new Error(`Agent ${params.agentId} not found`);
   }
 
-  // ── Concurrent call limit (per user, hard ceiling = 15) ──────────────────
+  // ── Concurrent call limit (per user, hard ceiling = 10) ──────────────────
   if (agent.userId) {
     const [user] = await withDbRetry("load-user-concurrent-limit", () =>
       db
@@ -171,7 +171,7 @@ export async function createSession(params: {
         .from(usersTable)
         .where(eq(usersTable.clerkId, agent.userId!)),
     );
-    const effectiveLimit = user?.concurrentLimit ?? 15;
+    const effectiveLimit = user?.concurrentLimit ?? 10;
     const activeForUser = Array.from(sessions.values()).filter(
       s => s.agentUserId === agent.userId,
     ).length;

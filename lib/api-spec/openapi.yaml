@@ -8348,8 +8348,8 @@ components:
           type: integer
         concurrentCallLimit:
           type: integer
-          description: "Maximum concurrent calls allowed for this campaign"
-          default: 20
+          description: "Maximum concurrent calls allowed for this campaign (hard platform ceiling: 10)"
+          default: 10
         isActive:
           type: boolean
         leadSource:
@@ -8408,7 +8408,7 @@ components:
           type: string
         concurrentCallLimit:
           type: integer
-          default: 20
+          default: 10
         callDelaySeconds:
           type: integer
           default: 5

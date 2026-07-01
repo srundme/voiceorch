@@ -13,6 +13,12 @@ import { evaluateIrdaiGate, IRDAI_BLOCKED_MESSAGE, IRDAI_BLOCKED_CODE, type Irda
 const router: IRouter = Router();
 
 /**
+ * Hard platform ceiling on how many concurrent calls a single campaign may run.
+ * Enforced server-side on create/update regardless of the account's stored limit.
+ */
+const MAX_CONCURRENT_CALLS = 10;
+
+/**
  * Evaluate the IRDAI enforcement gate for a campaign's assigned agent. Reads the
  * agent's latest stored irdaiComplianceStatus (no re-check at call time).
  * Returns a not-blocked result when the campaign has no agent assigned.
@@ -195,6 +201,15 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     if (err) { res.status(400).json({ error: err, code: "DPDP_CONSENT_BASIS_REQUIRED" }); return; }
   }
 
+  // ── Hard platform ceiling on concurrent calls (max 10) ──
+  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
+    res.status(400).json({
+      error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
+      code: "CONCURRENT_LIMIT_EXCEEDED",
+    });
+    return;
+  }
+
   const [campaign] = await db.insert(campaignsTable).values({
     userId,
     name:                parsed.data.name,
@@ -202,7 +217,7 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     agentId:             parsed.data.agentId,
     fieldMappings,
     fromNumber:          parsed.data.fromNumber,
-    concurrentCallLimit: parsed.data.concurrentCallLimit ?? 20,
+    concurrentCallLimit: parsed.data.concurrentCallLimit ?? MAX_CONCURRENT_CALLS,
     callDelaySeconds:    parsed.data.callDelaySeconds,
     maxAttempts:         parsed.data.maxAttempts,
     retryDelayMinutes:   parsed.data.retryDelayMinutes,
@@ -262,6 +277,15 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"]!, 10);
   const parsed = UpdateCampaignBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+
+  // ── Hard platform ceiling on concurrent calls (max 10) ──
+  if (parsed.data.concurrentCallLimit != null && parsed.data.concurrentCallLimit > MAX_CONCURRENT_CALLS) {
+    res.status(400).json({
+      error: `Max Concurrent Calls cannot exceed ${MAX_CONCURRENT_CALLS}.`,
+      code: "CONCURRENT_LIMIT_EXCEEDED",
+    });
+    return;
+  }
 
   // If toggling isActive, also sync status field
   const { fieldMappings: rawMappings, ...rest } = parsed.data;

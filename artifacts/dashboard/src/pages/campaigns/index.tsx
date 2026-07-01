@@ -295,9 +295,11 @@ function CampaignWizard({
   const { data: phoneNumbers } = useListPhoneNumbers();
   const { data: accountInfo } = useGetAccount();
 
-  // User's account-level concurrent call ceiling (set by admin; default 15).
-  // The campaign slider must never allow a value above this limit.
-  const maxConcurrency = accountInfo?.concurrentLimit ?? 15;
+  // User's account-level concurrent call ceiling (set by admin; default 10).
+  // The campaign slider caps at the lower of the account limit and the hard
+  // platform ceiling of 10 — users can never pick more than 10.
+  const CAMPAIGN_CONCURRENCY_CEILING = 10;
+  const maxConcurrency = Math.min(accountInfo?.concurrentLimit ?? 10, CAMPAIGN_CONCURRENCY_CEILING);
 
   const [step, setStep] = useState<WizardStep>("info");
   const [name, setName] = useState("");
