@@ -1,0 +1,486 @@
+# Campaigns Dashboard Redesign (Production-Ready)
+
+I want to redesign the **Campaigns Listing Page** into a true **Campaign Operations Dashboard**.
+
+The objective is **NOT** just to improve the UI. Every metric displayed must come from the live backend so that the dashboard always reflects the real-time state of the campaigns.
+
+This page should become the first screen users look at every day.
+
+---
+
+# Design Goals
+
+- Modern SaaS dashboard
+- Enterprise-grade UX
+- Minimalistic (do NOT introduce bright neon colors)
+- Continue using the existing SnapServe dark theme
+- Keep existing typography and spacing system
+- Use subtle borders and cards
+- Smooth hover animations
+- Real-time updates
+- Mobile responsiveness is NOT required now (desktop first)
+
+Think of the quality level of:
+
+- Stripe Dashboard
+- Linear
+- Vercel
+- HubSpot
+- GoHighLevel
+
+Use those as UX inspiration.
+
+---
+
+# Keep Existing Actions
+
+The campaign action flow should remain exactly the same.
+
+Users should still have:
+
+- Open Campaign
+- Edit
+- Delete
+
+The three-dot menu should continue to contain:
+
+- Edit
+- Delete
+
+The primary CTA should remain:
+
+Open →
+
+Do NOT replace these with Pause, Resume, Analytics, etc.
+
+---
+
+# Dashboard Summary Cards
+
+Replace the existing summary cards with operational metrics.
+
+These numbers must be calculated from live backend data.
+
+Cards:
+
+## Active Campaigns
+
+Definition:
+
+Campaigns whose status is:
+
+- Listening
+- Running
+- Active
+
+Exclude:
+
+- Draft
+- Stopped
+- Archived
+
+---
+
+## Listening Sources
+
+Count campaigns currently listening for:
+
+- Website Forms
+- Meta Ads
+- CRM Instant Trigger
+- Other Webhook Sources
+
+CSV campaigns should NOT be counted.
+
+---
+
+## Live Calls
+
+Current number of calls that are actively in progress.
+
+Should come directly from active call sessions.
+
+---
+
+## Queued Leads
+
+Total leads waiting for execution.
+
+Include:
+
+- Waiting for Business Hours
+- Waiting because concurrency limit reached
+- Scheduled for immediate processing
+
+Exclude completed leads.
+
+---
+
+## Today's Leads
+
+Number of leads received today across all campaigns.
+
+Realtime.
+
+---
+
+## Today's Bookings
+
+Number of booked dispositions today.
+
+Realtime.
+
+---
+
+# Filter Bar
+
+Add quick filters above the campaign table.
+
+Campaign Source:
+
+- All
+- Meta Ads
+- Website/Form
+- CRM
+- CSV
+
+Campaign Status:
+
+- All
+- Listening
+- Running
+- Paused
+- Scheduled
+- Stopped
+
+Filters should work together.
+
+---
+
+# Search
+
+Search should support:
+
+- Campaign Name
+- Assigned Agent
+- Phone Number
+- Campaign Source
+
+---
+
+# Campaign Table
+
+Every row represents one campaign.
+
+The columns should be:
+
+---
+
+## Campaign
+
+Display:
+
+Campaign Name
+
+Source Badge
+
+Created Time
+
+Example:
+
+Meta Ads after Migration
+
+Meta Ads
+
+Created 2 days ago
+
+---
+
+## Status
+
+Display actual operational state.
+
+Possible values:
+
+Listening
+
+Running
+
+Paused
+
+Scheduled
+
+Stopped
+
+Draft
+
+Validation Error
+
+Webhook Error
+
+Show colored badges.
+
+These statuses must come from backend state.
+
+---
+
+## Agent
+
+Display
+
+Agent Name
+
+Phone Number
+
+Realtime.
+
+---
+
+## Today's Leads
+
+Display
+
+Today's lead count
+
+Also show comparison vs yesterday if data exists.
+
+Examples:
+
+23
+
+↑ 18%
+
+or
+
+5
+
+↓ 10%
+
+---
+
+## Total Leads
+
+Display total leads imported into this campaign.
+
+Realtime.
+
+---
+
+## Call Progress
+
+Display:
+
+189 / 250
+
+Progress Bar
+
+76%
+
+The denominator should represent total callable leads.
+
+The numerator should represent completed outbound calls.
+
+---
+
+## Pending / Queued
+
+Display current waiting leads.
+
+Examples:
+
+4
+
+Queued
+
+0
+
+—
+
+Realtime.
+
+---
+
+## Booked
+
+Display
+
+Booked count
+
+Trend if available.
+
+Example
+
+12
+
+↑20%
+
+---
+
+## Campaign Health
+
+This is extremely important.
+
+Compute this dynamically.
+
+Possible states:
+
+Healthy
+
+Queue Growing
+
+Webhook Offline
+
+Validation Error
+
+No Agent Assigned
+
+Outside Business Hours
+
+Token Expired
+
+CRM Disconnected
+
+Meta Token Expired
+
+Do NOT hardcode.
+
+The backend should evaluate campaign conditions and return the correct health.
+
+---
+
+## Last Activity
+
+Display
+
+Last lead received
+
+Last call completed
+
+Campaign paused
+
+Webhook received
+
+Examples:
+
+2 mins ago
+
+New lead received
+
+or
+
+7 mins ago
+
+6 leads queued
+
+Realtime.
+
+---
+
+## Actions
+
+Keep exactly as current implementation.
+
+Primary button:
+
+Open →
+
+Overflow Menu:
+
+⋮
+
+Edit
+
+Delete
+
+No other actions.
+
+---
+
+# Live Refresh
+
+This page should always stay current.
+
+Whenever:
+
+- Lead arrives
+- Call starts
+- Call completes
+- Booking happens
+- Campaign paused
+- Campaign resumed
+- Batch created
+
+The dashboard should update automatically.
+
+Avoid requiring browser refresh.
+
+Use existing websocket/event infrastructure if available.
+
+Otherwise use efficient polling.
+
+---
+
+# Performance
+
+Do NOT execute N+1 queries.
+
+Create a dashboard aggregation endpoint that returns all metrics in one request.
+
+Campaign list should be paginated.
+
+Avoid expensive calculations on every render.
+
+---
+
+# Backend Aggregation
+
+Instead of computing everything on the frontend, expose aggregated values.
+
+Each campaign should already return:
+
+{
+  id,
+  name,
+  source,
+  status,
+  agent,
+  phoneNumber,
+  todayLeads,
+  yesterdayLeads,
+  totalLeads,
+  completedCalls,
+  totalCallableLeads,
+  queuedLeads,
+  bookedToday,
+  campaignHealth,
+  lastActivity,
+  createdAt
+}
+
+The frontend should only render.
+
+---
+
+# UX Improvements
+
+Use subtle animations only.
+
+Hover effects on rows.
+
+Progress bars should animate.
+
+Status badges should use existing SnapServe colors.
+
+Do NOT introduce bright neon colors.
+
+Keep everything aligned with the existing SnapServe design language.
+
+---
+
+# Important
+
+This is **not** a static UI redesign.
+
+Every number, badge, progress bar, health indicator, and activity label must be driven by live backend data.
+
+The Campaigns page should function as a real-time **Campaign Operations Dashboard**, allowing users to understand the state of all campaigns without opening each one.

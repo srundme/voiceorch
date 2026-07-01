@@ -1,16 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import {
-  useListCampaigns, useCreateCampaign, useUpdateCampaign, useDeleteCampaign,
+  useCreateCampaign, useUpdateCampaign, useDeleteCampaign,
   getListCampaignsQueryKey,
-  useGetPlatformAnalyticsQueue,
   useListAgents,
   useListPhoneNumbers,
   useGetAccount,
 } from "@workspace/api-client-react";
 import type { Campaign, ConsentBasisBasisType } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +35,9 @@ import {
   CheckCircle2, PlayCircle, PauseCircle, XCircle,
   Target, Layers, ArrowRight,
   Globe, Zap, Upload, Instagram, Loader2,
+  TrendingUp, TrendingDown, Wifi, WifiOff,
+  AlertTriangle, ShieldAlert, Timer, BookMarked,
+  Activity, ChevronDown,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -73,128 +75,207 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ── Status badges ─────────────────────────────────────────────────────────
+// ── Dashboard types ────────────────────────────────────────────────────────
 
-function CallStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-    pending:   { label: "Pending",   icon: <PauseCircle className="h-3 w-3" />,   cls: "bg-muted/50 text-muted-foreground border-border" },
-    calling:   { label: "Calling",   icon: <PhoneCall className="h-3 w-3" />,     cls: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
-    completed: { label: "Completed", icon: <CheckCircle2 className="h-3 w-3" />,  cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
-    failed:    { label: "Failed",    icon: <XCircle className="h-3 w-3" />,       cls: "bg-red-500/10 text-red-500 border-red-500/20" },
-    skipped:   { label: "Skipped",   icon: <X className="h-3 w-3" />,             cls: "bg-muted/30 text-muted-foreground/60 border-border" },
-  };
-  const cfg = map[status] ?? { label: status, icon: null, cls: "bg-muted/50 text-muted-foreground border-border" };
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border", cfg.cls)}>
-      {cfg.icon}{cfg.label}
-    </span>
-  );
+type DashboardStats = {
+  activeCampaigns:    number;
+  listeningCampaigns: number;
+  liveCalls:          number;
+  queuedLeads:        number;
+  todayLeads:         number;
+  todayBookings:      number;
+};
+
+type CampaignHealth = "healthy" | "no_agent" | "no_number" | "validation_error" | "webhook_offline" | "outside_hours";
+
+type DashboardCampaign = Campaign & {
+  agentName:      string | null;
+  todayLeads:     number;
+  yesterdayLeads: number;
+  queuedLeads:    number;
+  callingLeads:   number;
+  completedLeads: number;
+  bookedToday:    number;
+  campaignHealth: CampaignHealth;
+  lastActivity:   { label: string; at: string } | null;
+};
+
+type DashboardData = {
+  stats:     DashboardStats;
+  campaigns: DashboardCampaign[];
+};
+
+async function apiFetchDash<T>(url: string): Promise<T> {
+  const token = localStorage.getItem("voiceorch:session");
+  const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json() as Promise<T>;
 }
 
+// ── Status helpers ─────────────────────────────────────────────────────────
+
+const STATUS_CFG: Record<string, { label: string; dot: string; cls: string }> = {
+  draft:     { label: "Draft",           dot: "bg-muted-foreground/40",  cls: "bg-muted/40 text-muted-foreground border-border" },
+  active:    { label: "Active",          dot: "bg-emerald-500 animate-pulse", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+  paused:    { label: "Paused",          dot: "bg-amber-500",             cls: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
+  completed: { label: "Completed",       dot: "bg-blue-500",              cls: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  stopped:   { label: "Stopped",         dot: "bg-red-500",               cls: "bg-red-500/10 text-red-500 border-red-500/20" },
+  listening: { label: "Listening",       dot: "bg-sky-500 animate-pulse", cls: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
+  archived:  { label: "Archived",        dot: "bg-muted-foreground/20",   cls: "bg-muted/30 text-muted-foreground/50 border-border" },
+};
+
 function CampaignStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; dot: string }> = {
-    draft:     { label: "Draft",     dot: "bg-muted-foreground/40" },
-    active:    { label: "Active",    dot: "bg-emerald-500" },
-    paused:    { label: "Paused",    dot: "bg-amber-500" },
-    completed: { label: "Completed", dot: "bg-blue-500" },
-    stopped:   { label: "Stopped",   dot: "bg-red-500" },
-    listening: { label: "Idle / Listening", dot: "bg-sky-500" },
-    archived:  { label: "Archived",  dot: "bg-muted-foreground/20" },
-  };
-  const cfg = map[status] ?? { label: status, dot: "bg-muted-foreground/40" };
+  const cfg = STATUS_CFG[status] ?? { label: status, dot: "bg-muted-foreground/40", cls: "bg-muted/40 text-muted-foreground border-border" };
   return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground border border-border bg-muted/40 px-2 py-0.5 rounded-full">
-      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
+    <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md border", cfg.cls)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dot)} />
       {cfg.label}
     </span>
   );
 }
 
+const HEALTH_CFG: Record<CampaignHealth, { label: string; icon: React.ReactNode; cls: string }> = {
+  healthy:         { label: "Healthy",               icon: <CheckCircle2 className="h-3 w-3" />,   cls: "text-emerald-500" },
+  no_agent:        { label: "No Agent",              icon: <AlertTriangle className="h-3 w-3" />,  cls: "text-amber-500" },
+  no_number:       { label: "No Phone Number",       icon: <AlertTriangle className="h-3 w-3" />,  cls: "text-amber-500" },
+  validation_error:{ label: "Validation Error",      icon: <ShieldAlert className="h-3 w-3" />,    cls: "text-red-500" },
+  webhook_offline: { label: "Webhook Offline",       icon: <WifiOff className="h-3 w-3" />,        cls: "text-red-500" },
+  outside_hours:   { label: "Outside Hours",         icon: <Clock className="h-3 w-3" />,          cls: "text-muted-foreground/50" },
+};
 
+function HealthBadge({ health }: { health: CampaignHealth }) {
+  const cfg = HEALTH_CFG[health];
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-[10px] font-medium", cfg.cls)}>
+      {cfg.icon}
+      <span className="hidden lg:inline">{cfg.label}</span>
+    </span>
+  );
+}
 
-// ── Campaign row ──────────────────────────────────────────────────────────
+const SOURCE_ICON: Record<string, React.ReactNode> = {
+  webhook:  <Globe className="h-3.5 w-3.5 text-blue-500" />,
+  meta_ads: <Instagram className="h-3.5 w-3.5 text-purple-500" />,
+  csv:      <Upload className="h-3.5 w-3.5 text-muted-foreground/40" />,
+  crm:      <Layers className="h-3.5 w-3.5 text-amber-500" />,
+};
+
+// ── Campaign Row ───────────────────────────────────────────────────────────
 
 function CampaignRow({
   campaign,
   onEdit,
   onDelete,
 }: {
-  campaign: Campaign;
+  campaign: DashboardCampaign;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
 }) {
   const [, navigate] = useLocation();
-  const calledPct = campaign.totalLeads > 0
-    ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100)
-    : 0;
+  const totalCallable = campaign.totalLeads;
+  const completed     = campaign.completedLeads;
+  const pct           = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
+  const trend         = campaign.yesterdayLeads > 0
+    ? Math.round(((campaign.todayLeads - campaign.yesterdayLeads) / campaign.yesterdayLeads) * 100)
+    : null;
 
   return (
     <div
-      className="group flex items-center gap-4 px-5 py-4 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0 relative"
+      className="group grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
+      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 1fr 100px" }}
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
-      {/* Icon — reflects lead source */}
-      {(() => {
-        const src = (campaign as unknown as Record<string, unknown>)["leadSource"] as string ?? "csv";
-        const iconMap: Record<string, React.ReactNode> = {
-          webhook:   <Globe className="h-4 w-4 text-blue-500" />,
-          meta_ads:  <Instagram className="h-4 w-4 text-purple-500" />,
-          csv:       <Upload className="h-4 w-4 text-muted-foreground/40" />,
-          crm:       <Layers className="h-4 w-4 text-amber-500" />,
-        };
-        return (
-          <div className="h-9 w-9 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
-            {iconMap[src] ?? <Megaphone className="h-4 w-4 text-muted-foreground/40" />}
-          </div>
-        );
-      })()}
-
-      {/* Name + description */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2.5 flex-wrap">
+      {/* Campaign name + source */}
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string,string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
           <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
-          <CampaignStatusBadge status={campaign.status} />
-          {(() => {
-            const src = (campaign as unknown as Record<string, unknown>)["leadSource"] as string ?? "csv";
-            const trig = (campaign as unknown as Record<string, unknown>)["triggerMode"] as string ?? "batch";
-            const srcOpt = SOURCE_OPTIONS.find(o => o.value === src);
-            return srcOpt ? (
-              <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground/60 border border-border/60">
-                {srcOpt.label}
-                {trig === "instant" && <Zap className="h-2 w-2 text-emerald-500" />}
-              </span>
-            ) : null;
-          })()}
+          {((campaign as unknown as Record<string,string>)["triggerMode"] === "instant") && (
+            <Zap className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
+          )}
         </div>
-        {campaign.description ? (
-          <p className="text-xs text-muted-foreground/50 truncate mt-0.5">{campaign.description}</p>
+        <p className="text-[10px] text-muted-foreground/40 mt-0.5 truncate ml-5.5">
+          {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
+        </p>
+      </div>
+
+      {/* Status */}
+      <div><CampaignStatusBadge status={campaign.status} /></div>
+
+      {/* Agent + number */}
+      <div className="min-w-0">
+        {campaign.agentName ? (
+          <>
+            <p className="text-xs font-medium text-foreground truncate">{campaign.agentName}</p>
+            {campaign.fromNumber && (
+              <p className="text-[10px] text-muted-foreground/40 font-mono truncate">{campaign.fromNumber}</p>
+            )}
+          </>
         ) : (
-          <p className="text-xs text-muted-foreground/30 mt-0.5">{formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}</p>
+          <span className="text-[10px] text-muted-foreground/30 italic">None</span>
         )}
       </div>
 
-      {/* Stats */}
-      <div className="hidden sm:flex items-center gap-4 shrink-0">
-        <div className="text-center min-w-[52px]">
-          <p className="text-[9px] text-muted-foreground/30 uppercase tracking-widest">Leads</p>
-          <p className="text-sm font-semibold text-foreground mt-0.5 tabular-nums">{campaign.totalLeads.toLocaleString()}</p>
-        </div>
-        {campaign.totalLeads > 0 && (
-          <div className="flex items-center gap-1.5 w-20 shrink-0">
-            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-foreground/20 rounded-full" style={{ width: `${calledPct}%` }} />
-            </div>
-            <span className="text-[10px] text-muted-foreground/40 font-mono w-6 text-right">{calledPct}%</span>
-          </div>
+      {/* Today's leads */}
+      <div className="text-center">
+        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.todayLeads}</p>
+        {trend !== null && (
+          <p className={cn("text-[9px] font-medium flex items-center justify-center gap-0.5", trend >= 0 ? "text-emerald-500" : "text-red-500")}>
+            {trend >= 0 ? <TrendingUp className="h-2 w-2" /> : <TrendingDown className="h-2 w-2" />}
+            {Math.abs(trend)}%
+          </p>
         )}
       </div>
+
+      {/* Total leads */}
+      <div className="text-center">
+        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.totalLeads.toLocaleString()}</p>
+      </div>
+
+      {/* Call progress */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] text-muted-foreground/50 tabular-nums">{completed}/{totalCallable}</span>
+          <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
+        </div>
+        <div className="h-1 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-foreground/25 rounded-full transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Queued */}
+      <div className="text-center">
+        {campaign.queuedLeads > 0 ? (
+          <>
+            <p className="text-sm font-semibold tabular-nums text-amber-500">{campaign.queuedLeads}</p>
+            <p className="text-[9px] text-muted-foreground/40">Queued</p>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground/25">—</p>
+        )}
+      </div>
+
+      {/* Booked today */}
+      <div className="text-center">
+        {campaign.bookedToday > 0 ? (
+          <p className="text-sm font-semibold tabular-nums text-violet-500">{campaign.bookedToday}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground/25">—</p>
+        )}
+      </div>
+
+      {/* Health */}
+      <div><HealthBadge health={campaign.campaignHealth} /></div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
         <Button
           size="sm"
           variant="outline"
-          className="h-7 text-xs gap-1"
+          className="h-7 text-xs gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/campaigns/${campaign.id}`); }}
         >
           Open <ChevronRight className="h-3 w-3" />
@@ -209,16 +290,11 @@ function CampaignRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[130px]">
-            <DropdownMenuItem
-              className="text-xs"
-              onClick={e => { e.stopPropagation(); onEdit(campaign); }}
-            >
+            <DropdownMenuItem className="text-xs" onClick={e => { e.stopPropagation(); onEdit(campaign as unknown as Campaign); }}>
               <Pencil className="h-3.5 w-3.5 text-muted-foreground/60" /> Edit
             </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
-              onClick={e => { e.stopPropagation(); onDelete(campaign); }}
-            >
+            <DropdownMenuItem className="text-xs text-red-500 focus:text-red-500 focus:bg-red-500/5"
+              onClick={e => { e.stopPropagation(); onDelete(campaign as unknown as Campaign); }}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -903,24 +979,101 @@ function CampaignFormDialog({
   );
 }
 
+// ── Stat Card ─────────────────────────────────────────────────────────────
+
+function StatCard({
+  label, value, sub, icon, accent, loading,
+}: {
+  label: string; value: number; sub?: string; icon: React.ReactNode;
+  accent?: string; loading?: boolean;
+}) {
+  return (
+    <div className="bg-card border border-border rounded-xl px-4 py-3.5 flex items-center gap-3">
+      <div className="h-8 w-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/40 leading-none mb-1.5 truncate">{label}</p>
+        {loading
+          ? <Skeleton className="h-5 w-8 rounded" />
+          : <p className={cn("text-xl font-semibold tabular-nums leading-none", accent ?? "text-foreground")}>{value}</p>
+        }
+        {sub && !loading && <p className="text-[9px] text-muted-foreground/30 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Table Header ───────────────────────────────────────────────────────────
+
+function TableHeader() {
+  return (
+    <div
+      className="grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
+      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 1fr 100px" }}
+    >
+      {[
+        "Campaign", "Status", "Agent / Number",
+        "Today", "Total", "Progress",
+        "Queued", "Booked", "Health", "",
+      ].map((h, i) => (
+        <span key={i} className={cn("text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40", i >= 3 && i <= 7 ? "text-center" : "")}>
+          {h}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 
+const SOURCE_LABEL: Record<string, string> = {
+  csv: "CSV / Bulk", webhook: "Website / Form", meta_ads: "Meta Ads", crm: "CRM",
+};
+
 export default function CampaignsPage() {
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editing, setEditing] = useState<Campaign | null>(null);
-  const [deleting, setDeleting] = useState<Campaign | null>(null);
+  const [createOpen,      setCreateOpen]      = useState(false);
+  const [editing,         setEditing]         = useState<Campaign | null>(null);
+  const [deleting,        setDeleting]        = useState<Campaign | null>(null);
   const [deleteNameInput, setDeleteNameInput] = useState("");
-  const [deletingCamp, setDeletingCamp] = useState(false);
-  const qc = useQueryClient();
+  const [deletingCamp,    setDeletingCamp]    = useState(false);
+  const [search,          setSearch]          = useState("");
+  const [filterSource,    setFilterSource]    = useState("__all__");
+  const [filterStatus,    setFilterStatus]    = useState("__all__");
+
+  const qc      = useQueryClient();
   const { toast } = useToast();
   const deleteMutation = useDeleteCampaign();
-  const { data: campaigns, isLoading } = useListCampaigns();
+
+  const { data, isLoading, isFetching } = useQuery<DashboardData>({
+    queryKey: ["campaigns-dashboard"],
+    queryFn:  () => apiFetchDash<DashboardData>(`${BASE}/api/campaigns/dashboard`),
+    refetchInterval: 10_000,
+    staleTime:        8_000,
+  });
+
+  const stats     = data?.stats;
+  const campaigns = data?.campaigns ?? [];
+
+  const filtered = useMemo(() => {
+    let rows = campaigns;
+    if (filterSource !== "__all__") rows = rows.filter(c => (c as unknown as Record<string,string>)["leadSource"] === filterSource);
+    if (filterStatus !== "__all__") rows = rows.filter(c => c.status === filterStatus);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter(c => c.name.toLowerCase().includes(q) || (c.agentName ?? "").toLowerCase().includes(q));
+    }
+    return rows;
+  }, [campaigns, filterSource, filterStatus, search]);
+
+  const listScrollRef = useScrollRestoration<HTMLDivElement>("campaigns-list", !isLoading);
 
   async function handleDelete() {
     if (!deleting || deleteNameInput.trim() !== deleting.name) return;
     setDeletingCamp(true);
     try {
       await deleteMutation.mutateAsync({ id: deleting.id });
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign deleted" });
     } catch {
@@ -932,129 +1085,206 @@ export default function CampaignsPage() {
     }
   }
 
-  const { data: queueData } = useGetPlatformAnalyticsQueue();
-  const totalCampaigns = campaigns?.length ?? 0;
-  const runningCampaigns = campaigns?.filter(c => c.status === "active").length ?? 0;
-
-  // Restore the list scroll position when returning from a campaign detail.
-  const listScrollRef = useScrollRestoration<HTMLDivElement>("campaigns-list", !isLoading);
-
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Header */}
+
+      {/* ── Header ── */}
       <div className="px-6 pt-6 pb-5 border-b border-border shrink-0">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <Target className="h-3.5 w-3.5 text-muted-foreground/40" />
               <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40">
-                Voice Campaigns
+                Campaign Operations
               </span>
+              {isFetching && !isLoading && (
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/20 animate-pulse" />
+              )}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground leading-none">
               Campaigns
             </h1>
             <p className="text-xs text-muted-foreground/50 mt-1.5">
-              Auto-call leads from Instagram ads, website forms, or CSV uploads
+              Live overview · auto-refreshes every 10 seconds
             </p>
           </div>
           <div className="flex items-center gap-2 pt-1">
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setCreateOpen(true)}
-            >
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> New Campaign
             </Button>
           </div>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Running Campaigns", value: runningCampaigns, icon: <Megaphone className="h-4 w-4 text-emerald-500" />, accent: runningCampaigns > 0 ? "text-emerald-500" : "" },
-            { label: "Active Calls",      value: (queueData as { activeCalls?: number } | undefined)?.activeCalls ?? 0, icon: <PhoneCall className="h-4 w-4 text-blue-500" />, accent: ((queueData as { activeCalls?: number } | undefined)?.activeCalls ?? 0) > 0 ? "text-blue-500" : "" },
-            { label: "Bookings Today",    value: (queueData as { bookingsToday?: number } | undefined)?.bookingsToday ?? 0, icon: <CalendarDays className="h-4 w-4 text-purple-500" />, accent: ((queueData as { bookingsToday?: number } | undefined)?.bookingsToday ?? 0) > 0 ? "text-purple-500" : "" },
-            { label: "Callbacks Due",     value: (queueData as { callbacksDue?: number } | undefined)?.callbacksDue ?? 0, icon: <Clock className="h-4 w-4 text-amber-500" />, accent: ((queueData as { callbacksDue?: number } | undefined)?.callbacksDue ?? 0) > 0 ? "text-amber-500" : "" },
-          ].map(stat => (
-            <div key={stat.label} className="flex items-center gap-3 bg-card border border-border rounded-xl px-4 py-3">
-              <div className="h-8 w-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
-                {stat.icon}
-              </div>
-              <div>
-                <p className="text-[9px] text-muted-foreground/40 uppercase tracking-widest leading-none mb-1">{stat.label}</p>
-                <p className={cn("text-xl font-semibold tabular-nums leading-none", stat.accent || "text-foreground")}>
-                  {stat.value}
-                </p>
-              </div>
-            </div>
-          ))}
+        {/* ── Stats Row ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          <StatCard
+            label="Active Campaigns"
+            value={stats?.activeCampaigns ?? 0}
+            icon={<Megaphone className="h-4 w-4 text-emerald-500" />}
+            accent={(stats?.activeCampaigns ?? 0) > 0 ? "text-emerald-500" : undefined}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Listening Sources"
+            value={stats?.listeningCampaigns ?? 0}
+            sub="Real-time intake"
+            icon={<Wifi className="h-4 w-4 text-sky-500" />}
+            accent={(stats?.listeningCampaigns ?? 0) > 0 ? "text-sky-500" : undefined}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Live Calls"
+            value={stats?.liveCalls ?? 0}
+            sub="In progress"
+            icon={<PhoneCall className="h-4 w-4 text-blue-500" />}
+            accent={(stats?.liveCalls ?? 0) > 0 ? "text-blue-500" : undefined}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Queued Leads"
+            value={stats?.queuedLeads ?? 0}
+            sub="Pending call"
+            icon={<Timer className="h-4 w-4 text-amber-500" />}
+            accent={(stats?.queuedLeads ?? 0) > 0 ? "text-amber-500" : undefined}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Leads Today"
+            value={stats?.todayLeads ?? 0}
+            sub="Since midnight UTC"
+            icon={<Users className="h-4 w-4 text-violet-500" />}
+            accent={(stats?.todayLeads ?? 0) > 0 ? "text-violet-500" : undefined}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Bookings Today"
+            value={stats?.todayBookings ?? 0}
+            sub="Meetings booked"
+            icon={<BookMarked className="h-4 w-4 text-rose-500" />}
+            accent={(stats?.todayBookings ?? 0) > 0 ? "text-rose-500" : undefined}
+            loading={isLoading}
+          />
         </div>
       </div>
 
-      {/* Content */}
+      {/* ── Content ── */}
       <div ref={listScrollRef} className="flex-1 overflow-auto px-6 py-5">
-        {/* Campaigns List */}
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          {/* Section header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Campaigns</h2>
-              <p className="text-xs text-muted-foreground/40 mt-0.5">Manage and monitor your campaigns</p>
+
+          {/* Filter bar */}
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/60 flex-wrap">
+            <div className="relative flex-1 min-w-[160px] max-w-xs">
+              <Activity className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40 pointer-events-none" />
+              <input
+                className="w-full h-8 bg-muted/40 border border-border/60 rounded-lg pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder="Search campaigns…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
             </div>
+
+            <Select value={filterSource} onValueChange={setFilterSource}>
+              <SelectTrigger className="h-8 w-[140px] text-xs border-border/60 bg-muted/40">
+                <SelectValue placeholder="Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Sources</SelectItem>
+                {Object.entries(SOURCE_LABEL).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-8 w-[140px] text-xs border-border/60 bg-muted/40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Statuses</SelectItem>
+                {Object.entries(STATUS_CFG).map(([v, cfg]) => (
+                  <SelectItem key={v} value={v}>{cfg.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(filterSource !== "__all__" || filterStatus !== "__all__" || search) && (
+              <button
+                className="h-8 px-2.5 text-xs text-muted-foreground/50 hover:text-foreground border border-border/60 rounded-lg flex items-center gap-1.5 transition-colors"
+                onClick={() => { setSearch(""); setFilterSource("__all__"); setFilterStatus("__all__"); }}
+              >
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
+
+            <span className="ml-auto text-[10px] text-muted-foreground/30 tabular-nums">
+              {filtered.length} campaign{filtered.length !== 1 ? "s" : ""}
+            </span>
           </div>
 
-
+          {/* Table */}
           {isLoading ? (
-            <div className="divide-y divide-border/40">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-5 py-4">
-                  <Skeleton className="h-9 w-9 rounded-xl" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-3.5 w-40 rounded" />
-                    <Skeleton className="h-2.5 w-24 rounded" />
-                  </div>
-                  <Skeleton className="hidden sm:block h-3 w-32 rounded" />
+            <div>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3.5 border-b border-border/30 last:border-0">
+                  <Skeleton className="h-3.5 flex-1 rounded" />
+                  <Skeleton className="h-3 w-16 rounded" />
+                  <Skeleton className="h-3 w-24 rounded" />
+                  <Skeleton className="h-3 w-10 rounded" />
+                  <Skeleton className="h-3 w-10 rounded" />
+                  <Skeleton className="h-3 w-20 rounded" />
                 </div>
               ))}
             </div>
-          ) : !campaigns?.length ? (
-            <div className="py-20 text-center">
-              <div className="h-12 w-12 rounded-2xl bg-muted border border-border flex items-center justify-center mx-auto mb-4">
-                <Megaphone className="h-5 w-5 text-muted-foreground/20" />
+          ) : filtered.length === 0 ? (
+            campaigns.length === 0 ? (
+              <div className="py-20 text-center">
+                <div className="h-12 w-12 rounded-2xl bg-muted border border-border flex items-center justify-center mx-auto mb-4">
+                  <Megaphone className="h-5 w-5 text-muted-foreground/20" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground mb-1">No campaigns yet</h3>
+                <p className="text-xs text-muted-foreground/40 max-w-xs mx-auto mb-5">
+                  Create a campaign to auto-call leads from Instagram ads, website forms, or CSV uploads.
+                </p>
+                <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> Create first campaign
+                </Button>
               </div>
-              <h3 className="text-sm font-semibold text-foreground mb-1">No campaigns yet</h3>
-              <p className="text-xs text-muted-foreground/40 max-w-xs mx-auto mb-5">
-                Create a campaign to auto-call leads from Instagram ads, website forms, or CSV uploads.
-              </p>
-              <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-3.5 w-3.5" /> Create first campaign
-              </Button>
-            </div>
+            ) : (
+              <div className="py-12 text-center">
+                <p className="text-sm text-muted-foreground/40">No campaigns match your filters.</p>
+                <button className="text-xs text-muted-foreground/50 hover:text-foreground mt-2 underline underline-offset-2"
+                  onClick={() => { setSearch(""); setFilterSource("__all__"); setFilterStatus("__all__"); }}>
+                  Clear filters
+                </button>
+              </div>
+            )
           ) : (
-            campaigns.map(c => (
-              <CampaignRow
-                key={c.id}
-                campaign={c}
-                onEdit={setEditing}
-                onDelete={(c) => { setDeleteNameInput(""); setDeleting(c); }}
-              />
-            ))
+            <>
+              <TableHeader />
+              {filtered.map(c => (
+                <CampaignRow
+                  key={c.id}
+                  campaign={c}
+                  onEdit={row => setEditing(row)}
+                  onDelete={row => { setDeleteNameInput(""); setDeleting(row); }}
+                />
+              ))}
+            </>
           )}
         </div>
       </div>
 
-      {/* Modals */}
+      {/* ── Modals ── */}
       <CampaignWizard
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        activeCampaigns={campaigns ?? []}
+        activeCampaigns={campaigns as unknown as Campaign[]}
       />
       <CampaignFormDialog
         open={!!editing}
         onClose={() => setEditing(null)}
         editing={editing}
-        activeCampaigns={campaigns ?? []}
+        activeCampaigns={campaigns as unknown as Campaign[]}
       />
 
       <Dialog open={!!deleting} onOpenChange={v => { if (!v) { setDeleting(null); setDeleteNameInput(""); } }}>
@@ -1084,9 +1314,7 @@ export default function CampaignsPage() {
                 value={deleteNameInput}
                 onChange={e => setDeleteNameInput(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === "Enter" && deleteNameInput.trim() === deleting?.name) {
-                    void handleDelete();
-                  }
+                  if (e.key === "Enter" && deleteNameInput.trim() === deleting?.name) void handleDelete();
                 }}
                 autoFocus
               />
