@@ -22,47 +22,15 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "lib/db/src/schema/campaigns.ts",
-  "lib/api-spec/openapi.yaml",
-  "lib/api-client-react/src/generated/api.ts",
-  "lib/api-zod/src/generated/api.ts",
-  "artifacts/api-server/src/routes/campaigns.ts",
-  "artifacts/api-server/src/routes/campaign-webhook.ts",
-  "artifacts/dashboard/src/pages/campaigns/[id].tsx",
+  "lib/db/drizzle/0037_campaign_meta_validation.sql",
+  "lib/db/drizzle/meta/_journal.json",
 ];
 
 const COMMIT_MESSAGE = [
-  "feat(campaigns): Meta Lead Ads form_id layer-2 validation + Integration UI",
+  "chore(db): migration 0037 — source_form_id, source_page_id, last_validation_error on campaigns",
   "",
-  "DB schema (campaigns.ts):",
-  "  - source_form_id text nullable — expected Meta form_id for this campaign",
-  "  - source_page_id text nullable — optional expected Meta page_id",
-  "  - last_validation_error json nullable — audit record of last mismatch",
-  "",
-  "Webhook handler (campaign-webhook.ts):",
-  "  - Extract value.form_id + value.page_id from Meta leadgen payload",
-  "  - When campaign.sourceFormId set: reject change if form_id absent or mismatches",
-  "  - When campaign.sourcePageId set: reject change if page_id mismatches",
-  "  - Rejected changes: write CampaignValidationError audit to lastValidationError",
-  "  - Fully valid batch with at least one accepted lead: clear lastValidationError",
-  "  - Always return 200 to Meta (non-200 causes unwanted Meta retries)",
-  "",
-  "API serializer (campaigns.ts toCampaign):",
-  "  - Return sourceFormId, sourcePageId, lastValidationError, lastWebhookAt,",
-  "    lastWebhookStatus (were previously missing from API response)",
-  "",
-  "OpenAPI spec / codegen:",
-  "  - Add sourceFormId, sourcePageId, lastWebhookAt, lastWebhookStatus,",
-  "    lastValidationError to Campaign schema",
-  "  - Add sourceFormId, sourcePageId to CampaignUpdate schema",
-  "  - Regenerated api.ts hooks + zod schemas",
-  "",
-  "Dashboard UI (campaigns/[id].tsx):",
-  "  - Replace simple Instagram hint with MetaIntegrationCard component",
-  "  - Shows webhook status badge, last-lead-received timestamp",
-  "  - Amber banner with audit detail when form_id/page_id mismatch detected",
-  "  - Configure button: inline form to set/clear sourceFormId + sourcePageId",
-  "  - Saves via PATCH /campaigns/:id, invalidates campaign query on save",
+  "Adds the three columns introduced by the Meta form_id validation feature.",
+  "Migration runs automatically on Railway redeploy via Drizzle migrate().",
 ].join("\n");
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
