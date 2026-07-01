@@ -1,0 +1,113 @@
+Task: Add "System Prompt Templates" Management to the Admin Portal
+
+We have finalized the SnapServe Prompting Framework, which consists of three reusable template layers:
+
+Foundation Template
+Domain Templates
+Client Details Template
+
+Create a new System Prompt Templates page in the Admin Portal.
+
+Page Layout
+
+Unlike the current upload page (single upload area), this page should contain three dedicated sections on the same page.
+
+1. Foundation Template
+
+Create a dedicated card for the Foundation Template.
+
+Features:
+
+Upload PDF/DOCX
+Current Active Version
+Version History
+Upload New Version
+Uploaded By
+Uploaded Date
+Preview Template
+Activate Previous Version
+
+There will always be only one Foundation Template.
+
+2. Domain Templates
+
+Create a dedicated section for Domain Templates.
+
+This section should not contain any predefined or hardcoded domains.
+
+Instead, make it fully dynamic.
+
+The admin should be able to:
+
+Create a new domain template
+Enter a Domain Name (for example, Real Estate, Insurance, Education, etc.)
+Upload the template (PDF/DOCX)
+View all existing domain templates
+Edit the domain name
+Upload a new version
+View version history
+Activate a previous version
+Delete a domain template if it is no longer needed
+
+Today we currently have only five domain templates, but they should simply appear because they were created by the admin—not because they are built into the UI.
+
+The goal is that in the future we can add, remove, rename, or manage any domain template without making any code changes.
+
+Each domain should maintain its own independent version history.
+
+Example structure:
+
++ New Domain Template
+
+Real Estate
+v3 (Active)
+
+Insurance
+v2 (Active)
+
+Education
+v1 (Active)
+
+The domains shown should always come from the stored data, never from hardcoded values.
+
+3. Client Details Template
+
+Create a dedicated card for the Client Details Template.
+
+Features:
+
+Upload PDF/DOCX
+Current Active Version
+Version History
+Upload New Version
+Uploaded By
+Uploaded Date
+Preview Template
+Activate Previous Version
+
+There will always be only one Client Details Template.
+
+Prompt Generation Integration
+
+These templates will become the source of truth for generating every new agent's system prompt.
+
+The generation flow should be:
+
+Foundation Template
+        +
+Selected Domain Template
+        +
+Client Details Template
+        ↓
+Final System Prompt
+
+Do not change the existing prompt generation logic yet if additional backend work is required. Instead, prepare the architecture so these uploaded templates become the source for future prompt generation.
+
+UI Requirements
+Keep all three sections on a single page.
+Each section should have its own upload area, version history, and active template indicator.
+Use the attached upload UI as the design reference, but redesign it into three independent sections instead of one generic uploader.
+Keep the UI clean, minimal, and consistent with the SnapServe Admin Portal.
+Make the architecture future-proof so additional template types can be added later without redesigning the page.
+
+This approach ensures the admin portal acts as a true template management system rather than a page with fixed domain categories.

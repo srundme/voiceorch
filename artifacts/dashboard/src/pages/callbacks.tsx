@@ -139,50 +139,44 @@ function CallbacksGuide() {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden mb-2">
+    <div className="rounded-md border border-border bg-card overflow-hidden mb-2">
       <button
         onClick={toggle}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/30 transition-colors"
       >
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-muted-foreground flex-none" />
-          <span className="text-sm font-medium text-foreground">How this page works</span>
+        <div className="flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5 text-muted-foreground flex-none" />
+          <span className="text-xs font-medium text-muted-foreground">How this page works</span>
         </div>
         {collapsed
-          ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-none" />
-          : <ChevronUp className="w-4 h-4 text-muted-foreground flex-none" />
+          ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-none" />
+          : <ChevronUp className="w-3.5 h-3.5 text-muted-foreground flex-none" />
         }
       </button>
 
       {!collapsed && (
-        <div className="px-4 pb-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            This page tracks three types of follow-up calls that the platform schedules automatically.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="px-3 pb-3 space-y-2 border-t border-border/50">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
             {GUIDE_ENTRIES.map(({ icon, title, color, trigger, source }) => (
-              <div key={title} className={`rounded-md border p-3 space-y-1.5 ${color}`}>
-                <div className="flex items-start gap-2">
-                  {icon}
-                  <span className="text-sm font-semibold text-foreground">{title}</span>
+              <div key={title} className={`rounded border p-2 ${color}`}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="[&>svg]:w-3.5 [&>svg]:h-3.5">{icon}</span>
+                  <span className="text-xs font-semibold text-foreground">{title}</span>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">{trigger}</p>
-                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-                  <span className="font-medium text-muted-foreground">Source:</span> {source}
+                <p className="text-[11px] text-muted-foreground leading-snug">{trigger}</p>
+                <p className="text-[10px] text-muted-foreground/60 leading-snug mt-0.5">
+                  <span className="font-medium text-muted-foreground/80">Source:</span> {source}
                 </p>
               </div>
             ))}
           </div>
 
-          <div className="rounded-md border border-border bg-muted/30 px-3 py-2 flex items-start gap-2">
-            <Info className="w-3.5 h-3.5 text-muted-foreground flex-none mt-0.5" />
-            <p className="text-xs text-muted-foreground leading-relaxed">
+          <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <Info className="w-3 h-3 flex-none mt-0.5" />
+            <span>
               <span className="font-medium text-foreground">Campaign retries are not shown here.</span>{" "}
-              When a campaign call goes unanswered or drops, the campaign's own retry schedule handles it.
-              Those retries appear inside the campaign detail view, keeping this page focused on
-              non-campaign follow-ups.
-            </p>
+              Campaign no-answers and drops are retried inside the campaign detail view.
+            </span>
           </div>
         </div>
       )}
