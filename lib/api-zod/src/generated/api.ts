@@ -2557,7 +2557,10 @@ export const UpdateCampaignBatchParams = zod.object({
 
 export const UpdateCampaignBatchBody = zod.object({
   "status": zod.enum(['draft', 'running', 'paused', 'stopped']).optional(),
-  "scheduledStartAt": zod.coerce.date().nullish()
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "maxAttempts": zod.number().optional(),
+  "retryDelayMinutes": zod.number().optional(),
+  "timezone": zod.string().nullish()
 })
 
 export const updateCampaignBatchResponseCallDelaySecondsDefault = 5;
@@ -2670,6 +2673,54 @@ export const RedialBatchNoPickupParams = zod.object({
 
 export const RedialBatchNoPickupResponse = zod.object({
   "queued": zod.number()
+})
+
+
+/**
+ * @summary Start a batch immediately (sets status to running and fires first wave)
+ */
+export const StartCampaignBatchParams = zod.object({
+  "id": zod.coerce.number(),
+  "batchId": zod.coerce.number()
+})
+
+export const startCampaignBatchResponseCallDelaySecondsDefault = 5;
+export const startCampaignBatchResponseMaxAttemptsDefault = 1;
+export const startCampaignBatchResponseRetryDelayMinutesDefault = 60;
+export const startCampaignBatchResponseDuplicatePolicyDefault = `skip`;
+
+export const StartCampaignBatchResponse = zod.object({
+  "id": zod.number(),
+  "campaignId": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "status": zod.enum(['draft', 'running', 'paused', 'stopped']),
+  "leadSource": zod.enum(['csv', 'meta', 'webhook']),
+  "leadSourceId": zod.number().nullish(),
+  "batchFieldMapping": zod.record(zod.string(), zod.string()).nullish(),
+  "scheduledStartAt": zod.coerce.date().nullish(),
+  "scheduledEndAt": zod.coerce.date().nullish(),
+  "totalLeads": zod.number(),
+  "calledLeads": zod.number(),
+  "fieldMappings": zod.record(zod.string(), zod.string()).nullish(),
+  "callDelaySeconds": zod.number().default(startCampaignBatchResponseCallDelaySecondsDefault),
+  "maxAttempts": zod.number().default(startCampaignBatchResponseMaxAttemptsDefault),
+  "retryDelayMinutes": zod.number().default(startCampaignBatchResponseRetryDelayMinutesDefault),
+  "timezone": zod.string().nullish(),
+  "businessHoursStart": zod.number().nullish(),
+  "businessHoursEnd": zod.number().nullish(),
+  "maxDailyCalls": zod.number().nullish(),
+  "duplicatePolicy": zod.enum(['ignore', 'skip', 'reject_with_report']).default(startCampaignBatchResponseDuplicatePolicyDefault),
+  "importSummary": zod.object({
+  "totalRows": zod.number(),
+  "leadsCreated": zod.number(),
+  "duplicatesFound": zod.number(),
+  "invalidPhones": zod.number(),
+  "dncBlocked": zod.number(),
+  "importRunId": zod.number().nullish()
+}).nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
 
 

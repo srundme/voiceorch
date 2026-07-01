@@ -2313,6 +2313,38 @@ paths:
         "404":
           description: Not found
 
+  /campaigns/{id}/batches/{batchId}/start:
+    post:
+      operationId: startCampaignBatch
+      tags: [campaigns]
+      summary: Start a batch immediately (sets status to running and fires first wave)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignBatch"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+        "409":
+          description: Batch already completed or cancelled
+
   # ── Campaign CRM ──────────────────────────────────────────────────────────────
   /campaigns/{id}/leads/{leadId}:
     get:
@@ -8818,6 +8850,13 @@ components:
         scheduledStartAt:
           type: string
           format: date-time
+          nullable: true
+        maxAttempts:
+          type: integer
+        retryDelayMinutes:
+          type: integer
+        timezone:
+          type: string
           nullable: true
 
     CampaignLeadProfile:

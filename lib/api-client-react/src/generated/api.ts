@@ -7379,6 +7379,78 @@ export const useRedialBatchNoPickup = <TError = ErrorType<void>,
       return useMutation(getRedialBatchNoPickupMutationOptions(options));
     }
 
+export const getStartCampaignBatchUrl = (id: number,
+    batchId: number,) => {
+
+
+
+
+  return `/api/campaigns/${id}/batches/${batchId}/start`
+}
+
+/**
+ * @summary Start a batch immediately (sets status to running and fires first wave)
+ */
+export const startCampaignBatch = async (id: number,
+    batchId: number, options?: RequestInit): Promise<CampaignBatch> => {
+
+  return customFetch<CampaignBatch>(getStartCampaignBatchUrl(id,batchId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStartCampaignBatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startCampaignBatch>>, TError,{id: number;batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startCampaignBatch>>, TError,{id: number;batchId: number}, TContext> => {
+
+const mutationKey = ['startCampaignBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startCampaignBatch>>, {id: number;batchId: number}> = (props) => {
+          const {id,batchId} = props ?? {};
+
+          return  startCampaignBatch(id,batchId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartCampaignBatchMutationResult = NonNullable<Awaited<ReturnType<typeof startCampaignBatch>>>
+
+    export type StartCampaignBatchMutationError = ErrorType<void>
+
+    /**
+ * @summary Start a batch immediately (sets status to running and fires first wave)
+ */
+export const useStartCampaignBatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startCampaignBatch>>, TError,{id: number;batchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startCampaignBatch>>,
+        TError,
+        {id: number;batchId: number},
+        TContext
+      > => {
+      return useMutation(getStartCampaignBatchMutationOptions(options));
+    }
+
 export const getGetCampaignLeadProfileUrl = (id: number,
     leadId: number,) => {
 

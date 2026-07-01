@@ -564,7 +564,7 @@ router.post("/crm/connections/:id/import", requireAuth, async (req, res): Promis
 
   const fieldMapping   = body.fieldMapping ?? (conn.fieldMapping as Record<string, string> | null) ?? {};
   const batchName      = body.batchName?.trim() || `${conn.accountName ?? conn.provider} Import ${new Date().toLocaleDateString()}`;
-  const duplicatePolicy: DuplicatePolicy = body.duplicatePolicy ?? "skip";
+  const duplicatePolicy: DuplicatePolicy = body.duplicatePolicy ?? "ignore";
 
   // Resolve which raw field holds the phone number
   const phoneField = fieldMapping["phone"] ?? "phone";

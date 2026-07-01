@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useMutation } from "@tanstack/react-query";
 import {
   useGetCampaign, useListLeadSources,
-  useListAgentVariables, useCreateCampaignBatch,
+  useListAgentVariables, useCreateCampaignBatch, useUpdateCampaignBatch, useStartCampaignBatch,
   getGetCampaignQueryKey, getListLeadSourcesQueryKey, getListAgentVariablesQueryKey,
   useListCrmConnections, getListCrmConnectionsQueryKey,
   customFetch,
@@ -1794,14 +1794,37 @@ function Step8({
     query: { queryKey: getGetCampaignQueryKey(campaignId) },
   });
   const createBatch = useCreateCampaignBatch();
+  const updateBatch = useUpdateCampaignBatch();
+  const startBatch  = useStartCampaignBatch();
+  const isCrmLaunching = updateBatch.isPending || startBatch.isPending;
 
-  // CRM branch: batch already created — just navigate to the campaign
+  // CRM branch: batch already created — apply execution settings then launch
   if (state.sourceMode === "crm" && state.crmBatchId != null) {
+    async function handleCrmLaunch() {
+      try {
+        await updateBatch.mutateAsync({
+          id: campaignId,
+          batchId: state.crmBatchId!,
+          data: {
+            maxAttempts:       state.maxAttempts,
+            retryDelayMinutes: state.retryDelayMinutes,
+            timezone:          state.timezone || undefined,
+          },
+        });
+        if (state.autoStart) {
+          await startBatch.mutateAsync({ id: campaignId, batchId: state.crmBatchId! });
+        }
+        setLocation(`/app/campaigns/${campaignId}/batches/${state.crmBatchId}`);
+      } catch {
+        toast({ title: "Launch failed", description: "Check your settings and try again.", variant: "destructive" });
+      }
+    }
+
     return (
       <div className="space-y-5 max-w-2xl">
         <div>
           <h2 className="text-lg font-semibold">Review & Launch</h2>
-          <p className="text-sm text-muted-foreground mt-1">Your CRM import is complete. The batch has already been created.</p>
+          <p className="text-sm text-muted-foreground mt-1">Your CRM import is complete. Review settings and launch the batch.</p>
         </div>
 
         <div className="space-y-3">
@@ -1840,10 +1863,13 @@ function Step8({
         <div className="pt-2">
           <Button
             size="lg"
-            onClick={() => setLocation(`/app/campaigns/${campaignId}/batches/${state.crmBatchId}`)}
+            onClick={() => void handleCrmLaunch()}
+            disabled={isCrmLaunching}
             className="w-full gap-2"
           >
-            <ExternalLink className="w-4 h-4" />Go to Batch
+            {isCrmLaunching
+              ? <><RefreshCw className="w-4 h-4 animate-spin" />Launching…</>
+              : <><Play className="w-4 h-4" />Launch Batch</>}
           </Button>
         </div>
       </div>

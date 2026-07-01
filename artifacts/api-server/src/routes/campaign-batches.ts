@@ -521,7 +521,13 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
   const batch = await requireBatch(batchId, campaignId);
   if (!batch) { res.status(404).json({ error: "Not found" }); return; }
 
-  const body = req.body as { status?: string; scheduledStartAt?: string | null };
+  const body = req.body as {
+    status?: string;
+    scheduledStartAt?: string | null;
+    maxAttempts?: number;
+    retryDelayMinutes?: number;
+    timezone?: string | null;
+  };
 
   if (body.status === "running" && batch.status !== "running") {
     const irdaiGate = await evaluateCampaignIrdaiGate(campaign.agentId);
@@ -536,6 +542,9 @@ router.patch("/campaigns/:id/batches/:batchId", async (req, res): Promise<void> 
   if ("scheduledStartAt" in body) {
     updateData.scheduledStartAt = body.scheduledStartAt ? new Date(body.scheduledStartAt) : null;
   }
+  if (body.maxAttempts != null) updateData.maxAttempts = body.maxAttempts;
+  if (body.retryDelayMinutes != null) updateData.retryDelayMinutes = body.retryDelayMinutes;
+  if ("timezone" in body) updateData.timezone = body.timezone ?? null;
 
   const [updated] = await db.update(campaignBatchesTable)
     .set(updateData)

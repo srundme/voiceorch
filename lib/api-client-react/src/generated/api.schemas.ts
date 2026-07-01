@@ -2357,6 +2357,9 @@ export const CampaignBatchUpdateStatus = {
 export interface CampaignBatchUpdate {
   status?: CampaignBatchUpdateStatus;
   scheduledStartAt?: string | null;
+  maxAttempts?: number;
+  retryDelayMinutes?: number;
+  timezone?: string | null;
 }
 
 export type CampaignLeadProfileLeadLeadData = {[key: string]: string};
