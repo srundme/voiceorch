@@ -22,7 +22,8 @@ const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/orchestration/pipeline.ts",
+  "lib/db/src/index.ts",
+  "artifacts/api-server/src/orchestration/telephony/vobiz.ts",
 ];
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -59,7 +60,7 @@ async function pushFile(relPath: string) {
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
-      message: `fix(pipeline): bounded same-provider LLM retry on transient 503/429/5xx/network errors before token stream, so a momentary Gemini/provider blip no longer drops the whole call (call 1296)`,
+      message: `fix(db): keep a warm Postgres connection floor to kill ~6s outbound-call dead air — raise idle timeout to 5min, add pool error handler + warm-pool keepalive, allowExitOnIdle so CLI scripts still exit; add vobiz setupMs log to verify pre-pipeline setup window`,
       content: encoded,
       branch: BRANCH,
       ...(sha ? { sha } : {}),

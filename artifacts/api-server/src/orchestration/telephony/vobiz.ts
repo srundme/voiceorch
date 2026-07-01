@@ -161,6 +161,13 @@ export async function handleVobizWebSocket(
         // WS stream-session id and `corrToken` links back to the dial request_uuid.
         logger.info({ agentId, streamId, streamCallId: callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, corrToken: corrToken ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
 
+        // Measures the pre-pipeline setup window (WS start → session ready) that
+        // the caller hears as silence frames only — the "dead air before anything
+        // starts" symptom. Watch setupMs in prod: if it collapses to <1 s after
+        // the DB warm-pool change, the dead air was cold DB setup; if it stays
+        // high the delay is elsewhere (e.g. the media bridge before this event).
+        const sessionSetupStartedAt = Date.now();
+
         // ── Silence keepalive during session init ───────────────────────────
         // VoBiz drops the call if the audio bridge receives no data for ~2 s
         // even with keepCallAlive="true". This happens when createSession is
@@ -243,7 +250,7 @@ export async function handleVobizWebSocket(
             logger.warn({ sessionId, agentId }, "Vobiz session ended before setup completed — ending immediately");
             await endSession(sessionId);
           } else {
-            logger.info({ sessionId, agentId, fromNumber, toNumber, streamId }, "Vobiz session started");
+            logger.info({ sessionId, agentId, fromNumber, toNumber, streamId, setupMs: Date.now() - sessionSetupStartedAt }, "Vobiz session started");
           }
         } catch (err) {
           stopSilence();
