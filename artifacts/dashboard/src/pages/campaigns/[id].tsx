@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetCampaign, useListCampaignBatches, useCreateCampaignBatch,
-  useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
+  useDeleteCampaign, useDeleteCampaignBatch, useGetCampaignAnalytics, useUpdateCampaign,
   useGetBatchWorkspaceKpis,
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey,
   getGetBatchAnalyticsQueryOptions,
@@ -1202,8 +1202,12 @@ export default function CampaignDetailPage() {
   const qc = useQueryClient();
 
   const [, setLocation] = useLocation();
-  const [deletingBatch, setDeletingBatch] = useState<CampaignBatch | null>(null);
-  const deleteBatch = useDeleteCampaignBatch();
+  const [deletingBatch,    setDeletingBatch]    = useState<CampaignBatch | null>(null);
+  const [showDeleteCamp,   setShowDeleteCamp]   = useState(false);
+  const [deleteNameInput,  setDeleteNameInput]  = useState("");
+  const [deletingCamp,     setDeletingCamp]     = useState(false);
+  const deleteBatch    = useDeleteCampaignBatch();
+  const deleteCampaign = useDeleteCampaign();
   const update = useUpdateCampaign();
 
   async function handleSaveBusinessHours() {
@@ -1357,6 +1361,19 @@ export default function CampaignDetailPage() {
     setDeletingBatch(null);
   }
 
+  async function handleDeleteCampaign() {
+    if (deleteNameInput.trim() !== campaign?.name) return;
+    setDeletingCamp(true);
+    try {
+      await deleteCampaign.mutateAsync({ id: campaignId });
+      toast({ title: "Campaign deleted" });
+      setLocation("/app/campaigns");
+    } catch {
+      toast({ title: "Failed to delete campaign", variant: "destructive" });
+      setDeletingCamp(false);
+    }
+  }
+
   if (campLoading) {
     return (
       <div className="p-6 space-y-4 animate-pulse">
@@ -1435,6 +1452,15 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* Delete campaign — always visible */}
+            <Button
+              size="icon" variant="ghost"
+              className="h-8 w-8 text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10"
+              title="Delete campaign"
+              onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
             {campaignFinished ? (
               <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Campaign Completed
@@ -1767,6 +1793,62 @@ export default function CampaignDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Delete Campaign dialog ─────────────────────────────────────── */}
+      <Dialog open={showDeleteCamp} onOpenChange={v => { if (!v) setShowDeleteCamp(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-500">
+              <Trash2 className="h-4 w-4" /> Delete Campaign
+            </DialogTitle>
+            <DialogDescription className="text-left pt-1">
+              This will permanently delete <strong className="text-foreground">{campaign?.name}</strong> along
+              with all its batches, leads, call records, and configuration.
+              This action <strong className="text-foreground">cannot be undone</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/[0.06] px-3 py-2.5 text-xs text-red-600">
+              All leads, call history, batches, and settings for this campaign will be erased.
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Type <span className="font-mono font-semibold text-foreground">{campaign?.name}</span> to confirm
+              </Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder={campaign?.name}
+                value={deleteNameInput}
+                onChange={e => setDeleteNameInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && deleteNameInput.trim() === campaign?.name) {
+                    void handleDeleteCampaign();
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button variant="ghost" size="sm" className="h-8 text-xs"
+              onClick={() => setShowDeleteCamp(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteNameInput.trim() !== campaign?.name || deletingCamp}
+              onClick={() => void handleDeleteCampaign()}
+            >
+              {deletingCamp
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deleting…</>
+                : <><Trash2 className="h-3.5 w-3.5" /> Delete Campaign</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

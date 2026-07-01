@@ -1,6 +1,3 @@
-/**
- * Push changed files to srundme/voiceorch main branch via GitHub Contents API.
- */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -8,36 +5,27 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../");
 
-const GITHUB_TOKEN =
-  process.env["GITHUB_PERSONAL_ACCESS_TOKEN"] ??
-  process.env["GITHUB_PAT"] ?? "";
-
-if (!GITHUB_TOKEN) {
-  console.error("ERROR: No GitHub token found");
-  process.exit(1);
-}
+const GITHUB_TOKEN = process.env["GITHUB_PERSONAL_ACCESS_TOKEN"] ?? process.env["GITHUB_PAT"] ?? "";
+if (!GITHUB_TOKEN) { console.error("ERROR: No GitHub token found"); process.exit(1); }
 
 const OWNER = "srundme";
 const REPO  = "voiceorch";
 const BRANCH = "main";
 
 const FILES_TO_PUSH = [
-  "artifacts/api-server/src/app.ts",
+  "artifacts/dashboard/src/pages/campaigns/[id].tsx",
 ];
 
 const COMMIT_MESSAGE = [
-  "fix(static): never cache index.html — force fresh JS bundle on every load",
+  "feat(campaigns): delete campaign with name-confirmation dialog",
   "",
-  "Root cause of 'new UI not showing after deploy': the browser cached",
-  "index.html from the previous deploy and kept loading the old hashed",
-  "JS bundle. Since Vite content-hashes all assets, the old index.html",
-  "pointed to old chunks that returned 404, so the browser used its",
-  "in-memory copy indefinitely.",
-  "",
-  "Fix: set Cache-Control: no-cache, no-store, must-revalidate on every",
-  "index.html response (both static-file and SPA-fallback paths).",
-  "Hashed JS/CSS/image assets are still cached indefinitely — only",
-  "index.html is forced to revalidate on each navigation.",
+  "- Trash icon button in campaign header (always visible, red on hover)",
+  "- Dialog opens on click; shows campaign name, red warning banner,",
+  "  and a text input — Delete button stays disabled until the user",
+  "  types the exact campaign name (Enter key also triggers delete)",
+  "- On confirm: calls DELETE /api/campaigns/:id, navigates to /campaigns",
+  "- Loading spinner + disabled state while the request is in flight",
+  "- Uses existing useDeleteCampaign hook (was already generated from spec)",
 ].join("\n");
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -51,48 +39,26 @@ async function ghFetch(apiPath: string, options: RequestInit = {}) {
       ...(options.headers as Record<string, string> ?? {}),
     },
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`GitHub API ${res.status} for ${apiPath}: ${body}`);
-  }
+  if (!res.ok) { const b = await res.text(); throw new Error(`GitHub ${res.status} ${apiPath}: ${b}`); }
   return res.json();
 }
 
 async function pushFile(relPath: string) {
-  const fullPath = path.join(REPO_ROOT, relPath);
-  const content = fs.readFileSync(fullPath, "utf8");
-  const encoded = Buffer.from(content, "utf8").toString("base64");
-
+  const content = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
+  const encoded = Buffer.from(content).toString("base64");
   let sha: string | undefined;
-  try {
-    const existing = await ghFetch(`contents/${relPath}?ref=${BRANCH}`) as { sha: string };
-    sha = existing.sha;
-  } catch {
-    console.log(`  ${relPath}: new file — will create`);
-  }
-
+  try { sha = ((await ghFetch(`contents/${relPath}?ref=${BRANCH}`)) as { sha: string }).sha; } catch { /**/ }
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
-    body: JSON.stringify({
-      message: COMMIT_MESSAGE,
-      content: encoded,
-      branch: BRANCH,
-      ...(sha ? { sha } : {}),
-    }),
+    body: JSON.stringify({ message: COMMIT_MESSAGE, content: encoded, branch: BRANCH, ...(sha ? { sha } : {}) }),
   });
-
-  console.log(`  ✓ pushed ${relPath}`);
+  console.log(`  ✓ ${relPath}`);
 }
 
 async function main() {
-  console.log(`Pushing ${FILES_TO_PUSH.length} files to ${OWNER}/${REPO}@${BRANCH} …`);
-  for (const f of FILES_TO_PUSH) {
-    await pushFile(f);
-  }
-  console.log("Done — Railway will redeploy automatically.");
+  console.log(`Pushing ${FILES_TO_PUSH.length} file(s) to ${OWNER}/${REPO}@${BRANCH}…`);
+  for (const f of FILES_TO_PUSH) await pushFile(f);
+  console.log("Done.");
 }
 
-main().catch((err) => {
-  console.error("Push failed:", err);
-  process.exit(1);
-});
+main().catch(e => { console.error(e); process.exit(1); });
