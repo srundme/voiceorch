@@ -117,6 +117,48 @@ async function getManagedQwenKey(): Promise<string | null> {
   return envValue || null;
 }
 
+async function getManagedSarvamKey(): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(platformSettingsTable)
+    .where(eq(platformSettingsTable.key, "managed_sarvam_key"));
+  const dbValue = (row?.value ?? "").trim();
+  if (dbValue) return dbValue;
+  const envValue = (process.env["SARVAM_API_KEY"] ?? "").trim();
+  return envValue || null;
+}
+
+/**
+ * Indic-language detection for prompt-generation model routing.
+ *
+ * Qwen (the default generation model) skews heavily formal/literary for Indic
+ * output — generated example lines then anchor the live call LLM into stilted
+ * written register. When any selected language is Indic we route generation
+ * through Sarvam's LLM (built for Indian languages, natural spoken register).
+ * Accepts language names ("tamil", "Hinglish") and locale codes ("ta-IN", "hi").
+ */
+const INDIC_LANGUAGE_NAMES = new Set([
+  "tamil", "hindi", "hinglish", "telugu", "kannada", "malayalam",
+  "bengali", "bangla", "marathi", "gujarati", "punjabi", "odia", "oriya",
+  "assamese",
+]);
+const INDIC_LANGUAGE_CODES = new Set([
+  "ta", "hi", "te", "kn", "ml", "bn", "mr", "gu", "pa", "or", "od", "as",
+]);
+
+export function includesIndicLanguage(languages: unknown): boolean {
+  const list = Array.isArray(languages) ? languages : languages != null ? [languages] : [];
+  for (const raw of list) {
+    if (typeof raw !== "string") continue;
+    const norm = raw.trim().toLowerCase();
+    if (!norm) continue;
+    if (INDIC_LANGUAGE_NAMES.has(norm)) return true;
+    const code = norm.split(/[-_]/)[0] ?? "";
+    if (INDIC_LANGUAGE_CODES.has(code)) return true;
+  }
+  return false;
+}
+
 /**
  * Strip any Qwen reasoning ("thinking") and markdown fences from generated text.
  *
@@ -151,19 +193,34 @@ export function stripReasoning(raw: string): string {
   return text.trim();
 }
 
+/** Optional per-call generation tuning shared by callQwen/callSarvam. */
+export interface PromptGenerationOpts {
+  temperature?: number;
+  maxTokens?: number;
+}
+
 /**
  * Low-level Qwen (via Groq) chat call shared by every prompt-generation path.
  * Throws if the managed key is missing or the call fails/returns empty.
  * Requests Groq's reasoning suppression and defensively strips any reasoning
  * that still leaks through, so callers only ever receive the final prompt.
+ * Pass `systemInstruction: null` to send a single user message only.
  */
-async function callQwen(systemInstruction: string, userContent: string): Promise<string> {
+async function callQwen(
+  systemInstruction: string | null,
+  userContent: string,
+  opts?: PromptGenerationOpts,
+): Promise<string> {
   const qwenKey = await getManagedQwenKey();
   if (!qwenKey) {
     throw new Error(
       "Managed Qwen key not configured — set managed_qwen_key in Admin → Managed Keys",
     );
   }
+
+  const messages: Array<{ role: string; content: string }> = [];
+  if (systemInstruction != null) messages.push({ role: "system", content: systemInstruction });
+  messages.push({ role: "user", content: userContent });
 
   const res = await fetch(
     "https://api.groq.com/openai/v1/chat/completions",
@@ -175,14 +232,11 @@ async function callQwen(systemInstruction: string, userContent: string): Promise
       },
       body: JSON.stringify({
         model: "qwen/qwen3-32b",
-        temperature: 0.4,
-        max_tokens: 4096,
+        temperature: opts?.temperature ?? 0.4,
+        max_tokens: opts?.maxTokens ?? 4096,
         // Suppress the reasoning model's thinking so it never reaches `content`.
         reasoning_format: "hidden",
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: userContent },
-        ],
+        messages,
       }),
     },
   );
@@ -209,6 +263,99 @@ async function callQwen(systemInstruction: string, userContent: string): Promise
 }
 
 /**
+ * Non-streaming Sarvam chat call — the Indic-language counterpart of callQwen.
+ * Uses sarvam-105b (highest quality; prompt generation is not latency-sensitive)
+ * with thinking explicitly disabled (`reasoning_effort: null` — Sarvam's default
+ * is ON). Auth header is `api-subscription-key`. Throws if the managed key is
+ * missing or the call fails/returns empty. Defensively strips leaked
+ * `<|message|>`-style special tokens plus any reasoning/fences.
+ * Pass `systemInstruction: null` to send a single user message only.
+ */
+export async function callSarvam(
+  systemInstruction: string | null,
+  userContent: string,
+  opts?: PromptGenerationOpts,
+): Promise<string> {
+  const sarvamKey = await getManagedSarvamKey();
+  if (!sarvamKey) {
+    throw new Error(
+      "Managed Sarvam key not configured — set managed_sarvam_key in Admin → Managed Keys",
+    );
+  }
+
+  const messages: Array<{ role: string; content: string }> = [];
+  if (systemInstruction != null) messages.push({ role: "system", content: systemInstruction });
+  messages.push({ role: "user", content: userContent });
+
+  const body: Record<string, unknown> = {
+    model: "sarvam-105b",
+    // Thinking is ON by default on Sarvam — disable it explicitly.
+    reasoning_effort: null,
+    max_tokens: opts?.maxTokens ?? 4096,
+    messages,
+  };
+  // Omit temperature unless explicitly set so Sarvam applies its own default.
+  if (typeof opts?.temperature === "number" && Number.isFinite(opts.temperature)) {
+    body["temperature"] = opts.temperature;
+  }
+
+  const res = await fetch("https://api.sarvam.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "api-subscription-key": sarvamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    logger.error({ status: res.status, errText: errText.slice(0, 300) }, "Sarvam prompt generation failed");
+    throw new Error(`Sarvam generation failed (HTTP ${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const rawText = data?.choices?.[0]?.message?.content?.trim() ?? "";
+  if (!rawText) throw new Error("Sarvam returned an empty prompt");
+
+  // Strip leaked internal special tokens (e.g. <|message|>) before the shared
+  // reasoning/fence stripper.
+  const text = stripReasoning(rawText.replace(/<\|[a-zA-Z_]+\|>/g, ""));
+  if (!text) {
+    throw new Error("Sarvam returned no usable prompt text — try generating again");
+  }
+  return text;
+}
+
+/**
+ * Language-routed prompt generation shared by every generation path.
+ * Indic-language selections go to Sarvam (natural spoken register); on a
+ * missing Sarvam key or any Sarvam failure it logs and falls back to the
+ * existing Qwen path. English-only selections go straight to Qwen unchanged.
+ */
+export async function generatePromptText(params: {
+  systemInstruction: string | null;
+  userContent: string;
+  /** Selected language(s) — string, string[], or undefined. */
+  languages?: unknown;
+  opts?: PromptGenerationOpts;
+}): Promise<string> {
+  const { systemInstruction, userContent, languages, opts } = params;
+  if (includesIndicLanguage(languages)) {
+    try {
+      const text = await callSarvam(systemInstruction, userContent, opts);
+      logger.info({ model: "sarvam-105b" }, "Indic prompt generation served by Sarvam");
+      return text;
+    } catch (err) {
+      logger.warn({ err }, "Sarvam Indic prompt generation failed — falling back to Qwen");
+    }
+  }
+  return callQwen(systemInstruction, userContent, opts);
+}
+
+/**
  * Single helper used by both wizard submit and admin regenerate.
  * Sends the active template (as system instruction) + the user's wizard inputs
  * (as a user-message context block) to Qwen via Groq, returns the generated prompt text.
@@ -230,7 +377,11 @@ ${templateText}
     2,
   )}`;
 
-  return callQwen(systemInstruction, inputsBlock);
+  return generatePromptText({
+    systemInstruction,
+    userContent: inputsBlock,
+    languages: wizardInputs.languages,
+  });
 }
 
 export interface LayeredPromptInput {
@@ -296,5 +447,15 @@ ${layers.join("\n\n")}`;
     2,
   )}`;
 
-  return callQwen(systemInstruction, inputsBlock);
+  // The modal collects a primary `language` plus an optional `selectedLanguages`
+  // list — either can flag an Indic selection.
+  const languages: unknown[] = [];
+  if (typeof formInputs["language"] === "string") languages.push(formInputs["language"]);
+  if (Array.isArray(formInputs["selectedLanguages"])) languages.push(...(formInputs["selectedLanguages"] as unknown[]));
+
+  return generatePromptText({
+    systemInstruction,
+    userContent: inputsBlock,
+    languages,
+  });
 }

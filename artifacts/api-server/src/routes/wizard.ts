@@ -5,7 +5,14 @@ import { platformSettingsTable, platformListedVoicesTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
-import { getActiveTemplate, generateAgentPrompt, generateLayeredAgentPrompt, stripReasoning } from "../services/prompt-template.js";
+import {
+  getActiveTemplate,
+  generateAgentPrompt,
+  generateLayeredAgentPrompt,
+  generatePromptText,
+  callSarvam,
+  includesIndicLanguage,
+} from "../services/prompt-template.js";
 import {
   getSystemPromptStore,
   getActiveLayer,
@@ -272,7 +279,7 @@ router.post("/wizard/generate-master-prompt", requireDbUser, async (req, res): P
 router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<void> => {
   const {
     useCase, role, companyName, agentName, serviceDescription,
-    agentDirection, callFlowDescription,
+    agentDirection, callFlowDescription, selectedLanguages,
   } = req.body as {
     useCase?: string;
     role?: string;
@@ -281,6 +288,7 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     serviceDescription?: string;
     agentDirection?: string;
     callFlowDescription?: string;
+    selectedLanguages?: string[];
   };
 
   if (!callFlowDescription?.trim()) {
@@ -288,12 +296,10 @@ router.post("/wizard/generate-prompt", requireDbUser, async (req, res): Promise<
     return;
   }
 
-  const qwenKey = (await getSetting("managed_qwen_key") ?? "").trim() || (process.env["GROQ_API_KEY"] ?? "").trim();
   let callFlowSteps = "";
 
-  if (qwenKey) {
-    try {
-      const systemMsg = `You are a professional AI voice agent prompt engineer. Based on the user's rough requirements (which may have grammatical errors or be informal), write clear and natural call flow steps for a voice AI agent.
+  try {
+    const systemMsg = `You are a professional AI voice agent prompt engineer. Based on the user's rough requirements (which may have grammatical errors or be informal), write clear and natural call flow steps for a voice AI agent.
 
 Requirements:
 - Agent Role: ${role ?? useCase ?? "AI assistant"}
@@ -305,32 +311,17 @@ Requirements:
 
 Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, natural, and conversational for a voice agent. No intro or explanation — just the numbered steps. Use <wait for response> where the agent should pause for the caller's reply.`;
 
-      const qwenRes = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${qwenKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "qwen/qwen3-32b",
-            temperature: 0.7,
-            max_tokens: 1024,
-            // Suppress the reasoning model's thinking so it never reaches `content`.
-            reasoning_format: "hidden",
-            messages: [{ role: "user", content: systemMsg }],
-          }),
-        },
-      );
-
-      if (qwenRes.ok) {
-        const qwenData = await qwenRes.json() as any;
-        callFlowSteps = stripReasoning(qwenData?.choices?.[0]?.message?.content ?? "");
-      }
-    } catch (err) {
-      logger.warn({ err }, "Qwen call flow generation failed — using rule-based fallback");
-    }
+    // Shared language-routed generation: Indic selections go to Sarvam
+    // (natural spoken register), everything else to Qwen; Sarvam failures
+    // fall back to Qwen inside the helper.
+    callFlowSteps = await generatePromptText({
+      systemInstruction: null,
+      userContent: systemMsg,
+      languages: selectedLanguages,
+      opts: { temperature: 0.7, maxTokens: 1024 },
+    });
+  } catch (err) {
+    logger.warn({ err }, "LLM call flow generation failed — using rule-based fallback");
   }
 
   if (!callFlowSteps.trim()) {
@@ -520,6 +511,26 @@ ${activeTemplate!.extractedText}
         `Q${i + 1}: ${a.question}\nA${i + 1}: ${a.answer || "(blank — omit this step or use sensible default handling)"}`,
       ),
     ].filter(Boolean).join("\n");
+
+    // Indic-language routing: try Sarvam first (natural spoken register for
+    // Indian languages). Any Sarvam failure — missing key, request error, or
+    // unparseable output — logs and falls through to the existing Qwen path.
+    if (includesIndicLanguage(languages)) {
+      try {
+        const sarvamText = await callSarvam(systemInstruction, userBlock, {
+          temperature: 0.6,
+          maxTokens: 2048,
+        });
+        const sarvamNodes = parseQwenNodes(sarvamText);
+        if (sarvamNodes) return { ok: true, nodes: sarvamNodes };
+        req.log.warn(
+          { preview: sarvamText.slice(0, 300) },
+          "Sarvam call-flow response failed to parse as nodes — falling back to Qwen",
+        );
+      } catch (err) {
+        req.log.warn({ err }, "Sarvam call-flow generation failed — falling back to Qwen");
+      }
+    }
 
     let r: globalThis.Response;
     try {
