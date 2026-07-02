@@ -190,7 +190,7 @@ function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaig
         <div className="flex items-center gap-1.5 flex-wrap">
           <Activity className="w-3 h-3 text-blue-400 shrink-0" />
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Instant Trigger</p>
-          <span className="text-[10px] text-muted-foreground/60">— auto-dial new CRM leads the moment they arrive</span>
+          <span className="text-[10px] text-muted-foreground/60">— new leads arriving in your CRM are dialled automatically</span>
         </div>
 
         {crmConns.map(conn => (
@@ -286,28 +286,26 @@ function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaig
       </div>
       )}
 
-      {/* Import & Batch — only shown for batch-mode CRM campaigns */}
-      {triggerMode !== "instant" && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Users className="w-3 h-3 text-emerald-400 shrink-0" />
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import from CRM</p>
-            <span className="text-[10px] text-muted-foreground/60">— pull contacts from your CRM into a calling batch</span>
-          </div>
-          <p className="text-xs text-muted-foreground/70">
-            Choose a connected CRM account to import contacts as a new calling batch.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {crmConns.map(conn => (
-              <Button key={conn.id} size="sm" className="h-8 text-xs gap-1.5"
-                onClick={() => setImportConn(conn)}>
-                <Building2 className="h-3.5 w-3.5" />
-                Import from {conn.accountName ?? conn.provider}
-              </Button>
-            ))}
-          </div>
+      {/* Import from CRM — always available for all CRM campaigns (instant and batch) */}
+      <div className={cn("space-y-3", triggerMode === "instant" && "border-t border-border/60 pt-3 mt-1")}>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Users className="w-3 h-3 text-emerald-400 shrink-0" />
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import from CRM</p>
+          <span className="text-[10px] text-muted-foreground/60">— pull contacts into a calling batch</span>
         </div>
-      )}
+        <p className="text-xs text-muted-foreground/70">
+          Choose a connected CRM account to import contacts as a new calling batch.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {crmConns.map(conn => (
+            <Button key={conn.id} size="sm" className="h-8 text-xs gap-1.5"
+              onClick={() => setImportConn(conn)}>
+              <Building2 className="h-3.5 w-3.5" />
+              Import from {conn.accountName ?? conn.provider}
+            </Button>
+          ))}
+        </div>
+      </div>
     </div>
 
     {importConn && (
@@ -1443,10 +1441,9 @@ export default function CampaignDetailPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-xl font-semibold tracking-tight">{campaign.name}</h2>
               <StatusBadge status={
-                // For continuous (webhook/meta_ads/crm) campaigns with no active
-                // batches, show "listening" to indicate the campaign is alive
-                // and accepting leads but idle.
-                isContinuous && activeBatches === 0 && campaign.status === "active"
+                // Only instant-trigger CRM/webhook campaigns "listen" for leads.
+                // Batch CRM campaigns wait for a manual import — show plain Active.
+                isContinuous && isInstantTrigger && activeBatches === 0 && campaign.status === "active"
                   ? "listening"
                   : batches?.some(b => b.status === "running")
                     ? "active"
