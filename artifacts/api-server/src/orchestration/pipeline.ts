@@ -2134,6 +2134,8 @@ export class OrchestrationPipeline {
         await this.greet();
       } else {
         // "hangup" (default) or leave_message with no message configured.
+        // Confirmed machine + hangup executed → distinct voicemail outcome.
+        try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
         this.config.onCallEnd();
       }
       return;
@@ -2235,6 +2237,8 @@ export class OrchestrationPipeline {
     // recording (sends real silence frames — critical for Vobiz).
     await this.drainPlaybackTail();
     logger.info({ callId: this.config.callId }, "Voicemail delivery: message playback complete — ending call");
+    // A voicemail message was actually delivered → distinct voicemail outcome.
+    try { this.config.onVoicemailAction?.(); } catch { /* best-effort */ }
     this.config.onCallEnd();
   }
 

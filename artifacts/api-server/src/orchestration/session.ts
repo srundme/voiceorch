@@ -109,6 +109,10 @@ interface ActiveSession {
   // Dropped-call detection: true when pipeline triggered the end (phrase/timeout/tool)
   // false means WS just closed — i.e. call was likely dropped mid-conversation
   naturalEndTriggered: boolean;
+  /** True when an outbound call was acoustically confirmed as a machine AND the
+   *  configured voicemail action executed (message delivered or confirmed-machine
+   *  hangup). Drives the distinct "voicemail" call/lead outcome in endSession. */
+  voicemailActionExecuted: boolean;
   /** When this call was itself spawned from a scheduled callback, the callback's reason
    *  (e.g. "network_drop"). Prevents re-scheduling another callback when a retry call
    *  itself drops — enforces the single-retry-only invariant. */
@@ -998,6 +1002,10 @@ export async function createSession(params: {
   // Becomes true when the pipeline deliberately ends the call (phrase/silence/tool/max-duration)
   // Remains false if the WS just closes unexpectedly → dropped call
   let naturalEndTriggered = false;
+  // Becomes true ONLY when an outbound call was acoustically confirmed as a machine
+  // AND the configured voicemail action executed (message delivered or confirmed-machine
+  // hangup). Drives the distinct "voicemail" call/lead outcome in endSession.
+  let voicemailActionExecuted = false;
 
   const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
   const redisTtl = (agentConfig.maxDuration ?? 600) + 600; // maxDuration + 10 min buffer
@@ -1037,6 +1045,9 @@ export async function createSession(params: {
         db.update(callsTable).set({ amdResult: result }).where(eq(callsTable.id, callRecord.id)),
       ).catch((err) => logger.error({ callId: callRecord.id, err }, "Failed to persist AMD result"));
     },
+    // Confirmed-machine voicemail action executed (message delivered or hangup) →
+    // record a distinct "voicemail" outcome instead of "completed" in endSession.
+    onVoicemailAction: () => { voicemailActionExecuted = true; },
     // Returning caller (>=1 prior completed call) → memory-informed recognition opening
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
@@ -1307,6 +1318,7 @@ export async function createSession(params: {
     get transferredTo() { return transferredTo; },
     setTransferred(to: string | null) { wasTransferred = to !== null; transferredTo = to; },
     get naturalEndTriggered() { return naturalEndTriggered; },
+    get voicemailActionExecuted() { return voicemailActionExecuted; },
     get callerProfileSnapshot() { return callerProfileSnapshot; },
     get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
     personaHash,
@@ -1506,12 +1518,20 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const avgTtsMs = metricsAcc.count > 0 ? Math.round(metricsAcc.ttsTotal / metricsAcc.count) : null;
 
   try {
+    // A confirmed-machine voicemail (message delivered or confirmed-machine hangup)
+    // is a distinct terminal outcome — takes precedence over transferred/completed.
     // A call where the agent had zero turns (no STT→LLM cycle completed) and ended
     // quickly was effectively rejected or dropped before the conversation started.
     // Mark it "no_pickup" instead of "completed" so the UI and campaign stats reflect
     // the real outcome (e.g. callee rejected, line busy, VoBiz brief-connect-then-drop).
     const noTurnsDrop = metricsAcc.count === 0 && durationSeconds <= 15 && !session.wasTransferred;
-    const callStatus = session.wasTransferred ? "transferred" : noTurnsDrop ? "no_pickup" : "completed";
+    const callStatus = session.voicemailActionExecuted
+      ? "voicemail"
+      : session.wasTransferred
+        ? "transferred"
+        : noTurnsDrop
+          ? "no_pickup"
+          : "completed";
 
     // ── Upload call recording (async, non-blocking) ──────────────────────────
     // Only finalize/upload when the agent has Call Recording enabled, so disabled
@@ -1599,15 +1619,18 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
       // let scheduleRetry decide whether attempts remain. Without this, dropped
       // campaign calls are silently marked "completed" and never retried.
       const midConvDrop =
+        !session.voicemailActionExecuted &&
         !session.naturalEndTriggered &&
         !session.wasTransferred &&
         durationSeconds > 15;
 
-      const terminalLeadStatus = session.wasTransferred
-        ? "transferred"
-        : midConvDrop
-          ? "failed"
-          : "completed";
+      const terminalLeadStatus = session.voicemailActionExecuted
+        ? "voicemail"
+        : session.wasTransferred
+          ? "transferred"
+          : midConvDrop
+            ? "failed"
+            : "completed";
 
       void db.update(campaignLeadsTable)
         .set({ callStatus: terminalLeadStatus })
@@ -1710,7 +1733,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          const termStatus = session.wasTransferred ? "transferred" : midConvDrop ? "failed" : "completed";
+          const termStatus = session.voicemailActionExecuted
+            ? "voicemail"
+            : session.wasTransferred ? "transferred" : midConvDrop ? "failed" : "completed";
           const outcome = computeOperationalOutcome({
             callStatus:           termStatus,
             disposition:          null, // disposeCall runs async; a later taxonomy run may update this

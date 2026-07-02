@@ -388,6 +388,7 @@ export default function CallsList() {
     if (!filteredCalls.length) return null;
     const total = filteredCalls.length;
     const completed = filteredCalls.filter((c) => c.status === "completed").length;
+    const voicemail = filteredCalls.filter((c) => (c.status as string) === "voicemail").length;
     const failed = filteredCalls.filter((c) => c.status === "failed").length;
     const inProgress = filteredCalls.filter((c) => c.status === "in_progress").length;
     const avgDuration =
@@ -396,7 +397,7 @@ export default function CallsList() {
             filteredCalls.reduce((sum, c) => sum + (c.durationSeconds ?? 0), 0) / total
           )
         : 0;
-    return { total, completed, failed, inProgress, avgDuration };
+    return { total, completed, voicemail, failed, inProgress, avgDuration };
   }, [filteredCalls]);
 
   const clearFilters = () => {
@@ -464,7 +465,7 @@ export default function CallsList() {
 
           {/* Stats Row */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
               <MiniStat
                 label="Total Calls"
                 value={String(stats.total)}
@@ -474,6 +475,11 @@ export default function CallsList() {
                 label="Completed"
                 value={String(stats.completed)}
                 icon={<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+              />
+              <MiniStat
+                label="Voicemail"
+                value={String(stats.voicemail)}
+                icon={<Voicemail className="h-3.5 w-3.5 text-violet-500" />}
               />
               <MiniStat
                 label="Failed"

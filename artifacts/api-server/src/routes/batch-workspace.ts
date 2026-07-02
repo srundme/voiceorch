@@ -62,6 +62,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
     transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
     failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed', 'busy', 'no_pickup'))::int`,
+    voicemail:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'voicemail')::int`,
     success:     sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} in ('interest_confirmed','booking_created','transfer_completed'))::int`,
     pending:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
     firstAttemptAt: sql<string | null>`min(last_attempt_at)::text`,
@@ -143,6 +144,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/kpis", async (req, res): P
     booked:           leadKpis?.booked      ?? 0,
     transferred:      leadKpis?.transferred ?? 0,
     failed:           leadKpis?.failed      ?? 0,
+    voicemail:        leadKpis?.voicemail   ?? 0,
     pending:          leadKpis?.pending     ?? 0,
     callbacks,
     incoming,
@@ -217,6 +219,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
   const statusFilter =
     status === "pending"   ? eq(campaignLeadsTable.callStatus, "pending")   :
     status === "completed" ? eq(campaignLeadsTable.callStatus, "completed") :
+    status === "voicemail" ? eq(campaignLeadsTable.callStatus, "voicemail") :
     status === "failed"    ? inArray(campaignLeadsTable.callStatus, ["failed", "busy", "no_pickup"]) :
     status === "calling"   ? eq(campaignLeadsTable.callStatus, "calling")   :
     undefined;

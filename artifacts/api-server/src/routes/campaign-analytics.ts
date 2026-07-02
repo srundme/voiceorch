@@ -91,6 +91,7 @@ router.get("/campaigns/:id/batches/:batchId/analytics", async (req, res): Promis
   const failed   = (statusMap["failed"] ?? 0) + (statusMap["skipped"] ?? 0);
   const calling  = statusMap["calling"] ?? 0;
   const pending  = statusMap["pending"] ?? 0;
+  const voicemail = statusMap["voicemail"] ?? 0;
   const answered = called;
   const notPicked = failed;
 
@@ -104,11 +105,12 @@ router.get("/campaigns/:id/batches/:batchId/analytics", async (req, res): Promis
       pending,
       calling,
       failed,
+      voicemail,
       answered,
       notPicked,
       callbacks:   Number(callbackCount),
       pendingRetries: Number(retryCount),
-      completionPct: total > 0 ? Math.round(((called + failed) / total) * 100) : 0,
+      completionPct: total > 0 ? Math.round(((called + failed + voicemail) / total) * 100) : 0,
     },
     statusBreakdown: statusMap,
     dispositions,
@@ -135,6 +137,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     booked:      sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'booking_created')::int`,
     transferred: sql<number>`count(*) filter (where ${campaignLeadsTable.operationalOutcome} = 'transfer_completed')::int`,
     failed:      sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} in ('failed','busy','no_pickup'))::int`,
+    voicemail:   sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'voicemail')::int`,
     pending:     sql<number>`count(*) filter (where ${campaignLeadsTable.callStatus} = 'pending')::int`,
   }).from(campaignLeadsTable)
     .where(eq(campaignLeadsTable.campaignId, campaignId));
@@ -191,6 +194,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
   const booked      = funnel?.booked      ?? 0;
   const transferred = funnel?.transferred ?? 0;
   const failed      = funnel?.failed      ?? 0;
+  const voicemail   = funnel?.voicemail   ?? 0;
   const pending     = funnel?.pending     ?? 0;
 
   // successRate = booked / called (primary conversion metric)
@@ -215,6 +219,7 @@ router.get("/campaigns/:id/analytics", async (req, res): Promise<void> => {
     booked,
     transferred,
     failed,
+    voicemail,
     pending,
     successRate,
     connectionRate,

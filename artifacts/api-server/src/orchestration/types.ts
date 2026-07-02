@@ -588,4 +588,11 @@ export interface SessionConfig {
   /** Called once with the acoustically-confirmed AMD verdict so the call record's
    *  `amd_result` reflects the confirmed outcome, not the raw untrusted provider flag. */
   onAmdResult?: (result: "human" | "machine") => void;
+  /** Called once, just before the call ends, when an outbound call was
+   *  acoustically confirmed as a MACHINE and the configured voicemail action
+   *  actually executed — either the voicemail message was delivered
+   *  (`leave_message`) or a confirmed-machine `hangup` fired. NOT called for the
+   *  `continue` action (which greets normally) nor for human fall-through. Lets
+   *  the session record a distinct "voicemail" outcome instead of "completed". */
+  onVoicemailAction?: () => void;
 }

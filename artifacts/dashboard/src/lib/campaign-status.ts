@@ -28,6 +28,7 @@ export const CALL_STATUS_MAP: Record<string, StatusCfg> = {
   calling:   { label: "Calling",   cls: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   connected: { label: "Connected", cls: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20" },
   completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
+  voicemail: { label: "Voicemail", cls: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
   failed:    { label: "Failed",    cls: "bg-red-500/10 text-red-500 border-red-500/20" },
   busy:      { label: "Busy",      cls: "bg-slate-500/10 text-slate-500 border-slate-500/20" },
   skipped:   { label: "Skipped",   cls: "bg-muted/30 text-muted-foreground/60 border-border" },

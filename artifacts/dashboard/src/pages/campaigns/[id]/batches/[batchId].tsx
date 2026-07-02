@@ -20,7 +20,7 @@ import { DetailNav } from "@/components/detail-nav";
 import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
-  TrendingUp, Bell, PhoneIncoming,
+  TrendingUp, Bell, PhoneIncoming, Voicemail,
   Eye, Database, RefreshCw,
   User, Search, X, CheckCircle2, Clock, Pencil,
 } from "lucide-react";
@@ -234,7 +234,7 @@ function ScheduledInlineChip({
 type BatchWorkspaceKpis = {
   total: number; connected: number; failed: number; pending: number;
   callbacks: number; incoming: number; bookings: number; transfers: number;
-  successRate: number;
+  voicemail: number; successRate: number;
 };
 
 type BatchWorkspaceLead = {
@@ -362,6 +362,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
     { key: "all", label: "All" },
     { key: "pending",   label: "Pending"   },
     { key: "completed", label: "Completed" },
+    { key: "voicemail", label: "Voicemail" },
     { key: "failed",    label: "Failed"    },
     { key: "calling",   label: "Calling"   },
   ];
@@ -843,13 +844,14 @@ export default function BatchWorkspacePage() {
 
       {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
       <div className="px-5 py-3 shrink-0">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
           <KpiCard icon={<Users className="h-3 w-3" />}        label="Total"     value={kpis?.total       ?? "—"} />
           <KpiCard icon={<PhoneCall className="h-3 w-3" />}    label="Connected" value={kpis?.connected    ?? "—"} color="text-emerald-500" />
           <KpiCard icon={<Bell className="h-3 w-3" />}         label="Callbacks" value={kpis?.callbacks    ?? "—"} color="text-amber-500"   />
           <KpiCard icon={<PhoneIncoming className="h-3 w-3" />} label="Incoming" value={kpis?.incoming     ?? "—"} color="text-sky-500"     />
           <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Bookings"  value={kpis?.bookings     ?? "—"} color="text-violet-500"  />
           <KpiCard icon={<ArrowRightLeft className="h-3 w-3" />} label="Transfers" value={kpis?.transfers  ?? "—"} color="text-sky-400"    />
+          <KpiCard icon={<Voicemail className="h-3 w-3" />}    label="Voicemail" value={kpis?.voicemail    ?? "—"} color="text-violet-500"  />
           <KpiCard icon={<XCircle className="h-3 w-3" />}      label="Failed"    value={kpis?.failed       ?? "—"} color="text-red-500"     />
           <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Success"   value={kpis ? `${kpis.successRate}%` : "—"} color="text-emerald-500" />
         </div>
