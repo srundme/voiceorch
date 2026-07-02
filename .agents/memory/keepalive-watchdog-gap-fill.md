@@ -45,6 +45,19 @@ update `lastTtsFrameAt` on its real sends, or the watchdog will over-inject duri
 that path. Do NOT touch `drainPlaybackTail` — it runs after `isSendingTtsAudio` is
 already false, so the pump already covers it (do not update `lastTtsFrameAt` there).
 
+**Sender exclusivity (VoBiz voicemail/AMD path):** the AMD acoustic-confirmation
+loop and the voicemail-delivery wait/lead-in loops pump their OWN 20ms silence
+frames while holding the greeting. If the watchdog interval also fires in that
+window (its guard sees `!isSendingTtsAudio`), TWO senders emit on the same 20ms
+cadence → doubled frame rate → helicopter chop on the delivered voicemail. Rule:
+**exactly one sender at any moment.** A `manualPumpActive`-style flag silences the
+watchdog while a manual pump runs and is released just before `playSentence` so
+the gap-fill still guards playback first-byte/stalls. Any future manual keep-alive
+pump added to the pipeline MUST take this flag too, never coexist with the watchdog.
+Also: a provider answer-webhook retry can open a second WS/session for the same
+CallUUID (session map keys on internal sessionId) — the same doubled-audio failure;
+guard duplicate live sessions by externalCallId on such paths.
+
 **Scope:** this covers the first-byte and mid-call phases. The initial ~6s at
 answer ALSO includes the `createSession` phase (VoBiz WS handshake, greeting gen,
 greeting TTS first byte) handled in `telephony/vobiz.ts` BEFORE the pipeline pump

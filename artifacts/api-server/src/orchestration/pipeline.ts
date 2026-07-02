@@ -450,6 +450,17 @@ export class OrchestrationPipeline {
   // config (set for the leave_message acoustic-confirm path) does not divert the
   // STT feed when confirmation resolves to a live human and we greet normally.
   private vmDelivering = false;
+  // True while the AMD confirmation loop or the voicemail-delivery wait/lead-in
+  // loops are pumping their OWN 20 ms silence frames (VoBiz voicemail path only).
+  // The ambient/keepalive watchdog interval MUST stay silent while this is set:
+  // two senders emitting frames on the same 20 ms cadence double the carrier-side
+  // frame rate and produce the chopped "helicopter" artifact on the delivered
+  // voicemail. Cleared before voicemail playback (playSentence) starts so the
+  // watchdog's first-byte/stall gap-fill still guards playback against the VoBiz
+  // ~2 s inactivity drop (hangup 4010). Never set on normal conversation calls.
+  private amdVmManualPumpActive = false;
+  private ambientSuppressedLogged = false; // one-shot proof log for sender exclusivity
+  private amdPostResolveEventLogged = false; // one-shot assertion log (should never fire)
   // Acoustic AMD confirmation (VoBiz unreliable machine-hint). When set, the
   // pipeline runs confirmAmdMachineThenBranch() instead of greeting immediately.
   private readonly amdConfirm: { action: "leave_message" | "hangup" | "continue"; hint?: boolean; leadInSeconds?: number } | null;
@@ -851,6 +862,23 @@ export class OrchestrationPipeline {
         // dead together and VoBiz drops the call after ~2 s (hangup 4010).
         // During healthy streaming a real frame lands every ~20 ms, so the gap
         // stays under the threshold and the pump skips (no double-send).
+        // Sender exclusivity (VoBiz voicemail path): while the AMD-confirmation
+        // or voicemail-delivery wait loops pump their own 20 ms silence frames,
+        // this watchdog must NOT also send — two senders on the same cadence
+        // double the frame rate and produce the "helicopter" chop on the
+        // delivered voicemail. Channel continuity is preserved because the
+        // manual pump sends a frame every 20 ms for the entire time this flag
+        // is set. Normal calls never set the flag, so behavior is unchanged.
+        if (this.amdVmManualPumpActive) {
+          if (!this.ambientSuppressedLogged) {
+            this.ambientSuppressedLogged = true;
+            logger.info(
+              { callId: this.config.callId },
+              "Keepalive watchdog suppressed — AMD/voicemail manual frame pump is the sole sender",
+            );
+          }
+          return;
+        }
         const gapMs = Date.now() - this.lastTtsFrameAt;
         if (!this.closed && (!this.isSendingTtsAudio || gapMs >= KEEPALIVE_FILL_GAP_MS)) {
           if (this.ambientStream) {
@@ -1291,6 +1319,20 @@ export class OrchestrationPipeline {
     // pause). Skip the STT / conversation path entirely while confirming; the verdict
     // is resolved in confirmAmdMachineThenBranch(), which then greets or delivers.
     if (this.amdConfirming) {
+      // Assertion: confirmation-phase events must never fire once the AMD
+      // verdict is resolved (amdConfirming is cleared before any branch —
+      // greeting or voicemail playback — begins). If this ever logs, a
+      // confirmation listener leaked past resolution.
+      if (this.amdResolved) {
+        if (!this.amdPostResolveEventLogged) {
+          this.amdPostResolveEventLogged = true;
+          logger.warn(
+            { callId: this.config.callId, agentId: this.agent.id },
+            "AMD confirmation event fired AFTER resolution — ignoring (listener leak, should never happen)",
+          );
+        }
+        return;
+      }
       const now = Date.now();
       if (hasSpeechEnergy(pcm8k, AMD_CONFIRM_ENERGY_THRESHOLD)) {
         this.amdHeardSpeech = true;
@@ -1987,6 +2029,9 @@ export class OrchestrationPipeline {
     const silenceFrame = Buffer.alloc(FRAME_BYTES, 0);
 
     this.amdConfirming = true;
+    // This loop is now the SOLE frame sender — silence the keepalive watchdog
+    // so two pumps never interleave on the same socket (helicopter chop).
+    this.amdVmManualPumpActive = true;
     const startedAt = Date.now();
     logger.info(
       {
@@ -2057,6 +2102,9 @@ export class OrchestrationPipeline {
     }
 
     this.amdConfirming = false;
+    // Hand the channel back to the watchdog until the next manual pump (the
+    // voicemail wait loop re-takes it; greet() uses the normal watchdog path).
+    this.amdVmManualPumpActive = false;
     this.amdResolved = true; // single resolution — later external callbacks are ignored
     if (this.closed) return;
 
@@ -2099,6 +2147,11 @@ export class OrchestrationPipeline {
     if (!vd || this.closed) return;
     // Arm the voicemail-listening branch in onRawPcm8kIn (see vmDelivering note).
     this.vmDelivering = true;
+    // The wait/lead-in loops below are the SOLE frame sender — silence the
+    // keepalive watchdog so two pumps never interleave (helicopter chop).
+    // Released just before playback so the watchdog's first-byte/stall
+    // gap-fill still protects playSentence from the VoBiz 4010 drop.
+    this.amdVmManualPumpActive = true;
     const margin  = vd.postSilenceMarginMs ?? VOICEMAIL_GREETING_END_SILENCE_MS;
     const maxWait = vd.maxWaitMs ?? VOICEMAIL_MAX_WAIT_MS;
     const leadInMs = Math.max(0, Math.round((vd.leadInSeconds ?? 0) * 1000));
@@ -2127,7 +2180,7 @@ export class OrchestrationPipeline {
       await new Promise<void>((r) => setTimeout(r, delay));
     }
 
-    if (this.closed) return;
+    if (this.closed) { this.amdVmManualPumpActive = false; return; }
     logger.info(
       {
         callId: this.config.callId,
@@ -2156,7 +2209,15 @@ export class OrchestrationPipeline {
       }
     }
 
+    // Manual pumping ends HERE — playSentence's paced sender takes over, with
+    // the keepalive watchdog re-enabled to cover its first-byte wait / stalls.
+    // Exactly one sender is active at any moment either side of this line.
+    this.amdVmManualPumpActive = false;
     if (this.closed) return;
+    logger.info(
+      { callId: this.config.callId },
+      "Voicemail delivery: manual frame pump released — starting message playback (watchdog gap-fill re-armed)",
+    );
     this.firstAudioSentAt = null;
     this.isPlaying = true;
     try {

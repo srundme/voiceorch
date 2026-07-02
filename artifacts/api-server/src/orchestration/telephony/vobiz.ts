@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { createSession, getSession, endSession, failSession } from "../session.js";
+import { createSession, getSession, getSessionByExternalCallId, endSession, failSession } from "../session.js";
 import { toReadableError } from "../utils.js";
 import { logger } from "../../lib/logger.js";
 import { db, scheduledCallbacksTable, callsTable } from "@workspace/db";
@@ -174,6 +174,26 @@ export async function handleVobizWebSocket(
         // answer-webhook CallUUID) is what /Transfer/ uses; `streamCallId` is the
         // WS stream-session id and `corrToken` links back to the dial request_uuid.
         logger.info({ agentId, streamId, streamCallId: callId, resolvedCallId, urlCallUuid: urlCallUuid ?? null, corrToken: corrToken ?? null, fromNumber, toNumber, encoding: msg.start?.mediaFormat?.encoding }, "Vobiz start event");
+
+        // ── Duplicate-stream guard (AMD/voicemail path only) ─────────────────
+        // A VoBiz answer-webhook retry can open a SECOND media WebSocket for the
+        // same CallUUID. The session map is keyed by internal sessionId, so
+        // nothing else prevents two live sessions (= two frame senders + a
+        // second AMD confirmation / voicemail playback) for one call — a direct
+        // cause of overlapping "helicopter" audio on the delivered voicemail.
+        // Scoped strictly to the AMD-armed / voicemail-delivery path so normal
+        // VoBiz call handling is unchanged.
+        if (resolvedCallId && (amdArmed || amdMachineHint || voicemailDelivery)) {
+          const existing = getSessionByExternalCallId(resolvedCallId);
+          if (existing) {
+            logger.warn(
+              { agentId, resolvedCallId, existingCallId: existing.callId, streamId },
+              "Vobiz start: live session already exists for this CallUUID (AMD/voicemail path) — closing duplicate media stream, no second playback",
+            );
+            ws.close();
+            break;
+          }
+        }
 
         // Measures the pre-pipeline setup window (WS start → session ready) that
         // the caller hears as silence frames only — the "dead air before anything
