@@ -5,7 +5,7 @@ import { platformSettingsTable, platformListedVoicesTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
-import { getActiveTemplate, generateAgentPrompt, generateLayeredAgentPrompt } from "../services/prompt-template.js";
+import { getActiveTemplate, generateAgentPrompt, generateLayeredAgentPrompt, stripReasoning } from "../services/prompt-template.js";
 import {
   getSystemPromptStore,
   getActiveLayer,
@@ -312,6 +312,8 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
             model: "qwen/qwen3-32b",
             temperature: 0.7,
             max_tokens: 1024,
+            // Suppress the reasoning model's thinking so it never reaches `content`.
+            reasoning_format: "hidden",
             messages: [{ role: "user", content: systemMsg }],
           }),
         },
@@ -319,7 +321,7 @@ Write ONLY numbered call flow steps (5-10 steps). Each step should be clear, nat
 
       if (qwenRes.ok) {
         const qwenData = await qwenRes.json() as any;
-        callFlowSteps = qwenData?.choices?.[0]?.message?.content ?? "";
+        callFlowSteps = stripReasoning(qwenData?.choices?.[0]?.message?.content ?? "");
       }
     } catch (err) {
       logger.warn({ err }, "Qwen call flow generation failed — using rule-based fallback");
@@ -529,6 +531,8 @@ ${activeTemplate!.extractedText}
             temperature: 0.6,
             max_tokens: 2048,
             response_format: { type: "json_object" },
+            // Suppress the reasoning model's thinking so it never reaches `content`.
+            reasoning_format: "hidden",
             messages: [
               { role: "system", content: systemInstruction },
               { role: "user", content: userBlock },

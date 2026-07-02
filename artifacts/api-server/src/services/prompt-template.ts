@@ -118,8 +118,44 @@ async function getManagedQwenKey(): Promise<string | null> {
 }
 
 /**
+ * Strip any Qwen reasoning ("thinking") and markdown fences from generated text.
+ *
+ * Qwen 3 is a reasoning model: even with `reasoning_format: "hidden"` requested,
+ * provider behaviour can drift and leak `<think>…</think>` blocks (including
+ * unclosed ones) or a reasoning preamble into the content field. That reasoning
+ * must never survive into a saved system prompt, or the agent treats it as
+ * instructions and speaks analysis-style text on live calls.
+ */
+export function stripReasoning(raw: string): string {
+  let text = raw ?? "";
+
+  // Remove complete <think>…</think> blocks (any casing, across newlines).
+  text = text.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "");
+
+  // Remove a dangling, unclosed <think> … (opened but never closed): drop
+  // everything from the opening tag onward so no reasoning tail remains.
+  text = text.replace(/<think\b[^>]*>[\s\S]*$/gi, "");
+
+  // Remove a stray leading closing tag if the opener was suppressed upstream
+  // (reasoning hidden, but the terminator still echoed): drop everything up to
+  // and including the first </think>.
+  text = text.replace(/^[\s\S]*?<\/think>/i, "");
+
+  // Strip surrounding markdown code fences (```…``` or ```lang … ```).
+  text = text.trim();
+  const fence = text.match(/^```[^\n]*\n([\s\S]*?)\n```$/);
+  if (fence?.[1] != null) {
+    text = fence[1];
+  }
+
+  return text.trim();
+}
+
+/**
  * Low-level Qwen (via Groq) chat call shared by every prompt-generation path.
  * Throws if the managed key is missing or the call fails/returns empty.
+ * Requests Groq's reasoning suppression and defensively strips any reasoning
+ * that still leaks through, so callers only ever receive the final prompt.
  */
 async function callQwen(systemInstruction: string, userContent: string): Promise<string> {
   const qwenKey = await getManagedQwenKey();
@@ -141,6 +177,8 @@ async function callQwen(systemInstruction: string, userContent: string): Promise
         model: "qwen/qwen3-32b",
         temperature: 0.4,
         max_tokens: 4096,
+        // Suppress the reasoning model's thinking so it never reaches `content`.
+        reasoning_format: "hidden",
         messages: [
           { role: "system", content: systemInstruction },
           { role: "user", content: userContent },
@@ -158,8 +196,15 @@ async function callQwen(systemInstruction: string, userContent: string): Promise
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
-  if (!text) throw new Error("Qwen returned an empty prompt");
+  const rawText = data?.choices?.[0]?.message?.content?.trim() ?? "";
+  if (!rawText) throw new Error("Qwen returned an empty prompt");
+
+  const text = stripReasoning(rawText);
+  if (!text) {
+    throw new Error(
+      "Qwen returned only reasoning with no usable prompt — try generating again",
+    );
+  }
   return text;
 }
 
