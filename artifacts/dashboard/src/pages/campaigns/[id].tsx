@@ -141,6 +141,35 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// ── CRM Import Button (Overview tab) ──────────────────────────────────────────
+
+function CrmImportButton({ campaignId }: { campaignId: number }) {
+  const { data: crmConns = [] } = useListCrmConnections();
+  const [importConn, setImportConn] = useState<CrmConnection | null>(null);
+  if (crmConns.length === 0) return null;
+  return (
+    <>
+      <div className="flex gap-2 flex-wrap items-center">
+        {crmConns.map(conn => (
+          <Button key={conn.id} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+            onClick={() => setImportConn(conn)}>
+            <Building2 className="h-3 w-3" />
+            Import from {conn.accountName ?? conn.provider}
+          </Button>
+        ))}
+      </div>
+      {importConn && (
+        <CrmImportDialog
+          connection={importConn}
+          open={true}
+          onClose={() => setImportConn(null)}
+          defaultCampaignId={campaignId}
+        />
+      )}
+    </>
+  );
+}
+
 // ── CRM Integration Card ──────────────────────────────────────────────────────
 
 function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaignId: number; triggerMode?: string; webhookToken?: string }) {
@@ -1769,6 +1798,9 @@ export default function CampaignDetailPage() {
                 <h3 className="text-sm font-semibold text-foreground">Batches</h3>
                 <p className="text-xs text-muted-foreground/50 mt-0.5">Manage and monitor your batches</p>
               </div>
+              {(campaign as any).leadSource === "crm" && (
+                <CrmImportButton campaignId={campaignId} />
+              )}
             </div>
             {batchLoading ? (
               <div className="grid grid-cols-1 gap-3">

@@ -1203,9 +1203,28 @@ export function CrmImportDialog({
     (existingLeadsPage?.leads ?? []).map((l: { phone: string }) => l.phone.replace(/\D/g, "").slice(-10)),
   );
 
-  // ── Client-side phone normalizer (mirrors server phone-normalization.ts, India config) ──
-  function clientNormalizePhone(raw: string | null | undefined): { normalized: string | null; valid: boolean } {
+  // ── Country-code config for phone normalization ────────────────────────────
+  const COUNTRY_PHONE_CONFIG: Record<string, { name: string; nl: number }> = {
+    "91":  { name: "India (+91)",       nl: 10 },
+    "1":   { name: "US/Canada (+1)",    nl: 10 },
+    "44":  { name: "UK (+44)",          nl: 10 },
+    "971": { name: "UAE (+971)",        nl: 9  },
+    "65":  { name: "Singapore (+65)",   nl: 8  },
+    "61":  { name: "Australia (+61)",   nl: 9  },
+    "60":  { name: "Malaysia (+60)",    nl: 9  },
+    "234": { name: "Nigeria (+234)",    nl: 10 },
+    "27":  { name: "South Africa (+27)",nl: 9  },
+    "49":  { name: "Germany (+49)",     nl: 10 },
+    "33":  { name: "France (+33)",      nl: 9  },
+    "55":  { name: "Brazil (+55)",      nl: 11 },
+  };
+
+  const [phoneCountryCode, setPhoneCountryCode] = useState("91");
+
+  // ── Client-side phone normalizer (mirrors server phone-normalization.ts) ────
+  function clientNormalizePhone(raw: string | null | undefined, cc = phoneCountryCode): { normalized: string | null; valid: boolean } {
     if (!raw || typeof raw !== "string") return { normalized: null, valid: false };
+    const nl = COUNTRY_PHONE_CONFIG[cc]?.nl ?? 10;
     const hasLeadingPlus = raw.trimStart().startsWith("+");
     const stripped  = raw.replace(/[\s\-().]/g, "").replace(/[^\d+]/g, "");
     const digitsOnly = stripped.replace(/\+/g, "");
@@ -1218,12 +1237,11 @@ export function CrmImportDialog({
       if (w.length < 7 || w.length > 15) return { normalized: null, valid: false };
       return { normalized: "+" + w, valid: true };
     }
-    const CC = "91", NL = 10;
-    if (digitsOnly.length === NL)                                 return { normalized: "+" + CC + digitsOnly, valid: true };
-    if (digitsOnly.startsWith(CC) && digitsOnly.slice(CC.length).length === NL)
-                                                                  return { normalized: "+" + digitsOnly, valid: true };
-    if (digitsOnly.startsWith("0") && digitsOnly.length === NL + 1)
-                                                                  return { normalized: "+" + CC + digitsOnly.slice(1), valid: true };
+    if (digitsOnly.length === nl)                                return { normalized: "+" + cc + digitsOnly, valid: true };
+    if (digitsOnly.startsWith(cc) && digitsOnly.slice(cc.length).length === nl)
+                                                                 return { normalized: "+" + digitsOnly, valid: true };
+    if (digitsOnly.startsWith("0") && digitsOnly.length === nl + 1)
+                                                                 return { normalized: "+" + cc + digitsOnly.slice(1), valid: true };
     return { normalized: null, valid: false };
   }
 
@@ -1358,6 +1376,7 @@ export function CrmImportDialog({
       setBusinessHoursEnd(null);
       setScheduledStartAt(null);
       setAutoStart(false);
+      setPhoneCountryCode("91");
     }
   }, [open, connection.fieldMapping]);
 
@@ -1402,6 +1421,21 @@ export function CrmImportDialog({
         {/* ── Step 1: Select Contacts ──────────────────────────────────────── */}
         {step === 1 && (
           <div className="space-y-4">
+            {/* Country code — affects phone normalization in the validation step */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Phone number country</Label>
+              <select
+                value={phoneCountryCode}
+                onChange={e => setPhoneCountryCode(e.target.value)}
+                className="w-full h-8 text-sm rounded-md border border-border bg-muted px-2 text-foreground focus:outline-none focus:border-primary"
+              >
+                {Object.entries(COUNTRY_PHONE_CONFIG).map(([cc, cfg]) => (
+                  <option key={cc} value={cc}>{cfg.name}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-muted-foreground">Used to normalize bare local numbers in the validation step</p>
+            </div>
+
             {isZoho && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Import from</Label>
