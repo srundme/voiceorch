@@ -169,7 +169,7 @@ function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
-  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 400) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
+  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
@@ -332,7 +332,7 @@ export default function AdminAgentEdit() {
       tools: [], genderDetectionEnabled: false, recordingEnabled: false,
       snapserveAgentId: "", contextWindowTurns: undefined, summarizationEnabled: false,
       stagedPromptEnabled: false, stagedPromptStages: [], stagedPromptCoreIdentity: "",
-      asrEndpointingSilenceMs: 100, llmMaxTokens: undefined, ttsMinSentenceChars: 15, linearDelayMs: 0,
+      asrEndpointingSilenceMs: 300, llmMaxTokens: undefined, ttsMinSentenceChars: 15, linearDelayMs: 0,
     },
   });
 
@@ -393,7 +393,7 @@ export default function AdminAgentEdit() {
       stagedPromptEnabled: agent.stagedPromptEnabled ?? false,
       stagedPromptStages: agent.stagedPromptStages ?? [],
       stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? "",
-      asrEndpointingSilenceMs: (agent.agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 100,
+      asrEndpointingSilenceMs: (agent.agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 300,
       llmMaxTokens: (agent.agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: (agent.agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: (agent.agentConfig?.incrementalDelay as number | undefined) ?? 0,

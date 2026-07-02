@@ -94,7 +94,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
-  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 100) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
+  if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
@@ -332,7 +332,7 @@ export default function AgentEdit() {
       stagedPromptEnabled: false,
       stagedPromptStages: [],
       stagedPromptCoreIdentity: "",
-      asrEndpointingSilenceMs: 100,
+      asrEndpointingSilenceMs: 300,
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
@@ -545,7 +545,7 @@ export default function AgentEdit() {
       stagedPromptEnabled: (agent as any).stagedPromptEnabled ?? false,
       stagedPromptStages: (agent as any).stagedPromptStages ?? [],
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
-      asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 100,
+      asrEndpointingSilenceMs: ((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 300,
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
