@@ -2112,9 +2112,9 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             </div>
             <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
               <AdvSlider form={form} name="startSpeakingWaitSecs"          label="Base Wait"           hint="Extra pause before any response (0 = off)"               min={0} max={5}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
-              <AdvSlider form={form} name="startSpeakingOnPunctuationSecs"  label="After Punctuation"   hint="Delay when utterance ends with . ? !"                    min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
-              <AdvSlider form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation" hint="Delay when utterance has no terminal punctuation"        min={0} max={3}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
-              <AdvSlider form={form} name="startSpeakingOnNumberSecs"       label="After Number"        hint="Extra delay when utterance ends with a digit"            min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
+              <AdvSlider form={form} name="startSpeakingOnPunctuationSecs"  label="After Punctuation"   hint="Delay when utterance ends with . ? ! — default 0.1s"     min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
+              <AdvSlider form={form} name="startSpeakingOnNoPunctuationSecs" label="After No Punctuation" hint="Delay when utterance has no terminal punctuation — default 1.5s (capped at 300ms)" min={0} max={3}   step={0.1}  fmt={v => `${v.toFixed(1)}s`} />
+              <AdvSlider form={form} name="startSpeakingOnNumberSecs"       label="After Number"        hint="Extra delay when utterance ends with a digit — default 0.5s (capped at 300ms)" min={0} max={3}   step={0.05} fmt={v => `${v.toFixed(2)}s`} />
             </div>
           </>
         )}
@@ -4439,9 +4439,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
       startSpeakingWaitSecs:            (agent as any).agentConfig?.startSpeakingPlan?.waitSeconds            ?? 0,
-      startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0,
-      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 0,
-      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0,
+      startSpeakingOnPunctuationSecs:   (agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds   ?? 0.1,
+      startSpeakingOnNoPunctuationSecs: (agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds ?? 1.5,
+      startSpeakingOnNumberSecs:        (agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds        ?? 0.5,
       stopSpeakingNumWords:    (agent as any).agentConfig?.stopSpeakingPlan?.numWords       ?? 0,
       stopSpeakingVoiceSecs:   (agent as any).agentConfig?.stopSpeakingPlan?.voiceSeconds   ?? 0.2,
       stopSpeakingBackOffSecs: (agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds ?? 1,

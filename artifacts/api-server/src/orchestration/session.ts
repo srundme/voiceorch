@@ -438,8 +438,15 @@ export async function createSession(params: {
     incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
-    // P1-I: Start Speaking Plan
-    startSpeakingPlan: (agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"]) ?? null,
+    // P1-I: Start Speaking Plan — default gives punctuated turns a small 100ms
+    // cushion and unclear/digit-ending turns the full 300ms cap (best-practice
+    // defaults; matches the dashboard/admin agent-editor defaults).
+    startSpeakingPlan: (agentCfg["startSpeakingPlan"] as AgentConfig["startSpeakingPlan"]) ?? {
+      waitSeconds: 0,
+      onPunctuationSeconds: 0.1,
+      onNoPunctuationSeconds: 1.5,
+      onNumberSeconds: 0.5,
+    },
     // P1-J: Stop Speaking Plan
     stopSpeakingPlan: (agentCfg["stopSpeakingPlan"] as AgentConfig["stopSpeakingPlan"]) ?? null,
     // P1-K: Compliance

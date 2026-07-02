@@ -105,9 +105,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   };
   agentConfig["startSpeakingPlan"] = {
     waitSeconds:            startSpeakingWaitSecs          ?? 0,
-    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0,
-    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 0,
-    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0,
+    onPunctuationSeconds:   startSpeakingOnPunctuationSecs ?? 0.1,
+    onNoPunctuationSeconds: startSpeakingOnNoPunctuationSecs ?? 1.5,
+    onNumberSeconds:        startSpeakingOnNumberSecs      ?? 0.5,
   };
   agentConfig["stopSpeakingPlan"] = {
     numWords:       stopSpeakingNumWords    ?? 0,
@@ -550,9 +550,9 @@ export default function AgentEdit() {
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
-      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0,
-      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 0,
-      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0,
+      startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0.1,
+      startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 1.5,
+      startSpeakingOnNumberSecs:        ((agent as any).agentConfig?.startSpeakingPlan?.onNumberSeconds as number | undefined)        ?? 0.5,
       stopSpeakingNumWords:    ((agent as any).agentConfig?.stopSpeakingPlan?.numWords as number | undefined)       ?? 0,
       stopSpeakingVoiceSecs:   ((agent as any).agentConfig?.stopSpeakingPlan?.voiceSeconds as number | undefined)   ?? 0.2,
       stopSpeakingBackOffSecs: ((agent as any).agentConfig?.stopSpeakingPlan?.backOffSeconds as number | undefined) ?? 1,
@@ -1162,15 +1162,15 @@ export default function AgentEdit() {
               <div className="mt-6">
                 <p className="text-sm font-medium text-foreground mb-0.5">Response Timing — Start Speaking Delays</p>
                 <p className="text-[11px] text-muted-foreground mb-4">
-                  How long the agent waits after end-of-turn detection before it starts speaking. <strong>Keep all at 0</strong> for minimum latency (~100ms turns with Indic punctuation, ~300ms without). Raise only if callers complain about the agent cutting in too early.
+                  How long the agent waits after end-of-turn detection before it starts speaking. <strong>Recommended defaults</strong>: 100ms after clear punctuation, 300ms (pipeline hard cap) after an unclear or digit-ending turn — gives trailing-off callers room to finish without adding latency to clean sentences.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {(
                     [
                       { name: "startSpeakingWaitSecs",            label: "Base Wait",            desc: "Flat extra pause before any response. 0 = off.", default: 0, step: 0.1, max: 5 },
-                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Keep at 0 — punctuated turns already fire in ~100ms.", default: 0, step: 0.05, max: 3 },
-                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation detected. Keep at 0 — the pipeline has a 300ms hard cap.", default: 0, step: 0.1,  max: 3 },
-                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit (e.g. caller is reading out a number). 0 = off.",     default: 0, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnPunctuationSecs",   label: "After Punctuation",    desc: "Extra delay when turn ends with . ? ! or ।. Default 0.1s — punctuated turns are a clear signal, so only a small cushion is needed.", default: 0.1, step: 0.05, max: 3 },
+                      { name: "startSpeakingOnNoPunctuationSecs", label: "After No Punctuation", desc: "Extra delay when no terminal punctuation detected. Default 1.5s (the pipeline caps actual delay at 300ms) — helps callers who trail off mid-sentence.", default: 1.5, step: 0.1,  max: 3 },
+                      { name: "startSpeakingOnNumberSecs",        label: "After Number",         desc: "Extra delay when turn ends with a digit (e.g. caller is reading out a number). Default 0.5s (capped at 300ms) — avoids cutting off phone/OTP numbers.", default: 0.5, step: 0.05, max: 3 },
                     ] as const
                   ).map(({ name, label, desc, default: def, step, max }) => (
                     <FormField key={name} control={form.control} name={name} render={({ field }) => (
