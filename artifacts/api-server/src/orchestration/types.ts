@@ -563,5 +563,23 @@ export interface SessionConfig {
     postSilenceMarginMs?: number;
     /** Hard cap: if no greeting-end is detected, speak anyway after this many ms. */
     maxWaitMs?: number;
+    /** Configured Lead-in Pause (seconds) applied AFTER the greeting/beep ends and
+     *  BEFORE the message is spoken, so a slow machine finishes its beep first. */
+    leadInSeconds?: number;
   };
+  /** When set, the session was answered with an UNRELIABLE provider "machine" hint
+   *  (VoBiz synchronous AMD). Instead of enacting the voicemail action outright, the
+   *  pipeline opens the media stream and runs a short acoustic confirmation window on
+   *  the inbound speech-energy signal. Only an acoustically-confirmed machine enacts
+   *  `action`; anything ambiguous falls through to a normal greeting so a live human
+   *  is never harmed. See confirmAmdMachineThenBranch() in the pipeline. */
+  amdConfirm?: {
+    /** Configured "When voicemail detected" action from the agent config. */
+    action: "leave_message" | "hangup" | "continue";
+    /** Configured Lead-in Pause (seconds); forwarded to voicemail delivery. */
+    leadInSeconds?: number;
+  };
+  /** Called once with the acoustically-confirmed AMD verdict so the call record's
+   *  `amd_result` reflects the confirmed outcome, not the raw untrusted provider flag. */
+  onAmdResult?: (result: "human" | "machine") => void;
 }

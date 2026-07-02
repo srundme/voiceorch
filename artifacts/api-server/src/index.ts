@@ -134,6 +134,10 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     return v;
   })();
   const voicemailDelivery = qs.get("vm") === "1";
+  // amdHint=machine → the answer webhook reported an unreliable VoBiz "machine"
+  // flag. The session opens normally but confirms acoustically before enacting any
+  // voicemail action (see confirmAmdMachineThenBranch).
+  const amdMachineHint = qs.get("amdHint") === "machine";
   // dir=out is appended by every outbound dial site (calls/campaign/callback/meta)
   // so the WS handler keys caller memory off the dialed party, not the shared
   // platform number. Absent → inbound (the provider dialed us).
@@ -199,7 +203,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                        break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt); break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt, amdMachineHint); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

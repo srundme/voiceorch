@@ -89,6 +89,13 @@ export async function handleVobizWebSocket(
    * between carrier answer and this media-stream connect is counted and padded.
    */
   urlAnsweredAt?: number,
+  /**
+   * When true, the answer webhook reported an UNRELIABLE VoBiz "machine" flag
+   * (threaded here via the WS URL ?amdHint=machine). The session opens normally
+   * but confirms the machine verdict acoustically before enacting any voicemail
+   * action, so a live human is never harmed. See confirmAmdMachineThenBranch.
+   */
+  amdMachineHint = false,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -217,6 +224,7 @@ export async function handleVobizWebSocket(
             customParameters: params,
             campaignLeadId,
             voicemailDelivery,
+            amdMachineHint,
             resumeContext: priorResumeContext,
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
@@ -318,7 +326,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number; answeredAt?: number } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; amdMachineHint?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number; answeredAt?: number } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -329,6 +337,10 @@ export function getVobizAnswerXML(
   // vm=1 routes the WS handler into voicemail-delivery mode: it listens for the
   // answering machine's greeting to end, then speaks the full message once.
   if (opts.voicemailDelivery) qsParts.push("vm=1");
+  // amdHint=machine routes the WS handler into acoustic AMD confirmation: the normal
+  // media stream is opened, but the pipeline confirms the machine verdict acoustically
+  // before enacting any voicemail action (VoBiz's raw machine flag is unreliable).
+  if (opts.amdMachineHint) qsParts.push("amdHint=machine");
   // Embed From/To in the WebSocket URL query string — the most reliable way to
   // pass caller/callee numbers.  VoBiz POSTs them to the answer URL, we encode
   // them here, and our WS handler reads them from the URL before the start event

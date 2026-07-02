@@ -162,6 +162,12 @@ export async function createSession(params: {
    *  (acoustic VAD cue) then speaks the agent's configured `voicemailMessage` once
    *  in full and hangs up. Used by the Vobiz AMD `leave_message` path. */
   voicemailDelivery?: boolean;
+  /** When true, the answer webhook reported an UNRELIABLE provider "machine" hint
+   *  (VoBiz synchronous AMD). The session opens the normal media stream but runs a
+   *  short acoustic confirmation window BEFORE greeting: only an acoustically-confirmed
+   *  machine enacts the configured voicemailAction; anything ambiguous falls through to
+   *  a normal greeting so a live human is never harmed. See confirmAmdMachineThenBranch. */
+  amdMachineHint?: boolean;
   /** When this call was spawned by a scheduled callback, the callback's reason string
    *  (e.g. "network_drop"). Stored in session state and used in endSession to prevent
    *  a dropped retry call from scheduling yet another callback (single-retry invariant). */
@@ -227,6 +233,16 @@ export async function createSession(params: {
 
   // Read agentConfig JSONB for advanced settings
   const agentCfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+
+  // AMD (voicemail) config — read once, used by both the voicemail-delivery config
+  // and the acoustic-confirmation config below. Default action is "hangup" (never
+  // leave a message unless explicitly configured).
+  const rawAmdAction = agentCfg["voicemailAction"];
+  const amdVoicemailAction: "leave_message" | "hangup" | "continue" =
+    rawAmdAction === "leave_message" || rawAmdAction === "continue" ? rawAmdAction : "hangup";
+  const rawAmdLeadIn = agentCfg["voicemailLeadInSeconds"];
+  const amdLeadInSeconds =
+    typeof rawAmdLeadIn === "number" && Number.isFinite(rawAmdLeadIn) && rawAmdLeadIn > 0 ? rawAmdLeadIn : undefined;
 
   // Build effective system prompt with date/time context + strict language enforcement
   const LANG_NAMES: Record<string, string> = {
@@ -985,13 +1001,25 @@ export async function createSession(params: {
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
-    voicemailDelivery: params.voicemailDelivery
+    voicemailDelivery: (params.voicemailDelivery || (params.amdMachineHint && amdVoicemailAction === "leave_message"))
       ? {
           message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
             ? (agentCfg["voicemailMessage"] as string)
             : "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
+          ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
         }
       : undefined,
+    // Acoustic AMD confirmation (VoBiz unreliable machine-hint): the pipeline holds
+    // the greeting and confirms the machine verdict acoustically before enacting.
+    amdConfirm: params.amdMachineHint
+      ? { action: amdVoicemailAction, ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}) }
+      : undefined,
+    // Persist the acoustically-confirmed AMD verdict (not the raw untrusted flag).
+    onAmdResult: (result) => {
+      void withDbRetry("persist-amd-result", () =>
+        db.update(callsTable).set({ amdResult: result }).where(eq(callsTable.id, callRecord.id)),
+      ).catch((err) => logger.error({ callId: callRecord.id, err }, "Failed to persist AMD result"));
+    },
     // Returning caller (>=1 prior completed call) → memory-informed recognition opening
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
@@ -1296,7 +1324,15 @@ export async function createSession(params: {
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
-  if (params.voicemailDelivery) {
+  if (params.amdMachineHint) {
+    // Acoustic AMD confirmation: the answer webhook reported an UNRELIABLE "machine"
+    // hint. Open the normal stream but confirm the machine verdict acoustically BEFORE
+    // greeting — only a confirmed machine enacts the voicemail action; anything
+    // ambiguous falls through to a normal greeting so a live human is never harmed.
+    pipeline.confirmAmdMachineThenBranch().catch((err) => {
+      logger.error({ sessionId, err }, "AMD acoustic confirmation failed");
+    });
+  } else if (params.voicemailDelivery) {
     // Voicemail-delivery mode: do NOT greet/run the conversation. Listen for the
     // machine greeting to end, then speak the full message once and hang up.
     pipeline.deliverVoicemail().catch((err) => {

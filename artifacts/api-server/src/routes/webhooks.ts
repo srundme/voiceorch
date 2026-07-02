@@ -547,9 +547,12 @@ function buildVoicemailXml(
  * Apply AMD gating in an answer/voice handler.
  *   • result === null → AMD not requested; returns false (proceed normally).
  *   • human/unknown   → persists result, returns false (open the AI stream).
- *   • machine         → persists result, sends the voicemailAction XML and
- *                       returns true (response already sent), UNLESS the action
- *                       is "continue", in which case it returns false.
+ *   • machine (trusted provider — Twilio/Plivo) → persists result, sends the
+ *     voicemailAction XML and returns true, UNLESS the action is "continue".
+ *   • machine (untrusted provider — VoBiz, via `acousticConfirmXml`) → does NOT
+ *     persist the raw flag and does NOT enact the action. Opens the media stream
+ *     with a machine hint so the pipeline can confirm the verdict acoustically
+ *     and only THEN enact + persist the confirmed result. Returns true.
  * `preloadedCfg` lets the Vobiz handler reuse the agentConfig it already loaded.
  */
 async function applyAmdGate(opts: {
@@ -560,31 +563,40 @@ async function applyAmdGate(opts: {
   result: AmdResult | null;
   speakTag: "Say" | "Speak";
   preloadedCfg?: Record<string, unknown>;
-  /** When provided AND the configured action is "leave_message", this builder's XML
-   *  is returned instead of the static blind-timer voicemail XML. Used by Vobiz to
-   *  open a media stream and deliver the full message after the greeting ends
-   *  (acoustic cue) rather than overlapping the greeting on a fixed timer. */
-  buildVoicemailStreamXml?: () => string;
-  /** VoBiz's synchronous machine flag is unreliable — it false-positives on live humans,
-   *  which routes a real answered call into voicemail-delivery mode (dead air + a dropped
-   *  voicemail message). VoBiz callers pass false so a "machine" result is logged/persisted
-   *  but NOT enacted; the normal AI stream is opened as if the answer were human. Twilio /
-   *  Plivo omit it (default true) and keep their AMD behaviour. */
-  trustMachineFlag?: boolean;
+  /** UNTRUSTED-provider path (VoBiz). VoBiz's synchronous machine flag is unreliable —
+   *  it false-positives on live humans. When provided, a "machine" result opens the
+   *  media stream using THIS builder's XML (which carries an `amdHint=machine` marker)
+   *  instead of enacting the voicemail action. The pipeline then confirms the verdict
+   *  acoustically and persists the CONFIRMED result — never the raw flag. Twilio/Plivo
+   *  omit this and keep their trusted-AMD behaviour. */
+  acousticConfirmXml?: () => string;
 }): Promise<boolean> {
-  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg, buildVoicemailStreamXml, trustMachineFlag = true } = opts;
+  const { res, log, agentId, providerCallId, result, speakTag, preloadedCfg, acousticConfirmXml } = opts;
   if (result === null) return false; // AMD not requested — no behaviour change
-  await persistAmdResult(providerCallId, result);
-  log.info({ agentId, providerCallId, amdResult: result }, "AMD result on answer webhook");
-  if (result !== "machine") return false; // human / unknown → open AI stream
-
-  // Untrusted provider AMD (VoBiz): a "machine" verdict here is too often a false
-  // positive on a live human, so do NOT enact the voicemail action. Persisted +
-  // logged above for diagnostics; fall through to open the normal AI stream.
-  if (!trustMachineFlag) {
-    log.info({ agentId, providerCallId }, "AMD machine flag NOT trusted (provider AMD unreliable) — opening AI stream instead of voicemail delivery");
+  if (result !== "machine") {
+    // human / unknown → safe to persist and open the AI stream immediately.
+    await persistAmdResult(providerCallId, result);
+    log.info({ agentId, providerCallId, amdResult: result }, "AMD result on answer webhook");
     return false;
   }
+
+  // Untrusted provider AMD (VoBiz): a "machine" verdict here is too often a false
+  // positive on a live human. Do NOT persist the raw flag and do NOT enact the
+  // voicemail action. Open the normal media stream with a machine HINT so the
+  // pipeline confirms acoustically first (never harming a human) and persists the
+  // acoustically-confirmed verdict.
+  if (acousticConfirmXml) {
+    log.info(
+      { agentId, providerCallId },
+      "AMD machine hint (untrusted provider) — opening stream for acoustic confirmation; action deferred to pipeline",
+    );
+    res.set("Content-Type", "text/xml").send(acousticConfirmXml());
+    return true;
+  }
+
+  // Trusted provider (Twilio/Plivo): the flag is reliable — persist + enact directly.
+  await persistAmdResult(providerCallId, result);
+  log.info({ agentId, providerCallId, amdResult: result }, "AMD result on answer webhook");
 
   let cfg = preloadedCfg;
   if (!cfg) {
@@ -597,15 +609,10 @@ async function applyAmdGate(opts: {
   const action  = (cfg["voicemailAction"]  as string | undefined) ?? "hangup";
   const message = (cfg["voicemailMessage"] as string | undefined) ?? DEFAULT_VOICEMAIL_MESSAGE;
 
-  // Acoustic voicemail delivery (Vobiz): open the media stream and speak the full
-  // message once the machine's greeting ends, instead of a blind <Wait> timer that
-  // overlaps the greeting and only records the message tail.
-  if (action === "leave_message" && buildVoicemailStreamXml) {
-    log.info({ agentId, providerCallId, action, mode: "stream-voicemail" }, "AMD machine — opening voicemail-delivery stream");
-    res.set("Content-Type", "text/xml").send(buildVoicemailStreamXml());
-    return true;
-  }
-
+  // Trusted providers (Twilio/Plivo) enact via static XML: an optional lead-in
+  // <Pause>/<Wait> so the machine's greeting + beep complete, then the message and
+  // hangup. (VoBiz never reaches here — its unreliable flag routes through the
+  // acousticConfirmXml path above, where the pipeline confirms + delivers acoustically.)
   const leadInRaw = cfg["voicemailLeadInSeconds"];
   const leadIn = typeof leadInRaw === "number" && Number.isFinite(leadInRaw)
     ? leadInRaw
@@ -727,14 +734,14 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
   // Synchronous AMD (Vobiz Plivo-compatible API): the machine flag is delivered
   // on this answer request. VoBiz's machine detection is UNRELIABLE and false-
   // positives on live humans (answered call → ~12 s dead air + a dropped voicemail
-  // message; call 1320), so we log the raw fields for diagnosis but pass
-  // trustMachineFlag:false — a "machine" verdict is NOT enacted and the normal AI
-  // stream is opened for whoever answered.
+  // message; call 1320), so a "machine" flag is treated as an INITIAL HINT only:
+  // the normal media stream is opened (never harming a human) and the pipeline
+  // confirms the verdict acoustically before enacting any voicemail action.
   const rawMachineField = req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine;
   if (rawMachineField !== undefined && rawMachineField !== null && rawMachineField !== "") {
     req.log.info(
       { agentId, MachineDetected: req.body?.MachineDetected, Machine: req.body?.Machine, machine: req.body?.machine },
-      "VoBiz raw machine-detection fields on answer webhook (flag NOT trusted for voicemail routing)",
+      "VoBiz raw machine-detection fields on answer webhook (treated as a HINT — confirmed acoustically in-pipeline)",
     );
   }
   const amdHandled = await applyAmdGate({
@@ -743,9 +750,11 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     result: parseMachineFlag(req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine),
     speakTag: "Speak",
     preloadedCfg: cfg,
-    trustMachineFlag: false,
-    buildVoicemailStreamXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
-      campaignLeadId, from: inboundFrom, to: inboundTo, voicemailDelivery: true, callDirection, corr,
+    // VoBiz AMD is unreliable: a "machine" flag opens the normal media stream carrying
+    // an amdHint=machine marker so the pipeline confirms the verdict acoustically before
+    // enacting any voicemail action — a live human is never harmed.
+    acousticConfirmXml: () => getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
+      campaignLeadId, from: inboundFrom, to: inboundTo, amdMachineHint: true, callDirection, corr,
       callUuid: String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined,
       answeredAt: answeredAtMs,
     }),
