@@ -1,0 +1,75 @@
+Improve Auto-Redial & Duplicate Callback Handling
+
+Please review the current implementation of the Callbacks / Auto-Redial page before making any changes. I want the solution to work with the existing retry engine rather than introducing duplicate logic.
+
+Current Scenario
+
+When an outbound call is made (for example, to 916383653279) and the call results in:
+
+Busy
+No Pickup / Unanswered
+
+the system automatically creates an Auto-Redial record.
+
+Currently, the default retry count is 5 attempts.
+
+Required Changes
+1. Reduce Default Attempts
+Change the default Auto-Redial attempts from 5 to 3.
+Existing retry interval of 30 minutes can remain unchanged.
+
+Example:
+
+Initial call: 4:00 PM
+Retry 1: 4:30 PM
+Retry 2: 5:00 PM
+Retry 3: 5:30 PM
+2. Prevent Duplicate Auto-Redial Records
+
+This is the main issue.
+
+Example:
+
+Scenario A
+
+4:00 PM
+Outbound call to 916383653279
+Customer is Busy / No Pickup
+Auto-Redial record is created (3 attempts scheduled)
+
+Now, before those retries complete...
+
+Scenario B
+
+4:20 PM
+Another outbound call is manually made to 916383653279
+Again the customer is Busy / No Pickup
+Expected Behavior
+
+The system must NOT create another Auto-Redial record for the same phone number if there is already an active pending Auto-Redial record.
+
+Instead:
+
+Detect that an active retry record already exists.
+Reuse the existing record.
+Continue using its scheduled retry attempts.
+Do not create duplicate entries in the Callback page.
+
+A new Auto-Redial record should only be created if:
+
+No active retry record exists for that phone number, or
+The previous Auto-Redial has already been completed, cancelled, expired, or exhausted all retry attempts.
+Please Investigate
+
+Before implementing, review the current callback/retry implementation and determine:
+
+How Auto-Redial records are currently created.
+How duplicate detection should be implemented.
+Whether duplicate detection should be based on:
+Phone Number
+Agent
+Campaign (if applicable)
+Retry status
+The cleanest place in the existing flow to perform this check without breaking the retry engine.
+
+Do not implement a workaround. Integrate this into the existing Auto-Redial workflow so there is always one active retry record per phone number until that retry cycle has completed.

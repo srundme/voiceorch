@@ -7,7 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import { db, scheduledCallbacksTable } from "@workspace/db";
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 type CallbackRow = typeof scheduledCallbacksTable.$inferSelect;
@@ -41,7 +41,7 @@ export async function scheduleNextRedial(prev: CallbackRow): Promise<void> {
     ));
 
   const todayCount = row?.count ?? 0;
-  const maxAttempts = prev.maxAttempts ?? 5;
+  const maxAttempts = prev.maxAttempts ?? 3;
 
   if (todayCount >= maxAttempts) {
     logger.info(
@@ -172,9 +172,32 @@ export async function scheduleNoAnswerRedial(opts: {
   maxAttempts?:          number;
   redialIntervalMinutes?: number;
 }): Promise<number | null> {
-  const maxAttempts = opts.maxAttempts ?? 5;
+  const maxAttempts = opts.maxAttempts ?? 3;
   const intervalMinutes = opts.redialIntervalMinutes ?? 30;
 
+  // ── Duplicate guard ───────────────────────────────────────────────────────
+  // If there is already a pending or triggering no-answer redial for this
+  // (agent, number) pair, reuse it — do not create a second chain.
+  const [activePending] = await db
+    .select({ id: scheduledCallbacksTable.id, attemptCount: scheduledCallbacksTable.attemptCount })
+    .from(scheduledCallbacksTable)
+    .where(and(
+      eq(scheduledCallbacksTable.agentId, opts.agentId),
+      eq(scheduledCallbacksTable.toNumber, opts.toNumber),
+      eq(scheduledCallbacksTable.reason, "no_answer"),
+      inArray(scheduledCallbacksTable.status, ["pending", "triggering"]),
+    ))
+    .limit(1);
+
+  if (activePending) {
+    logger.info(
+      { agentId: opts.agentId, toNumber: opts.toNumber, existingId: activePending.id },
+      "No-answer: active redial already pending — skipping duplicate creation",
+    );
+    return activePending.id;
+  }
+
+  // ── Daily cap check ───────────────────────────────────────────────────────
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const tomorrowStart = new Date(todayStart);
