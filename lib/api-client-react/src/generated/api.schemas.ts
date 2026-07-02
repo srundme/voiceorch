@@ -1258,6 +1258,11 @@ export const CallStatus = {
   failed: 'failed',
   cancelled: 'cancelled',
   transferred: 'transferred',
+  no_pickup: 'no_pickup',
+  voicemail: 'voicemail',
+  busy: 'busy',
+  booked: 'booked',
+  callback_scheduled: 'callback_scheduled',
 } as const;
 
 /**

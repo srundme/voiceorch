@@ -7754,7 +7754,7 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, in_progress, completed, failed, cancelled, transferred]
+          enum: [pending, in_progress, completed, failed, cancelled, transferred, no_pickup, voicemail, busy, booked, callback_scheduled]
         toNumber:
           type: string
         fromNumber:
