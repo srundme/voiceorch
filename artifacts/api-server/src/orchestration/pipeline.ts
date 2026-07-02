@@ -2732,7 +2732,7 @@ export class OrchestrationPipeline {
             callId,
             notes,
           });
-          return "Callback scheduled successfully. I'll call you back at the requested time.";
+          return `Callback recorded for ${scheduledAt.toISOString()}. Now speak naturally to the caller: confirm the time back to them (e.g. "Great, I've noted that — we'll call you at [time]"), thank them, then close the conversation. Do NOT call end_call automatically — only end the call after you have spoken a proper goodbye.`;
         }
         return "Callback noted — I'll arrange for someone to call you back.";
       }
