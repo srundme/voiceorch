@@ -37,10 +37,12 @@ import {
   Globe, Zap, Upload, Instagram, Loader2,
   TrendingUp, TrendingDown, Wifi, WifiOff,
   AlertTriangle, ShieldAlert, Timer, BookMarked,
-  Activity, ChevronDown,
+  Activity, ChevronDown, HelpCircle, FileText, Webhook,
+  Building2, ChevronUp, Info, Sparkles, ArrowUpRight,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1101,6 +1103,7 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export default function CampaignsPage() {
   const [createOpen,      setCreateOpen]      = useState(false);
+  const [helpOpen,        setHelpOpen]        = useState(false);
   const [editing,         setEditing]         = useState<Campaign | null>(null);
   const [deleting,        setDeleting]        = useState<Campaign | null>(null);
   const [deleteNameInput, setDeleteNameInput] = useState("");
@@ -1177,6 +1180,13 @@ export default function CampaignsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
+              title="Campaign guide"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
             <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> New Campaign
             </Button>
@@ -1305,17 +1315,73 @@ export default function CampaignsPage() {
             </div>
           ) : filtered.length === 0 ? (
             campaigns.length === 0 ? (
-              <div className="py-20 text-center">
-                <div className="h-12 w-12 rounded-2xl bg-muted border border-border flex items-center justify-center mx-auto mb-4">
-                  <Megaphone className="h-5 w-5 text-muted-foreground/20" />
+              <div className="py-10 px-6">
+                {/* Hero */}
+                <div className="text-center mb-8">
+                  <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
+                    <Megaphone className="h-6 w-6 text-primary/60" />
+                  </div>
+                  <h3 className="text-base font-semibold text-foreground mb-1.5">Start your first campaign</h3>
+                  <p className="text-xs text-muted-foreground/60 max-w-sm mx-auto leading-relaxed">
+                    A campaign auto-calls leads the moment they arrive — from ads, forms, spreadsheets, or your own CRM.
+                    Your AI voice agent handles the conversation.
+                  </p>
                 </div>
-                <h3 className="text-sm font-semibold text-foreground mb-1">No campaigns yet</h3>
-                <p className="text-xs text-muted-foreground/40 max-w-xs mx-auto mb-5">
-                  Create a campaign to auto-call leads from Instagram ads, website forms, or CSV uploads.
-                </p>
-                <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> Create first campaign
-                </Button>
+
+                {/* How it works */}
+                <div className="max-w-2xl mx-auto mb-8">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 text-center mb-4">How it works</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      { icon: <Upload className="h-4 w-4 text-blue-400" />, step: "1", title: "Bring your leads", body: "Connect a CSV, a Meta Ads form, a webhook, or your CRM. Leads flow in automatically." },
+                      { icon: <Zap className="h-4 w-4 text-amber-400" />, step: "2", title: "Agent calls instantly", body: "Within seconds of a lead arriving, your voice agent dials the number and starts talking." },
+                      { icon: <CheckCircle2 className="h-4 w-4 text-emerald-400" />, step: "3", title: "Track every outcome", body: "See bookings, callbacks, transfers, and dispositions per lead. Every call is recorded." },
+                    ].map(item => (
+                      <div key={item.step} className="rounded-xl border border-border/60 bg-card/60 p-4">
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
+                            <span className="text-[10px] font-bold text-muted-foreground/60">{item.step}</span>
+                          </div>
+                          {item.icon}
+                        </div>
+                        <p className="text-xs font-semibold text-foreground mb-1">{item.title}</p>
+                        <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{item.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Source types */}
+                <div className="max-w-2xl mx-auto mb-8">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 text-center mb-4">Lead sources</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      { icon: <FileText className="h-4 w-4 text-blue-400" />, name: "CSV Upload", desc: "Fixed list from a spreadsheet" },
+                      { icon: <Webhook className="h-4 w-4 text-violet-400" />, name: "Webhook", desc: "Any system that can POST a lead" },
+                      { icon: <Instagram className="h-4 w-4 text-orange-400" />, name: "Meta Ads", desc: "Facebook / Instagram form fills" },
+                      { icon: <Globe className="h-4 w-4 text-emerald-400" />, name: "CRM Import", desc: "HubSpot or Zoho contacts" },
+                    ].map(src => (
+                      <div key={src.name} className="rounded-lg border border-border/50 bg-card/40 p-3 flex flex-col gap-1.5">
+                        {src.icon}
+                        <p className="text-xs font-medium text-foreground/80">{src.name}</p>
+                        <p className="text-[10px] text-muted-foreground/50 leading-relaxed">{src.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <div className="text-center flex items-center justify-center gap-3">
+                  <Button className="h-8 text-xs gap-2" onClick={() => setCreateOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Create first campaign
+                  </Button>
+                  <button
+                    className="text-xs text-muted-foreground/50 hover:text-foreground underline underline-offset-4 transition-colors"
+                    onClick={() => setHelpOpen(true)}
+                  >
+                    Read the guide
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="py-12 text-center">
@@ -1341,6 +1407,127 @@ export default function CampaignsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Campaign Guide Slide-over ── */}
+      <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader className="pb-4 border-b border-border/60">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <Megaphone className="h-4 w-4 text-primary/60" />
+              Campaign Guide
+            </SheetTitle>
+            <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-1">
+              Everything you need to set up and run your first AI voice campaign.
+            </p>
+          </SheetHeader>
+
+          <div className="py-5 space-y-7">
+
+            {/* What is a Campaign */}
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">What is a Campaign?</p>
+              <div className="rounded-xl border border-border/60 bg-card/60 p-4 text-[11px] text-muted-foreground/70 leading-relaxed space-y-2">
+                <p>A campaign ties together a <strong className="text-foreground/80">voice agent</strong>, a <strong className="text-foreground/80">phone number</strong>, and a <strong className="text-foreground/80">lead source</strong>.</p>
+                <p>When a new lead arrives, the platform dials them automatically. The agent handles the full conversation — qualifying, booking, or transferring — without any human in the loop.</p>
+                <p>You stay in control: set call hours, retry rules, and concurrency limits. Every call is logged with a full transcript and outcome.</p>
+              </div>
+            </section>
+
+            {/* Lead Sources */}
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Lead Sources</p>
+              <div className="space-y-2.5">
+                {[
+                  {
+                    icon: <FileText className="h-3.5 w-3.5 text-blue-400" />,
+                    name: "CSV Upload",
+                    desc: "Upload a spreadsheet (.csv). Leads are called in row order. Best for bulk outreach from a CRM export or vendor list.",
+                    badge: "One-time batch",
+                    badgeColor: "bg-blue-500/10 text-blue-500",
+                  },
+                  {
+                    icon: <Webhook className="h-3.5 w-3.5 text-violet-400" />,
+                    name: "Webhook",
+                    desc: "Any system can POST a lead to a unique URL. The call fires within seconds. Works with Zapier, Make, custom backends, or any contact form.",
+                    badge: "Real-time",
+                    badgeColor: "bg-violet-500/10 text-violet-500",
+                  },
+                  {
+                    icon: <Instagram className="h-3.5 w-3.5 text-orange-400" />,
+                    name: "Meta Ads (Facebook / Instagram)",
+                    desc: "Connect a Meta Lead Ads form. When someone fills it out, the platform calls them within 30 seconds — while intent is highest.",
+                    badge: "Real-time",
+                    badgeColor: "bg-orange-500/10 text-orange-500",
+                  },
+                  {
+                    icon: <Globe className="h-3.5 w-3.5 text-emerald-400" />,
+                    name: "CRM Import (HubSpot / Zoho)",
+                    desc: "Pull contacts directly from your connected CRM. Imported contacts become a batch, called in the order they're fetched.",
+                    badge: "One-time batch",
+                    badgeColor: "bg-emerald-500/10 text-emerald-500",
+                  },
+                ].map(src => (
+                  <div key={src.name} className="flex gap-3 p-3 rounded-lg border border-border/50 bg-card/40">
+                    <div className="h-6 w-6 rounded-md bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">{src.icon}</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-foreground/80">{src.name}</span>
+                        <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded", src.badgeColor)}>{src.badge}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{src.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Batches */}
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Campaigns vs. Batches</p>
+              <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
+                {[
+                  { icon: <Megaphone className="h-3.5 w-3.5 text-primary/50" />, term: "Campaign", def: "The top-level container. Defines the agent, number, calling hours, and retry rules. Lives forever." },
+                  { icon: <Layers className="h-3.5 w-3.5 text-amber-400" />, term: "Batch", def: "One group of leads added at a particular time. A campaign can have unlimited batches — each is tracked independently." },
+                ].map(item => (
+                  <div key={item.term} className="flex gap-3">
+                    <div className="h-5 w-5 rounded-md bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">{item.icon}</div>
+                    <div>
+                      <span className="text-xs font-semibold text-foreground/80">{item.term}</span>
+                      <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-0.5">{item.def}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Quick tips */}
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 mb-3">Quick Tips</p>
+              <div className="space-y-2">
+                {[
+                  "Set calling hours to only dial during business hours — leads won't pick up at 2 AM.",
+                  "Enable retries (up to 3×) with a 60-minute gap to catch leads who missed the first call.",
+                  "Concurrency controls how many simultaneous calls the campaign makes. Start with 2–3 and scale up.",
+                  "The agent prompt sets the conversation goal. Be specific: 'Book a 30-min demo call' outperforms 'Qualify the lead'.",
+                  "Check the Batch Workspace after the first 50 calls to review dispositions and tweak the agent if needed.",
+                ].map((tip, i) => (
+                  <div key={i} className="flex gap-2.5 text-[11px] text-muted-foreground/60">
+                    <span className="shrink-0 font-mono text-primary/40 text-[10px] mt-0.5">{i + 1}.</span>
+                    <span className="leading-relaxed">{tip}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* CTA */}
+            <div className="pt-2">
+              <Button className="w-full h-9 text-xs gap-2" onClick={() => { setHelpOpen(false); setCreateOpen(true); }}>
+                <Plus className="h-3.5 w-3.5" /> Create a Campaign
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ── Modals ── */}
       <CampaignWizard

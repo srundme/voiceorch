@@ -447,10 +447,10 @@ function Step2({
         <div className="grid grid-cols-3 gap-3">
           {(["csv", "webhook", "meta_form"] as const).map(type => {
             const isSelected = state.sourceMode === "new" && state.newSourceType === type;
-            const labels: Record<string, { name: string; desc: string }> = {
-              csv:       { name: "CSV Upload",  desc: "Upload a CSV file" },
-              webhook:   { name: "Webhook",     desc: "Receive leads via webhook" },
-              meta_form: { name: "Meta Form",   desc: "Connect Meta Lead Ads" },
+            const labels: Record<string, { name: string; desc: string; when: string }> = {
+              csv:       { name: "CSV Upload",  desc: "Upload a spreadsheet of leads and call them in order.", when: "You have a fixed list from a CRM export, vendor, or Excel sheet" },
+              webhook:   { name: "Webhook",     desc: "Your website or app sends a lead → call fires in seconds.", when: "You have a contact form, custom CRM, or any system that can send an HTTP request" },
+              meta_form: { name: "Meta Ads",    desc: "Facebook/Instagram form fill triggers an instant call.", when: "You run paid ads and want to call leads within 30 seconds of a form submission" },
             };
             const info = labels[type]!;
             return (
@@ -470,6 +470,9 @@ function Step2({
                 <div>
                   <p className="text-sm font-medium">{info.name}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{info.desc}</p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-1.5 leading-relaxed">
+                    <span className="font-semibold text-muted-foreground/70">Best when:</span> {info.when}
+                  </p>
                 </div>
               </button>
             );
