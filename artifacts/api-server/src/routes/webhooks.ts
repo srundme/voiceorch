@@ -988,7 +988,7 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
         logger.warn({ callUuid, bodyKeys: Object.keys(req.body ?? {}) }, "VoBiz status: missing or too-short CallUUID — ignoring");
         return;
       }
-      const [call] = await db.select({ agentId: callsTable.agentId, toNumber: callsTable.toNumber })
+      const [call] = await db.select({ id: callsTable.id, agentId: callsTable.agentId, toNumber: callsTable.toNumber })
         .from(callsTable)
         .where(and(
           sql`metadata::text like ${"%" + callUuid + "%"}`,
@@ -1001,6 +1001,15 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
       }
       agentId    = call.agentId;
       dbToNumber = call.toNumber;
+      // Update the calls table row so it reflects the real outcome instead of
+      // staying "in_progress" forever when a pre-answer rejection arrives here.
+      const vobizTerminal = mapRawStatusToLeadStatus(callStatus);
+      if (vobizTerminal && vobizTerminal !== "ignore") {
+        await db.update(callsTable)
+          .set({ status: vobizTerminal, endedAt: new Date() })
+          .where(and(eq(callsTable.id, call.id), eq(callsTable.status, "in_progress")));
+        logger.info({ callId: call.id, callStatus, vobizTerminal }, "VoBiz status: updated calls table for non-campaign terminal call");
+      }
     }
 
     if (!dbToNumber) {
@@ -1065,7 +1074,7 @@ router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
         logger.warn({ body: req.body }, "Twilio status: missing or too-short CallSid — ignoring");
         return;
       }
-      const [call] = await db.select({ agentId: callsTable.agentId, toNumber: callsTable.toNumber })
+      const [call] = await db.select({ id: callsTable.id, agentId: callsTable.agentId, toNumber: callsTable.toNumber })
         .from(callsTable)
         .where(and(
           sql`metadata::text like ${"%" + callSid + "%"}`,
@@ -1092,6 +1101,14 @@ router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
       }
       agentId    = call.agentId;
       dbToNumber = call.toNumber;
+      // Update the calls table row so rejected/no-answer calls don't stay "in_progress".
+      const twilioTerminal = mapRawStatusToLeadStatus(callStatus);
+      if (twilioTerminal && twilioTerminal !== "ignore") {
+        await db.update(callsTable)
+          .set({ status: twilioTerminal, endedAt: new Date() })
+          .where(and(eq(callsTable.id, call.id), eq(callsTable.status, "in_progress")));
+        logger.info({ callId: call.id, callStatus, twilioTerminal }, "Twilio status: updated calls table for non-campaign terminal call");
+      }
     }
 
     if (!dbToNumber) {
