@@ -1614,6 +1614,8 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
     // ── Mark campaign lead terminal (drains the active Connected count) ──────────
     if (session.campaignLeadId) {
+      const leadId = session.campaignLeadId;
+
       // A mid-conversation drop (naturalEnd=false, not transferred, duration >15s)
       // should be retried just like a BUSY/NO_ANSWER: mark the lead "failed" and
       // let scheduleRetry decide whether attempts remain. Without this, dropped
@@ -1624,7 +1626,17 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
         !session.wasTransferred &&
         durationSeconds > 15;
 
-      const terminalLeadStatus = session.voicemailActionExecuted
+      // A confirmed voicemail counts as ONE attempt and is retryable (respecting
+      // Max Attempts / Retry Delay), exactly like a mid-conversation drop — NOT a
+      // final terminal status on the first attempt. It only "sticks" as terminal
+      // once every configured attempt has ended in voicemail (scheduleRetry then
+      // returns false). This mirrors the pre-connect webhook path, which already
+      // treats voicemail/machine as retryable.
+      const isVoicemail = session.voicemailActionExecuted;
+      const shouldRetry = midConvDrop || isVoicemail;
+      const retryReason = isVoicemail ? "voicemail" : "network_drop";
+
+      const terminalLeadStatus = isVoicemail
         ? "voicemail"
         : session.wasTransferred
           ? "transferred"
@@ -1632,63 +1644,65 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             ? "failed"
             : "completed";
 
-      void db.update(campaignLeadsTable)
-        .set({ callStatus: terminalLeadStatus })
-        .where(eq(campaignLeadsTable.id, session.campaignLeadId))
-        .then(async () => {
-          // For mid-conversation drops: schedule a retry via the same path used
-          // by BUSY/NO_ANSWER so the lead is redialled if attempts remain.
-          if (midConvDrop) {
-            try {
-              const leadId = session.campaignLeadId!;
-              const [freshLead] = await db
-                .select({ callAttempts: campaignLeadsTable.callAttempts, campaignId: campaignLeadsTable.campaignId, batchId: campaignLeadsTable.batchId })
-                .from(campaignLeadsTable)
-                .where(eq(campaignLeadsTable.id, leadId))
-                .limit(1);
-              if (freshLead) {
-                const [camp] = await db
-                  .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
-                  .from(campaignsTable)
-                  .where(eq(campaignsTable.id, freshLead.campaignId))
-                  .limit(1);
-                const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(freshLead.batchId, camp);
-                const scheduled = await import("../services/retryEngine.js")
-                  .then(m => m.scheduleRetry({
-                    leadId,
-                    campaignId:         freshLead.campaignId,
-                    currentAttempts:    freshLead.callAttempts ?? 0,
-                    maxAttempts,
-                    retryDelayMinutes,
-                    reason:             "network_drop",
-                  }));
-                logger.info(
-                  { campaignLeadId: leadId, durationSeconds, retryScheduled: scheduled },
-                  "Campaign call mid-conversation drop — retry scheduled",
-                );
-              }
-            } catch (retryErr) {
-              logger.warn({ campaignLeadId: session.campaignLeadId, retryErr }, "Failed to schedule mid-conv drop retry");
-            }
-          }
-          // Rolling concurrency: this connected/completed/transferred call just
-          // freed a slot, so immediately top the campaign back up to its limit
-          // rather than waiting for the next 60 s poll. Fire-and-forget.
-          void refillCampaignForLead(session.campaignLeadId!);
-        })
-        .catch((err) => {
-          logger.warn({ campaignLeadId: session.campaignLeadId, err }, "Failed to mark campaign lead terminal");
-        });
-
-      // ── Compute & persist operational outcome (fire-and-forget) ────────────
-      // Runs shortly after the lead status is persisted above. Checks for a
-      // booking created during this call (bookings.call_id = session.callId),
-      // a pending callback, and max-attempts exhaustion, then writes the
-      // canonical operationalOutcome so the batch workspace KPI cards update.
+      // Single sequential flow so retry scheduling, operational-outcome
+      // computation, and reconcile run in a deterministic order:
+      //   update status → schedule retry → set outcome (using !retryScheduled)
+      //   → refill/reconcile (which keeps the batch open while a retry is pending).
       void (async () => {
         try {
-          const leadId = session.campaignLeadId!;
+          await db.update(campaignLeadsTable)
+            .set({ callStatus: terminalLeadStatus })
+            .where(eq(campaignLeadsTable.id, leadId));
+        } catch (err) {
+          logger.warn({ campaignLeadId: leadId, err }, "Failed to mark campaign lead terminal");
+          return;
+        }
 
+        // ── Schedule a retry for retryable terminal outcomes (drop / voicemail) ──
+        // Uses the same path as BUSY/NO_ANSWER so the lead is redialled if
+        // attempts remain. scheduleRetry returns false once attempts are
+        // exhausted (or a pending retry already exists) — the terminal status
+        // then "sticks".
+        let retryScheduled = false;
+        if (shouldRetry) {
+          try {
+            const [freshLead] = await db
+              .select({ callAttempts: campaignLeadsTable.callAttempts, campaignId: campaignLeadsTable.campaignId, batchId: campaignLeadsTable.batchId })
+              .from(campaignLeadsTable)
+              .where(eq(campaignLeadsTable.id, leadId))
+              .limit(1);
+            if (freshLead) {
+              const [camp] = await db
+                .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
+                .from(campaignsTable)
+                .where(eq(campaignsTable.id, freshLead.campaignId))
+                .limit(1);
+              const { maxAttempts, retryDelayMinutes } = await resolveRetryConfig(freshLead.batchId, camp);
+              retryScheduled = await import("../services/retryEngine.js")
+                .then(m => m.scheduleRetry({
+                  leadId,
+                  campaignId:         freshLead.campaignId,
+                  currentAttempts:    freshLead.callAttempts ?? 0,
+                  maxAttempts,
+                  retryDelayMinutes,
+                  reason:             retryReason,
+                }));
+              logger.info(
+                { campaignLeadId: leadId, durationSeconds, terminalLeadStatus, retryReason, retryScheduled },
+                "Campaign call terminal — retry decision",
+              );
+            }
+          } catch (retryErr) {
+            logger.warn({ campaignLeadId: leadId, retryErr }, "Failed to schedule campaign retry");
+          }
+        }
+
+        // ── Compute & persist operational outcome ─────────────────────────────
+        // Checks for a booking created during this call (bookings.call_id =
+        // session.callId), a pending callback, and max-attempts exhaustion, then
+        // writes the canonical operationalOutcome so the batch workspace KPI
+        // cards update.
+        try {
           // Booking: the native_booking tool writes bookings.call_id = callId
           const [bookingRow] = await db
             .select({ id: bookingsTable.id })
@@ -1721,7 +1735,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             .limit(1);
 
           let maxAttemptsReached = false;
-          if (freshLead) {
+          if (isVoicemail) {
+            // A voicemail with a scheduled retry stays pending; the outcome only
+            // finalizes once the last configured attempt also ends in voicemail
+            // (no retry scheduled) — same pattern as the webhook terminal path.
+            maxAttemptsReached = !retryScheduled;
+          } else if (freshLead) {
             const [camp] = await db
               .select({ maxAttempts: campaignsTable.maxAttempts, retryDelayMinutes: campaignsTable.retryDelayMinutes })
               .from(campaignsTable)
@@ -1733,11 +1752,8 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             }
           }
 
-          const termStatus = session.voicemailActionExecuted
-            ? "voicemail"
-            : session.wasTransferred ? "transferred" : midConvDrop ? "failed" : "completed";
           const outcome = computeOperationalOutcome({
-            callStatus:           termStatus,
+            callStatus:           terminalLeadStatus,
             disposition:          null, // disposeCall runs async; a later taxonomy run may update this
             hasBooking,
             hasCompletedTransfer: session.wasTransferred,
@@ -1749,13 +1765,19 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           if (freshLead) {
             await setOperationalOutcome(db, leadId, freshLead.campaignId, outcome);
             logger.info(
-              { leadId, outcome, hasBooking, wasTransferred: session.wasTransferred, hasPendingCallback },
+              { leadId, outcome, hasBooking, wasTransferred: session.wasTransferred, hasPendingCallback, retryScheduled },
               "Campaign lead operational outcome set",
             );
           }
         } catch (outcomeErr) {
-          logger.warn({ campaignLeadId: session.campaignLeadId, outcomeErr }, "Failed to set campaign lead operational outcome");
+          logger.warn({ campaignLeadId: leadId, outcomeErr }, "Failed to set campaign lead operational outcome");
         }
+
+        // Rolling concurrency + reconcile: this call freed a slot, so top the
+        // campaign back up to its limit rather than waiting for the next 60 s
+        // poll. Runs AFTER retry scheduling so a pending call_retries row
+        // correctly keeps the batch/campaign open. Fire-and-forget.
+        void refillCampaignForLead(leadId);
       })();
     }
 
