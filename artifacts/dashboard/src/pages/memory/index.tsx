@@ -799,8 +799,8 @@ function CallerDetailView({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* caller header — the primary focus of the page */}
-      <div className="px-6 pt-6 pb-5 shrink-0">
-        <DetailNav className="mb-4" backTo="/app/memory" backLabel="Back" onBack={onBack} preferOnBack />
+      <div className="px-6 pt-3 pb-4 shrink-0">
+        <DetailNav className="mb-2.5" backTo="/app/memory" backLabel="Back" onBack={onBack} preferOnBack />
         <div className="flex items-start gap-4">
           <CallerAvatar contact={contact} size="lg" />
           <div className="flex-1 min-w-0">
@@ -826,7 +826,7 @@ function CallerDetailView({
         </div>
 
         {/* Per-caller stat band — clean spaced cells, hierarchy via type weight */}
-        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Total Calls", value: String(contact.callCount),    icon: <Phone className="h-4 w-4 text-blue-500" />,    accent: "text-blue-500" },
             { label: "Facts",       value: String(contact.factCount),    icon: <FileText className="h-4 w-4 text-purple-500" />, accent: "text-purple-500" },
@@ -1119,16 +1119,16 @@ export default function MemoryPage() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
       {/* Header */}
-      <div className="px-6 pt-6 pb-5 shrink-0">
+      <div className="px-6 pt-4 pb-3 border-b border-border/40 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
-            <Brain className="h-5 w-5 text-purple-500" />
+          <div className="h-9 w-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
+            <Brain className="h-4 w-4 text-purple-500" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground leading-none">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground leading-none">
               Customer Intelligence
             </h1>
-            <p className="text-xs text-muted-foreground/60 mt-1.5">
+            <p className="text-xs text-muted-foreground/60 mt-1">
               Memory / CRM
             </p>
           </div>
