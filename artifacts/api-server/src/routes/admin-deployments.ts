@@ -227,7 +227,7 @@ router.get("/admin/deployments/migrations", async (req, res): Promise<void> => {
       created_at: bigint;
     }>(`
       SELECT id, hash, created_at
-      FROM __drizzle_migrations
+      FROM drizzle.__drizzle_migrations
       ORDER BY created_at DESC
       LIMIT 5
     `);
@@ -254,7 +254,7 @@ router.get("/admin/deployments/migrations", async (req, res): Promise<void> => {
 
     // Compare applied count against journal to detect unapplied migrations.
     const countRes = await pool.query<{ count: string }>(
-      "SELECT COUNT(*) AS count FROM __drizzle_migrations",
+      "SELECT COUNT(*) AS count FROM drizzle.__drizzle_migrations",
     );
     const appliedCount = parseInt(countRes.rows[0]?.count ?? "0", 10);
     const journalCount = readJournalCount();
