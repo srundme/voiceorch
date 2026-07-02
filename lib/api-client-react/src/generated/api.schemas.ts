@@ -162,6 +162,16 @@ export const GenerateSystemPromptBodyAgentDirection = {
   outbound: 'outbound',
 } as const;
 
+export interface SystemPromptFailedCheckContext {
+  label: string;
+  detail: string;
+  /**
+     * The exact offending/missing text from the previous attempt, when available
+     * @nullable
+     */
+  snippet?: string | null;
+}
+
 export interface GenerateSystemPromptBody {
   /** @minLength 1 */
   agentName: string;
@@ -183,6 +193,8 @@ export interface GenerateSystemPromptBody {
   callFlowDescription: string;
   /** Optional key knowledge / product details the agent should know */
   keyKnowledge?: string;
+  /** Failed guardrail checks from the previous generation attempt. When regenerating after a failed guardrail result, the client passes the failed checks here so the generator is explicitly told what went wrong last time and does not reproduce the same contradiction. */
+  previousFailures?: SystemPromptFailedCheckContext[];
 }
 
 export interface SystemPromptGenDomain {
@@ -221,6 +233,11 @@ export interface SystemPromptGuardrailCheck {
   detail: string;
   /** Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks */
   source: SystemPromptGuardrailCheckSource;
+  /**
+     * The exact generated-prompt text (or missing template content) that tripped this check — present on failed checks when the checker can pinpoint it
+     * @nullable
+     */
+  snippet?: string | null;
 }
 
 export interface SystemPromptGuardrailResult {

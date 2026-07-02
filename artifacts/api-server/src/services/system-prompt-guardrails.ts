@@ -18,6 +18,8 @@ export interface GuardrailCheck {
   detail: string;
   /** Which layer of verification produced this check. */
   source: GuardrailCheckSource;
+  /** The exact generated-prompt text that tripped this check (failed checks only). */
+  snippet?: string | null;
 }
 
 export interface GuardrailResult {
@@ -32,6 +34,31 @@ interface GuardrailRule {
   contradictions: RegExp[];
   passDetail: string;
   failDetail: string;
+  /**
+   * When true, a contradiction match is DISCARDED if the sentence containing it
+   * is moderation phrasing about frequency/overuse (e.g. "don't overuse Sir/Ma'am",
+   * "avoid repeating sir in every sentence") rather than a genuine disable.
+   */
+  moderationExemptible?: boolean;
+}
+
+/**
+ * Frequency/overuse moderation cues. A sentence that tells the agent to tone
+ * something DOWN (not turn it OFF) legitimately co-occurs with "avoid"/"don't"
+ * verbs — e.g. "avoid repeating sir in every sentence" — and must not be
+ * treated as a Foundation contradiction.
+ */
+const MODERATION_CUE_RE =
+  /\b(?:overus\w*|over-?rel\w*|too\s+(?:often|much|frequently|many)|repeat\w*|repetiti\w*|every\s+(?:sentence|line|turn|response|reply|phrase|utterance)|each\s+(?:sentence|line|turn|response|reply)|excessiv\w*|constantly|sparingly|occasionally|frequency|multiple\s+times)\b/i;
+
+/** Extract the sentence (bounded by newline or period) containing a match offset. */
+function sentenceAround(text: string, index: number, matchLen: number): string {
+  const boundary = /[.\n]/;
+  let start = index;
+  while (start > 0 && !boundary.test(text[start - 1]!)) start--;
+  let end = index + matchLen;
+  while (end < text.length && !boundary.test(text[end]!)) end++;
+  return text.slice(start, end).trim();
 }
 
 const RULES: GuardrailRule[] = [
@@ -66,6 +93,7 @@ const RULES: GuardrailRule[] = [
     ],
     passDetail: "Salutation handling not overridden.",
     failDetail: "Prompt disables the salutation protocol — contradicts the Foundation salutation rule.",
+    moderationExemptible: true,
   },
   {
     name: "spoken_form",
@@ -117,17 +145,39 @@ const RULES: GuardrailRule[] = [
   },
 ];
 
+/**
+ * Find the first genuine contradiction of a rule in the text. Returns the
+ * offending sentence, or null when the rule is not contradicted. For
+ * moderation-exemptible rules, matches whose containing sentence is frequency/
+ * overuse moderation phrasing are skipped.
+ */
+function findContradiction(rule: GuardrailRule, text: string): string | null {
+  for (const re of rule.contradictions) {
+    // Scan all occurrences so a moderation-phrased first hit doesn't mask a
+    // genuine disable later in the prompt.
+    const global = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    for (const m of text.matchAll(global)) {
+      const sentence = sentenceAround(text, m.index ?? 0, m[0]!.length);
+      if (rule.moderationExemptible && MODERATION_CUE_RE.test(sentence)) continue;
+      return sentence || m[0]!;
+    }
+  }
+  return null;
+}
+
 /** Scan a generated system prompt against the Foundation-locked rule set. */
 export function checkFoundationGuardrails(generatedPrompt: string): GuardrailResult {
   const text = generatedPrompt ?? "";
   const checks: GuardrailCheck[] = RULES.map((rule) => {
-    const contradicted = rule.contradictions.some((re) => re.test(text));
+    const offending = findContradiction(rule, text);
+    const contradicted = offending != null;
     return {
       name: rule.name,
       label: rule.label,
       passed: !contradicted,
       detail: contradicted ? rule.failDetail : rule.passDetail,
       source: "foundation" as const,
+      ...(contradicted ? { snippet: offending.slice(0, 240) } : {}),
     };
   });
   return { passed: checks.every((c) => c.passed), checks };

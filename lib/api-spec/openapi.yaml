@@ -6643,6 +6643,25 @@ components:
         keyKnowledge:
           type: string
           description: "Optional key knowledge / product details the agent should know"
+        previousFailures:
+          type: array
+          description: >-
+            Failed guardrail checks from the previous generation attempt. When
+            regenerating after a failed guardrail result, the client passes the
+            failed checks here so the generator is explicitly told what went
+            wrong last time and does not reproduce the same contradiction.
+          items:
+            $ref: "#/components/schemas/SystemPromptFailedCheckContext"
+
+    SystemPromptFailedCheckContext:
+      type: object
+      required: [label, detail]
+      properties:
+        label: { type: string }
+        detail: { type: string }
+        snippet:
+          type: ["string", "null"]
+          description: "The exact offending/missing text from the previous attempt, when available"
 
     SystemPromptGenDomain:
       type: object
@@ -6679,6 +6698,9 @@ components:
           type: string
           enum: [foundation, structure, domain]
           description: "Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks"
+        snippet:
+          type: ["string", "null"]
+          description: "The exact generated-prompt text (or missing template content) that tripped this check — present on failed checks when the checker can pinpoint it"
 
     SystemPromptGuardrailResult:
       type: object

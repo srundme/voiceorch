@@ -384,6 +384,23 @@ ${templateText}
   });
 }
 
+/** A failed guardrail check fed back into generation/repair as context. */
+export interface FailedCheckContext {
+  label: string;
+  detail: string;
+  /** The exact offending text from the previous attempt, when available. */
+  snippet?: string | null;
+}
+
+function formatFailedChecks(failures: FailedCheckContext[]): string {
+  return failures
+    .map((f, i) => {
+      const snippet = f.snippet?.trim();
+      return `${i + 1}. ${f.label}: ${f.detail}${snippet ? `\n   Offending/missing text: "${snippet}"` : ""}`;
+    })
+    .join("\n");
+}
+
 export interface LayeredPromptInput {
   /** Foundation layer — LOCKED, universal rules that must never be contradicted. */
   foundationText: string;
@@ -395,6 +412,12 @@ export interface LayeredPromptInput {
   clientDetailsText?: string;
   /** Raw form inputs collected by the modal. */
   formInputs: Record<string, unknown>;
+  /**
+   * Failed guardrail checks from a previous generation attempt. When present,
+   * the generator is explicitly told what went wrong last time so a manual
+   * "Adjust & Regenerate" does not reproduce the same contradiction.
+   */
+  previousFailures?: FailedCheckContext[];
 }
 
 /**
@@ -404,7 +427,7 @@ export interface LayeredPromptInput {
  * are declared non-negotiable; the Domain/inputs may only specialise, never override.
  */
 export async function generateLayeredAgentPrompt(input: LayeredPromptInput): Promise<string> {
-  const { foundationText, domainText, domainName, clientDetailsText, formInputs } = input;
+  const { foundationText, domainText, domainName, clientDetailsText, formInputs, previousFailures } = input;
 
   const layers: string[] = [
     `=== FOUNDATION (LOCKED — universal rules that MUST NOT be contradicted or removed) ===\n${foundationText}\n=== END FOUNDATION ===`,
@@ -438,7 +461,14 @@ RULES OF ASSEMBLY:
    - Variables Used
    - Response Guidelines
 6. Output ONLY the final system prompt — no commentary, no markdown fences.
-
+${
+  previousFailures && previousFailures.length > 0
+    ? `
+PREVIOUS ATTEMPT FAILED VERIFICATION — a prior generation of this same prompt failed the automated checks below. These failures came from phrasing the generator itself produced, NOT from the user's inputs. You MUST NOT reproduce any of them. Where "offending text" is shown, avoid that phrasing pattern entirely; where content is listed as missing, it MUST be present this time:
+${formatFailedChecks(previousFailures)}
+`
+    : ""
+}
 ${layers.join("\n\n")}`;
 
   const inputsBlock = `Generate the agent's final system prompt by layering the sections above and applying these form inputs:\n\n${JSON.stringify(
@@ -458,4 +488,36 @@ ${layers.join("\n\n")}`;
     userContent: inputsBlock,
     languages,
   });
+}
+
+/**
+ * Bounded server-side repair pass for a generated layered prompt that failed
+ * guardrail verification. Feeds the failed checks + offending snippets back to
+ * the LLM with an instruction to rewrite ONLY the violating phrasing while
+ * preserving everything else. One LLM round; the caller re-runs the checks on
+ * the result and keeps whichever attempt scores best.
+ */
+export async function repairLayeredAgentPrompt(params: {
+  generatedPrompt: string;
+  failedChecks: FailedCheckContext[];
+  /** Selected language(s) for model routing (same as generation). */
+  languages?: unknown;
+}): Promise<string> {
+  const { generatedPrompt, failedChecks, languages } = params;
+
+  const systemInstruction = `You are a senior AI voice agent prompt engineer performing a SURGICAL REPAIR of an existing system prompt that failed automated verification checks.
+
+REPAIR RULES:
+1. The prompt below is otherwise final. Preserve its structure, sections, wording, and content EXACTLY — except for the minimal edits needed to fix the listed failures.
+2. For each failure with "offending text", rewrite ONLY that phrasing so it no longer violates the check, keeping the sentence's legitimate intent (e.g. moderation guidance may stay, but phrased so it cannot read as disabling a locked rule).
+3. For each failure describing MISSING content (missing section, missing flow step, missing outcome value, missing compliance keyword), ADD the missing content in the appropriate place with detailed, specific text. Backtick-quoted outcome values must be included verbatim.
+4. Never introduce new contradictions of the locked Foundation rules (AI honesty, salutation protocol, spoken-form rules, silent tool calls, stay-on-script, closing protocol, opt-out handling).
+5. Output ONLY the full corrected system prompt — no commentary, no markdown fences, no explanation of the changes.
+
+FAILED CHECKS TO FIX:
+${formatFailedChecks(failedChecks)}`;
+
+  const userContent = `=== PROMPT TO REPAIR ===\n${generatedPrompt}\n=== END PROMPT ===`;
+
+  return generatePromptText({ systemInstruction, userContent, languages });
 }

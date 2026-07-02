@@ -9,6 +9,7 @@ import {
   getActiveTemplate,
   generateAgentPrompt,
   generateLayeredAgentPrompt,
+  repairLayeredAgentPrompt,
   generatePromptText,
   callSarvam,
   includesIndicLanguage,
@@ -853,32 +854,24 @@ router.post("/wizard/generate-system-prompt", requireDbUser, async (req, res): P
     keyKnowledge: body.keyKnowledge ?? "",
   };
 
-  try {
-    const systemPrompt = await generateLayeredAgentPrompt({
-      foundationText: foundation.extractedText,
-      domainText,
-      domainName,
-      clientDetailsText: clientDetails?.extractedText,
-      formInputs,
-    });
-
-    // Merge the three check families into one named pass/fail list:
-    //  - Foundation contradiction guardrails (always)
-    //  - Required output-structure sections (always; Defined Outcomes only when a domain drives the generation)
-    //  - Domain-template compliance checks (only when a domain is selected)
-    //
-    // Gating is keyed off the SELECTED domain (not non-empty text): if a domain
-    // was picked but its template text is empty/unusable, that is an explicit
-    // FAILING check — never a silent skip.
-    const hasDomain = !body.isCustom;
-    const domainTextUsable = domainText.trim().length > 0;
-    const foundationResult = checkFoundationGuardrails(systemPrompt);
-    const sectionChecks = checkRequiredSections(systemPrompt, {
+  // Merge the three check families into one named pass/fail list:
+  //  - Foundation contradiction guardrails (always)
+  //  - Required output-structure sections (always; Defined Outcomes only when a domain drives the generation)
+  //  - Domain-template compliance checks (only when a domain is selected)
+  //
+  // Gating is keyed off the SELECTED domain (not non-empty text): if a domain
+  // was picked but its template text is empty/unusable, that is an explicit
+  // FAILING check — never a silent skip.
+  const hasDomain = !body.isCustom;
+  const domainTextUsable = domainText.trim().length > 0;
+  const runAllChecks = (prompt: string) => {
+    const foundationResult = checkFoundationGuardrails(prompt);
+    const sectionChecks = checkRequiredSections(prompt, {
       requireDefinedOutcomes: hasDomain && domainTextUsable,
     });
     const domainChecks = hasDomain
       ? domainTextUsable
-        ? checkDomainCompliance({ domainText, domainName, generatedPrompt: systemPrompt })
+        ? checkDomainCompliance({ domainText, domainName, generatedPrompt: prompt })
         : [
             {
               name: "domain_template_content",
@@ -889,11 +882,67 @@ router.post("/wizard/generate-system-prompt", requireDbUser, async (req, res): P
             },
           ]
       : [];
-    const allChecks = [...foundationResult.checks, ...sectionChecks, ...domainChecks];
-    const guardrail = {
-      passed: allChecks.every((c) => c.passed),
-      checks: allChecks,
-    };
+    const checks = [...foundationResult.checks, ...sectionChecks, ...domainChecks];
+    return { passed: checks.every((c) => c.passed), checks };
+  };
+  const toFailureContext = (checks: Array<{ label: string; detail: string; snippet?: string | null }>) =>
+    checks.map((c) => ({ label: c.label, detail: c.detail, snippet: c.snippet ?? null }));
+
+  // Model-routing languages (same signal generateLayeredAgentPrompt derives).
+  const routeLanguages: unknown[] = [body.language, ...(body.selectedLanguages ?? [])];
+
+  try {
+    let systemPrompt = await generateLayeredAgentPrompt({
+      foundationText: foundation.extractedText,
+      domainText,
+      domainName,
+      clientDetailsText: clientDetails?.extractedText,
+      formInputs,
+      // A manual "Adjust & Regenerate" after a failed attempt carries the
+      // previous failures so the generator does not reproduce the same
+      // contradiction.
+      previousFailures: body.previousFailures,
+    });
+    let guardrail = runAllChecks(systemPrompt);
+
+    // Bounded auto-repair: when the assembled prompt fails verification, run
+    // ONE repair round — feed the failed checks + offending snippets back to
+    // the LLM to rewrite only the violating phrasing — then keep whichever
+    // attempt scores best. Repairs only fixable failures: the unusable-domain-
+    // template check cannot be fixed by rewriting the prompt, so it is skipped.
+    const REPAIR_ATTEMPTS = 1;
+    for (let attempt = 0; attempt < REPAIR_ATTEMPTS && !guardrail.passed; attempt++) {
+      const fixable = guardrail.checks.filter(
+        (c) => !c.passed && c.name !== "domain_template_content",
+      );
+      if (fixable.length === 0) break;
+      try {
+        const repaired = await repairLayeredAgentPrompt({
+          generatedPrompt: systemPrompt,
+          failedChecks: toFailureContext(fixable),
+          languages: routeLanguages,
+        });
+        const repairedGuardrail = runAllChecks(repaired);
+        const failCount = (g: { checks: Array<{ passed: boolean }> }) =>
+          g.checks.filter((c) => !c.passed).length;
+        const beforeFails = failCount(guardrail);
+        const afterFails = failCount(repairedGuardrail);
+        const keptRepair = afterFails < beforeFails;
+        if (keptRepair) {
+          systemPrompt = repaired;
+          guardrail = repairedGuardrail;
+        }
+        req.log.info(
+          { keptRepair, beforeFails, afterFails },
+          "System prompt guardrail auto-repair pass completed",
+        );
+      } catch (repairErr) {
+        // Repair is best-effort — a repair failure never loses the original.
+        req.log.warn({ err: repairErr }, "System prompt guardrail auto-repair pass failed");
+        break;
+      }
+    }
+
     const warnings = hasDomain ? jurisdictionMismatchWarnings(domainText, body.language) : [];
 
     res.json({

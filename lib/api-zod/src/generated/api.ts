@@ -59,7 +59,12 @@ export const GenerateSystemPromptBody = zod.object({
   "language": zod.string(),
   "selectedLanguages": zod.array(zod.string()).optional(),
   "callFlowDescription": zod.string().min(generateSystemPromptBodyCallFlowDescriptionMin),
-  "keyKnowledge": zod.string().optional().describe('Optional key knowledge \/ product details the agent should know')
+  "keyKnowledge": zod.string().optional().describe('Optional key knowledge \/ product details the agent should know'),
+  "previousFailures": zod.array(zod.object({
+  "label": zod.string(),
+  "detail": zod.string(),
+  "snippet": zod.string().nullish().describe('The exact offending\/missing text from the previous attempt, when available')
+})).optional().describe('Failed guardrail checks from the previous generation attempt. When regenerating after a failed guardrail result, the client passes the failed checks here so the generator is explicitly told what went wrong last time and does not reproduce the same contradiction.')
 })
 
 export const GenerateSystemPromptResponse = zod.object({
@@ -82,7 +87,8 @@ export const GenerateSystemPromptResponse = zod.object({
   "label": zod.string(),
   "passed": zod.boolean(),
   "detail": zod.string(),
-  "source": zod.enum(['foundation', 'structure', 'domain']).describe('Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks')
+  "source": zod.enum(['foundation', 'structure', 'domain']).describe('Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks'),
+  "snippet": zod.string().nullish().describe('The exact generated-prompt text (or missing template content) that tripped this check — present on failed checks when the checker can pinpoint it')
 }))
 }),
   "warnings": zod.array(zod.string()).describe('Non-blocking advisory warnings (e.g. jurisdiction\/language mismatch between the domain template and the agent\'s configured market)')

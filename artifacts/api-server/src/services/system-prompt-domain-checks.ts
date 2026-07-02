@@ -159,6 +159,9 @@ export function checkRequiredSections(
         ? "Present with detailed content."
         : "Section heading found but its content is too thin — it must be filled in detail, not a one-liner.",
       source: "structure" as const,
+      ...(passed
+        ? {}
+        : { snippet: `${text.slice(hit.start, hit.end).trim()}\n${body.replace(/\s+/g, " ").trim()}`.slice(0, 240) }),
     };
   });
 }
@@ -346,6 +349,7 @@ export function checkDomainCompliance(input: DomainComplianceInput): GuardrailCh
             .map((s) => `"${s.step.slice(0, 80)}"`)
             .join(", ")}${missing.length > 4 ? ` (+${missing.length - 4} more)` : ""} — each numbered step must be carried into the prompt.`,
       source: "domain",
+      ...(passed ? {} : { snippet: missing.map((s) => s.step).join(" | ").slice(0, 240) }),
     });
   }
 
@@ -365,6 +369,7 @@ export function checkDomainCompliance(input: DomainComplianceInput): GuardrailCh
         ? "All mandatory/regulatory steps from the domain template are represented."
         : `Missing mandatory step(s) from the domain template: ${missing.map((s) => `"${s.step.slice(0, 80)}"`).join(", ")}.`,
       source: "domain",
+      ...(passed ? {} : { snippet: missing.map((s) => s.step).join(" | ").slice(0, 240) }),
     });
   }
 
@@ -380,6 +385,7 @@ export function checkDomainCompliance(input: DomainComplianceInput): GuardrailCh
         ? `All ${el.definedOutcomes.length} outcome values from the domain template are present.`
         : `Missing outcome value(s): ${missing.map((o) => `\`${o}\``).join(", ")} — the Defined Outcomes list must be carried verbatim.`,
       source: "domain",
+      ...(passed ? {} : { snippet: missing.map((o) => `\`${o}\``).join(", ").slice(0, 240) }),
     });
   }
 
@@ -400,6 +406,7 @@ export function checkDomainCompliance(input: DomainComplianceInput): GuardrailCh
           ? "The generated prompt has no compliance/disclosure content despite the domain template's Compliance Note."
           : `Compliance requirement(s) missing from the prompt: ${missingKeywords.join(", ")}.`,
       source: "domain",
+      ...(passed ? {} : { snippet: missingKeywords.join(", ").slice(0, 240) || null }),
     });
   }
 

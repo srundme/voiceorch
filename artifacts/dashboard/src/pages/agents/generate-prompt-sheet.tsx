@@ -57,6 +57,9 @@ export function GeneratePromptSheet({
   const [generatedPrompt, setGenerated] = useState("");
   const [genMeta, setGenMeta]           = useState<SystemPromptGenerationMeta | null>(null);
   const [guardrail, setGuardrail]       = useState<SystemPromptGuardrailResult | null>(null);
+  // Failed checks from the last generation attempt — threaded back into the
+  // next generation so "Adjust & Regenerate" doesn't reproduce the same issue.
+  const [prevFailures, setPrevFailures] = useState<Array<{ label: string; detail: string; snippet?: string | null }>>([]);
   const [warnings, setWarnings]         = useState<string[]>([]);
   const [errorMsg, setErrorMsg]         = useState("");
   const [errorReason, setErrorReason]   = useState<string>("");
@@ -119,11 +122,19 @@ export function GeneratePromptSheet({
           selectedLanguages: [form.language.trim()].filter(Boolean),
           callFlowDescription: form.callFlowDescription.trim(),
           keyKnowledge:   form.keyKnowledge.trim() || undefined,
+          // Carry the last attempt's failed checks so the generator is told
+          // exactly what to avoid this time.
+          previousFailures: prevFailures.length > 0 ? prevFailures : undefined,
         },
       });
       setGenerated(res.systemPrompt);
       setGenMeta(res.generationMeta);
       setGuardrail(res.guardrail);
+      setPrevFailures(
+        res.guardrail.checks
+          .filter(c => !c.passed)
+          .map(c => ({ label: c.label, detail: c.detail, snippet: c.snippet ?? null })),
+      );
       setWarnings(res.warnings ?? []);
       // When the field already holds a prompt, surface the diff by default rather
       // than silently overwriting — the user must see what changes.
@@ -145,6 +156,7 @@ export function GeneratePromptSheet({
     setGenerated("");
     setGenMeta(null);
     setGuardrail(null);
+    setPrevFailures([]);
     setWarnings([]);
     setErrorMsg("");
     setErrorReason("");
@@ -423,13 +435,20 @@ export function GeneratePromptSheet({
                           </span>
                           <span className="font-medium">{c.label}</span>
                           {!c.passed && <> — {c.detail}</>}
+                          {!c.passed && c.snippet && (
+                            <span className="block mt-0.5 rounded bg-red-500/10 px-1.5 py-1 font-mono text-[9px] leading-snug text-red-200/90">
+                              “{c.snippet}”
+                            </span>
+                          )}
                         </span>
                       </li>
                     ))}
                   </ul>
                   {!guardrail.passed && (
                     <p className="text-[10px] font-medium text-red-300">
-                      This prompt can't be applied until the failed checks are resolved. Adjust your inputs and regenerate.
+                      These issues come from the generated text — not your inputs. An automatic fix was already attempted.
+                      Click <strong>Adjust &amp; Regenerate</strong>: the next generation is told exactly which checks failed
+                      (and the offending text) so it can produce a compliant prompt.
                     </p>
                   )}
                 </div>
@@ -518,7 +537,7 @@ export function GeneratePromptSheet({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                You can adjust your inputs and try again, or write the prompt manually.
+                This was a generation error on our side — your inputs are fine. You can try again, or write the prompt manually.
               </p>
             </div>
           )}
