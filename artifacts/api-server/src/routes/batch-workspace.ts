@@ -277,7 +277,15 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
 
   const leadIds = leads.map(l => l.id);
 
-  // Batch-load related records
+  // Batch-load related records (including call stats for duration/cost)
+  const callIds = leads.filter(l => l.callId).map(l => l.callId!);
+  const callStatsMap = new Map<number, { durationSeconds: number | null; costCents: number | null }>();
+  if (callIds.length > 0) {
+    const callRows = await db.select({ id: callsTable.id, durationSeconds: callsTable.durationSeconds, costCents: callsTable.costCents })
+      .from(callsTable).where(inArray(callsTable.id, callIds));
+    for (const r of callRows) callStatsMap.set(r.id, { durationSeconds: r.durationSeconds ?? null, costCents: r.costCents ?? null });
+  }
+
   const [callbacks, bookings, transfers] = await Promise.all([
     db.select({
       leadId: callCallbacksTable.leadId,
@@ -326,9 +334,11 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
 
   const items = leads.map(l => ({
     ...l,
-    lastAttemptAt: l.lastAttemptAt?.toISOString() ?? null,
-    nextRetryAt:   l.nextRetryAt ? new Date(l.nextRetryAt).toISOString() : null,
-    createdAt:     l.createdAt.toISOString(),
+    lastAttemptAt:   l.lastAttemptAt?.toISOString() ?? null,
+    nextRetryAt:     l.nextRetryAt ? new Date(l.nextRetryAt).toISOString() : null,
+    createdAt:       l.createdAt.toISOString(),
+    durationSeconds: l.callId ? (callStatsMap.get(l.callId)?.durationSeconds ?? null) : null,
+    costCents:       l.callId ? (callStatsMap.get(l.callId)?.costCents ?? null) : null,
     callback:  callbackMap.has(l.id) ? {
       status:     callbackMap.get(l.id)!.status,
       callbackAt: callbackMap.get(l.id)!.callbackAt?.toISOString() ?? null,

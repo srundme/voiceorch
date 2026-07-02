@@ -10974,6 +10974,8 @@ components:
         lastAttemptAt:      { type: string, format: date-time, nullable: true }
         nextRetryAt:        { type: string, format: date-time, nullable: true }
         callId:             { type: integer, nullable: true }
+        durationSeconds:    { type: integer, nullable: true }
+        costCents:          { type: integer, nullable: true }
         createdAt:          { type: string, format: date-time }
         callback:
           $ref: "#/components/schemas/BatchWorkspaceLeadCallbackInfo"

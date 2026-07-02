@@ -18,7 +18,7 @@ import {
   ChevronLeft, ChevronRight, User, Clock, Calendar,
   Activity, Phone, BarChart2,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, parseISO } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -43,7 +43,9 @@ type LiveQueueLead = {
   operationalOutcome: string;
   disposition: string | null;
   callAttempts: number;
+  callId: number | null;
   durationSeconds: number | null;
+  costCents: number | null;
   lastAttemptAt: string | null;
   nextRetryAt: string | null;
   callbackAt: string | null;
@@ -619,7 +621,7 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-muted/10 border-b border-border/60">
+                <tr className="bg-muted/10 border-b border-border/40">
                   <th className="pl-4 pr-2 py-2 w-8">
                     <Checkbox
                       checked={allPageSelected}
@@ -628,11 +630,14 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                     />
                   </th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
+                  <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Date & Time</th>
+                  <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Call ID</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Outcome</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Disposition</th>
                   <th className="px-3 py-2 text-center text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider w-16">Att.</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell w-16">Dur.</th>
+                  <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Cost</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Next Retry</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Callback</th>
                   <th className="px-3 py-2 text-left text-[9px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Last Activity</th>
@@ -643,11 +648,12 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                   const sc = STATUS_CFG[lead.callStatus];
                   const oc = OUTCOME_CFG[lead.operationalOutcome];
                   const sel = selectedIds.has(lead.id);
+                  const ts = lead.lastAttemptAt ?? lead.createdAt;
                   return (
                     <tr
                       key={lead.id}
                       className={cn(
-                        "hover:bg-muted/20 transition-colors cursor-pointer",
+                        "group hover:bg-muted/30 transition-colors duration-100 cursor-pointer",
                         sel && "bg-foreground/[0.03]",
                       )}
                       onClick={() => setDrawerLeadId(lead.id)}
@@ -658,10 +664,23 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                       >
                         <Checkbox checked={sel} onCheckedChange={() => toggleOne(lead.id)} className="h-3.5 w-3.5" />
                       </td>
+                      {/* Lead */}
                       <td className="px-3 py-2.5">
-                        <p className="text-xs font-medium truncate max-w-[120px]">{lead.name ?? "—"}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground/60">{lead.phone}</p>
+                        <p className="text-xs font-medium truncate max-w-[120px] text-foreground/80">{lead.name ?? "—"}</p>
+                        <p className="text-[10px] font-mono text-muted-foreground/50">{lead.phone}</p>
                       </td>
+                      {/* Date & Time */}
+                      <td className="px-3 py-2.5 hidden lg:table-cell whitespace-nowrap">
+                        <div className="text-[11px] text-foreground/70 font-medium">{format(parseISO(ts), "MMM d, yyyy")}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground/40">{format(parseISO(ts), "HH:mm:ss")}</div>
+                      </td>
+                      {/* Call ID */}
+                      <td className="px-3 py-2.5 hidden md:table-cell">
+                        <span className="font-mono text-[10px] text-muted-foreground/40">
+                          {lead.callId ? `#${lead.callId}` : "—"}
+                        </span>
+                      </td>
+                      {/* Status */}
                       <td className="px-3 py-2.5">
                         <span className={cn(
                           "inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border",
@@ -673,6 +692,7 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                           <p className="text-[9px] text-muted-foreground/50 mt-0.5 max-w-[110px] truncate">{lead.queueReason}</p>
                         )}
                       </td>
+                      {/* Outcome */}
                       <td className="px-3 py-2.5 hidden md:table-cell">
                         <span className={cn(
                           "inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border",
@@ -681,15 +701,25 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                           {oc?.label ?? lead.operationalOutcome}
                         </span>
                       </td>
+                      {/* Disposition */}
                       <td className="px-3 py-2.5 hidden lg:table-cell">
                         <span className="text-xs text-muted-foreground/60 capitalize">{lead.disposition ?? "—"}</span>
                       </td>
+                      {/* Attempts */}
                       <td className="px-3 py-2.5 text-center">
                         <span className="text-xs tabular-nums text-muted-foreground/60">{lead.callAttempts}</span>
                       </td>
+                      {/* Duration */}
                       <td className="px-3 py-2.5 hidden xl:table-cell">
                         <span className="text-xs tabular-nums text-muted-foreground/60">{fmtDuration(lead.durationSeconds)}</span>
                       </td>
+                      {/* Cost */}
+                      <td className="px-3 py-2.5 hidden xl:table-cell">
+                        <span className="font-mono text-[10px] text-muted-foreground/50">
+                          {lead.costCents != null && lead.costCents > 0 ? `$${(lead.costCents / 100).toFixed(3)}` : "—"}
+                        </span>
+                      </td>
+                      {/* Next Retry */}
                       <td className="px-3 py-2.5 hidden xl:table-cell">
                         <span className="text-xs text-muted-foreground/50">
                           {lead.nextRetryAt
@@ -697,6 +727,7 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                             : "—"}
                         </span>
                       </td>
+                      {/* Callback */}
                       <td className="px-3 py-2.5 hidden xl:table-cell">
                         {lead.callbackAt ? (
                           <span className={cn(
@@ -713,6 +744,7 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                           <span className="text-xs text-muted-foreground/30">—</span>
                         )}
                       </td>
+                      {/* Last Activity */}
                       <td className="px-3 py-2.5">
                         <span className="text-[10px] text-muted-foreground/40">
                           {lead.lastAttemptAt

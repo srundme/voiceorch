@@ -21,7 +21,7 @@ import {
   ArrowLeft, Play, Pause, Square, RotateCcw, ChevronRight,
   Users, Phone, PhoneCall, Calendar, ArrowRightLeft, XCircle,
   TrendingUp, Bell, PhoneIncoming, Voicemail,
-  Eye, Database, RefreshCw,
+  Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
 } from "lucide-react";
 import {
@@ -32,7 +32,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
@@ -242,6 +242,7 @@ type BatchWorkspaceLead = {
   callStatus: string; operationalOutcome: string;
   disposition: string | null; callAttempts: number;
   lastAttemptAt: string | null; nextRetryAt: string | null; callId: number | null; createdAt: string;
+  durationSeconds: number | null; costCents: number | null;
   callback: { status: string; callbackAt: string | null } | null;
   booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
   transfer: { status: string; transferTo: string } | null;
@@ -477,38 +478,52 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
           </div>
         ) : (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/30">
+            <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
               <tr>
-                {/* Lead → Status → Outcome → Attempts → Last Activity → Actions */}
-                <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Outcome</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Attempts</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Last Activity</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground/40 uppercase tracking-wider w-20">Actions</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Lead</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden lg:table-cell">Date & Time</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Call ID</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden sm:table-cell">Outcome</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden md:table-cell">Attempts</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Duration</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider hidden xl:table-cell">Cost</th>
+                <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-wider w-20">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/30">
+            <tbody className="divide-y divide-border/20">
               {items.map(lead => {
                 const sc = callStatusCfg(lead.callStatus);
                 const oc = outcomeCfg(lead.operationalOutcome ?? "");
+                const ts = lead.lastAttemptAt ?? lead.createdAt;
                 return (
-                  <tr key={lead.id} className="hover:bg-muted/20 transition-colors">
+                  <tr key={lead.id} className="group hover:bg-muted/30 transition-colors duration-100 cursor-default">
                     {/* Lead */}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/40 text-xs font-semibold text-muted-foreground/70 shrink-0">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/40 text-xs font-semibold text-muted-foreground/70 shrink-0 group-hover:bg-muted/60 transition-colors">
                           {((lead.name?.trim()?.charAt(0)) || (lead.phone?.charAt(0)) || "?").toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium truncate max-w-[120px]">{lead.name ?? "—"}</p>
-                          <p className="text-xs font-mono text-muted-foreground/60">{lead.phone}</p>
+                          <p className="font-medium truncate max-w-[120px] text-foreground/80">{lead.name ?? "—"}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground/50">{lead.phone}</p>
                         </div>
                       </div>
                     </td>
+                    {/* Date & Time */}
+                    <td className="px-3 py-2.5 hidden lg:table-cell whitespace-nowrap">
+                      <div className="text-[11px] text-foreground/70 font-medium">{format(parseISO(ts), "MMM d, yyyy")}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground/40">{format(parseISO(ts), "HH:mm:ss")}</div>
+                    </td>
+                    {/* Call ID */}
+                    <td className="px-3 py-2.5 hidden md:table-cell">
+                      <span className="font-mono text-[10px] text-muted-foreground/40">
+                        {lead.callId ? `#${lead.callId}` : "—"}
+                      </span>
+                    </td>
                     {/* Status */}
                     <td className="px-3 py-2.5">
-                      <span className={cn("inline-flex text-xs font-semibold px-2 py-0.5 rounded border", sc.cls)}>
+                      <span className={cn("inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border", sc.cls)}>
                         {sc.label}
                       </span>
                     </td>
@@ -519,16 +534,10 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                     {/* Attempts */}
                     <td className="px-3 py-2.5 hidden md:table-cell">
                       {(() => {
-                        // Clamp the displayed attempt to the configured max so any
-                        // legacy/over-incremented row never renders "Attempt 3 of 2".
                         const currentAttempt = Math.min(Math.max(1, lead.callAttempts), maxAttempts);
                         const exhausted = lead.callAttempts >= maxAttempts;
                         const oneLeft   = !exhausted && currentAttempt === maxAttempts - 1;
-                        const counterCls = exhausted
-                          ? "text-red-500"
-                          : oneLeft
-                          ? "text-amber-500"
-                          : "text-muted-foreground/60";
+                        const counterCls = exhausted ? "text-red-500" : oneLeft ? "text-amber-500" : "text-muted-foreground/60";
                         const TERMINAL = ["completed", "failed", "skipped"];
                         const showRetry = lead.nextRetryAt && !TERMINAL.includes(lead.callStatus);
                         return (
@@ -537,7 +546,7 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                               Attempt {currentAttempt} of {maxAttempts}
                             </span>
                             {showRetry && (
-                              <span className="text-xs text-amber-500/80 tabular-nums" title={new Date(lead.nextRetryAt!).toLocaleString()}>
+                              <span className="text-[10px] text-amber-500/80 tabular-nums" title={new Date(lead.nextRetryAt!).toLocaleString()}>
                                 retry {formatDistanceToNow(new Date(lead.nextRetryAt!), { addSuffix: true })}
                               </span>
                             )}
@@ -545,27 +554,42 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                         );
                       })()}
                     </td>
-                    {/* Last Activity */}
-                    <td className="px-3 py-2.5 hidden lg:table-cell">
-                      <span className="text-xs text-muted-foreground/60">
-                        {lead.lastAttemptAt ? fmtRelative(lead.lastAttemptAt) : "—"}
+                    {/* Duration */}
+                    <td className="px-3 py-2.5 hidden xl:table-cell">
+                      <span className="font-mono text-[11px] text-muted-foreground/60">
+                        {lead.durationSeconds != null
+                          ? lead.durationSeconds >= 60
+                            ? `${Math.floor(lead.durationSeconds / 60)}m ${lead.durationSeconds % 60}s`
+                            : `${lead.durationSeconds}s`
+                          : "—"}
                       </span>
+                    </td>
+                    {/* Cost */}
+                    <td className="px-3 py-2.5 hidden xl:table-cell">
+                      {lead.costCents != null && lead.costCents > 0 ? (
+                        <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
+                          <DollarSign className="h-2.5 w-2.5" />
+                          {(lead.costCents / 100).toFixed(3)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/25">—</span>
+                      )}
                     </td>
                     {/* Actions */}
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-1">
                         {lead.callId && (
-                          <Button size="icon" variant="ghost" className="h-6 w-6"
+                          <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                             title="View Call"
                             onClick={() => {
                               const idx = items.findIndex(l => l.id === lead.id);
                               setSelectedIdx(idx >= 0 ? idx : null);
                             }}>
-                            <Eye className="h-3 w-3 text-muted-foreground/50" />
+                            <Eye className="h-3 w-3 text-muted-foreground/60" />
                           </Button>
                         )}
                         {lead.callStatus === "failed" && (
-                          <Button size="icon" variant="ghost" className="h-6 w-6"
+                          <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Retry" onClick={() => void handleRetry(lead.id)}>
                             <RotateCcw className="h-3 w-3 text-amber-500" />
                           </Button>

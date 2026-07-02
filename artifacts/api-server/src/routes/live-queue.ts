@@ -175,11 +175,11 @@ router.get("/campaigns/:id/live-queue/leads", async (req, res): Promise<void> =>
 
   // Duration from latest call
   const callIds = rows.filter(r => r.callId).map(r => r.callId!);
-  const durationMap = new Map<number, number | null>();
+  const durationMap = new Map<number, { durationSeconds: number | null; costCents: number | null }>();
   if (callIds.length > 0) {
-    const calls = await db.select({ id: callsTable.id, durationSeconds: callsTable.durationSeconds })
+    const calls = await db.select({ id: callsTable.id, durationSeconds: callsTable.durationSeconds, costCents: callsTable.costCents })
       .from(callsTable).where(inArray(callsTable.id, callIds));
-    for (const c of calls) durationMap.set(c.id, c.durationSeconds ?? null);
+    for (const c of calls) durationMap.set(c.id, { durationSeconds: c.durationSeconds ?? null, costCents: c.costCents ?? null });
   }
 
   // Next pending retry
@@ -229,7 +229,9 @@ router.get("/campaigns/:id/live-queue/leads", async (req, res): Promise<void> =>
       operationalOutcome: r.operationalOutcome,
       disposition:      r.disposition ?? null,
       callAttempts:     r.callAttempts,
-      durationSeconds:  r.callId ? (durationMap.get(r.callId) ?? null) : null,
+      callId:           r.callId ?? null,
+      durationSeconds:  r.callId ? (durationMap.get(r.callId)?.durationSeconds ?? null) : null,
+      costCents:        r.callId ? (durationMap.get(r.callId)?.costCents ?? null) : null,
       lastAttemptAt:    r.lastAttemptAt?.toISOString() ?? null,
       nextRetryAt:      retry?.scheduledAt.toISOString() ?? null,
       callbackAt:       cb?.callbackAt?.toISOString() ?? null,
