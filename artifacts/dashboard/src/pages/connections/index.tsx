@@ -990,15 +990,34 @@ function SetupSteps({ connection }: { connection: Connection }) {
 // ── Recipe cards (Zapier/Make, Google Sheets) ─────────────────────────────────
 
 function RecipeCard({
-  icon, title, description, badge, children,
+  icon, title, description, badge, children, comingSoon,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
   badge?: string;
   children?: React.ReactNode;
+  comingSoon?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  if (comingSoon) {
+    return (
+      <div className="bg-card border border-border/40 rounded-xl overflow-hidden opacity-50 cursor-not-allowed select-none">
+        <div className="w-full flex items-center gap-3 p-4 text-left">
+          <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0 grayscale">{icon}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-muted-foreground">{title}</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted border border-border text-muted-foreground/60">
+                Coming Soon
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground/60 mt-0.5 truncate">{description}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <button
@@ -2281,6 +2300,7 @@ export default function ConnectionsPage() {
             </h2>
             <div className="space-y-3">
               <RecipeCard
+                comingSoon
                 icon={<Sheet className="w-4 h-4 text-emerald-400" />}
                 title="Google Sheets"
                 description="Forward new rows to your webhook via a Google Apps Script trigger"
@@ -2288,6 +2308,7 @@ export default function ConnectionsPage() {
                 <GoogleSheetsRecipe firstWebhookUrl={firstWebhookUrl} />
               </RecipeCard>
               <RecipeCard
+                comingSoon
                 icon={<Zap className="w-4 h-4 text-amber-400" />}
                 title="Zapier & Make"
                 description="Connect any app that supports Zapier or Make to your webhook"
@@ -2295,6 +2316,7 @@ export default function ConnectionsPage() {
                 <ZapierMakeRecipe firstWebhookUrl={firstWebhookUrl} />
               </RecipeCard>
               <RecipeCard
+                comingSoon
                 icon={<Globe className="w-4 h-4 text-blue-400" />}
                 title="Generic Webhook"
                 description="Any platform that can POST JSON — n8n, custom servers, CRMs"
