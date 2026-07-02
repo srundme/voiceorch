@@ -1,0 +1,283 @@
+I want to understand the **current campaign calling workflow** in detail based on the existing implementation. Please inspect the actual codebase and explain the flow. Do not make assumptions—describe only what is currently implemented.
+
+## 1. Overall Call Flow
+
+Starting from when a lead enters a campaign, explain the complete lifecycle.
+
+For example:
+
+Lead Imported / Webhook Received
+↓
+Lead Queued
+↓
+Call Triggered
+↓
+Telephony Provider
+↓
+Call Connected / Failed / Busy / etc.
+↓
+Final Lead Status
+↓
+Campaign Metrics Updated
+
+I want the complete sequence.
+
+---
+
+## 2. Lead Status Lifecycle
+
+List every possible lead status that currently exists in the system.
+
+For each status explain:
+
+- When it is assigned
+- Which service/function assigns it
+- Whether it is temporary or final
+- What causes it to move to the next status
+
+Example format:
+
+Status:
+Queued
+
+Assigned when:
+...
+
+Next possible statuses:
+Calling
+Failed
+Completed
+...
+
+---
+
+## 3. Call Outcomes
+
+Explain exactly what happens for each possible call outcome.
+
+### User answered the call
+
+- Status?
+- When is it marked connected?
+- When is it marked completed?
+- What campaign metrics are updated?
+
+---
+
+### User did not answer
+
+- What status is assigned?
+- Is it "No Answer"?
+- Is it "Failed"?
+- Is it retried?
+- Which retry rules are used?
+
+---
+
+### User rejected the call
+
+- What status is assigned?
+- Is it different from No Answer?
+
+---
+
+### Line Busy
+
+- What status is assigned?
+- Does it enter retry?
+
+---
+
+### Call Failed
+
+Explain every scenario where the system marks a call as **Failed**.
+
+Examples:
+
+- Invalid number
+- Provider rejected
+- SIP error
+- Network error
+- Telephony timeout
+- Agent unavailable
+- Internal exception
+- Provider API failure
+- Call never initiated
+
+I want the complete list from the code.
+
+---
+
+### Call Connected but Short Duration
+
+Example:
+
+Call connected for:
+
+- 2 sec
+- 5 sec
+- 10 sec
+- 15 sec
+
+Is there any minimum conversation duration?
+
+Does the system treat it differently?
+
+Does it still count as Connected?
+
+Does it count as Completed?
+
+---
+
+### Customer Hung Up
+
+Explain the status.
+
+---
+
+### Agent Hung Up
+
+Explain the status.
+
+---
+
+### Call Dropped
+
+Explain:
+
+- Network drop
+- Provider disconnect
+- Unexpected termination
+
+How does the system classify these?
+
+---
+
+### Voicemail
+
+What happens if voicemail answers?
+
+Is voicemail detected?
+
+What status is assigned?
+
+---
+
+## 4. Failure Scenarios
+
+List every failure scenario currently implemented.
+
+For each scenario provide:
+
+- Telephony event
+- Internal status
+- Retry eligible?
+- Final disposition
+
+---
+
+## 5. Campaign Metrics
+
+Explain how these are calculated.
+
+- Total Leads
+- Imported
+- Queued
+- Calling
+- Connected
+- Interested
+- Booked
+- Failed
+- Completed
+- Callbacks
+- Transfers
+
+Which tables are updated?
+
+Which services update them?
+
+---
+
+## 6. Dashboard Counters
+
+Explain how these numbers are calculated.
+
+- Running Campaigns
+- Live Calls
+- Today's Leads
+- Today's Bookings
+- Active Batches
+- Completed Batches
+- Campaign Progress
+- Campaign Health
+
+I want the exact backend logic.
+
+---
+
+## 7. Batch Status Logic
+
+When does a batch become:
+
+- Draft
+- Scheduled
+- Running
+- Completed
+- Failed
+- Paused
+- Stopped
+
+Explain the transition conditions.
+
+---
+
+## 8. Retry Logic
+
+Explain the retry implementation.
+
+For each outcome tell me:
+
+- No Answer
+- Busy
+- Failed
+- Error
+- Voicemail
+
+Is it retried?
+
+How many times?
+
+Where is that configured?
+
+---
+
+## 9. Code References
+
+For every explanation, include:
+
+- File name
+- Service name
+- Function name
+
+So I can verify the implementation.
+
+---
+
+## 10. Final Summary
+
+Create a table like this using the actual implementation:
+
+| Scenario | Call Status | Lead Status | Retry | Final Result |
+|----------|------------|------------|-------|--------------|
+| Connected | | | | |
+| No Answer | | | | |
+| Busy | | | | |
+| Rejected | | | | |
+| Failed | | | | |
+| Error | | | | |
+| Voicemail | | | | |
+| Customer Hung Up | | | | |
+| Agent Hung Up | | | | |
+| Network Drop | | | | |
+
+**Important:** Please inspect the codebase and explain the current implementation. Do not describe how it should work or provide generic telephony behavior.
