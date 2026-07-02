@@ -193,6 +193,21 @@ export class SarvamSTT implements STTAdapter {
     const audioQueue: Buffer[] = [];
     let speechEndAt       = 0;     // timestamp of last END_SPEECH event for latency tracking
     let speechEndReceived = false; // true once speech_end fires; reset on speech_start
+
+    // ── Hallucination guard: speech-duration plausibility ────────────────────
+    // Telephony lines carry line noise / comfort noise / ambient bumps that Sarvam's
+    // own VAD occasionally mistakes for a speech onset. When that happens the acoustic
+    // model can hallucinate real-looking words (e.g. "Out of") from a burst that lasted
+    // only a few dozen ms — far too short for a human to have actually said anything.
+    // Webcall audio is browser-AEC/noise-suppressed so this rarely fires there; it's a
+    // telephony-specific failure mode. Track wall-clock speech_start → speech_end span
+    // for the CURRENT coalescing window (first onset to last offset, spanning multiple
+    // internal Sarvam segments/pauses) and require it to be long enough to plausibly
+    // contain the transcript's word count before trusting the final text.
+    let segmentStartAt = 0; // first speech_start of this coalescing window
+    let segmentEndAt   = 0; // most recent speech_end of this coalescing window
+    const MIN_MS_PER_WORD       = 150; // generous — well under normal ~300-400 ms/word speech rate
+    const MIN_PLAUSIBLE_SPEECH_MS = 250; // absolute floor even for a single short word
     // Closure variables for the onSpeechStart / onSpeechEnd callbacks. Declared here
     // (before openSocket) so the WS message handler — an async callback inside openSocket —
     // can reference them safely. Exposed on sttObj via Object.defineProperty getter/setter below.
@@ -303,10 +318,34 @@ export class SarvamSTT implements STTAdapter {
         mergedSegments: segments,
         pauseCount:     Math.max(0, segments - 1),
       };
+      const windowStart = segmentStartAt;
+      const windowEnd   = segmentEndAt;
       coalesceBuf            = "";
       coalesceMeta           = undefined;
       coalesceMergedSegments = 0;
       transcriptArrivedAt    = 0;
+      segmentStartAt         = 0;
+      segmentEndAt           = 0;
+
+      // Hallucination guard: if Sarvam's own VAD window (speech_start → speech_end)
+      // was too short to plausibly contain the number of words in the transcript,
+      // this is almost certainly a noise-burst hallucination (telephony line noise,
+      // comfort noise, a click) rather than real speech — drop it silently. The
+      // existing stall-backstop / silence-reprompt path will handle it exactly like
+      // any other "no usable transcript" case.
+      if (windowStart > 0 && windowEnd > 0) {
+        const speechDurationMs = windowEnd - windowStart;
+        const wordCount        = text.trim().split(/\s+/).filter(Boolean).length;
+        const minPlausibleMs   = Math.max(MIN_PLAUSIBLE_SPEECH_MS, wordCount * MIN_MS_PER_WORD);
+        if (speechDurationMs < minPlausibleMs) {
+          logger.warn(
+            { text: text.slice(0, 120), speechDurationMs, wordCount, minPlausibleMs, langCode },
+            "Sarvam STT: discarding transcript — speech window too short to be plausible (likely noise hallucination)",
+          );
+          return;
+        }
+      }
+
       logger.info(
         { text: text.slice(0, 120), segments, holdMs: adaptiveHoldMs(), pauseHistory: pauseHistory.slice() },
         "Sarvam STT: emitting adaptive-coalesced transcript",
@@ -384,6 +423,10 @@ export class SarvamSTT implements STTAdapter {
         if (msg.type === "speech_start" || (msg.type === "events" && msg.data?.signal_type === "START_SPEECH")) {
           inSpeechSegment    = true;
           speechEndReceived  = false; // caller is speaking again; clear the speech_end flag
+          // Only stamp the WINDOW start on the first onset — a resumed segment (caller
+          // paused mid-thought) must not reset the clock, or a long multi-pause utterance
+          // would always measure as "short" from its last segment alone.
+          if (segmentStartAt === 0) segmentStartAt = Date.now();
           _onSpeechStart?.();
           logger.debug({ langCode }, "Sarvam STT: speech start");
           // If we are holding a transcript and the user resumed speaking, cancel
@@ -411,6 +454,7 @@ export class SarvamSTT implements STTAdapter {
           inSpeechSegment   = false;
           speechEndReceived = true;
           speechEndAt       = Date.now();
+          segmentEndAt      = speechEndAt;
           logger.debug({ langCode }, "Sarvam STT: speech end");
           // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
           // caller has stopped talking — shorten any running timer.
