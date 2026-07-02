@@ -274,7 +274,7 @@ function CampaignRow({
         <Button
           size="sm"
           variant="outline"
-          className="h-7 text-xs gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-7 text-xs gap-1"
           onClick={e => { e.stopPropagation(); navigate(`${BASE}/app/campaigns/${campaign.id}`); }}
         >
           Open <ChevronRight className="h-3 w-3" />
@@ -282,7 +282,7 @@ function CampaignRow({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+              className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
               onClick={e => e.stopPropagation()}
             >
               <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/50" />
