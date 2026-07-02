@@ -266,6 +266,7 @@ router.get("/campaigns/:id", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const id = parseInt(req.params["id"]!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
   const [row] = await db.select().from(campaignsTable)
     .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)));
 
@@ -290,6 +291,7 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const id = parseInt(req.params["id"]!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
   const parsed = UpdateCampaignBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
@@ -356,6 +358,7 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const id = parseInt(req.params["id"]!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
   const deleted = await db.delete(campaignsTable)
     .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)))
     .returning();
@@ -371,6 +374,7 @@ router.get("/campaigns/:id/consent-basis", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const id = parseInt(req.params["id"]!, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
   const [campaign] = await db
     .select({ id: campaignsTable.id })
     .from(campaignsTable)
@@ -391,6 +395,7 @@ router.get("/campaigns/:id/leads", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const campaignId = parseInt(req.params["id"]!, 10);
+  if (isNaN(campaignId)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
 
   // Verify ownership
   const [campaign] = await db.select().from(campaignsTable)
@@ -423,6 +428,7 @@ router.post("/campaigns/:id/import-leads", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const campaignId = parseInt(req.params["id"]!, 10);
+  if (isNaN(campaignId)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
 
   const [campaign] = await db.select().from(campaignsTable)
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
@@ -555,6 +561,7 @@ router.post("/campaigns/:id/redial", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const campaignId = parseInt(req.params["id"]!, 10);
+  if (isNaN(campaignId)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
   const [campaign] = await db.select().from(campaignsTable)
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
   if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
@@ -590,6 +597,7 @@ router.post("/campaigns/:id/leads/:leadId/retry", async (req, res): Promise<void
 
   const campaignId = parseInt(req.params["id"]!, 10);
   const leadId     = parseInt(req.params["leadId"]!, 10);
+  if (isNaN(campaignId) || isNaN(leadId)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const [campaign] = await db.select().from(campaignsTable)
     .where(and(eq(campaignsTable.id, campaignId), eq(campaignsTable.userId, userId)));
