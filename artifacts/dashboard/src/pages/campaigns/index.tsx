@@ -182,7 +182,7 @@ function CampaignRow({
   return (
     <div
       className="group grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 1fr 100px" }}
+      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 100px" }}
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
       {/* Campaign name + source */}
@@ -266,9 +266,6 @@ function CampaignRow({
           <p className="text-xs text-muted-foreground/25">—</p>
         )}
       </div>
-
-      {/* Health */}
-      <div><HealthBadge health={campaign.campaignHealth} /></div>
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 justify-end" onClick={e => e.stopPropagation()}>
@@ -1081,12 +1078,12 @@ function TableHeader() {
   return (
     <div
       className="grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 1fr 100px" }}
+      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 100px" }}
     >
       {[
         "Campaign", "Status", "Agent / Number",
         "Today", "Total", "Progress",
-        "Queued", "Booked", "Health", "",
+        "Queued", "Booked", "",
       ].map((h, i) => (
         <span key={i} className={cn("text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40", i >= 3 && i <= 7 ? "text-center" : "")}>
           {h}
