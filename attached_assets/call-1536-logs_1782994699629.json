@@ -1,0 +1,1006 @@
+[
+  {
+    "id": 75279,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 79,
+      "agentName": "Ravilla",
+      "asrProvider": "sarvam",
+      "llmProvider": "sarvam",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1536,
+      "sessionId": "5ccfc8c6-8e5a-4499-91d4-9f6080a790b6",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-02T12:16:30.506Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 75277,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 1
+      },
+      "factCount": 2,
+      "facts": {
+        "property_type": "house",
+        "location": "chennai"
+      },
+      "recentCallsCount": 1
+    },
+    "metadata": null
+  },
+  {
+    "id": 75278,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 75280,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "9342042401",
+        "from_number": "917971442381",
+        "agent_name": "Ravilla",
+        "caller_number": "917971442381",
+        "date": "Thursday, July 2, 2026",
+        "phone": "9342042401",
+        "name": "shiva",
+        "email": "",
+        "customer_name": "shiva",
+        "phone_number": "9342042401",
+        "age": "89"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which may belong to a previous caller on the same number.\n=====================================\n\n\n\n## IDENTITY\n\nYou are Varsha, a real human Real Estate Sales Executive for Ravilla Homes, specializing in residential plots/land sales a"
+    },
+    "metadata": null
+  },
+  {
+    "id": 75282,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "model": "sarvam-105b"
+    }
+  },
+  {
+    "id": 75283,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 75281,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "32d5092c-0fff-406e-941c-9c44e907018b"
+    }
+  },
+  {
+    "id": 75284,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:30.512Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "03f3fb2fa298",
+      "promptLength": 19580,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), imm"
+    }
+  },
+  {
+    "id": 75286,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:31.386Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 75285,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:31.386Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம், எப்படி இருக்கிறீர்கள்?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 75288,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:33.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2437,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 66274,
+      "textLength": 31,
+      "firstByteMs": 372
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 2437
+    }
+  },
+  {
+    "id": 75287,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:33.821Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2071,
+      "turnNumber": 0,
+      "durationMs": 2437
+    }
+  },
+  {
+    "id": 75299,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:37.966Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 261,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75300,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:37.969Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-105b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it ",
+      "historyLength": 2,
+      "tools": [
+        "transfer_to_human",
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75301,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:39.589Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1623,
+      "turnNumber": 1,
+      "durationMs": 1623
+    }
+  },
+  {
+    "id": 75302,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:39.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75303,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:39.629Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம்!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75304,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:39.856Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1623,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "வணக்கம்! நான் ரவிளா ஹோம்ஸ்ல இருந்து வர்ஷா பேசுறேன். சென்னைல ஒரு பிளாட் வாங்க நினைக்கிறீங்களா?"
+    },
+    "metadata": {
+      "inputTokens": 5613,
+      "outputTokens": 177,
+      "cachedTokens": 0,
+      "model": "sarvam-105b",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75305,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:40.568Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 1,
+      "durationMs": 939
+    }
+  },
+  {
+    "id": 75306,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:40.568Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 938,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 8,
+      "firstByteMs": 133
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 938
+    }
+  },
+  {
+    "id": 75308,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:40.568Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75307,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:40.568Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நான் ரவிளா ஹோம்ஸ்ல இருந்து வர்ஷா பேசுறேன்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75313,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:43.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2471,
+      "turnNumber": 1,
+      "durationMs": 2748
+    }
+  },
+  {
+    "id": 75314,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:43.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2748,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79074,
+      "textLength": 42,
+      "firstByteMs": 266
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2748
+    }
+  },
+  {
+    "id": 75311,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:43.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75312,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:43.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சென்னைல ஒரு பிளாட் வாங்க நினைக்கிறீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 75317,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:45.924Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2608,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 73954,
+      "textLength": 41,
+      "firstByteMs": 267
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2608
+    }
+  },
+  {
+    "id": 75318,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:45.924Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2311,
+      "turnNumber": 1,
+      "durationMs": 2608
+    }
+  },
+  {
+    "id": 75328,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:50.145Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா உங்களுக்கு என்னுடைய age தெரியுமா?",
+      "endDetectToFinalMs": 183,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 75329,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:50.147Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-105b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it ",
+      "historyLength": 4,
+      "tools": [
+        "transfer_to_human",
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 75334,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:52.703Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 2559,
+      "turnNumber": 2,
+      "durationMs": 2559
+    }
+  },
+  {
+    "id": 75337,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:52.947Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2559,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "உங்க வயசு எனக்கு தெரியாது, ஆனா நீங்க எந்த ஏரியாவுல பிளாட் வாங்க நினைக்கிறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 5690,
+      "outputTokens": 248,
+      "cachedTokens": 0,
+      "model": "sarvam-105b",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 75336,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:52.947Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்க வயசு எனக்கு தெரியாது, ஆனா நீங்க எந்த ஏரியாவுல பிளாட் வாங்க நினைக்கிறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 75335,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:52.947Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 75340,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:57.346Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4399,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 130274,
+      "textLength": 78,
+      "firstByteMs": 256
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 4399
+    }
+  },
+  {
+    "id": 75341,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:16:57.346Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4071,
+      "turnNumber": 2,
+      "durationMs": 4399
+    }
+  },
+  {
+    "id": 75344,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:01.951Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Okay, thank you.",
+      "endDetectToFinalMs": 209,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 75345,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:01.952Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "sarvam-105b",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. Never translate, localize, or transliterate them, even when part of a name resembles a common Tamil word.\n\n=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it ",
+      "historyLength": 6,
+      "tools": [
+        "transfer_to_human",
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 75354,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:03.874Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1924,
+      "turnNumber": 3,
+      "durationMs": 1924
+    }
+  },
+  {
+    "id": 75355,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.039Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 75356,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.054Z",
+    "component": "LLM",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1924,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நீங்க எந்த ஏரியாவுல பிளாட் வாங்க நினைக்கிறீங்க?"
+    },
+    "metadata": {
+      "inputTokens": 5728,
+      "outputTokens": 261,
+      "cachedTokens": 0,
+      "model": "sarvam-105b",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 75357,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.054Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 75358,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.054Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நீங்க எந்த ஏரியாவுல பிளாட் வாங்க நினைக்கிறீங்க?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 75359,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.090Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1536"
+    }
+  },
+  {
+    "id": 75360,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.090Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1536"
+    }
+  },
+  {
+    "id": 75361,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.103Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 50,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 52,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 50
+    }
+  },
+  {
+    "id": 75362,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.103Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 0,
+      "turnNumber": 3,
+      "durationMs": 51
+    }
+  },
+  {
+    "id": 75363,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.122Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "TTS",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 33,
+        "turns": 3,
+        "lastComponent": "TTS",
+        "lastUserTranscript": "Okay, thank you.",
+        "lastAgentResponse": "சரி, நீங்க எந்த ஏரியாவுல பிளாட் வாங்க நினைக்கிறீங்க?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 33,
+      "turns": 3,
+      "avgSttMs": 0,
+      "avgLlmMs": 2091,
+      "avgTtsMs": 2432
+    }
+  },
+  {
+    "id": 75364,
+    "callId": 1536,
+    "agentId": 79,
+    "ts": "2026-07-02T12:17:04.842Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
