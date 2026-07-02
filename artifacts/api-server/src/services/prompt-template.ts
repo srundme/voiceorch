@@ -118,33 +118,16 @@ async function getManagedQwenKey(): Promise<string | null> {
 }
 
 /**
- * Single helper used by both wizard submit and admin regenerate.
- * Sends the active template (as system instruction) + the user's wizard inputs
- * (as a user-message context block) to Qwen via Groq, returns the generated prompt text.
- * Throws if Qwen key missing or call fails.
+ * Low-level Qwen (via Groq) chat call shared by every prompt-generation path.
+ * Throws if the managed key is missing or the call fails/returns empty.
  */
-export async function generateAgentPrompt(
-  wizardInputs: WizardInputs,
-  templateText: string,
-): Promise<string> {
+async function callQwen(systemInstruction: string, userContent: string): Promise<string> {
   const qwenKey = await getManagedQwenKey();
   if (!qwenKey) {
     throw new Error(
       "Managed Qwen key not configured — set managed_qwen_key in Admin → Managed Keys",
     );
   }
-
-  const systemInstruction = `You are a senior AI voice agent prompt engineer. Use the master template below as the exact structure for the system prompt you produce. Substitute placeholders with the user's inputs, expand the call-flow section into a clear, natural multi-step flow, and keep the rest of the structure intact. If the wizard inputs include a "microAnswers" array (the user's raw answers to the 5 wizard micro-questions), EVERY non-empty answer MUST be reflected in the final prompt using the user's actual words or recognisably paraphrased — do not drop or replace them with generic filler. Output only the final system prompt, with no surrounding commentary or markdown fences.
-
-=== MASTER TEMPLATE ===
-${templateText}
-=== END MASTER TEMPLATE ===`;
-
-  const inputsBlock = `Generate the agent's final system prompt using the master template above and the following wizard inputs:\n\n${JSON.stringify(
-    wizardInputs,
-    null,
-    2,
-  )}`;
 
   const res = await fetch(
     "https://api.groq.com/openai/v1/chat/completions",
@@ -160,7 +143,7 @@ ${templateText}
         max_tokens: 4096,
         messages: [
           { role: "system", content: systemInstruction },
-          { role: "user", content: inputsBlock },
+          { role: "user", content: userContent },
         ],
       }),
     },
@@ -178,4 +161,81 @@ ${templateText}
   const text = data?.choices?.[0]?.message?.content?.trim() ?? "";
   if (!text) throw new Error("Qwen returned an empty prompt");
   return text;
+}
+
+/**
+ * Single helper used by both wizard submit and admin regenerate.
+ * Sends the active template (as system instruction) + the user's wizard inputs
+ * (as a user-message context block) to Qwen via Groq, returns the generated prompt text.
+ * Throws if Qwen key missing or call fails.
+ */
+export async function generateAgentPrompt(
+  wizardInputs: WizardInputs,
+  templateText: string,
+): Promise<string> {
+  const systemInstruction = `You are a senior AI voice agent prompt engineer. Use the master template below as the exact structure for the system prompt you produce. Substitute placeholders with the user's inputs, expand the call-flow section into a clear, natural multi-step flow, and keep the rest of the structure intact. If the wizard inputs include a "microAnswers" array (the user's raw answers to the 5 wizard micro-questions), EVERY non-empty answer MUST be reflected in the final prompt using the user's actual words or recognisably paraphrased — do not drop or replace them with generic filler. Output only the final system prompt, with no surrounding commentary or markdown fences.
+
+=== MASTER TEMPLATE ===
+${templateText}
+=== END MASTER TEMPLATE ===`;
+
+  const inputsBlock = `Generate the agent's final system prompt using the master template above and the following wizard inputs:\n\n${JSON.stringify(
+    wizardInputs,
+    null,
+    2,
+  )}`;
+
+  return callQwen(systemInstruction, inputsBlock);
+}
+
+export interface LayeredPromptInput {
+  /** Foundation layer — LOCKED, universal rules that must never be contradicted. */
+  foundationText: string;
+  /** Domain layer text (empty string for the Custom / Other path). */
+  domainText: string;
+  /** Domain display name (or "Custom / Other"). */
+  domainName: string;
+  /** Optional Client Details structure layer. */
+  clientDetailsText?: string;
+  /** Raw form inputs collected by the modal. */
+  formInputs: Record<string, unknown>;
+}
+
+/**
+ * Layered generation for the dashboard "Generate System Prompt" modal.
+ * Assembles Foundation (locked) → Domain → Client Details structure → form inputs
+ * and asks Qwen to produce the final system prompt. The Foundation layer's rules
+ * are declared non-negotiable; the Domain/inputs may only specialise, never override.
+ */
+export async function generateLayeredAgentPrompt(input: LayeredPromptInput): Promise<string> {
+  const { foundationText, domainText, domainName, clientDetailsText, formInputs } = input;
+
+  const layers: string[] = [
+    `=== FOUNDATION (LOCKED — universal rules that MUST NOT be contradicted or removed) ===\n${foundationText}\n=== END FOUNDATION ===`,
+  ];
+  if (domainText.trim()) {
+    layers.push(`=== DOMAIN: ${domainName} (specialises the Foundation — never overrides it) ===\n${domainText}\n=== END DOMAIN ===`);
+  }
+  if (clientDetailsText && clientDetailsText.trim()) {
+    layers.push(`=== CLIENT DETAILS STRUCTURE (how to weave the client's specifics in) ===\n${clientDetailsText}\n=== END CLIENT DETAILS STRUCTURE ===`);
+  }
+
+  const systemInstruction = `You are a senior AI voice agent prompt engineer. Produce the final system prompt for a voice agent by layering the sections below in order of authority.
+
+RULES OF ASSEMBLY:
+1. The FOUNDATION section is LOCKED. Every rule in it (identity/AI-honesty, salutation protocol, spoken-form rules, silent tool-call handling, off-script/silence/closing/opt-out behaviour) MUST be preserved verbatim in intent. Never weaken, contradict, or drop a Foundation rule.
+2. The DOMAIN section specialises the Foundation for this use case. It may add specifics but must never override a Foundation rule.
+3. The CLIENT DETAILS STRUCTURE (if present) tells you how to weave the client's concrete inputs into the prompt.
+4. Substitute the user's form inputs (company, agent name, direction, language(s), call flow, key knowledge) into the appropriate places and expand the call flow into a clear, natural multi-step conversation.
+5. Output ONLY the final system prompt — no commentary, no markdown fences.
+
+${layers.join("\n\n")}`;
+
+  const inputsBlock = `Generate the agent's final system prompt by layering the sections above and applying these form inputs:\n\n${JSON.stringify(
+    formInputs,
+    null,
+    2,
+  )}`;
+
+  return callQwen(systemInstruction, inputsBlock);
 }

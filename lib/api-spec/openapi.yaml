@@ -62,6 +62,8 @@ tags:
     description: CRM connectors — HubSpot and Zoho OAuth connect, contact import, and call-outcome writeback
   - name: book
     description: The SnapServe Book — anonymous per-device reading progress
+  - name: wizard
+    description: Agent-builder wizard helpers (voices, layered system-prompt generation)
 
 paths:
   /healthz:
@@ -76,6 +78,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Wizard: layered system-prompt generation ────────────────────────────────
+  /wizard/system-prompt-store:
+    get:
+      operationId: getSystemPromptStore
+      tags: [wizard]
+      summary: Read the layered System Prompt Templates store for the generate modal
+      description: >
+        Returns the currently active Foundation and Client Details layer status
+        plus the list of Domain templates (id, name, active version) that drive
+        the Use-case dropdown. Only domains with an active version are returned.
+      responses:
+        "200":
+          description: The layered template store snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemPromptStore"
+        "401":
+          description: Unauthorized
+
+  /wizard/generate-system-prompt:
+    post:
+      operationId: generateSystemPrompt
+      tags: [wizard]
+      summary: Generate a system prompt from the layered store (Foundation → Domain → inputs)
+      description: >
+        Fetches the active Foundation, the selected Domain version (unless Custom),
+        and the active Client Details structure live at click time, assembles them
+        with the user's form inputs, and generates the final system prompt via the
+        managed LLM. Hard-fails (no legacy fallback) when Foundation is missing or
+        a non-custom domain cannot be resolved. Returns the prompt, version
+        traceability metadata, and a named guardrail pass/fail list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateSystemPromptBody"
+      responses:
+        "200":
+          description: Generated system prompt with traceability + guardrail result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateSystemPromptResponse"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "422":
+          description: Layered store not ready (Foundation missing or domain unresolved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemPromptGenerationError"
 
   # ── Agents ──────────────────────────────────────────────────────────────────
   /agents:
@@ -6522,6 +6580,131 @@ components:
           type: ["object", "null"]
           additionalProperties: true
 
+    # ── Layered System Prompt Templates (generate modal) ──────────────────────
+    SystemPromptLayerStatus:
+      type: object
+      required: [available, version]
+      properties:
+        available: { type: boolean }
+        version: { type: ["integer", "null"] }
+
+    SystemPromptDomainOption:
+      type: object
+      required: [id, name, version]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        version: { type: integer }
+
+    SystemPromptStore:
+      type: object
+      required: [foundation, clientDetails, domains]
+      properties:
+        foundation:
+          $ref: "#/components/schemas/SystemPromptLayerStatus"
+        clientDetails:
+          $ref: "#/components/schemas/SystemPromptLayerStatus"
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/SystemPromptDomainOption"
+
+    GenerateSystemPromptBody:
+      type: object
+      required: [agentName, companyName, useCaseLabel, isCustom, agentDirection, language, callFlowDescription]
+      properties:
+        agentName:
+          type: string
+          minLength: 1
+        companyName:
+          type: string
+          minLength: 1
+        isCustom:
+          type: boolean
+          description: "true = Custom / Other (no domain layer); false = a Domain template must be resolved via domainId"
+        domainId:
+          type: ["integer", "null"]
+          description: "Required (non-null) when isCustom is false — identifies the Domain template layer"
+        useCaseLabel:
+          type: string
+          description: "Human-readable use-case label shown in the dropdown (domain name or 'Custom / Other')"
+        agentDirection:
+          type: string
+          enum: [inbound, outbound]
+        language:
+          type: string
+        selectedLanguages:
+          type: array
+          items:
+            type: string
+        callFlowDescription:
+          type: string
+          minLength: 12
+        keyKnowledge:
+          type: string
+          description: "Optional key knowledge / product details the agent should know"
+
+    SystemPromptGenDomain:
+      type: object
+      required: [id, name, version]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        version: { type: integer }
+
+    SystemPromptGenerationMeta:
+      type: object
+      required: [foundationVersion, clientDetailsVersion, domain, generatedAt, formInputs]
+      properties:
+        foundationVersion: { type: integer }
+        clientDetailsVersion: { type: ["integer", "null"] }
+        domain:
+          oneOf:
+            - $ref: "#/components/schemas/SystemPromptGenDomain"
+            - type: "null"
+        generatedAt: { type: string, format: date-time }
+        formInputs:
+          type: object
+          additionalProperties: true
+
+    SystemPromptGuardrailCheck:
+      type: object
+      required: [name, label, passed, detail]
+      properties:
+        name: { type: string }
+        label: { type: string }
+        passed: { type: boolean }
+        detail: { type: string }
+
+    SystemPromptGuardrailResult:
+      type: object
+      required: [passed, checks]
+      properties:
+        passed: { type: boolean }
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SystemPromptGuardrailCheck"
+
+    GenerateSystemPromptResponse:
+      type: object
+      required: [systemPrompt, generationMeta, guardrail]
+      properties:
+        systemPrompt: { type: string }
+        generationMeta:
+          $ref: "#/components/schemas/SystemPromptGenerationMeta"
+        guardrail:
+          $ref: "#/components/schemas/SystemPromptGuardrailResult"
+
+    SystemPromptGenerationError:
+      type: object
+      required: [error, reason]
+      properties:
+        error: { type: string }
+        reason:
+          type: string
+          enum: [no_foundation, no_domain]
+
     HealthStatus:
       type: object
       properties:
@@ -7096,6 +7279,11 @@ components:
           type: object
           additionalProperties: true
           description: "Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses."
+        systemPromptGenMeta:
+          oneOf:
+            - $ref: "#/components/schemas/SystemPromptGenerationMeta"
+            - type: "null"
+          description: "Version traceability stamped when a system prompt generated via the layered System Prompt Templates store is applied and saved."
 
     AgentUpdate:
       type: object
@@ -7260,6 +7448,11 @@ components:
           type: integer
           nullable: true
           description: "Phone number ID used as caller ID for outbound calls"
+        systemPromptGenMeta:
+          oneOf:
+            - $ref: "#/components/schemas/SystemPromptGenerationMeta"
+            - type: "null"
+          description: "Version traceability stamped when a system prompt generated via the layered System Prompt Templates store is applied and saved."
 
     # ── SnapServe Executions ─────────────────────────────────────────────────────
     SnapServeCostBreakdown:

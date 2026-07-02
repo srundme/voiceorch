@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Sparkles, RotateCcw, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Sparkles, RotateCcw, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Loader2, XCircle, ShieldCheck } from "lucide-react";
+import { diffWords } from "diff";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,32 +14,29 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { LANGUAGES } from "@/lib/agent-providers";
-import { customFetch } from "@workspace/api-client-react";
+import {
+  useGetSystemPromptStore,
+  useGenerateSystemPrompt,
+  type SystemPromptGenerationMeta,
+  type SystemPromptGuardrailResult,
+} from "@workspace/api-client-react";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const USE_CASES = [
-  { value: "lead_qualification",  label: "Lead Qualification" },
-  { value: "appointment_booking", label: "Appointment Booking" },
-  { value: "customer_support",    label: "Customer Support" },
-  { value: "outbound_sales",      label: "Outbound Sales" },
-  { value: "survey_collection",   label: "Survey / Feedback" },
-  { value: "collections",         label: "Collections / Payment Reminder" },
-  { value: "custom",              label: "Custom / Other" },
-];
+const CUSTOM_VALUE = "custom";
 
 interface GeneratePromptSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultAgentName?: string;
   defaultLanguage?: string;
-  onApply: (prompt: string) => void;
+  /** Current System Prompt field content — drives the diff/overwrite gating. */
+  currentPrompt?: string;
+  onApply: (prompt: string, meta: SystemPromptGenerationMeta | null) => void;
 }
 
 interface FormState {
   agentName: string;
   companyName: string;
-  useCase: string;
+  useCase: string; // domain id as string, or CUSTOM_VALUE
   agentDirection: "inbound" | "outbound";
   language: string;
   callFlowDescription: string;
@@ -52,63 +50,90 @@ export function GeneratePromptSheet({
   onOpenChange,
   defaultAgentName = "",
   defaultLanguage = "en-US",
+  currentPrompt = "",
   onApply,
 }: GeneratePromptSheetProps) {
   const [phase, setPhase]               = useState<SheetPhase>("form");
   const [generatedPrompt, setGenerated] = useState("");
+  const [genMeta, setGenMeta]           = useState<SystemPromptGenerationMeta | null>(null);
+  const [guardrail, setGuardrail]       = useState<SystemPromptGuardrailResult | null>(null);
   const [errorMsg, setErrorMsg]         = useState("");
+  const [errorReason, setErrorReason]   = useState<string>("");
   const [showKnowledge, setShowKnowledge] = useState(false);
+  const [showDiff, setShowDiff]         = useState(false);
 
   const languageLabel = LANGUAGES.find(l => l.value === defaultLanguage)?.label ?? defaultLanguage;
 
   const [form, setForm] = useState<FormState>({
     agentName:           defaultAgentName,
     companyName:         "",
-    useCase:             "custom",
+    useCase:             CUSTOM_VALUE,
     agentDirection:      "inbound",
     language:            languageLabel,
     callFlowDescription: "",
     keyKnowledge:        "",
   });
 
+  // Fetch the layered store (Foundation status + domain dropdown) when the sheet opens.
+  const storeQuery = useGetSystemPromptStore({ query: { enabled: open, queryKey: ["wizard", "system-prompt-store"] } });
+  const store = storeQuery.data;
+
+  const generateMutation = useGenerateSystemPrompt();
+
   const setField = <K extends keyof FormState>(key: K, val: FormState[K]) =>
     setForm(f => ({ ...f, [key]: val }));
 
-  const canGenerate = form.callFlowDescription.trim().length > 15;
+  const hasExistingPrompt = currentPrompt.trim().length > 0;
+  const foundationMissing = !!store && !store.foundation.available;
+
+  // Required fields for a valid generation.
+  const missingFields = useMemo(() => {
+    const m: string[] = [];
+    if (!form.agentName.trim())   m.push("Agent name");
+    if (!form.companyName.trim()) m.push("Company name");
+    if (form.callFlowDescription.trim().length < 12) m.push("Call flow description");
+    return m;
+  }, [form.agentName, form.companyName, form.callFlowDescription]);
+
+  const canGenerate = missingFields.length === 0 && !foundationMissing && !storeQuery.isLoading;
+
+  const isCustom = form.useCase === CUSTOM_VALUE;
+  const selectedDomainId = isCustom ? null : Number(form.useCase);
+  const selectedDomain = store?.domains.find(d => String(d.id) === form.useCase);
 
   async function runGeneration() {
     setPhase("generating");
     setErrorMsg("");
+    setErrorReason("");
     try {
-      const res = await customFetch<{ systemPrompt: string }>(
-        `${BASE}/api/wizard/generate-master-prompt`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            agentName:           form.agentName.trim() || undefined,
-            companyName:         form.companyName.trim() || undefined,
-            useCase:             form.useCase,
-            agentDirection:      form.agentDirection,
-            selectedLanguages:   [form.language].filter(Boolean),
-            serviceDescription:  form.keyKnowledge.trim() || undefined,
-            callFlowDescription: [
-              form.callFlowDescription.trim(),
-              form.keyKnowledge.trim() ? `\n\nKey knowledge:\n${form.keyKnowledge.trim()}` : "",
-            ].join(""),
-          }),
+      const res = await generateMutation.mutateAsync({
+        data: {
+          agentName:      form.agentName.trim(),
+          companyName:    form.companyName.trim(),
+          isCustom,
+          domainId:       selectedDomainId,
+          useCaseLabel:   isCustom ? "Custom / Other" : (selectedDomain?.name ?? "Custom / Other"),
+          agentDirection: form.agentDirection,
+          language:       form.language.trim(),
+          selectedLanguages: [form.language.trim()].filter(Boolean),
+          callFlowDescription: form.callFlowDescription.trim(),
+          keyKnowledge:   form.keyKnowledge.trim() || undefined,
         },
-      );
+      });
       setGenerated(res.systemPrompt);
+      setGenMeta(res.generationMeta);
+      setGuardrail(res.guardrail);
+      // When the field already holds a prompt, surface the diff by default rather
+      // than silently overwriting — the user must see what changes.
+      setShowDiff(currentPrompt.trim().length > 0);
       setPhase("preview");
     } catch (err: unknown) {
-      const msg = (err as Error)?.message ?? "Generation failed";
-      const isNoTemplate = msg.includes("No active master prompt template");
-      setErrorMsg(
-        isNoTemplate
-          ? "No active prompt template is set up yet. Ask your admin to upload and activate a master template in the Admin panel."
-          : msg,
-      );
+      // customFetch throws with the parsed body attached when available.
+      const anyErr = err as { reason?: string; error?: string; message?: string; body?: { reason?: string; error?: string } };
+      const reason = anyErr?.reason ?? anyErr?.body?.reason ?? "";
+      const msg = anyErr?.error ?? anyErr?.body?.error ?? anyErr?.message ?? "Generation failed";
+      setErrorReason(reason);
+      setErrorMsg(msg);
       setPhase("error");
     }
   }
@@ -116,12 +141,16 @@ export function GeneratePromptSheet({
   function handleClose() {
     setPhase("form");
     setGenerated("");
+    setGenMeta(null);
+    setGuardrail(null);
     setErrorMsg("");
+    setErrorReason("");
+    setShowDiff(false);
     onOpenChange(false);
   }
 
   function handleApply() {
-    onApply(generatedPrompt);
+    onApply(generatedPrompt, genMeta);
     handleClose();
   }
 
@@ -130,6 +159,15 @@ export function GeneratePromptSheet({
   if (defaultAgentName && form.agentName === "" && phase === "form") {
     setForm(f => ({ ...f, agentName: defaultAgentName }));
   }
+
+  // Apply is blocked while any Foundation guardrail fails — a failed prompt must
+  // never be inserted into the agent's System Prompt field.
+  const applyBlocked = !!guardrail && !guardrail.passed;
+
+  const diffParts = useMemo(() => {
+    if (!showDiff) return null;
+    return diffWords(currentPrompt, generatedPrompt);
+  }, [showDiff, currentPrompt, generatedPrompt]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -144,12 +182,25 @@ export function GeneratePromptSheet({
             Generate System Prompt
           </SheetTitle>
           <SheetDescription className="text-xs">
-            Describe what your agent should do and we'll write a production-quality prompt using AI.
+            Describe what your agent should do — we layer your company's Foundation, the use-case template, and your inputs into a production-quality prompt.
           </SheetDescription>
         </SheetHeader>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+          {/* Foundation-missing hard block */}
+          {(phase === "form" || phase === "generating") && foundationMissing && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-400">Foundation template not configured</p>
+                <p className="text-xs text-muted-foreground">
+                  Your admin needs to upload and activate a Foundation template in the System Prompt Templates page before prompts can be generated.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Phase: form ─────────────────────────────────────────────── */}
           {(phase === "form" || phase === "generating") && (
@@ -157,7 +208,7 @@ export function GeneratePromptSheet({
               {/* Row 1: Agent name + Company name */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Agent name</Label>
+                  <Label className="text-xs">Agent name <span className="text-red-400">*</span></Label>
                   <Input
                     className="h-8 text-xs"
                     placeholder="Alex"
@@ -166,7 +217,7 @@ export function GeneratePromptSheet({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Company name</Label>
+                  <Label className="text-xs">Company name <span className="text-red-400">*</span></Label>
                   <Input
                     className="h-8 text-xs"
                     placeholder="Acme Corp"
@@ -182,16 +233,24 @@ export function GeneratePromptSheet({
                   <Label className="text-xs">Use case</Label>
                   <Select value={form.useCase} onValueChange={v => setField("useCase", v)}>
                     <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
+                      <SelectValue placeholder={storeQuery.isLoading ? "Loading…" : "Select a use case"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {USE_CASES.map(u => (
-                        <SelectItem key={u.value} value={u.value} className="text-xs">
-                          {u.label}
+                      {(store?.domains ?? []).map(d => (
+                        <SelectItem key={d.id} value={String(d.id)} className="text-xs">
+                          {d.name}
                         </SelectItem>
                       ))}
+                      <SelectItem value={CUSTOM_VALUE} className="text-xs">
+                        Custom / Other
+                      </SelectItem>
                     </SelectContent>
                   </Select>
+                  {!isCustom && selectedDomain && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Template v{selectedDomain.version}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Call direction</Label>
@@ -232,9 +291,9 @@ export function GeneratePromptSheet({
                   </Label>
                   <span className={cn(
                     "text-[10px]",
-                    form.callFlowDescription.length > 15 ? "text-muted-foreground" : "text-amber-400",
+                    form.callFlowDescription.trim().length >= 12 ? "text-muted-foreground" : "text-amber-400",
                   )}>
-                    {form.callFlowDescription.length > 15 ? "✓ enough detail" : "describe more to generate"}
+                    {form.callFlowDescription.trim().length >= 12 ? "✓ enough detail" : "describe more to generate"}
                   </span>
                 </div>
                 <Textarea
@@ -274,6 +333,13 @@ export function GeneratePromptSheet({
                   </div>
                 )}
               </div>
+
+              {/* Missing-field hint */}
+              {phase === "form" && missingFields.length > 0 && !foundationMissing && (
+                <p className="text-[10px] text-amber-400">
+                  Fill in: {missingFields.join(", ")}
+                </p>
+              )}
             </>
           )}
 
@@ -289,7 +355,7 @@ export function GeneratePromptSheet({
               <div>
                 <p className="text-sm font-medium">Generating your prompt…</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Qwen is crafting a production-quality system prompt. This takes 3–5 seconds.
+                  Layering Foundation → {isCustom ? "Custom" : (selectedDomain?.name ?? "use case")} → your inputs. This takes 3–5 seconds.
                 </p>
               </div>
             </div>
@@ -307,15 +373,99 @@ export function GeneratePromptSheet({
                   {generatedPrompt.length.toLocaleString()} chars
                 </Badge>
               </div>
+
+              {/* Version traceability */}
+              {genMeta && (
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="outline" className="text-[10px]">
+                    Foundation v{genMeta.foundationVersion}
+                  </Badge>
+                  {genMeta.domain
+                    ? <Badge variant="outline" className="text-[10px]">{genMeta.domain.name} v{genMeta.domain.version}</Badge>
+                    : <Badge variant="outline" className="text-[10px]">Custom / Other</Badge>}
+                  {genMeta.clientDetailsVersion != null && (
+                    <Badge variant="outline" className="text-[10px]">Client Details v{genMeta.clientDetailsVersion}</Badge>
+                  )}
+                </div>
+              )}
+
+              {/* Guardrail pass/fail list */}
+              {guardrail && (
+                <div className={cn(
+                  "rounded-lg border p-3 space-y-2",
+                  guardrail.passed ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5",
+                )}>
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className={cn("w-3.5 h-3.5", guardrail.passed ? "text-emerald-400" : "text-red-400")} />
+                    <span className="text-xs font-medium">
+                      {guardrail.passed ? "All Foundation guardrails passed" : "Some Foundation guardrails failed"}
+                    </span>
+                  </div>
+                  <ul className="space-y-1">
+                    {guardrail.checks.map(c => (
+                      <li key={c.name} className="flex items-start gap-1.5 text-[10px]">
+                        {c.passed
+                          ? <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                          : <XCircle className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />}
+                        <span className={c.passed ? "text-muted-foreground" : "text-red-300"}>
+                          <span className="font-medium">{c.label}</span>
+                          {!c.passed && <> — {c.detail}</>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {!guardrail.passed && (
+                    <p className="text-[10px] font-medium text-red-300">
+                      This prompt can't be applied until the failed guardrails are resolved. Adjust your inputs and regenerate.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Overwrite / diff gating */}
+              {hasExistingPrompt && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-xs font-medium text-amber-300">Your System Prompt already has content</span>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setShowDiff(v => !v)}>
+                      {showDiff ? "Hide diff" : "Show diff"}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Using this prompt will replace the existing content.
+                  </p>
+                </div>
+              )}
+
               <div className="rounded-lg border border-border bg-muted/20 overflow-hidden">
                 <div className="max-h-[420px] overflow-y-auto p-4">
-                  <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed text-foreground/90">
-                    {generatedPrompt}
-                  </pre>
+                  {showDiff && diffParts ? (
+                    <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed">
+                      {diffParts.map((part, i) => (
+                        <span
+                          key={i}
+                          className={cn(
+                            part.added && "bg-emerald-500/20 text-emerald-300",
+                            part.removed && "bg-red-500/20 text-red-300 line-through",
+                            !part.added && !part.removed && "text-foreground/60",
+                          )}
+                        >
+                          {part.value}
+                        </span>
+                      ))}
+                    </pre>
+                  ) : (
+                    <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed text-foreground/90">
+                      {generatedPrompt}
+                    </pre>
+                  )}
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Review the prompt above. Click <strong>Use this prompt</strong> to insert it into the editor, or <strong>Regenerate</strong> to try again with different inputs.
+                Review the prompt above. Click <strong>Use this prompt</strong> to insert it into the editor, or <strong>Adjust &amp; Regenerate</strong> to try again.
               </p>
             </div>
           )}
@@ -326,7 +476,13 @@ export function GeneratePromptSheet({
               <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-red-400">Generation failed</p>
+                  <p className="text-sm font-medium text-red-400">
+                    {errorReason === "no_foundation"
+                      ? "Foundation template not configured"
+                      : errorReason === "no_domain"
+                        ? "Use case template unavailable"
+                        : "Generation failed"}
+                  </p>
                   <p className="text-xs text-muted-foreground">{errorMsg}</p>
                 </div>
               </div>
@@ -353,7 +509,7 @@ export function GeneratePromptSheet({
                 onClick={() => { setPhase("form"); }}
               >
                 <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-                Adjust & Regenerate
+                Adjust &amp; Regenerate
               </Button>
             )}
 
@@ -369,11 +525,13 @@ export function GeneratePromptSheet({
               </Button>
             )}
 
-            {/* Use this prompt — shown in preview */}
+            {/* Use this prompt — shown in preview; blocked until guardrails pass */}
             {phase === "preview" && (
-              <Button size="sm" onClick={handleApply}>
+              <Button size="sm" onClick={handleApply} disabled={applyBlocked}>
                 <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                Use this prompt
+                {applyBlocked
+                  ? "Fix guardrails to continue"
+                  : hasExistingPrompt ? "Replace & use prompt" : "Use this prompt"}
               </Button>
             )}
           </div>

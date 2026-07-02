@@ -136,6 +136,103 @@ export interface AdminAgentPrompt {
   wizardInputs?: AdminAgentPromptWizardInputs;
 }
 
+export interface SystemPromptLayerStatus {
+  available: boolean;
+  /** @nullable */
+  version: number | null;
+}
+
+export interface SystemPromptDomainOption {
+  id: number;
+  name: string;
+  version: number;
+}
+
+export interface SystemPromptStore {
+  foundation: SystemPromptLayerStatus;
+  clientDetails: SystemPromptLayerStatus;
+  domains: SystemPromptDomainOption[];
+}
+
+export type GenerateSystemPromptBodyAgentDirection = typeof GenerateSystemPromptBodyAgentDirection[keyof typeof GenerateSystemPromptBodyAgentDirection];
+
+
+export const GenerateSystemPromptBodyAgentDirection = {
+  inbound: 'inbound',
+  outbound: 'outbound',
+} as const;
+
+export interface GenerateSystemPromptBody {
+  /** @minLength 1 */
+  agentName: string;
+  /** @minLength 1 */
+  companyName: string;
+  /** true = Custom / Other (no domain layer); false = a Domain template must be resolved via domainId */
+  isCustom: boolean;
+  /**
+     * Required (non-null) when isCustom is false — identifies the Domain template layer
+     * @nullable
+     */
+  domainId?: number | null;
+  /** Human-readable use-case label shown in the dropdown (domain name or 'Custom / Other') */
+  useCaseLabel: string;
+  agentDirection: GenerateSystemPromptBodyAgentDirection;
+  language: string;
+  selectedLanguages?: string[];
+  /** @minLength 12 */
+  callFlowDescription: string;
+  /** Optional key knowledge / product details the agent should know */
+  keyKnowledge?: string;
+}
+
+export interface SystemPromptGenDomain {
+  id: number;
+  name: string;
+  version: number;
+}
+
+export type SystemPromptGenerationMetaFormInputs = { [key: string]: unknown };
+
+export interface SystemPromptGenerationMeta {
+  foundationVersion: number;
+  /** @nullable */
+  clientDetailsVersion: number | null;
+  domain: SystemPromptGenDomain | null;
+  generatedAt: string;
+  formInputs: SystemPromptGenerationMetaFormInputs;
+}
+
+export interface SystemPromptGuardrailCheck {
+  name: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface SystemPromptGuardrailResult {
+  passed: boolean;
+  checks: SystemPromptGuardrailCheck[];
+}
+
+export interface GenerateSystemPromptResponse {
+  systemPrompt: string;
+  generationMeta: SystemPromptGenerationMeta;
+  guardrail: SystemPromptGuardrailResult;
+}
+
+export type SystemPromptGenerationErrorReason = typeof SystemPromptGenerationErrorReason[keyof typeof SystemPromptGenerationErrorReason];
+
+
+export const SystemPromptGenerationErrorReason = {
+  no_foundation: 'no_foundation',
+  no_domain: 'no_domain',
+} as const;
+
+export interface SystemPromptGenerationError {
+  error: string;
+  reason: SystemPromptGenerationErrorReason;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -821,6 +918,8 @@ export interface AgentInput {
   stagedPromptCoreIdentity?: string;
   /** Raw wizard answers passed from the dashboard. May include the ordered micro-question/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent's system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses. */
   wizardInputs?: AgentInputWizardInputs;
+  /** Version traceability stamped when a system prompt generated via the layered System Prompt Templates store is applied and saved. */
+  systemPromptGenMeta?: SystemPromptGenerationMeta | null;
 }
 
 /**
@@ -952,6 +1051,8 @@ export interface AgentUpdate {
   inboundPhoneNumberId?: number | null;
   /** Phone number ID used as caller ID for outbound calls */
   outboundPhoneNumberId?: number | null;
+  /** Version traceability stamped when a system prompt generated via the layered System Prompt Templates store is applied and saved. */
+  systemPromptGenMeta?: SystemPromptGenerationMeta | null;
 }
 
 export interface SnapServeCostBreakdown {

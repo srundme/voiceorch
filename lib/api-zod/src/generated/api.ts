@@ -17,6 +17,77 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Returns the currently active Foundation and Client Details layer status plus the list of Domain templates (id, name, active version) that drive the Use-case dropdown. Only domains with an active version are returned.
+
+ * @summary Read the layered System Prompt Templates store for the generate modal
+ */
+export const GetSystemPromptStoreResponse = zod.object({
+  "foundation": zod.object({
+  "available": zod.boolean(),
+  "version": zod.number().nullable()
+}),
+  "clientDetails": zod.object({
+  "available": zod.boolean(),
+  "version": zod.number().nullable()
+}),
+  "domains": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "version": zod.number()
+}))
+})
+
+
+/**
+ * Fetches the active Foundation, the selected Domain version (unless Custom), and the active Client Details structure live at click time, assembles them with the user's form inputs, and generates the final system prompt via the managed LLM. Hard-fails (no legacy fallback) when Foundation is missing or a non-custom domain cannot be resolved. Returns the prompt, version traceability metadata, and a named guardrail pass/fail list.
+
+ * @summary Generate a system prompt from the layered store (Foundation → Domain → inputs)
+ */
+
+
+export const generateSystemPromptBodyCallFlowDescriptionMin = 12;
+
+
+
+export const GenerateSystemPromptBody = zod.object({
+  "agentName": zod.string().min(1),
+  "companyName": zod.string().min(1),
+  "isCustom": zod.boolean().describe('true = Custom \/ Other (no domain layer); false = a Domain template must be resolved via domainId'),
+  "domainId": zod.number().nullish().describe('Required (non-null) when isCustom is false — identifies the Domain template layer'),
+  "useCaseLabel": zod.string().describe('Human-readable use-case label shown in the dropdown (domain name or \'Custom \/ Other\')'),
+  "agentDirection": zod.enum(['inbound', 'outbound']),
+  "language": zod.string(),
+  "selectedLanguages": zod.array(zod.string()).optional(),
+  "callFlowDescription": zod.string().min(generateSystemPromptBodyCallFlowDescriptionMin),
+  "keyKnowledge": zod.string().optional().describe('Optional key knowledge \/ product details the agent should know')
+})
+
+export const GenerateSystemPromptResponse = zod.object({
+  "systemPrompt": zod.string(),
+  "generationMeta": zod.object({
+  "foundationVersion": zod.number(),
+  "clientDetailsVersion": zod.number().nullable(),
+  "domain": zod.union([zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "version": zod.number()
+}),zod.null()]),
+  "generatedAt": zod.coerce.date(),
+  "formInputs": zod.record(zod.string(), zod.unknown())
+}),
+  "guardrail": zod.object({
+  "passed": zod.boolean(),
+  "checks": zod.array(zod.object({
+  "name": zod.string(),
+  "label": zod.string(),
+  "passed": zod.boolean(),
+  "detail": zod.string()
+}))
+})
+})
+
+
+/**
  * @summary List all agents
  */
 export const ListAgentsResponseItem = zod.object({
@@ -208,7 +279,18 @@ export const CreateAgentBody = zod.object({
   "content": zod.string().optional()
 })).optional().describe('Named prompt stages (each with name + content)'),
   "stagedPromptCoreIdentity": zod.string().optional().describe('Core identity block always included in staged-prompt mode'),
-  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.')
+  "wizardInputs": zod.record(zod.string(), zod.unknown()).optional().describe('Raw wizard answers passed from the dashboard. May include the ordered micro-question\/answer pairs (microAnswers) and any uploaded job description content (jdFileContent, jdFileName). When present, the server generates the agent\'s system prompt server-side using the active admin master template (Qwen) and stores the result. Never returned in responses.'),
+  "systemPromptGenMeta": zod.union([zod.object({
+  "foundationVersion": zod.number(),
+  "clientDetailsVersion": zod.number().nullable(),
+  "domain": zod.union([zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "version": zod.number()
+}),zod.null()]),
+  "generatedAt": zod.coerce.date(),
+  "formInputs": zod.record(zod.string(), zod.unknown())
+}),zod.null()]).optional().describe('Version traceability stamped when a system prompt generated via the layered System Prompt Templates store is applied and saved.')
 })
 
 
@@ -424,7 +506,18 @@ export const UpdateAgentBody = zod.object({
 })).optional().describe('Named prompt stages (each with name + content)'),
   "stagedPromptCoreIdentity": zod.string().optional().describe('Core identity block always included in staged-prompt mode'),
   "inboundPhoneNumberId": zod.number().nullish().describe('Phone number ID for inbound routing to this agent'),
-  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls')
+  "outboundPhoneNumberId": zod.number().nullish().describe('Phone number ID used as caller ID for outbound calls'),
+  "systemPromptGenMeta": zod.union([zod.object({
+  "foundationVersion": zod.number(),
+  "clientDetailsVersion": zod.number().nullable(),
+  "domain": zod.union([zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "version": zod.number()
+}),zod.null()]),
+  "generatedAt": zod.coerce.date(),
+  "formInputs": zod.record(zod.string(), zod.unknown())
+}),zod.null()]).optional().describe('Version traceability stamped when a system prompt generated via the layered System Prompt Templates store is applied and saved.')
 })
 
 export const UpdateAgentResponse = zod.object({

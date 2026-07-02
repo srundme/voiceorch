@@ -217,6 +217,18 @@ export const agentsTable = pgTable("agents", {
   promptTemplateVersion: integer("prompt_template_version"),
   wizardInputs: json("wizard_inputs").$type<Record<string, unknown>>(),
 
+  // ── Layered System Prompt generation traceability ─────────────────────────────
+  // Stamped when a prompt generated via the layered System Prompt Templates store
+  // (Foundation + Domain + Client Details) is applied and the agent is saved.
+  // Records which layer versions + form inputs produced the current system prompt.
+  systemPromptGenMeta: jsonb("system_prompt_gen_meta").$type<{
+    foundationVersion: number;
+    clientDetailsVersion: number | null;
+    domain: { id: number; name: string; version: number } | null;
+    generatedAt: string;
+    formInputs: Record<string, unknown>;
+  }>(),
+
   // ── Token Optimization ────────────────────────────────────────────────────────
   contextWindowTurns: integer("context_window_turns"),
   tokenSummarizationEnabled: boolean("token_summarization_enabled").default(false),

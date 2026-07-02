@@ -14,6 +14,13 @@ export const agentFormSchema = z.object({
   ttsModel:          z.string().optional(),
   telephonyProvider: z.string().min(1, "Telephony Provider is required"),
   systemPrompt:      z.string().min(1, "System prompt is required"),
+  systemPromptGenMeta: z.object({
+    foundationVersion: z.number(),
+    clientDetailsVersion: z.number().nullable(),
+    domain: z.object({ id: z.number(), name: z.string(), version: z.number() }).nullable(),
+    generatedAt: z.string(),
+    formInputs: z.record(z.string(), z.unknown()),
+  }).nullable().optional(),
   temperature:       z.number().min(0).max(2).optional(),
   maxDuration:       z.number().min(10).max(3600).optional(),
   greetingMessage:          z.string().optional(),

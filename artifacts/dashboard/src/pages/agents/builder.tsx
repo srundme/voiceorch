@@ -397,7 +397,11 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
         onOpenChange={setGenerateOpen}
         defaultAgentName={agentName ?? agent?.name ?? ""}
         defaultLanguage={language ?? "en-US"}
-        onApply={(prompt) => form.setValue("systemPrompt", prompt, { shouldDirty: true })}
+        currentPrompt={form.watch("systemPrompt") ?? ""}
+        onApply={(prompt, meta) => {
+          form.setValue("systemPrompt", prompt, { shouldDirty: true });
+          form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
+        }}
       />
 
       {/* ── Left: Vapi-style config ──────────────────────────────────────────── */}
@@ -791,8 +795,10 @@ function PromptTab({ form }: { form: any }) {
         onOpenChange={setGenerateOpen}
         defaultAgentName={agentName ?? ""}
         defaultLanguage={agentLang ?? "en-US"}
-        onApply={(prompt) => {
+        currentPrompt={form.watch("systemPrompt") ?? ""}
+        onApply={(prompt, meta) => {
           form.setValue("systemPrompt", prompt, { shouldDirty: true });
+          form.setValue("systemPromptGenMeta", meta, { shouldDirty: true });
         }}
       />
       <FormField control={form.control} name="systemPrompt" render={({ field }) => (

@@ -176,6 +176,62 @@ export async function getVersionDetail(id: number) {
   return row ?? null;
 }
 
+// ── Layered generation helpers (dashboard "Generate System Prompt" modal) ─────
+
+/** The currently active row (with extractedText) for a group, or null. */
+export async function getActiveLayer(group: TemplateGroup) {
+  const [row] = await db
+    .select()
+    .from(systemPromptTemplatesTable)
+    .where(and(groupWhere(group), eq(systemPromptTemplatesTable.isActive, true)))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface SystemPromptLayerStatus {
+  available: boolean;
+  version: number | null;
+}
+
+export interface SystemPromptDomainOption {
+  id: number;
+  name: string;
+  version: number;
+}
+
+export interface SystemPromptStore {
+  foundation: SystemPromptLayerStatus;
+  clientDetails: SystemPromptLayerStatus;
+  domains: SystemPromptDomainOption[];
+}
+
+/**
+ * Snapshot for the dashboard generate modal: whether the Foundation and Client
+ * Details layers have an active version, plus the Use-case dropdown options
+ * (only domains that have an active version can drive a generation).
+ */
+export async function getSystemPromptStore(): Promise<SystemPromptStore> {
+  const [foundation, clientDetails, domainRows] = await Promise.all([
+    getActiveLayer({ type: "foundation" }),
+    getActiveLayer({ type: "client_details" }),
+    db.select().from(systemPromptDomainsTable).orderBy(systemPromptDomainsTable.name),
+  ]);
+
+  const domains: SystemPromptDomainOption[] = [];
+  for (const d of domainRows) {
+    const active = await getActiveLayer({ type: "domain", domainId: d.id });
+    if (active) {
+      domains.push({ id: d.id, name: d.name, version: active.version });
+    }
+  }
+
+  return {
+    foundation: { available: !!foundation, version: foundation?.version ?? null },
+    clientDetails: { available: !!clientDetails, version: clientDetails?.version ?? null },
+    domains,
+  };
+}
+
 // ── Domain CRUD ──────────────────────────────────────────────────────────────
 
 export async function getDomain(id: number) {

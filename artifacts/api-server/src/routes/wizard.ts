@@ -5,7 +5,14 @@ import { platformSettingsTable, platformListedVoicesTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
-import { getActiveTemplate, generateAgentPrompt } from "../services/prompt-template.js";
+import { getActiveTemplate, generateAgentPrompt, generateLayeredAgentPrompt } from "../services/prompt-template.js";
+import {
+  getSystemPromptStore,
+  getActiveLayer,
+  getDomain,
+} from "../services/system-prompt-template.js";
+import { checkFoundationGuardrails } from "../services/system-prompt-guardrails.js";
+import { GenerateSystemPromptBody } from "@workspace/api-zod";
 
 interface FlowNode { label: string; badge?: string; branch?: boolean }
 
@@ -735,6 +742,128 @@ router.put("/admin/managed-keys", requireAdmin, async (req, res): Promise<void> 
 
   await Promise.all(updates);
   res.json({ saved: updates.length });
+});
+
+// ── GET /wizard/system-prompt-store ──────────────────────────────────────────
+//
+// Snapshot of the layered System Prompt Templates store for the dashboard
+// "Generate System Prompt" modal: Foundation + Client Details layer status and
+// the Use-case dropdown options (domains with an active version).
+
+router.get("/wizard/system-prompt-store", requireDbUser, async (req, res): Promise<void> => {
+  try {
+    const store = await getSystemPromptStore();
+    res.json(store);
+  } catch (err) {
+    req.log.error({ err }, "Failed to read system prompt store");
+    res.status(500).json({ error: "Failed to read system prompt store" });
+  }
+});
+
+// ── POST /wizard/generate-system-prompt ──────────────────────────────────────
+//
+// Layered generation for the dashboard modal. Fetches the active Foundation,
+// the selected Domain version (unless Custom / Other), and the active Client
+// Details structure LIVE at click time, assembles them with the user's form
+// inputs, and generates the final system prompt via Qwen.
+//
+// Hard-fails (422, no legacy fallback) when Foundation is missing (reason:
+// no_foundation) or a non-custom domain cannot be resolved (reason: no_domain).
+// Returns the prompt, version-traceability metadata, and a named guardrail list.
+
+router.post("/wizard/generate-system-prompt", requireDbUser, async (req, res): Promise<void> => {
+  const parsed = GenerateSystemPromptBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", issues: parsed.error.issues });
+    return;
+  }
+  const body = parsed.data;
+
+  // 1) Foundation layer — LOCKED and mandatory. No foundation → hard-fail.
+  const foundation = await getActiveLayer({ type: "foundation" });
+  if (!foundation) {
+    res.status(422).json({
+      error:
+        "No active Foundation template is configured. Ask your admin to upload and activate one in the System Prompt Templates page.",
+      reason: "no_foundation",
+    });
+    return;
+  }
+
+  // 2) Domain layer — required unless the user picked Custom / Other.
+  let domainMeta: { id: number; name: string; version: number } | null = null;
+  let domainText = "";
+  let domainName = "Custom / Other";
+  if (!body.isCustom) {
+    if (body.domainId == null) {
+      res.status(422).json({
+        error: "A use case must be selected (or choose Custom / Other).",
+        reason: "no_domain",
+      });
+      return;
+    }
+    const domainRow = await getDomain(body.domainId);
+    const activeDomain = domainRow
+      ? await getActiveLayer({ type: "domain", domainId: body.domainId })
+      : null;
+    if (!domainRow || !activeDomain) {
+      res.status(422).json({
+        error:
+          "The selected use case has no active Domain template version. Pick another use case or Custom / Other.",
+        reason: "no_domain",
+      });
+      return;
+    }
+    domainText = activeDomain.extractedText;
+    domainName = domainRow.name;
+    domainMeta = { id: domainRow.id, name: domainRow.name, version: activeDomain.version };
+  }
+
+  // 3) Client Details structure — optional layer.
+  const clientDetails = await getActiveLayer({ type: "client_details" });
+
+  const formInputs: Record<string, unknown> = {
+    agentName: body.agentName,
+    companyName: body.companyName,
+    useCase: body.useCaseLabel,
+    agentDirection: body.agentDirection,
+    language: body.language,
+    selectedLanguages: body.selectedLanguages ?? [],
+    callFlowDescription: body.callFlowDescription,
+    keyKnowledge: body.keyKnowledge ?? "",
+  };
+
+  try {
+    const systemPrompt = await generateLayeredAgentPrompt({
+      foundationText: foundation.extractedText,
+      domainText,
+      domainName,
+      clientDetailsText: clientDetails?.extractedText,
+      formInputs,
+    });
+
+    const guardrail = checkFoundationGuardrails(systemPrompt);
+
+    res.json({
+      systemPrompt,
+      generationMeta: {
+        foundationVersion: foundation.version,
+        clientDetailsVersion: clientDetails?.version ?? null,
+        domain: domainMeta,
+        generatedAt: new Date().toISOString(),
+        formInputs,
+      },
+      guardrail,
+    });
+  } catch (err: unknown) {
+    req.log.error({ err }, "Layered system prompt generation failed");
+    const msg = (err as Error)?.message ?? "Prompt generation failed";
+    if (msg.includes("Managed Qwen key not configured")) {
+      res.status(503).json({ error: msg, reason: "qwen_key_missing" });
+    } else {
+      res.status(502).json({ error: msg, reason: "qwen_request_failed" });
+    }
+  }
 });
 
 export default router;

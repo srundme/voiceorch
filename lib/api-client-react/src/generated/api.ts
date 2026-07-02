@@ -147,6 +147,8 @@ import type {
   ExportCampaignCallbacksParams,
   ExportCampaignIncomingCallsParams,
   ExportCampaignLiveQueueParams,
+  GenerateSystemPromptBody,
+  GenerateSystemPromptResponse,
   GetAdminAgents200,
   GetAdminPromptTemplates200,
   GetAgentSnapserveExecutionsParams,
@@ -284,6 +286,8 @@ import type {
   SchedulingCalendarUpdate,
   SnapServeExecutionsResponse,
   StartCrmConnectParams,
+  SystemPromptGenerationError,
+  SystemPromptStore,
   TestToolBody,
   TestToolResponse,
   TimeSlot,
@@ -403,6 +407,158 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getGetSystemPromptStoreUrl = () => {
+
+
+
+
+  return `/api/wizard/system-prompt-store`
+}
+
+/**
+ * Returns the currently active Foundation and Client Details layer status plus the list of Domain templates (id, name, active version) that drive the Use-case dropdown. Only domains with an active version are returned.
+
+ * @summary Read the layered System Prompt Templates store for the generate modal
+ */
+export const getSystemPromptStore = async ( options?: RequestInit): Promise<SystemPromptStore> => {
+
+  return customFetch<SystemPromptStore>(getGetSystemPromptStoreUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSystemPromptStoreQueryKey = () => {
+    return [
+    `/api/wizard/system-prompt-store`
+    ] as const;
+    }
+
+
+export const getGetSystemPromptStoreQueryOptions = <TData = Awaited<ReturnType<typeof getSystemPromptStore>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSystemPromptStore>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSystemPromptStoreQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemPromptStore>>> = ({ signal }) => getSystemPromptStore({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSystemPromptStore>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSystemPromptStoreQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemPromptStore>>>
+export type GetSystemPromptStoreQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read the layered System Prompt Templates store for the generate modal
+ */
+
+export function useGetSystemPromptStore<TData = Awaited<ReturnType<typeof getSystemPromptStore>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSystemPromptStore>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSystemPromptStoreQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGenerateSystemPromptUrl = () => {
+
+
+
+
+  return `/api/wizard/generate-system-prompt`
+}
+
+/**
+ * Fetches the active Foundation, the selected Domain version (unless Custom), and the active Client Details structure live at click time, assembles them with the user's form inputs, and generates the final system prompt via the managed LLM. Hard-fails (no legacy fallback) when Foundation is missing or a non-custom domain cannot be resolved. Returns the prompt, version traceability metadata, and a named guardrail pass/fail list.
+
+ * @summary Generate a system prompt from the layered store (Foundation → Domain → inputs)
+ */
+export const generateSystemPrompt = async (generateSystemPromptBody: GenerateSystemPromptBody, options?: RequestInit): Promise<GenerateSystemPromptResponse> => {
+
+  return customFetch<GenerateSystemPromptResponse>(getGenerateSystemPromptUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      generateSystemPromptBody,)
+  }
+);}
+
+
+
+
+export const getGenerateSystemPromptMutationOptions = <TError = ErrorType<void | SystemPromptGenerationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSystemPrompt>>, TError,{data: BodyType<GenerateSystemPromptBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateSystemPrompt>>, TError,{data: BodyType<GenerateSystemPromptBody>}, TContext> => {
+
+const mutationKey = ['generateSystemPrompt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateSystemPrompt>>, {data: BodyType<GenerateSystemPromptBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateSystemPrompt(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateSystemPromptMutationResult = NonNullable<Awaited<ReturnType<typeof generateSystemPrompt>>>
+    export type GenerateSystemPromptMutationBody = BodyType<GenerateSystemPromptBody>
+    export type GenerateSystemPromptMutationError = ErrorType<void | SystemPromptGenerationError>
+
+    /**
+ * @summary Generate a system prompt from the layered store (Foundation → Domain → inputs)
+ */
+export const useGenerateSystemPrompt = <TError = ErrorType<void | SystemPromptGenerationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSystemPrompt>>, TError,{data: BodyType<GenerateSystemPromptBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateSystemPrompt>>,
+        TError,
+        {data: BodyType<GenerateSystemPromptBody>},
+        TContext
+      > => {
+      return useMutation(getGenerateSystemPromptMutationOptions(options));
+    }
 
 export const getListAgentsUrl = () => {
 

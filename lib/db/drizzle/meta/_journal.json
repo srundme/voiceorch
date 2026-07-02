@@ -288,6 +288,13 @@
       "when": 1785100000000,
       "tag": "0040_system_prompt_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1785200000000,
+      "tag": "0041_agent_system_prompt_gen_meta",
+      "breakpoints": true
     }
   ]
 }
