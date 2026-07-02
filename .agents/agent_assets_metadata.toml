@@ -216,3 +216,9 @@ id = "VXDCY5pvQoIokSrKtrlFq"
 uri = "file://artifacts/snapserve-book/public/brochure/snapserve-brochure.pdf"
 type = "pdf"
 title = "SnapServe Product Brochure v3 (Fixed)"
+
+[[outputs]]
+id = "SW9xONcvxahGIeoNVS3ZE"
+uri = "file://docs/advanced-call-settings-report.md"
+type = "text"
+title = "Advanced Call Settings — Detailed Reference & Interaction Report"
