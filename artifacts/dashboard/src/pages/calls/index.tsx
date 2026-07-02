@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, RefreshCw, Clock, AlertTriangle,
   CheckCircle2, PauseCircle, PlayCircle, XCircle, Voicemail,
   UserCheck, Users, TrendingUp, Globe, Eye,
-  PhoneOff, PhoneMissed, Megaphone,
+  PhoneOff, PhoneMissed, Megaphone, ArrowUpRight, ArrowDownLeft,
 } from "lucide-react";
 import {
   useListCalls,
@@ -708,10 +708,32 @@ export default function CallsList() {
                           const isCampaign = !isWeb && (call as any).campaignId != null;
                           const icon = isWeb ? <Globe className="h-3 w-3" /> : isCampaign ? <Megaphone className="h-3 w-3" /> : <Phone className="h-3 w-3" />;
                           const label = isWeb ? "Web Call" : isCampaign ? "Campaign" : "Live Call";
+                          let direction: "inbound" | "outbound" | null = null;
+                          const rawMeta = (call as any).metadata;
+                          if (typeof rawMeta === "string" && rawMeta.length > 0) {
+                            try {
+                              const parsed = JSON.parse(rawMeta);
+                              if (parsed?.direction === "inbound" || parsed?.direction === "outbound") {
+                                direction = parsed.direction;
+                              }
+                            } catch {
+                              // metadata is not valid JSON — fall through to default
+                            }
+                          }
+                          if (direction === null) {
+                            direction = isCampaign ? "outbound" : "inbound";
+                          }
                           return (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
-                              {icon}
-                              {label}
+                            <span className="inline-flex items-center gap-1">
+                              {direction === "outbound" ? (
+                                <ArrowUpRight className="h-3 w-3 text-foreground/50" />
+                              ) : (
+                                <ArrowDownLeft className="h-3 w-3 text-foreground/50" />
+                              )}
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+                                {icon}
+                                {label}
+                              </span>
                             </span>
                           );
                         })()}
