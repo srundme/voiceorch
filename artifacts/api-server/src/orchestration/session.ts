@@ -1506,7 +1506,12 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
   const avgTtsMs = metricsAcc.count > 0 ? Math.round(metricsAcc.ttsTotal / metricsAcc.count) : null;
 
   try {
-    const callStatus = session.wasTransferred ? "transferred" : "completed";
+    // A call where the agent had zero turns (no STT→LLM cycle completed) and ended
+    // quickly was effectively rejected or dropped before the conversation started.
+    // Mark it "no_pickup" instead of "completed" so the UI and campaign stats reflect
+    // the real outcome (e.g. callee rejected, line busy, VoBiz brief-connect-then-drop).
+    const noTurnsDrop = metricsAcc.count === 0 && durationSeconds <= 15 && !session.wasTransferred;
+    const callStatus = session.wasTransferred ? "transferred" : noTurnsDrop ? "no_pickup" : "completed";
 
     // ── Upload call recording (async, non-blocking) ──────────────────────────
     // Only finalize/upload when the agent has Call Recording enabled, so disabled

@@ -277,6 +277,13 @@ export default function CallsList() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined,
         }),
+        // Poll fast when any call is live so status transitions appear in real-time;
+        // fall back to a slower interval when everything is settled.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        refetchInterval: (query: any) =>
+          (query.state.data as any[] | undefined)?.some((c: any) => c.status === "in_progress")
+            ? 5_000
+            : 15_000,
       },
     }
   );

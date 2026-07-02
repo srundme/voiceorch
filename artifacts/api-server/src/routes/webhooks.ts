@@ -179,6 +179,19 @@ async function handleCampaignLeadTerminalStatus(opts: {
     .set({ callStatus: leadStatus })
     .where(eq(campaignLeadsTable.id, campaignLeadId));
 
+  // Mirror the terminal status onto the calls table row so the Calls Log shows
+  // the real outcome instead of staying "in_progress" forever.
+  // Only do this when the lead was in "calling" state (never connected) — if it
+  // was "connected", endSession() owns the calls row and will update it itself.
+  if (lead.callId && lead.callStatus === "calling") {
+    await db.update(callsTable)
+      .set({ status: leadStatus, endedAt: new Date() })
+      .where(and(
+        eq(callsTable.id, lead.callId),
+        eq(callsTable.status, "in_progress"),
+      ));
+  }
+
   await db.insert(leadTimelineTable).values({
     leadId:     campaignLeadId,
     campaignId: lead.campaignId,

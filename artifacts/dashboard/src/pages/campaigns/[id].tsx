@@ -1288,11 +1288,12 @@ export default function CampaignDetailPage() {
 
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
 
-  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 30_000 } as any });
+  const { data: campaign, isLoading: campLoading } = useGetCampaign(campaignId, { query: { refetchInterval: 15_000 } as any });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 30_000 } as any });
+  const { data: batches, isLoading: batchLoading } = useListCampaignBatches(campaignId, { query: { refetchInterval: 10_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: analytics } = useGetCampaignAnalytics(campaignId, { query: { refetchInterval: 10_000 } as any });
 
   // Business hours editor state — declared after campaign so the useEffect dep is valid
   const [editingHours, setEditingHours] = useState(false);
