@@ -12,6 +12,11 @@ import {
   getDomain,
 } from "../services/system-prompt-template.js";
 import { checkFoundationGuardrails } from "../services/system-prompt-guardrails.js";
+import {
+  checkRequiredSections,
+  checkDomainCompliance,
+  jurisdictionMismatchWarnings,
+} from "../services/system-prompt-domain-checks.js";
 import { GenerateSystemPromptBody } from "@workspace/api-zod";
 
 interface FlowNode { label: string; badge?: string; branch?: boolean }
@@ -846,7 +851,39 @@ router.post("/wizard/generate-system-prompt", requireDbUser, async (req, res): P
       formInputs,
     });
 
-    const guardrail = checkFoundationGuardrails(systemPrompt);
+    // Merge the three check families into one named pass/fail list:
+    //  - Foundation contradiction guardrails (always)
+    //  - Required output-structure sections (always; Defined Outcomes only when a domain drives the generation)
+    //  - Domain-template compliance checks (only when a domain is selected)
+    //
+    // Gating is keyed off the SELECTED domain (not non-empty text): if a domain
+    // was picked but its template text is empty/unusable, that is an explicit
+    // FAILING check — never a silent skip.
+    const hasDomain = !body.isCustom;
+    const domainTextUsable = domainText.trim().length > 0;
+    const foundationResult = checkFoundationGuardrails(systemPrompt);
+    const sectionChecks = checkRequiredSections(systemPrompt, {
+      requireDefinedOutcomes: hasDomain && domainTextUsable,
+    });
+    const domainChecks = hasDomain
+      ? domainTextUsable
+        ? checkDomainCompliance({ domainText, domainName, generatedPrompt: systemPrompt })
+        : [
+            {
+              name: "domain_template_content",
+              label: "Domain template content available",
+              passed: false,
+              detail: `The "${domainName}" domain template's extracted text is empty or unusable — domain compliance could not be verified. Re-upload the domain template in the Admin panel.`,
+              source: "domain" as const,
+            },
+          ]
+      : [];
+    const allChecks = [...foundationResult.checks, ...sectionChecks, ...domainChecks];
+    const guardrail = {
+      passed: allChecks.every((c) => c.passed),
+      checks: allChecks,
+    };
+    const warnings = hasDomain ? jurisdictionMismatchWarnings(domainText, body.language) : [];
 
     res.json({
       systemPrompt,
@@ -858,6 +895,7 @@ router.post("/wizard/generate-system-prompt", requireDbUser, async (req, res): P
         formInputs,
       },
       guardrail,
+      warnings,
     });
   } catch (err: unknown) {
     req.log.error({ err }, "Layered system prompt generation failed");

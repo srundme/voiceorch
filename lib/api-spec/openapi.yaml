@@ -6669,12 +6669,16 @@ components:
 
     SystemPromptGuardrailCheck:
       type: object
-      required: [name, label, passed, detail]
+      required: [name, label, passed, detail, source]
       properties:
         name: { type: string }
         label: { type: string }
         passed: { type: boolean }
         detail: { type: string }
+        source:
+          type: string
+          enum: [foundation, structure, domain]
+          description: "Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks"
 
     SystemPromptGuardrailResult:
       type: object
@@ -6688,13 +6692,17 @@ components:
 
     GenerateSystemPromptResponse:
       type: object
-      required: [systemPrompt, generationMeta, guardrail]
+      required: [systemPrompt, generationMeta, guardrail, warnings]
       properties:
         systemPrompt: { type: string }
         generationMeta:
           $ref: "#/components/schemas/SystemPromptGenerationMeta"
         guardrail:
           $ref: "#/components/schemas/SystemPromptGuardrailResult"
+        warnings:
+          type: array
+          items: { type: string }
+          description: "Non-blocking advisory warnings (e.g. jurisdiction/language mismatch between the domain template and the agent's configured market)"
 
     SystemPromptGenerationError:
       type: object

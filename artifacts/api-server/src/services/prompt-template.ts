@@ -269,10 +269,24 @@ export async function generateLayeredAgentPrompt(input: LayeredPromptInput): Pro
 
 RULES OF ASSEMBLY:
 1. The FOUNDATION section is LOCKED. Every rule in it (identity/AI-honesty, salutation protocol, spoken-form rules, silent tool-call handling, off-script/silence/closing/opt-out behaviour) MUST be preserved verbatim in intent. Never weaken, contradict, or drop a Foundation rule.
-2. The DOMAIN section specialises the Foundation for this use case. It may add specifics but must never override a Foundation rule.
+2. The DOMAIN section specialises the Foundation for this use case. It may add specifics but must never override a Foundation rule. When a DOMAIN section is present you MUST carry its machinery through completely:
+   a. Reproduce EVERY numbered step of the DOMAIN's conversation flow in the final prompt's Conversation Flow section — specialised with the client's details, never dropped, merged, or summarised away. If the DOMAIN has more steps than the client's call-flow description, keep ALL domain steps and weave the client's flow into them.
+   b. Steps containing mandatory or regulatory requirements (eligibility/needs checks, disclosures such as IRDAI/KYC/consent, verification) are NON-NEGOTIABLE: they must each appear as an explicit, detailed step. Mandatory-disclosure steps may NEVER be summarised away or folded into another step.
+   c. Include the DOMAIN's "Defined Outcomes" list in the final prompt VERBATIM — every backtick-quoted outcome value exactly as written (e.g. \`interested\`, \`not_eligible\`), including any "pick exactly one per call" instruction.
+   d. Preserve every requirement of the DOMAIN's Compliance Note / compliance guardrails (e.g. never guarantee claims or returns, no fear-based pressure, required regulatory disclosures) in the final prompt's Compliance & Disclosures section.
 3. The CLIENT DETAILS STRUCTURE (if present) tells you how to weave the client's concrete inputs into the prompt.
 4. Substitute the user's form inputs (company, agent name, direction, language(s), call flow, key knowledge) into the appropriate places and expand the call flow into a clear, natural multi-step conversation.
-5. Output ONLY the final system prompt — no commentary, no markdown fences.
+5. MANDATORY OUTPUT STRUCTURE — the final prompt MUST contain ALL of the following sections, using these EXACT headings, each filled with detailed, specific content (multiple sentences or bullet points — never a one-line placeholder):
+   - Agent Identity & Role
+   - Language & Communication Style
+   - Conversation Flow  (numbered steps; when a DOMAIN is present this carries every domain step per rule 2a)
+   - Objection Handling
+   - Escalation & Transfer Rules
+   - Compliance & Disclosures
+   - Defined Outcomes  (mandatory when a DOMAIN section is present — verbatim per rule 2c; when no DOMAIN is present, include it with sensible outcomes derived from the call flow)
+   - Variables Used
+   - Response Guidelines
+6. Output ONLY the final system prompt — no commentary, no markdown fences.
 
 ${layers.join("\n\n")}`;
 

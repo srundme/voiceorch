@@ -81,9 +81,11 @@ export const GenerateSystemPromptResponse = zod.object({
   "name": zod.string(),
   "label": zod.string(),
   "passed": zod.boolean(),
-  "detail": zod.string()
+  "detail": zod.string(),
+  "source": zod.enum(['foundation', 'structure', 'domain']).describe('Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks')
 }))
-})
+}),
+  "warnings": zod.array(zod.string()).describe('Non-blocking advisory warnings (e.g. jurisdiction\/language mismatch between the domain template and the agent\'s configured market)')
 })
 
 

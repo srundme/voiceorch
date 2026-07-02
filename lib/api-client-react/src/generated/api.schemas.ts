@@ -202,11 +202,25 @@ export interface SystemPromptGenerationMeta {
   formInputs: SystemPromptGenerationMetaFormInputs;
 }
 
+/**
+ * Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks
+ */
+export type SystemPromptGuardrailCheckSource = typeof SystemPromptGuardrailCheckSource[keyof typeof SystemPromptGuardrailCheckSource];
+
+
+export const SystemPromptGuardrailCheckSource = {
+  foundation: 'foundation',
+  structure: 'structure',
+  domain: 'domain',
+} as const;
+
 export interface SystemPromptGuardrailCheck {
   name: string;
   label: string;
   passed: boolean;
   detail: string;
+  /** Which verification layer produced this check: Foundation contradiction guardrails, required-output-structure checks, or domain-template compliance checks */
+  source: SystemPromptGuardrailCheckSource;
 }
 
 export interface SystemPromptGuardrailResult {
@@ -218,6 +232,8 @@ export interface GenerateSystemPromptResponse {
   systemPrompt: string;
   generationMeta: SystemPromptGenerationMeta;
   guardrail: SystemPromptGuardrailResult;
+  /** Non-blocking advisory warnings (e.g. jurisdiction/language mismatch between the domain template and the agent's configured market) */
+  warnings: string[];
 }
 
 export type SystemPromptGenerationErrorReason = typeof SystemPromptGenerationErrorReason[keyof typeof SystemPromptGenerationErrorReason];

@@ -57,6 +57,7 @@ export function GeneratePromptSheet({
   const [generatedPrompt, setGenerated] = useState("");
   const [genMeta, setGenMeta]           = useState<SystemPromptGenerationMeta | null>(null);
   const [guardrail, setGuardrail]       = useState<SystemPromptGuardrailResult | null>(null);
+  const [warnings, setWarnings]         = useState<string[]>([]);
   const [errorMsg, setErrorMsg]         = useState("");
   const [errorReason, setErrorReason]   = useState<string>("");
   const [showKnowledge, setShowKnowledge] = useState(false);
@@ -123,6 +124,7 @@ export function GeneratePromptSheet({
       setGenerated(res.systemPrompt);
       setGenMeta(res.generationMeta);
       setGuardrail(res.guardrail);
+      setWarnings(res.warnings ?? []);
       // When the field already holds a prompt, surface the diff by default rather
       // than silently overwriting — the user must see what changes.
       setShowDiff(currentPrompt.trim().length > 0);
@@ -143,6 +145,7 @@ export function GeneratePromptSheet({
     setGenerated("");
     setGenMeta(null);
     setGuardrail(null);
+    setWarnings([]);
     setErrorMsg("");
     setErrorReason("");
     setShowDiff(false);
@@ -398,7 +401,7 @@ export function GeneratePromptSheet({
                   <div className="flex items-center gap-1.5">
                     <ShieldCheck className={cn("w-3.5 h-3.5", guardrail.passed ? "text-emerald-400" : "text-red-400")} />
                     <span className="text-xs font-medium">
-                      {guardrail.passed ? "All Foundation guardrails passed" : "Some Foundation guardrails failed"}
+                      {guardrail.passed ? "All checks passed" : "Some checks failed"}
                     </span>
                   </div>
                   <ul className="space-y-1">
@@ -408,6 +411,16 @@ export function GeneratePromptSheet({
                           ? <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
                           : <XCircle className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />}
                         <span className={c.passed ? "text-muted-foreground" : "text-red-300"}>
+                          <span className={cn(
+                            "inline-block mr-1 rounded px-1 py-px text-[8px] font-semibold uppercase tracking-wide align-middle",
+                            c.source === "domain"
+                              ? "bg-violet-500/15 text-violet-300"
+                              : c.source === "structure"
+                                ? "bg-sky-500/15 text-sky-300"
+                                : "bg-emerald-500/10 text-emerald-300/80",
+                          )}>
+                            {c.source === "domain" ? "Domain" : c.source === "structure" ? "Structure" : "Foundation"}
+                          </span>
                           <span className="font-medium">{c.label}</span>
                           {!c.passed && <> — {c.detail}</>}
                         </span>
@@ -416,9 +429,27 @@ export function GeneratePromptSheet({
                   </ul>
                   {!guardrail.passed && (
                     <p className="text-[10px] font-medium text-red-300">
-                      This prompt can't be applied until the failed guardrails are resolved. Adjust your inputs and regenerate.
+                      This prompt can't be applied until the failed checks are resolved. Adjust your inputs and regenerate.
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Non-blocking jurisdiction / language mismatch warnings */}
+              {warnings.length > 0 && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-xs font-medium text-amber-300">Check your use case &amp; language</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {warnings.map((w, i) => (
+                      <li key={i} className="text-[10px] text-amber-200/90">{w}</li>
+                    ))}
+                  </ul>
+                  <p className="text-[10px] text-muted-foreground">
+                    This doesn't block applying the prompt, but a mismatched use case is a common cause of wrong-domain generations.
+                  </p>
                 </div>
               )}
 

@@ -9,11 +9,15 @@
  * modal's named pass/fail list and gates the "Use this prompt" button.
  */
 
+export type GuardrailCheckSource = "foundation" | "structure" | "domain";
+
 export interface GuardrailCheck {
   name: string;
   label: string;
   passed: boolean;
   detail: string;
+  /** Which layer of verification produced this check. */
+  source: GuardrailCheckSource;
 }
 
 export interface GuardrailResult {
@@ -123,6 +127,7 @@ export function checkFoundationGuardrails(generatedPrompt: string): GuardrailRes
       label: rule.label,
       passed: !contradicted,
       detail: contradicted ? rule.failDetail : rule.passDetail,
+      source: "foundation" as const,
     };
   });
   return { passed: checks.every((c) => c.passed), checks };
