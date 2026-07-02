@@ -105,7 +105,7 @@ async function apiFetch<T>(url: string): Promise<T> {
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
   pending:     { label: "Queued",      cls: "bg-muted/50 text-muted-foreground border-border" },
   calling:     { label: "Calling",     cls: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
-  connected:   { label: "Connected",   cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  connected:   { label: "In Progress", cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
   completed:   { label: "Completed",   cls: "bg-muted/50 text-muted-foreground border-border" },
   transferred: { label: "Transferred", cls: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
   no_pickup:   { label: "No Pickup",   cls: "bg-muted/50 text-muted-foreground border-border" },
