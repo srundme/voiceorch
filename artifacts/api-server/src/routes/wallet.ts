@@ -6,6 +6,8 @@ import { usersTable, walletTransactionsTable, platformSettingsTable } from "@wor
 import { eq, desc, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
+import { sendBrevoEmail } from "../services/brevo.js";
+import { walletTopUpEmail } from "../services/email-templates.js";
 
 const router = Router();
 
@@ -215,6 +217,20 @@ router.post("/wallet/verify-payment", requireAuth, async (req, res) => {
     { userId: user.id, razorpayOrderId, razorpayPaymentId, amountCents: claimed.amountCents },
     "Wallet credited via verify-payment",
   );
+
+  // Top-up receipt email — fire-and-forget
+  if (user.email) {
+    sendBrevoEmail(
+      user.email,
+      "Payment received — SnapServe wallet topped up",
+      walletTopUpEmail(
+        user.name ?? user.email.split("@")[0]!,
+        claimed.amountCents,
+        updated?.walletBalanceCents ?? 0,
+        razorpayPaymentId,
+      ),
+    ).catch(err => logger.warn({ err, userId: user.id }, "Top-up receipt email failed"));
+  }
 
   res.json(walletInfoPayload(updated));
 });

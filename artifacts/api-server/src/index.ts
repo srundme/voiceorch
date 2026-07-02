@@ -12,6 +12,7 @@ import { startCallbackPoller } from "./orchestration/callbackScheduler.js";
 import { startSpikeChecker } from "./services/spike-checker.js";
 import { startAlertSweep } from "./services/usage/alert-engine.js";
 import { startRateLimitCleanup } from "./services/rate-limit-cleanup.js";
+import { startEmailScheduler } from "./services/onboarding-emails.js";
 import { startBatchScheduler } from "./services/batchScheduler.js";
 import { startDpdpRetentionSweep } from "./services/dpdpRetention.js";
 import { startVobizWalletMonitor } from "./services/vobiz-wallet-monitor.js";
@@ -421,6 +422,7 @@ server.listen(port, () => {
       startSpikeChecker();
       startAlertSweep();
       startRateLimitCleanup();
+      startEmailScheduler();
       startBatchScheduler();
       startDpdpRetentionSweep();
       startVobizWalletMonitor();

@@ -19,7 +19,12 @@ import { usersTable, walletTransactionsTable, passwordResetOtpsTable, platformSe
 import { eq, and, isNull, gt, desc, sql } from "drizzle-orm";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
-import { sendGmailEmail } from "../services/scheduling/notifications.js";
+import { sendBrevoEmail } from "../services/brevo.js";
+import {
+  welcomeEmail,
+  passwordResetOtpEmail,
+  passwordChangedEmail,
+} from "../services/email-templates.js";
 import { registerTransientKey } from "../services/rate-limit-cleanup.js";
 import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
 import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
@@ -140,6 +145,14 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
     const token = createSessionToken({ sub, email: normalizedEmail, name: user.name });
     logger.info({ sub, email: normalizedEmail }, "User registered");
+
+    // Welcome email — fire-and-forget, never block the signup response
+    sendBrevoEmail(
+      normalizedEmail,
+      "Welcome to SnapServe! 🎉",
+      welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
+    ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome email send failed"));
+
     res.json({ token });
   } catch (err) {
     logger.error({ err }, "Registration error");
@@ -266,23 +279,12 @@ router.post("/auth/password-reset/request", async (req, res): Promise<void> => {
       expiresAt,
     });
 
-    const htmlBody = `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-        <h2 style="margin:0 0 16px;font-size:1.25rem;color:#111">Reset your password</h2>
-        <p style="margin:0 0 24px;color:#444;line-height:1.6">
-          Use the code below to reset your SnapServe password. It expires in <strong>10 minutes</strong>.
-        </p>
-        <div style="background:#f4f4f5;border-radius:10px;padding:20px 24px;text-align:center;margin-bottom:24px">
-          <span style="font-size:2rem;font-weight:700;letter-spacing:0.25em;color:#111">${otp}</span>
-        </div>
-        <p style="margin:0;font-size:0.85rem;color:#888">
-          If you didn't request this, you can safely ignore this email.
-        </p>
-      </div>
-    `;
-
     try {
-      await sendGmailEmail(normalizedEmail, "Your SnapServe password reset code", htmlBody);
+      await sendBrevoEmail(
+        normalizedEmail,
+        "Your SnapServe password reset code",
+        passwordResetOtpEmail(otp),
+      );
     } catch (emailErr) {
       logger.warn({ emailErr, email: normalizedEmail }, "OTP email send failed");
     }
@@ -477,6 +479,14 @@ router.post("/auth/password-reset/verify", async (req, res): Promise<void> => {
 
     const token = createSessionToken({ sub, email: user.email, name: user.name });
     logger.info({ email: normalizedEmail }, "Password reset successful");
+
+    // Password-changed confirmation — fire-and-forget
+    sendBrevoEmail(
+      normalizedEmail,
+      "Your SnapServe password was changed",
+      passwordChangedEmail(user.name ?? normalizedEmail.split("@")[0]!),
+    ).catch(err => logger.warn({ err, email: normalizedEmail }, "Password-changed email send failed"));
+
     res.json({ token });
   } catch (err) {
     logger.error({ err }, "Password reset verify error");
@@ -633,6 +643,15 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       });
 
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: new user registered");
+
+      // Welcome email — fire-and-forget
+      if (normalizedEmail) {
+        sendBrevoEmail(
+          normalizedEmail,
+          "Welcome to SnapServe! 🎉",
+          welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
+        ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google signup welcome email failed"));
+      }
     } else {
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: existing user signed in");
     }
