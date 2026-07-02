@@ -1,0 +1,534 @@
+[
+  {
+    "id": 77412,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 3
+      },
+      "factCount": 3,
+      "facts": {
+        "callback_time": "5 minutes",
+        "callback_requested": "true",
+        "interested_in": "SnapServe AI"
+      },
+      "recentCallsCount": 3
+    },
+    "metadata": null
+  },
+  {
+    "id": 77411,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 66,
+      "agentName": "friend",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1573,
+      "sessionId": "live-1573",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": false,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-02T18:58:11.712Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 77414,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "friend",
+        "caller_number": "917971442376",
+        "date": "Thursday, July 2, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely seeking more information or a demo of SnapServe AI\n📊 SENTIMENT ARC: 😐 → 😐 → 😐 (↕ mixed)\n\nKNOWN FACTS:\n• callback_time: 5 minutes  [today]\n• callback_requested: true  [today]\n• interested_in: SnapServe AI  [yesterday]\n\nRECENT EPISODES:\n[today] 😐 The caller inquired about SnapServe AI and its usefulness for businesses in a previous call, then requested a callback in five minutes, but upon callback, the caller ended the call abruptly without discussing any"
+    },
+    "metadata": null
+  },
+  {
+    "id": 77413,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 77415,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 77416,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 77418,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    }
+  },
+  {
+    "id": 77417,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:11.726Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "0d0de5e33a9f",
+      "promptLength": 17446,
+      "preview": "=== CALLER MEMORY — NEVER FORGETS ===\nName: unknown  |  Calls: 3  |  Last: today\n\n🎯 PREDICTED REASON FOR THIS CALL: The caller is likely seeking more information or a demo of SnapServe AI\n📊 SENTIMEN"
+    }
+  },
+  {
+    "id": 77420,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:12.035Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 77419,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:12.035Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hi again, I see you're calling back about SnapServe AI, just like we discussed a few minutes ago."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 77421,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:17.440Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5191,
+      "turnNumber": 0,
+      "durationMs": 5406
+    }
+  },
+  {
+    "id": 77422,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:17.440Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5404,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 166114,
+      "textLength": 97,
+      "firstByteMs": 159
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 5404
+    }
+  },
+  {
+    "id": 77424,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:28.240Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 0,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 77425,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:28.240Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 77423,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:28.240Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 77427,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:31.103Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2863,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 54,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 2863
+    }
+  },
+  {
+    "id": 77426,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:31.103Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2711,
+      "turnNumber": 0,
+      "durationMs": 2863
+    }
+  },
+  {
+    "id": 77429,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:41.905Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 0,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 77430,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:41.905Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 77428,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:41.905Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 77431,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:43.333Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 1200,
+      "configuredThreshold": 1200,
+      "echoFloor": 0,
+      "currentRms": 12706,
+      "turnNumber": 0,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 77432,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:43.351Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1446,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 54,
+      "firstByteMs": 126
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1446
+    }
+  },
+  {
+    "id": 77433,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:43.351Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2711,
+      "turnNumber": 0,
+      "durationMs": 1446,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 77434,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:53.486Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "completed",
+        "reasonLabel": "Conversation completed",
+        "component": "TTS",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Completed",
+        "durationSeconds": 42,
+        "turns": 0,
+        "lastComponent": "TTS",
+        "lastUserTranscript": null,
+        "lastAgentResponse": "Hi again, I see you're calling back about SnapServe AI, just like we discussed a few minutes ago.",
+        "recordingStatus": "disabled",
+        "warningCount": 4,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 42,
+      "turns": 0,
+      "avgSttMs": null,
+      "avgLlmMs": null,
+      "avgTtsMs": null
+    }
+  },
+  {
+    "id": 77435,
+    "callId": 1573,
+    "agentId": 66,
+    "ts": "2026-07-02T18:58:53.495Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false
+    }
+  }
+]
