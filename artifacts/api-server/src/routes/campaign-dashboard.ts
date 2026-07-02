@@ -47,7 +47,14 @@ function computeHealth(c: typeof campaignsTable.$inferSelect, now: Date): Health
   if (needsWebhook) {
     if (!c.lastWebhookAt) return "webhook_offline";
     const staleMs = now.getTime() - c.lastWebhookAt.getTime();
-    if (staleMs > 60 * 60 * 1000) return "webhook_offline"; // > 1 hour
+    // CRM and Meta Ads campaigns send leads in daily batches — flag only after
+    // 24 hours of silence so normal inter-batch gaps don't show as offline.
+    // Pure webhook-source campaigns keep a tighter 1-hour window.
+    const staleThresholdMs =
+      c.leadSource === "webhook"
+        ? 60 * 60 * 1000        // webhook source: 1 hour
+        : 24 * 60 * 60 * 1000; // crm / meta_ads: 24 hours
+    if (staleMs > staleThresholdMs) return "webhook_offline";
   }
   if (c.isCallingHoursEnabled && c.businessHoursStart != null && c.businessHoursEnd != null) {
     const hour = now.getUTCHours();
