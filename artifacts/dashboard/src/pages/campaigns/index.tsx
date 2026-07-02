@@ -35,7 +35,7 @@ import {
   CheckCircle2, PlayCircle, PauseCircle, XCircle,
   Target, Layers, ArrowRight,
   Globe, Zap, Upload, Instagram, Loader2,
-  TrendingUp, TrendingDown, Wifi, WifiOff,
+  Wifi, WifiOff,
   AlertTriangle, ShieldAlert, Timer, BookMarked,
   Activity, ChevronDown, HelpCircle, FileText, Webhook,
   Building2, ChevronUp, Info, Sparkles, ArrowUpRight,
@@ -98,6 +98,7 @@ type DashboardCampaign = Campaign & {
   callingLeads:   number;
   completedLeads: number;
   bookedToday:    number;
+  batchCount:     number;
   campaignHealth: CampaignHealth;
   lastActivity:   { label: string; at: string } | null;
 };
@@ -177,26 +178,35 @@ function CampaignRow({
   const totalCallable = campaign.totalLeads;
   const completed     = campaign.completedLeads;
   const pct           = totalCallable > 0 ? Math.round((completed / totalCallable) * 100) : 0;
-  const trend         = campaign.yesterdayLeads > 0
-    ? Math.round(((campaign.todayLeads - campaign.yesterdayLeads) / campaign.yesterdayLeads) * 100)
-    : null;
+  const healthCfg     = HEALTH_CFG[campaign.campaignHealth];
+  const healthDotCls  = campaign.campaignHealth === "healthy"
+    ? "bg-emerald-500"
+    : campaign.campaignHealth === "outside_hours"
+      ? "bg-muted-foreground/40"
+      : campaign.campaignHealth === "validation_error" || campaign.campaignHealth === "webhook_offline"
+        ? "bg-red-500"
+        : "bg-amber-500";
 
   return (
     <div
       className="group grid items-center gap-3 px-4 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer border-b border-border/40 last:border-0"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 100px" }}
+      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
       onClick={() => navigate(`${BASE}/app/campaigns/${campaign.id}`)}
     >
       {/* Campaign name + source */}
       <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={cn("h-1.5 w-1.5 rounded-full shrink-0", healthDotCls)}
+            title={healthCfg.label}
+          />
           <span className="shrink-0">{SOURCE_ICON[(campaign as unknown as Record<string,string>)["leadSource"] ?? "csv"] ?? <Megaphone className="h-3.5 w-3.5 text-muted-foreground/40" />}</span>
           <span className="text-sm font-medium text-foreground truncate">{campaign.name}</span>
           {((campaign as unknown as Record<string,string>)["triggerMode"] === "instant") && (
             <Zap className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
           )}
         </div>
-        <p className="text-[10px] text-muted-foreground/40 mt-0.5 truncate ml-5.5">
+        <p className="text-[10px] text-muted-foreground/40 mt-0.5 truncate ml-6.5">
           {formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })}
         </p>
       </div>
@@ -218,20 +228,21 @@ function CampaignRow({
         )}
       </div>
 
-      {/* Today's leads */}
+      {/* Live calls */}
       <div className="text-center">
-        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.todayLeads}</p>
-        {trend !== null && (
-          <p className={cn("text-[9px] font-medium flex items-center justify-center gap-0.5", trend >= 0 ? "text-emerald-500" : "text-red-500")}>
-            {trend >= 0 ? <TrendingUp className="h-2 w-2" /> : <TrendingDown className="h-2 w-2" />}
-            {Math.abs(trend)}%
+        {campaign.callingLeads > 0 ? (
+          <p className="text-sm font-semibold tabular-nums text-emerald-500 flex items-center justify-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            {campaign.callingLeads}
           </p>
+        ) : (
+          <p className="text-xs text-muted-foreground/25">—</p>
         )}
       </div>
 
-      {/* Total leads */}
+      {/* Batch count */}
       <div className="text-center">
-        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.totalLeads.toLocaleString()}</p>
+        <p className="text-sm font-semibold tabular-nums text-foreground">{campaign.batchCount}</p>
       </div>
 
       {/* Call progress */}
@@ -1080,11 +1091,11 @@ function TableHeader() {
   return (
     <div
       className="grid items-center gap-3 px-4 py-2.5 border-b border-border/60 bg-muted/30"
-      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 80px 100px 56px 80px 100px" }}
+      style={{ gridTemplateColumns: "2fr 1fr 1fr 80px 70px 100px 56px 80px 100px" }}
     >
       {[
         "Campaign", "Status", "Agent / Number",
-        "Today", "Total", "Progress",
+        "Live", "Batches", "Progress",
         "Queued", "Booked", "",
       ].map((h, i) => (
         <span key={i} className={cn("text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/40", i >= 3 && i <= 7 ? "text-center" : "")}>

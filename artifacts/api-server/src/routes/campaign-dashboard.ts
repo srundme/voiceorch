@@ -13,6 +13,7 @@ import {
   db,
   campaignsTable,
   campaignLeadsTable,
+  campaignBatchesTable,
   agentsTable,
   callBookingsTable,
 } from "@workspace/db";
@@ -152,6 +153,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
     callingRows,
     completedRows,
     bookedTodayRows,
+    batchCountRows,
   ] = await Promise.all([
     runSafe("agents", () =>
       uniqueAgentIds.length > 0
@@ -215,6 +217,14 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
         .groupBy(callBookingsTable.campaignId) as Promise<LeadRow[]>,
       noLeads,
     ),
+
+    runSafe("batchCount", () =>
+      db.select({ campaignId: campaignBatchesTable.campaignId, n: count() })
+        .from(campaignBatchesTable)
+        .where(inArray(campaignBatchesTable.campaignId, ids))
+        .groupBy(campaignBatchesTable.campaignId) as Promise<LeadRow[]>,
+      noLeads,
+    ),
   ]);
 
   const agentMap     = new Map(agentRows.map(a => [a.id, a.name]));
@@ -224,6 +234,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
   const callingMap   = new Map(callingRows.map(r => [r.campaignId, Number(r.n)]));
   const completedMap = new Map(completedRows.map(r => [r.campaignId, Number(r.n)]));
   const bookedMap    = new Map(bookedTodayRows.map(r => [r.campaignId, Number(r.n)]));
+  const batchCountMap = new Map(batchCountRows.map(r => [r.campaignId, Number(r.n)]));
 
   const LISTENING_SOURCES = ["webhook", "meta_ads", "crm"];
 
@@ -243,6 +254,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
     const calling   = callingMap.get(c.id) ?? 0;
     const completed = completedMap.get(c.id) ?? 0;
     const booked    = bookedMap.get(c.id) ?? 0;
+    const batchCount = batchCountMap.get(c.id) ?? 0;
     const health    = computeHealth(c, now);
 
     let lastActivity: { label: string; at: string } | null = null;
@@ -263,6 +275,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
       callingLeads:   calling,
       completedLeads: completed,
       bookedToday:    booked,
+      batchCount,
       campaignHealth: health,
       lastActivity,
     };
