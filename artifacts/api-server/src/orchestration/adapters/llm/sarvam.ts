@@ -324,8 +324,8 @@ export class SarvamLLM implements LLMAdapter {
     options?: {
       tools?: ToolDefinition[];
       onToolCall?: (name: string, args: Record<string, unknown>) => void;
-      onToolDetected?: (info: { format: "structured" | "json" | "bracket" }) => void;
-      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket"; args: Record<string, unknown> }) => void;
+      onToolDetected?: (info: { format: "structured" | "json" | "bracket" | "function_tag" }) => void;
+      onToolParsed?: (info: { name: string; format: "structured" | "json" | "bracket" | "function_tag"; args: Record<string, unknown> }) => void;
       onUsage?: (usage: LLMUsage) => void;
     }
   ): Promise<void> {
@@ -605,7 +605,33 @@ export class SarvamLLM implements LLMAdapter {
       return;
     }
 
-    // Plain text reply.
+    // Plain text reply — but first check for a trailing <function>name</function> tag.
+    // Sarvam occasionally emits the tool call AFTER conversational text (third emission
+    // format, distinct from the structured delta.tool_calls path and the JSON-buffer path):
+    //   "சரி, connect பண்றேன்!\n\n<function>transfer_to_human</function>"
+    // The buffer-and-sniff above won't catch it because the first char is not `{`/`[`/`` ` ``.
+    // The existing tool-tail TTS-leak guard strips the tag from TTS, but onToolCall is never
+    // fired — so the tool call is silently dropped. Detect it here, at end-of-stream, on the
+    // plain-text path only (not when bufferingJson / sawToolDelta already handled it).
+    if (!sawToolDelta && !bufferingJson && options?.onToolCall && validToolNames.size > 0) {
+      const fnTagMatch = /^([\s\S]*?)\s*<function>([^<]+)<\/function>\s*$/.exec(full);
+      if (fnTagMatch) {
+        const textBefore = fnTagMatch[1] ?? "";
+        const toolName   = (fnTagMatch[2] ?? "").trim();
+        if (validToolNames.has(toolName)) {
+          // The tag was streamed character-by-character via onToken; the TTS sentence
+          // extractor's tool-tail guard strips it from audio. Fire onToolCall so the
+          // pipeline actually executes the tool (which was previously silently dropped).
+          options.onToolDetected?.({ format: "function_tag" });
+          options.onToolParsed?.({ name: toolName, format: "function_tag", args: {} });
+          options.onToolCall(toolName, {});
+          return; // exactly one terminal callback — do NOT also call onDone
+        }
+        // Tag found but not a recognised tool — strip the tag and speak the clean text.
+        full = textBefore.trim();
+      }
+    }
+
     onDone(full, usage);
   }
 }

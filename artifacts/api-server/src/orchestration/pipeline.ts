@@ -371,6 +371,16 @@ export class OrchestrationPipeline {
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private silenceHangupTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
+  /**
+   * Set to true the moment executeCallTransfer begins (before the provider API
+   * call). Prevents any queued STT transcript — caller speech during the transfer
+   * hold window — from spawning a new LLM turn and a duplicate transfer API call.
+   * Defense-in-depth alongside the this.closed guard on the pendingTranscriptQueue
+   * drain: the closed flag is set by onCallEnd which fires AFTER the provider API
+   * resolves, so there is a brief window where closed=false but the transfer is
+   * already in progress.
+   */
+  private transferInitiated = false;
 
   // Barge-in state
   private isPlaying = false;
@@ -1208,6 +1218,20 @@ export class OrchestrationPipeline {
       this.streamingBargeInWordCount = 0;
     }
 
+    // Transfer in-flight guard (defense-in-depth). transferInitiated is set at
+    // the very top of executeCallTransfer — BEFORE the provider API call and
+    // before onCallEnd sets this.closed. This closes the brief race window where
+    // the caller speaks "Connect" during the TTS hold window, the transcript
+    // arrives while isProcessing=true (turn 7), lands in pendingTranscriptQueue,
+    // and then drains AFTER the transfer completes but before this.closed=true.
+    if (this.transferInitiated) {
+      logger.info(
+        { callId: this.config.callId, transcript },
+        "Streaming STT: discarding transcript — transfer already in progress",
+      );
+      return;
+    }
+
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
     this.safetyNet.onFinal();
@@ -1223,6 +1247,9 @@ export class OrchestrationPipeline {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
+      // If the call ended (transfer or end_call) while this turn was processing,
+      // do NOT drain the pending queue — those transcripts must be discarded.
+      if (this.closed) return;
       const queue = this.pendingTranscriptQueue;
       if (queue.length > 0) {
         this.pendingTranscriptQueue = [];
@@ -2988,8 +3015,15 @@ export class OrchestrationPipeline {
   }
 
   private async executeCallTransfer(tool: AgentTool & { type: "call_transfer" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    // Arm the transfer gate immediately — BEFORE any async work — so that any STT
+    // transcript that arrives while this turn is executing (caller speech during the
+    // hold window) is discarded by handleStreamingTranscript and never spawns a
+    // duplicate LLM turn / duplicate transfer API call.
+    this.transferInitiated = true;
+
     // Guard: no transfer number configured — return error to LLM so it can respond gracefully
     if (!tool.transferTo?.trim()) {
+      this.transferInitiated = false; // reset — call continues
       logger.warn({ callId: this.config.callId }, "call_transfer: no transfer number configured — returning error to LLM");
       return "transfer_unavailable: no transfer number has been configured for this agent";
     }
@@ -3095,6 +3129,7 @@ export class OrchestrationPipeline {
     // Notify session layer (triggers telephony transfer); only end the call if it succeeded
     const ok = (await this.config.onCallTransfer?.(tool.transferTo, operatorSummary)) ?? true;
     if (!ok) {
+      this.transferInitiated = false; // reset — call continues after failure
       logger.warn({ callId: this.config.callId }, "call_transfer: provider transfer failed — returning error to LLM");
       return "transfer_failed: unable to connect to a human agent at this time";
     }
@@ -3105,8 +3140,10 @@ export class OrchestrationPipeline {
   // ── New transfer tool executors (T3+) ─────────────────────────────────────────
 
   private async executeTransferCold(tool: AgentTool & { type: "transfer_cold" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    this.transferInitiated = true;
     // Guard: no transfer number configured — return error to LLM so it can respond gracefully
     if (!tool.targetNumber?.trim()) {
+      this.transferInitiated = false; // reset — call continues
       logger.warn({ callId: this.config.callId }, "transfer_cold: no target number configured — returning error to LLM");
       return "transfer_unavailable: no transfer number has been configured for this agent";
     }
@@ -3132,6 +3169,7 @@ export class OrchestrationPipeline {
     // Notify session layer (triggers telephony redirect); only end the call if it succeeded
     const ok = (await this.config.onCallTransfer?.(tool.targetNumber)) ?? true;
     if (!ok) {
+      this.transferInitiated = false; // reset — call continues after failure
       logger.warn({ callId: this.config.callId }, "transfer_cold: provider transfer failed — returning error to LLM");
       return "transfer_failed: unable to connect to a human agent at this time";
     }
@@ -3148,8 +3186,10 @@ export class OrchestrationPipeline {
   }
 
   private async executeTransferWarm(tool: AgentTool & { type: "transfer_warm" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    this.transferInitiated = true;
     // Guard: no transfer number configured — return error to LLM so it can respond gracefully
     if (!tool.targetNumber?.trim()) {
+      this.transferInitiated = false; // reset — call continues
       logger.warn({ callId: this.config.callId }, "transfer_warm: no target number configured — returning error to LLM");
       return "transfer_unavailable: no transfer number has been configured for this agent";
     }
@@ -3202,6 +3242,7 @@ export class OrchestrationPipeline {
     // Notify session layer (triggers telephony redirect + warm briefing); only end the call if it succeeded
     const ok = (await this.config.onCallTransfer?.(tool.targetNumber, operatorSummary)) ?? true;
     if (!ok) {
+      this.transferInitiated = false; // reset — call continues after failure
       logger.warn({ callId: this.config.callId }, "transfer_warm: provider transfer failed — returning error to LLM");
       return "transfer_failed: unable to connect to a human agent at this time";
     }
@@ -3219,6 +3260,7 @@ export class OrchestrationPipeline {
   }
 
   private async executeTransferAgent(tool: AgentTool & { type: "transfer_agent" }, _args: Record<string, unknown>): Promise<string | undefined> {
+    this.transferInitiated = true;
     const targetAgentId = tool.targetAgentId;
     logger.info({ callId: this.config.callId, targetAgentId }, "Executing transfer_agent");
 
@@ -3228,6 +3270,7 @@ export class OrchestrationPipeline {
     // instead of the call going dead after a no-op transfer.
     const ok = (await this.config.onCallTransfer?.(`agent:${targetAgentId}`)) ?? false;
     if (!ok) {
+      this.transferInitiated = false; // reset — call continues (agent-to-agent not implemented)
       logger.warn({ callId: this.config.callId, targetAgentId }, "transfer_agent: handoff failed/unsupported — returning error to LLM");
       return "transfer_failed: unable to transfer to the requested agent right now";
     }
