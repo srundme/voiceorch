@@ -16,6 +16,7 @@ import { startEmailScheduler } from "./services/onboarding-emails.js";
 import { startBatchScheduler } from "./services/batchScheduler.js";
 import { startDpdpRetentionSweep } from "./services/dpdpRetention.js";
 import { startVobizWalletMonitor } from "./services/vobiz-wallet-monitor.js";
+import { startStaleCallCleanup } from "./services/stale-call-cleanup.js";
 import { handleTwilioWebSocket } from "./orchestration/telephony/twilio.js";
 import { handlePlivoWebSocket } from "./orchestration/telephony/plivo.js";
 import { handleVobizWebSocket } from "./orchestration/telephony/vobiz.js";
@@ -435,6 +436,7 @@ server.listen(port, () => {
       startBatchScheduler();
       startDpdpRetentionSweep();
       startVobizWalletMonitor();
+      startStaleCallCleanup();
     })
     .catch((err: unknown) => {
       // Log but do NOT exit — keeps the process alive so Railway's healthcheck
