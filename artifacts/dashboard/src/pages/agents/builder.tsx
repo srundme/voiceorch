@@ -339,13 +339,14 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    // Strictly show only voices whose language metadata matches the selected
-    // Transcriber language (e.g. "ta-IN" → "ta"). No fallback to the static
-    // English list — an empty/loading whitelist must never surface English
-    // voices for a non-English language.
     const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
-    const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
-    // If no voices for this language, show only the custom paste option
+    // For English, also include Hindi and Tamil voices — all Indian voices
+    // on this platform can speak English.
+    const INDIAN_LANGS = new Set(["hi", "ta"]);
+    const matched = all.filter(v => {
+      const vLang = v.language?.toLowerCase().split("-")[0] ?? "";
+      return vLang === baseLang || (baseLang === "en" && INDIAN_LANGS.has(vLang));
+    });
     const opts = matched.map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
@@ -362,7 +363,11 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     const known = all.find(v => v.id === ttsVoice);
     if (!known) return; // user-pasted custom ID — leave it alone
     const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
-    if (known.language?.toLowerCase() !== baseLang) {
+    const vLang = known.language?.toLowerCase().split("-")[0] ?? "";
+    const INDIAN_LANGS = new Set(["hi", "ta"]);
+    // Don't clear an Indian voice when switching to English — they speak English too.
+    const isCompatible = vLang === baseLang || (baseLang === "en" && INDIAN_LANGS.has(vLang));
+    if (!isCompatible) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [language, whitelistedData, ttsProvider, ttsVoice, form]);

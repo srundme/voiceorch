@@ -108,13 +108,21 @@ export default function VoicesPage() {
     return langs;
   }, [voices]);
 
+  const INDIAN_LANGS = new Set(["hi", "hi-IN", "ta", "ta-IN"]);
+
   const filtered = useMemo(() => {
     return voices.filter((v) => {
       const matchesSearch =
         !search ||
         v.name.toLowerCase().includes(search.toLowerCase()) ||
         (v.description ?? "").toLowerCase().includes(search.toLowerCase());
-      const matchesLang = langFilter === "all" || v.language === langFilter;
+      // When an English variant is selected, also show Hindi and Tamil voices —
+      // all Indian voices on this platform can speak English.
+      const isEnglishFilter = langFilter.startsWith("en") || langFilter === "en";
+      const matchesLang =
+        langFilter === "all" ||
+        v.language === langFilter ||
+        (isEnglishFilter && INDIAN_LANGS.has(v.language));
       return matchesSearch && matchesLang;
     });
   }, [voices, search, langFilter]);
