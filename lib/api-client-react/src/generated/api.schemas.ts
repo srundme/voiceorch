@@ -5520,6 +5520,7 @@ export type GetCommandCenterActivityStream200 = {
 export type GetPlatformAnalyticsOverviewParams = {
 from: string;
 to: string;
+campaignId?: number;
 };
 
 export type GetPlatformAnalyticsFunnelParams = {

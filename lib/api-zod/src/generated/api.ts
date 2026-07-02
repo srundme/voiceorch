@@ -5914,7 +5914,8 @@ export const CreateBatchSnapshotResponse = zod.object({
  */
 export const GetPlatformAnalyticsOverviewQueryParams = zod.object({
   "from": zod.date(),
-  "to": zod.date()
+  "to": zod.date(),
+  "campaignId": zod.coerce.number().optional()
 })
 
 export const GetPlatformAnalyticsOverviewResponse = zod.object({

@@ -45,8 +45,18 @@ router.get("/platform/analytics/overview", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { from, to } = parseDateRange(req.query as Record<string, unknown>);
+  const q = req.query as Record<string, string | undefined>;
+  const filterCampaignId = q["campaignId"] ? parseInt(q["campaignId"]) : null;
+
   const campaignIds = await getCampaignIds(userId);
   if (campaignIds.length === 0) { res.json(EMPTY_OVERVIEW); return; }
+
+  if (filterCampaignId !== null && !campaignIds.includes(filterCampaignId)) {
+    res.status(403).json({ error: "Campaign not found or not owned by user" });
+    return;
+  }
+
+  const activeCampaignIds = filterCampaignId !== null ? [filterCampaignId] : campaignIds;
 
   // Lead funnel counts
   const [leadStats] = await db.select({
@@ -57,7 +67,7 @@ router.get("/platform/analytics/overview", async (req, res): Promise<void> => {
     booked:      sql<number>`count(*) filter (where operational_outcome = 'booked')::int`,
     transferred: sql<number>`count(*) filter (where operational_outcome = 'transferred')::int`,
   }).from(campaignLeadsTable).where(and(
-    inArray(campaignLeadsTable.campaignId, campaignIds),
+    inArray(campaignLeadsTable.campaignId, activeCampaignIds),
     gte(campaignLeadsTable.createdAt, from),
     lte(campaignLeadsTable.createdAt, to),
   ));
@@ -67,7 +77,7 @@ router.get("/platform/analytics/overview", async (req, res): Promise<void> => {
     total:     sql<number>`count(*)::int`,
     completed: sql<number>`count(*) filter (where status = 'completed')::int`,
   }).from(callCallbacksTable).where(and(
-    inArray(callCallbacksTable.campaignId, campaignIds),
+    inArray(callCallbacksTable.campaignId, activeCampaignIds),
     gte(callCallbacksTable.createdAt, from),
     lte(callCallbacksTable.createdAt, to),
   ));
@@ -78,7 +88,7 @@ router.get("/platform/analytics/overview", async (req, res): Promise<void> => {
   }).from(callExecutionsTable)
     .innerJoin(callsTable, eq(callExecutionsTable.callId, callsTable.id))
     .where(and(
-      inArray(callExecutionsTable.campaignId, campaignIds),
+      inArray(callExecutionsTable.campaignId, activeCampaignIds),
       gte(callExecutionsTable.createdAt, from),
       lte(callExecutionsTable.createdAt, to),
       isNotNull(callExecutionsTable.callId),
@@ -95,7 +105,7 @@ router.get("/platform/analytics/overview", async (req, res): Promise<void> => {
   }).from(batchDailyMetricsTable)
     .innerJoin(campaignBatchesTable, eq(batchDailyMetricsTable.batchId, campaignBatchesTable.id))
     .where(and(
-      inArray(campaignBatchesTable.campaignId, campaignIds),
+      inArray(campaignBatchesTable.campaignId, activeCampaignIds),
       gte(batchDailyMetricsTable.date, from.toISOString().slice(0, 10)),
       lte(batchDailyMetricsTable.date, to.toISOString().slice(0, 10)),
     ))

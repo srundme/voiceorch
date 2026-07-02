@@ -5453,6 +5453,9 @@ paths:
           in: query
           required: true
           schema: { type: string, format: date }
+        - name: campaignId
+          in: query
+          schema: { type: integer }
       responses:
         "200":
           description: Overview analytics

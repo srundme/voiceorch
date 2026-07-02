@@ -9,38 +9,24 @@ const OWNER = "srundme", REPO = "voiceorch", BRANCH = "main";
 
 // All files changed in this session
 const FILES_TO_PUSH = [
-  // DB schema + migration
-  "lib/db/src/schema/agents.ts",
-  "lib/db/drizzle/meta/_journal.json",
-  "lib/db/drizzle/0041_agent_system_prompt_gen_meta.sql",
-  // OpenAPI + codegen
   "lib/api-spec/openapi.yaml",
   "lib/api-zod/src/generated/api.ts",
-  "lib/api-client-react/src/generated/api.ts",
   "lib/api-client-react/src/generated/api.schemas.ts",
-  // Backend services + routes
-  "artifacts/api-server/src/services/system-prompt-template.ts",
-  "artifacts/api-server/src/services/system-prompt-guardrails.ts",
-  "artifacts/api-server/src/services/prompt-template.ts",
-  "artifacts/api-server/src/routes/wizard.ts",
-  // Frontend
-  "artifacts/dashboard/src/pages/agents/edit.schema.ts",
-  "artifacts/dashboard/src/pages/agents/generate-prompt-sheet.tsx",
-  "artifacts/dashboard/src/pages/agents/builder.tsx",
+  "artifacts/api-server/src/routes/platform-analytics.ts",
+  "artifacts/dashboard/src/pages/analytics.tsx",
 ];
 
 const COMMIT_MESSAGE = [
-  "feat(agents): wire layered System Prompt Templates store into Generate modal",
+  "fix(analytics): scope Analytics page overview to the selected campaign",
   "",
-  "- Add systemPromptGenMeta jsonb column to agents (migration 0041) for version traceability",
-  "- OpenAPI: GET /wizard/system-prompt-store + POST /wizard/generate-system-prompt;",
-  "  SystemPromptGenerationMeta on AgentInput + AgentUpdate; regenerated hooks + Zod",
-  "- Layered generation (Foundation -> Domain -> Client Details -> form inputs)",
-  "  fetched live at click; hard-fail 422 (no_foundation / no_domain), no legacy fallback",
-  "- Server-side guardrail named pass/fail list (system-prompt-guardrails.ts)",
-  "- Modal: dynamic Use-case dropdown from Domain templates + Custom/Other,",
-  "  required-field gating, foundation-missing block, guardrail list, version badges,",
-  "  diff/overwrite gating when System Prompt has content; keeps fill-not-save behavior",
+  "- GET /platform/analytics/overview now accepts an optional campaignId query param",
+  "  (mirrors the ownership-check pattern already used by /platform/analytics/funnel)",
+  "- When campaignId is present, every sub-query (lead funnel, callback stats,",
+  "  avg call duration, daily trend) is scoped to that single campaign instead of",
+  "  the user's full campaign-ID list; 403 if the campaign isn't owned by the user",
+  "- OpenAPI + regenerated Orval hooks/Zod schemas for the new param",
+  "- Frontend Analytics page passes campaignId from the URL through to the hook and",
+  "  shows a campaign-scoped subtitle (fetches campaign name via useGetCampaign)",
 ].join("\n");
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {

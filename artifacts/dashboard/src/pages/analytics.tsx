@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format, subDays, parseISO } from "date-fns";
 import { useChartTheme } from "@/hooks/use-chart-theme";
-import { useGetPlatformAnalyticsOverview } from "@workspace/api-client-react";
+import { useGetPlatformAnalyticsOverview, useGetCampaign, getGetCampaignQueryKey } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -93,9 +93,13 @@ function fmtDur(s: number | null | undefined) {
 
 // ── Overview ──────────────────────────────────────────────────────────────────
 
-function OverviewTab({ range }: { range: DateRange }) {
+function OverviewTab({ range, campaignId }: { range: DateRange; campaignId?: number }) {
   const ct = useChartTheme();
-  const { data, isLoading } = useGetPlatformAnalyticsOverview({ from: range.from, to: range.to });
+  const { data, isLoading } = useGetPlatformAnalyticsOverview({
+    from: range.from,
+    to: range.to,
+    ...(campaignId !== undefined ? { campaignId } : {}),
+  });
   const d = data as OverviewData | undefined;
 
   const kpis = [
@@ -191,8 +195,14 @@ export default function AnalyticsPage() {
 
   const search = useSearch();
   const [, setLocation] = useLocation();
-  const campaignId = new URLSearchParams(search).get("campaignId");
+  const campaignIdParam = new URLSearchParams(search).get("campaignId");
+  const campaignId = campaignIdParam ? parseInt(campaignIdParam, 10) : undefined;
   const backTo = campaignId ? `/app/campaigns/${campaignId}` : "/app/campaigns";
+
+  const { data: campaign } = useGetCampaign(campaignId ?? 0, {
+    query: { enabled: campaignId !== undefined, queryKey: getGetCampaignQueryKey(campaignId ?? 0) },
+  });
+  const campaignName = (campaign as { name?: string } | undefined)?.name;
 
   return (
     <div className="flex flex-col h-full overflow-auto bg-background">
@@ -217,7 +227,9 @@ export default function AnalyticsPage() {
               Analytics
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Operational outcomes across all campaigns
+              {campaignId
+                ? `Operational outcomes for ${campaignName ?? "this campaign"}`
+                : "Operational outcomes across all campaigns"}
             </p>
           </div>
           {/* Date range presets */}
@@ -247,7 +259,7 @@ export default function AnalyticsPage() {
 
         {/* Overview content */}
         <div className="pb-8">
-          <OverviewTab range={range} />
+          <OverviewTab range={range} campaignId={campaignId} />
         </div>
       </div>
     </div>
