@@ -1831,6 +1831,9 @@ export default function CampaignDetailPage() {
                 <h3 className="text-sm font-semibold text-foreground">Daily Batches</h3>
                 <p className="text-xs text-muted-foreground/50 mt-0.5">Auto-created per day as leads arrive via the webhook</p>
               </div>
+              {(campaign as any).leadSource === "crm" && (
+                <CrmImportButton campaignId={campaignId} />
+              )}
             </div>
             {batchLoading ? (
               <div className="grid grid-cols-1 gap-3">
