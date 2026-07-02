@@ -185,7 +185,7 @@ function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaig
       </div>
 
       {/* Instant Trigger — only shown for instant-trigger CRM campaigns */}
-      {triggerMode !== "batch" && (
+      {triggerMode === "instant" && (
       <div className="space-y-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Activity className="w-3 h-3 text-blue-400 shrink-0" />
@@ -288,16 +288,20 @@ function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaig
 
       {/* Import & Batch — only shown for batch-mode CRM campaigns */}
       {triggerMode !== "instant" && (
-        <div className="border-t border-border/60 pt-3 space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             <Users className="w-3 h-3 text-emerald-400 shrink-0" />
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import & Batch</p>
-            <span className="text-[10px] text-muted-foreground/60">— pull contacts from your CRM into a new batch</span>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Import from CRM</p>
+            <span className="text-[10px] text-muted-foreground/60">— pull contacts from your CRM into a calling batch</span>
           </div>
+          <p className="text-xs text-muted-foreground/70">
+            Choose a connected CRM account to import contacts as a new calling batch.
+          </p>
           <div className="flex flex-wrap gap-2">
             {crmConns.map(conn => (
-              <Button key={conn.id} size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+              <Button key={conn.id} size="sm" className="h-8 text-xs gap-1.5"
                 onClick={() => setImportConn(conn)}>
+                <Building2 className="h-3.5 w-3.5" />
                 Import from {conn.accountName ?? conn.provider}
               </Button>
             ))}
@@ -1269,6 +1273,7 @@ export default function CampaignDetailPage() {
   const [hoursEnd,   setHoursEnd]   = useState<string>("");
   const [hoursTz,    setHoursTz]    = useState<string>("Asia/Kolkata");
   const [hoursEnabled, setHoursEnabled] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<"overview" | "config">("overview");
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1523,8 +1528,32 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
+        {/* Tab bar */}
+        <div className="flex items-center px-4 border-b border-border/60">
+          {(["overview", "config"] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors",
+                activeTab === tab
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab === "config" && <Settings className="h-3 w-3" />}
+              {tab === "overview" ? "Overview" : "Configuration"}
+            </button>
+          ))}
+        </div>
+
         {/* Content */}
-        <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 210px)" }}>
+        <div className="overflow-y-auto px-6 py-5 space-y-5" style={{ maxHeight: "calc(100vh - 248px)" }}>
+
+          {/* ── OVERVIEW tab ─────────────────────────────────────────────── */}
+          {activeTab === "overview" && (<>
+
           {/* View Analytics */}
           <div className="flex items-center justify-end">
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
@@ -1564,6 +1593,11 @@ export default function CampaignDetailPage() {
               </div>
             );
           })()}
+
+          </>)}
+
+          {/* ── CONFIGURATION tab ──────────────────────────────────────── */}
+          {activeTab === "config" && (<>
 
           {/* Webhook Intake URL — only for webhook/Meta intake campaigns */}
           {campaign.webhookToken && (campaign as any).leadSource !== "csv" && (
@@ -1704,6 +1738,21 @@ export default function CampaignDetailPage() {
             </div>
           )}
 
+          {/* CSV campaigns — no extra configuration needed */}
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+          {(campaign as any).leadSource === "csv" && (
+            <div className="py-12 text-center border border-dashed border-border rounded-xl">
+              <FileText className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground/50">No extra configuration needed</p>
+              <p className="text-xs text-muted-foreground/30 mt-0.5">Upload a CSV file when creating a new batch</p>
+            </div>
+          )}
+
+          </>)}
+
+          {/* ── OVERVIEW continued: stats + batches ──────────────────────── */}
+          {activeTab === "overview" && (<>
+
           {/* Campaign-level summary tiles — connected strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
             <KpiCard icon={<Layers className="h-3 w-3" />}       label="Total Batches"        value={totalBatches} />
@@ -1793,6 +1842,8 @@ export default function CampaignDetailPage() {
             })()}
           </div>
           )}
+
+          </>)}
 
         </div>
       </div>
