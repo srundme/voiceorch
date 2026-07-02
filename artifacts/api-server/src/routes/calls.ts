@@ -58,7 +58,7 @@ async function checkUsageLimits(agent: typeof agentsTable.$inferSelect): Promise
     const [{ activeCount }] = await db
       .select({ activeCount: sql<number>`count(*)::int` })
       .from(callsTable)
-      .where(and(eq(callsTable.agentId, agent.id), eq(callsTable.status, "in_progress")));
+      .where(and(eq(callsTable.agentId, agent.id), inArray(callsTable.status, ["ringing", "in_progress"])));
     if ((activeCount ?? 0) >= agent.maxConcurrentCalls) {
       return `Agent has reached its concurrent call limit (${agent.maxConcurrentCalls}).`;
     }
@@ -392,7 +392,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
 
   const executionId = `exec_${randomBytes(4).toString("hex")}`;
   const [call] = await db.insert(callsTable).values({
-    agentId, toNumber, fromNumber: effectiveFromNumber, status: "in_progress",
+    agentId, toNumber, fromNumber: effectiveFromNumber, status: "ringing",
     userId: agent.userId ?? null,
     executionId,
     metadata: JSON.stringify({
@@ -817,7 +817,7 @@ router.post("/calls/:id/transfer", requireAuth, async (req, res): Promise<void> 
 
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, id));
   if (!call) { res.status(404).json({ error: "Call not found" }); return; }
-  if (call.status !== "in_progress") {
+  if (call.status !== "in_progress" && call.status !== "ringing") {
     res.status(409).json({ error: `Call is not active (status: ${call.status})` }); return;
   }
 

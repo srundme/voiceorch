@@ -37,7 +37,7 @@ import { CallDetailDrawer } from "@/components/call-detail-drawer";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
-type CallStatus = "completed" | "failed" | "in_progress" | "pending" | "cancelled" | "transferred" | "booked" | "callback_scheduled" | "voicemail" | "busy" | "no_pickup";
+type CallStatus = "completed" | "failed" | "ringing" | "in_progress" | "pending" | "cancelled" | "transferred" | "booked" | "callback_scheduled" | "voicemail" | "busy" | "no_pickup";
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 const formatDuration = (seconds?: number | null) => {
@@ -62,6 +62,24 @@ function getDispositionValues(
 
 function StatusBadge({ status }: { status: string }) {
   const configs: Record<string, { label: string; icon: React.ReactNode; variant: string; bg: string; text: string; border: string; dot: string }> = {
+    ringing: {
+      label: "Calling",
+      icon: <Phone className="h-3 w-3" />,
+      variant: "secondary",
+      bg: "bg-amber-500/10",
+      text: "text-amber-600 dark:text-amber-400",
+      border: "border-amber-500/20",
+      dot: "bg-amber-500 animate-pulse",
+    },
+    in_progress: {
+      label: "In Progress",
+      icon: <PlayCircle className="h-3 w-3" />,
+      variant: "secondary",
+      bg: "bg-blue-500/10",
+      text: "text-blue-600 dark:text-blue-400",
+      border: "border-blue-500/20",
+      dot: "bg-blue-500 animate-pulse",
+    },
     completed: {
       label: "Completed",
       icon: <CheckCircle2 className="h-3 w-3" />,
@@ -79,15 +97,6 @@ function StatusBadge({ status }: { status: string }) {
       text: "text-red-600 dark:text-red-400",
       border: "border-red-500/20",
       dot: "bg-red-500",
-    },
-    in_progress: {
-      label: "In Progress",
-      icon: <PlayCircle className="h-3 w-3" />,
-      variant: "secondary",
-      bg: "bg-blue-500/10",
-      text: "text-blue-600 dark:text-blue-400",
-      border: "border-blue-500/20",
-      dot: "bg-blue-500 animate-pulse",
     },
     pending: {
       label: "Pending",
@@ -277,12 +286,12 @@ export default function CallsList() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           agentId: agentFilter !== "all" ? parseInt(agentFilter) : undefined,
         }),
-        // Poll fast when any call is live so status transitions appear in real-time;
-        // fall back to a slower interval when everything is settled.
+        // Poll fast when any call is live (ringing or in-progress) so status
+        // transitions appear in real-time; slower interval when everything settled.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refetchInterval: (query: any) =>
-          (query.state.data as any[] | undefined)?.some((c: any) => c.status === "in_progress")
-            ? 5_000
+          (query.state.data as any[] | undefined)?.some((c: any) => c.status === "ringing" || c.status === "in_progress")
+            ? 3_000
             : 15_000,
       },
     }
@@ -522,9 +531,10 @@ export default function CallsList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="ringing">Calling</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="transferred">Transferred</SelectItem>

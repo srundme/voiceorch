@@ -1,5 +1,5 @@
 import { db, callsTable } from "@workspace/db";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;    // every hour
@@ -25,7 +25,7 @@ async function sweepStaleCalls(): Promise<void> {
       .set({ status: "failed", endedAt: new Date() })
       .where(
         and(
-          eq(callsTable.status, "in_progress"),
+          inArray(callsTable.status, ["ringing", "in_progress"]),
           isNull(callsTable.endedAt),
           lt(callsTable.createdAt, cutoff),
         ),

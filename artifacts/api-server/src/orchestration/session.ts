@@ -822,7 +822,7 @@ export async function createSession(params: {
         db.select().from(callsTable)
           .where(and(
             sql`${callsTable.metadata}::jsonb->>'corrToken' = ${params.corrToken}`,
-            eq(callsTable.status, "in_progress"),
+            inArray(callsTable.status, ["ringing", "in_progress"]),
           ))
           .limit(1),
       );
@@ -832,7 +832,7 @@ export async function createSession(params: {
         db.select().from(callsTable)
           .where(and(
             sql`${callsTable.metadata}::jsonb->>'providerCallId' = ${params.externalCallId}`,
-            eq(callsTable.status, "in_progress"),
+            inArray(callsTable.status, ["ringing", "in_progress"]),
           ))
           .limit(1),
       );
@@ -843,6 +843,7 @@ export async function createSession(params: {
       catch { prevMeta = {}; }
       await withDbRetry("update-existing-call-record", () =>
         db.update(callsTable).set({
+          status: "in_progress",
           metadata: JSON.stringify({
             ...prevMeta,
             ...(params.externalCallId ? { providerCallId: params.externalCallId, externalCallId: params.externalCallId } : {}),

@@ -103,12 +103,15 @@ async function apiFetch<T>(url: string): Promise<T> {
 // ── Status display maps ───────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<string, { label: string; cls: string }> = {
-  pending:     { label: "Queued",      cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  pending:     { label: "Queued",      cls: "bg-muted/50 text-muted-foreground border-border" },
   calling:     { label: "Calling",     cls: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
   connected:   { label: "Connected",   cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
   completed:   { label: "Completed",   cls: "bg-muted/50 text-muted-foreground border-border" },
   transferred: { label: "Transferred", cls: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-  failed:      { label: "No Pickup",   cls: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
+  no_pickup:   { label: "No Pickup",   cls: "bg-muted/50 text-muted-foreground border-border" },
+  busy:        { label: "Busy",        cls: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+  voicemail:   { label: "Voicemail",   cls: "bg-violet-500/10 text-violet-400 border-violet-500/20" },
+  failed:      { label: "Failed",      cls: "bg-red-500/10 text-red-400 border-red-500/20" },
   exhausted:   { label: "Exhausted",   cls: "bg-red-500/10 text-red-400 border-red-500/20" },
   skipped:     { label: "Paused",      cls: "bg-muted/50 text-muted-foreground border-border" },
 };

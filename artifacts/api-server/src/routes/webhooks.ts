@@ -188,7 +188,7 @@ async function handleCampaignLeadTerminalStatus(opts: {
       .set({ status: leadStatus, endedAt: new Date() })
       .where(and(
         eq(callsTable.id, lead.callId),
-        eq(callsTable.status, "in_progress"),
+        inArray(callsTable.status, ["ringing", "in_progress"]),
       ));
   }
 
@@ -816,7 +816,7 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
     const [countRow] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(callsTable)
-      .where(sql`agent_id = ${agentId} AND status = 'in_progress'`);
+      .where(sql`agent_id = ${agentId} AND status IN ('ringing', 'in_progress')`);
     if ((countRow?.n ?? 0) >= maxConcurrent) {
       const holdPart = holdUrl
         ? `\n  <Play loop="10">${escapeXml(holdUrl)}</Play>`
@@ -1007,7 +1007,7 @@ router.post("/webhooks/vobiz/status", (req, res): void => {
       if (vobizTerminal && vobizTerminal !== "ignore") {
         await db.update(callsTable)
           .set({ status: vobizTerminal, endedAt: new Date() })
-          .where(and(eq(callsTable.id, call.id), eq(callsTable.status, "in_progress")));
+          .where(and(eq(callsTable.id, call.id), inArray(callsTable.status, ["ringing", "in_progress"])));
         logger.info({ callId: call.id, callStatus, vobizTerminal }, "VoBiz status: updated calls table for non-campaign terminal call");
       }
     }
@@ -1106,7 +1106,7 @@ router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
       if (twilioTerminal && twilioTerminal !== "ignore") {
         await db.update(callsTable)
           .set({ status: twilioTerminal, endedAt: new Date() })
-          .where(and(eq(callsTable.id, call.id), eq(callsTable.status, "in_progress")));
+          .where(and(eq(callsTable.id, call.id), inArray(callsTable.status, ["ringing", "in_progress"])));
         logger.info({ callId: call.id, callStatus, twilioTerminal }, "Twilio status: updated calls table for non-campaign terminal call");
       }
     }

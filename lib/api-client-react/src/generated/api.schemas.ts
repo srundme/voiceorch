@@ -1253,7 +1253,9 @@ export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
 
 export const CallStatus = {
   pending: 'pending',
+  ringing: 'ringing',
   in_progress: 'in_progress',
+  connected: 'connected',
   completed: 'completed',
   failed: 'failed',
   cancelled: 'cancelled',

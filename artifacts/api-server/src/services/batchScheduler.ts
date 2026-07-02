@@ -554,7 +554,7 @@ async function sweepStuckInProgressCalls(): Promise<void> {
       .select({ id: callsTable.id, createdAt: callsTable.createdAt })
       .from(callsTable)
       .where(and(
-        eq(callsTable.status, "in_progress"),
+        inArray(callsTable.status, ["ringing", "in_progress"]),
         lt(callsTable.createdAt, cutoff),
       ))
       .limit(50);
@@ -573,7 +573,7 @@ async function sweepStuckInProgressCalls(): Promise<void> {
           })
           .where(and(
             eq(callsTable.id, call.id),
-            eq(callsTable.status, "in_progress"),
+            inArray(callsTable.status, ["ringing", "in_progress"]),
           ));
         logger.warn({ callId: call.id, durationSeconds }, "Stuck in-progress call auto-closed by sweep");
       } catch (callErr) {
