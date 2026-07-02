@@ -38,7 +38,25 @@ function parseLatencyBody(body: unknown): { sttLatencyMs?: number; llmLatencyMs?
 
 const router: IRouter = Router();
 
-async function enrichCall(call: typeof callsTable.$inferSelect) {
+function deriveDirection(call: typeof callsTable.$inferSelect, campaignId?: number | null): "inbound" | "outbound" {
+  const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
+  if (isWeb) return "outbound";
+  if (campaignId != null) return "outbound";
+  const rawMeta = call.metadata;
+  if (typeof rawMeta === "string" && rawMeta.length > 0) {
+    try {
+      const parsed = JSON.parse(rawMeta);
+      if (parsed?.direction === "inbound" || parsed?.direction === "outbound") {
+        return parsed.direction;
+      }
+    } catch {
+      // not valid JSON
+    }
+  }
+  return "inbound";
+}
+
+async function enrichCall(call: typeof callsTable.$inferSelect, campaignId?: number | null) {
   const [agent] = await db
     .select({ name: agentsTable.name, agentConfig: agentsTable.agentConfig })
     .from(agentsTable)
@@ -50,6 +68,7 @@ async function enrichCall(call: typeof callsTable.$inferSelect) {
     recordingEnabled,
     endedAt: call.endedAt?.toISOString() ?? null,
     createdAt: call.createdAt.toISOString(),
+    direction: deriveDirection(call, campaignId),
   };
 }
 
@@ -532,7 +551,7 @@ router.get("/calls", requireAuth, async (req, res): Promise<void> => {
     .orderBy(desc(callsTable.createdAt));
   const enriched = await Promise.all(
     calls.map(async (row) => ({
-      ...(await enrichCall(row.call)),
+      ...(await enrichCall(row.call, row.campaignId ?? null)),
       campaignId: row.campaignId ?? null,
     })),
   );
@@ -619,7 +638,7 @@ router.get("/calls/:id", requireAuth, async (req, res): Promise<void> => {
     .from(callExecutionsTable)
     .where(eq(callExecutionsTable.callId, call.id));
   const enriched = {
-    ...(await enrichCall(call)),
+    ...(await enrichCall(call, exec?.campaignId ?? null)),
     campaignId: exec?.campaignId ?? null,
   };
   res.json(GetCallResponse.parse(enriched));

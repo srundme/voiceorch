@@ -708,21 +708,7 @@ export default function CallsList() {
                           const isCampaign = !isWeb && (call as any).campaignId != null;
                           const icon = isWeb ? <Globe className="h-3 w-3" /> : isCampaign ? <Megaphone className="h-3 w-3" /> : <Phone className="h-3 w-3" />;
                           const label = isWeb ? "Web Call" : isCampaign ? "Campaign" : "Live Call";
-                          let direction: "inbound" | "outbound" | null = null;
-                          const rawMeta = (call as any).metadata;
-                          if (typeof rawMeta === "string" && rawMeta.length > 0) {
-                            try {
-                              const parsed = JSON.parse(rawMeta);
-                              if (parsed?.direction === "inbound" || parsed?.direction === "outbound") {
-                                direction = parsed.direction;
-                              }
-                            } catch {
-                              // metadata is not valid JSON — fall through to default
-                            }
-                          }
-                          if (direction === null) {
-                            direction = isCampaign ? "outbound" : "inbound";
-                          }
+                          const direction: "inbound" | "outbound" = isWeb ? "outbound" : (call.direction ?? "inbound");
                           return (
                             <span className="inline-flex items-center gap-1">
                               {direction === "outbound" ? (

@@ -7838,6 +7838,10 @@ components:
         campaignId:
           type: ["integer", "null"]
           description: ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual/direct/web calls.
+        direction:
+          type: string
+          enum: ["inbound", "outbound"]
+          description: Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.
 
     CallEndPayload:
       type: object

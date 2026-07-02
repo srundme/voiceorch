@@ -1081,7 +1081,8 @@ export const ListCallsResponseItem = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 export const ListCallsResponse = zod.array(ListCallsResponseItem)
 
@@ -1129,7 +1130,8 @@ export const GetCallResponse = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 
 
@@ -1174,7 +1176,8 @@ export const UpdateCallResponse = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 
 
@@ -1273,7 +1276,8 @@ export const TransferCallResponse = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 
 
@@ -1316,7 +1320,8 @@ export const EndCallResponse = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 
 
@@ -1356,7 +1361,8 @@ export const UpdateCallDispositionResponse = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 
 
@@ -1466,7 +1472,8 @@ export const GetRecentCallsResponseItem = zod.object({
   "successEvaluation": zod.string().nullish().describe('Post-call LLM evaluation — PASS or FAIL on first line, one-sentence reason on the second line'),
   "dispositionResult": zod.record(zod.string(), zod.union([zod.string(),zod.number(),zod.boolean()])).nullish().describe('Extracted disposition values keyed by field name'),
   "tokensSaved": zod.number().nullish().describe('Estimated number of input tokens saved by token optimization (sliding window + summarization)'),
-  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.')
+  "campaignId": zod.number().nullish().describe('ID of the outbound campaign that placed this call, derived from the call_executions linkage. Null for manual\/direct\/web calls.'),
+  "direction": zod.enum(['inbound', 'outbound']).optional().describe('Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.')
 })
 export const GetRecentCallsResponse = zod.array(GetRecentCallsResponseItem)
 
@@ -3969,6 +3976,8 @@ export const ListBatchWorkspaceLeadsResponse = zod.object({
   "lastAttemptAt": zod.coerce.date().nullish(),
   "nextRetryAt": zod.coerce.date().nullish(),
   "callId": zod.number().nullish(),
+  "durationSeconds": zod.number().nullish(),
+  "costCents": zod.number().nullish(),
   "createdAt": zod.coerce.date(),
   "callback": zod.object({
   "status": zod.string().optional(),

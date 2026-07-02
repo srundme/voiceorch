@@ -1290,6 +1290,17 @@ export const CallStatus = {
  */
 export type CallDispositionResult = {[key: string]: string | number | boolean} | null;
 
+/**
+ * Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise.
+ */
+export type CallDirection = typeof CallDirection[keyof typeof CallDirection];
+
+
+export const CallDirection = {
+  inbound: 'inbound',
+  outbound: 'outbound',
+} as const;
+
 export interface Call {
   id: number;
   agentId: number;
@@ -1370,6 +1381,8 @@ export interface Call {
      * @nullable
      */
   campaignId?: number | null;
+  /** Call direction derived server-side. Outbound for campaign calls, webcalls, and calls where metadata.direction=outbound; inbound otherwise. */
+  direction?: CallDirection;
 }
 
 export interface CallEndPayload {
@@ -4215,6 +4228,8 @@ export interface BatchWorkspaceLead {
   lastAttemptAt?: string | null;
   nextRetryAt?: string | null;
   callId?: number | null;
+  durationSeconds?: number | null;
+  costCents?: number | null;
   createdAt: string;
   callback?: BatchWorkspaceLeadCallbackInfo;
   booking?: BatchWorkspaceLeadBookingInfo;
