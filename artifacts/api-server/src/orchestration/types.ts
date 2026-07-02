@@ -576,6 +576,12 @@ export interface SessionConfig {
   amdConfirm?: {
     /** Configured "When voicemail detected" action from the agent config. */
     action: "leave_message" | "hangup" | "continue";
+    /** True when the answer webhook carried a synchronous "machine" flag (legacy
+     *  hint path). False when confirmation was armed UNCONDITIONALLY for an
+     *  AMD-enabled VoBiz outbound call — the real verdict then arrives via the
+     *  async machine_detection_url callback (onExternalAmdSignal). Diagnostic
+     *  only; the confirmation heuristics are identical either way. */
+    hint?: boolean;
     /** Configured Lead-in Pause (seconds); forwarded to voicemail delivery. */
     leadInSeconds?: number;
   };

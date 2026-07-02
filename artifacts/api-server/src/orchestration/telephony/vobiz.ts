@@ -96,6 +96,13 @@ export async function handleVobizWebSocket(
    * action, so a live human is never harmed. See confirmAmdMachineThenBranch.
    */
   amdMachineHint = false,
+  /**
+   * When true, AMD is enabled for this outbound call and acoustic confirmation
+   * must be armed UNCONDITIONALLY at session start (threaded via ?amdArm=1) —
+   * VoBiz's verdict arrives on the async machine_detection_url callback, not the
+   * answer webhook, so waiting for a hint means voicemail is never detected.
+   */
+  amdArmed = false,
 ): Promise<void> {
   let sessionId: string | null = null;
   let streamId: string | null = null;
@@ -225,6 +232,7 @@ export async function handleVobizWebSocket(
             campaignLeadId,
             voicemailDelivery,
             amdMachineHint,
+            amdArmed,
             resumeContext: priorResumeContext,
             sourceCallbackReason,
             scheduledCallbackId: callbackId,
@@ -326,7 +334,7 @@ export function getVobizAnswerXML(
   wsBaseUrl: string,
   agentId: number,
   platformTelephony = false,
-  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; amdMachineHint?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number; answeredAt?: number } = {},
+  opts: { campaignLeadId?: number; from?: string; to?: string; voicemailDelivery?: boolean; amdMachineHint?: boolean; amdArm?: boolean; callUuid?: string; corr?: string; callDirection?: "inbound" | "outbound"; cbId?: number; answeredAt?: number } = {},
 ): string {
   const qsParts: string[] = [];
   if (platformTelephony) qsParts.push("pt=1");
@@ -341,6 +349,11 @@ export function getVobizAnswerXML(
   // media stream is opened, but the pipeline confirms the machine verdict acoustically
   // before enacting any voicemail action (VoBiz's raw machine flag is unreliable).
   if (opts.amdMachineHint) qsParts.push("amdHint=machine");
+  // amdArm=1 arms hint-INDEPENDENT acoustic AMD confirmation: set for every
+  // AMD-enabled VoBiz outbound call regardless of any answer-webhook flag, since
+  // per VoBiz docs the verdict arrives via the async machine_detection_url
+  // callback (which corroborates the acoustic analysis mid-window), not here.
+  if (opts.amdArm) qsParts.push("amdArm=1");
   // Embed From/To in the WebSocket URL query string — the most reliable way to
   // pass caller/callee numbers.  VoBiz POSTs them to the answer URL, we encode
   // them here, and our WS handler reads them from the URL before the start event

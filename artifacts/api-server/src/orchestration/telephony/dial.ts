@@ -136,12 +136,20 @@ export async function dialVobiz(opts: {
   /** Max call duration in seconds. Vobiz hangs up at this limit (time_limit param). */
   maxDurationSeconds?: number;
   /**
-   * AMD — omit to disable. Vobiz exposes a Plivo-compatible call API, so we
-   * request synchronous detection (`machine_detection: "true"`); the result is
-   * delivered to answer_url as the `Machine`/`MachineDetected` parameter, which
-   * the answer handler reads to gate the AI stream.
+   * AMD — omit to disable. Per VoBiz's Machine Detection docs, the verdict is
+   * delivered via the ASYNCHRONOUS `machine_detection_url` callback (POST with
+   * `Machine`, `CallUUID`, `RequestUUID`, `Event=MachineDetection`), NOT on the
+   * answer webhook (that was a Plivo-compat assumption — VoBiz does not send the
+   * flag there). We still request `machine_detection=true` and treat any flag
+   * that does appear on answer_url as a bonus hint.
    */
   machineDetectionEnabled?: boolean;
+  /**
+   * Async AMD callback URL (VoBiz `machine_detection_url`). VoBiz POSTs the
+   * verdict here when detection completes. Only sent when
+   * `machineDetectionEnabled` is true.
+   */
+  machineDetectionUrl?: string;
 }): Promise<{ requestUuid: string | null; callUuid: string | null }> {
   const url  = `https://api.vobiz.ai/api/v1/Account/${opts.authId}/Call/`;
   const body: Record<string, string | number> = {
@@ -154,9 +162,18 @@ export async function dialVobiz(opts: {
     body["time_limit"] = Math.min(Math.floor(opts.maxDurationSeconds), 86400);
   }
   if (opts.machineDetectionEnabled) {
-    // Synchronous detection (Plivo-compatible): result delivered to answer_url
-    // as the `Machine`/`MachineDetected` parameter — no async callback URL.
     body["machine_detection"] = "true";
+    // Analysis window (ms). VoBiz default is 5000, valid range 2000–10000. We
+    // default lower (3000) so the async verdict lands INSIDE the pipeline's
+    // acoustic confirmation window instead of after it has already resolved.
+    const rawTime = Number(process.env["AMD_VOBIZ_DETECTION_TIME_MS"]) || 3000;
+    body["machine_detection_time"] = Math.min(10000, Math.max(2000, Math.floor(rawTime)));
+    if (opts.machineDetectionUrl) {
+      // Async verdict delivery per VoBiz docs — the documented (and only
+      // reliable) channel for the AMD result.
+      body["machine_detection_url"] = opts.machineDetectionUrl;
+      body["machine_detection_method"] = "POST";
+    }
   }
   const resp = await fetch(url, {
     method: "POST",

@@ -138,6 +138,11 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
   // flag. The session opens normally but confirms acoustically before enacting any
   // voicemail action (see confirmAmdMachineThenBranch).
   const amdMachineHint = qs.get("amdHint") === "machine";
+  // amdArm=1 → AMD is enabled for this outbound call; acoustic confirmation is
+  // armed UNCONDITIONALLY at session start (VoBiz's real verdict arrives via the
+  // async machine_detection_url callback, not the answer webhook, so waiting for
+  // a hint would mean voicemail is never detected).
+  const amdArmed = qs.get("amdArm") === "1";
   // dir=out is appended by every outbound dial site (calls/campaign/callback/meta)
   // so the WS handler keys caller memory off the dialed party, not the shared
   // platform number. Absent → inbound (the provider dialed us).
@@ -203,7 +208,7 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
     switch (provider) {
       case "twilio":   void handleTwilioWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                       break;
       case "plivo":    void handlePlivoWebSocket(ws, agentId, campaignLeadId, callDirection, vobizCallbackId);                        break;
-      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt, amdMachineHint); break;
+      case "vobiz":    void handleVobizWebSocket(ws, agentId, platformTelephony, campaignLeadId, vobizFrom, vobizTo, voicemailDelivery, vobizCallUuid, callDirection, vobizCorrToken, vobizCallbackId, vobizAnsweredAt, amdMachineHint, amdArmed); break;
       case "webcall":  void handleWebcallWebSocket(ws, agentId, webcallUserId!);                                                     break;
     }
   });

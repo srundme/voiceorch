@@ -321,7 +321,7 @@ export async function fireCampaignCall(lead: LeadRow, campaign: CampaignRow): Pr
         toNumber: lead.phone,
         answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agent.id}&campaignLeadId=${lead.id}&dir=out`,
         hangupUrl: `${baseUrl}/api/webhooks/vobiz/status?campaignLeadId=${lead.id}&campaignLeadSig=${vobizLeadSig}`,
-        ...(amd.enabled ? { machineDetectionEnabled: true } : {}),
+        ...(amd.enabled ? { machineDetectionEnabled: true, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agent.id}` } : {}),
       });
       logger.info({ leadId: lead.id, dialRequestUuid: dialRes.requestUuid }, "VoBiz campaign call dialed");
     } else {

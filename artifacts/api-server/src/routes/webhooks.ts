@@ -4,6 +4,8 @@ import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { getTwilioVoiceTwiML } from "../orchestration/telephony/twilio.js";
 import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
+import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
+import { getSessionByCallId, getSessionByExternalCallId } from "../orchestration/session.js";
 import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, canonicalizeCallerKey } from "@workspace/db";
 import { eq, sql, and, gte, inArray } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
@@ -744,6 +746,38 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
       "VoBiz raw machine-detection fields on answer webhook (treated as a HINT — confirmed acoustically in-pipeline)",
     );
   }
+
+  // Hint-INDEPENDENT arming: per VoBiz docs, `machine_detection=true` does NOT
+  // deliver the verdict to the answer webhook — it arrives via the asynchronous
+  // machine_detection_url callback (handled by /webhooks/vobiz/amd, which feeds
+  // the live session). So for every AMD-enabled VoBiz OUTBOUND call we open the
+  // media stream with acoustic confirmation armed unconditionally: the pipeline
+  // holds the greeting briefly, analyses the callee's speech-energy pattern
+  // (Task #1267 heuristics), lets the async callback corroborate mid-window, and
+  // only a confirmed machine enacts the configured voicemailAction. A live human
+  // resolves within ~1.5 s of silence or a short "hello?" — no perceptible delay.
+  // Queue/IVR are inbound-facing features and are intentionally bypassed here
+  // (the previous machine-hint path already bypassed them).
+  if (callDirection === "outbound" && resolveAmdConfig(cfg).enabled) {
+    const answerCallUuid = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "") || undefined;
+    req.log.info(
+      { agentId, callUuid: answerCallUuid, hint: parseMachineFlag(rawMachineField) },
+      "AMD enabled (VoBiz outbound) — arming acoustic confirmation unconditionally; async machine_detection_url callback will corroborate",
+    );
+    res.set("Content-Type", "text/xml").send(
+      getVobizAnswerXML(wsBaseUrl, agentId, platformTelephony, {
+        campaignLeadId, from: inboundFrom, to: inboundTo,
+        amdArm: true,
+        amdMachineHint: parseMachineFlag(rawMachineField) === "machine",
+        callDirection, corr,
+        callUuid: answerCallUuid,
+        cbId: answerCbId,
+        answeredAt: answeredAtMs,
+      }),
+    );
+    return;
+  }
+
   const amdHandled = await applyAmdGate({
     res, log: req.log, agentId,
     providerCallId: String(req.body?.CallUUID ?? req.body?.call_uuid ?? ""),
@@ -1080,20 +1114,74 @@ router.post("/webhooks/twilio/status", async (req, res): Promise<void> => {
   })().catch((err) => logger.error({ err }, "Twilio status webhook handler error"));
 });
 
-// ── P2-B: AMD / Voicemail Detection callback ─────────────────────────────────
-// VoBiz POSTs here when machine_detection fires.
-// Body fields: MachineDetected ("true"/"false"), CallUUID, To, From.
-// Query param: agentId (set when initiating the outbound call).
+// ── P2-B: AMD / Voicemail Detection callback (async, in-call trigger) ────────
+// Per VoBiz docs this is the ONLY channel that delivers the machine-detection
+// verdict (`machine_detection=true` alone does NOT put it on the answer webhook).
+// This is set as `machine_detection_url` on every AMD-enabled outbound dial.
+// Body fields: Machine/MachineDetected ("true"/"false"), CallUUID, RequestUUID,
+// Event=MachineDetection. Query param: agentId (set at dial time, diagnostic).
+//
+// Flow: resolve the LIVE session (CallUUID → session.externalCallId, falling
+// back to RequestUUID/CallUUID → call-record metadata → session by call id) and
+// feed the verdict into the pipeline's acoustic-confirmation state machine via
+// onExternalAmdSignal(). The verdict is a corroborating input, NOT blindly
+// trusted: a "machine" callback lowers the acoustic bar but still requires
+// speech-energy corroboration; a "human" callback resolves human immediately.
+// Late/duplicate callbacks after the window has resolved are logged + ignored
+// by the pipeline (single-resolution). If no live session is found, fall back
+// to best-effort persistence of the raw flag (legacy behavior).
 
 router.post("/webhooks/vobiz/amd", async (req, res): Promise<void> => {
-  // AMD is now resolved synchronously on the /vobiz/voice answer webhook, which
-  // gates the call flow there. This async callback is retained only as a
-  // best-effort persistence sink for any late/duplicate AMD notification — it no
-  // longer controls the call flow.
   const machineFlag = parseMachineFlag(req.body?.MachineDetected ?? req.body?.Machine ?? req.body?.machine);
-  const callUuid    = String(req.body?.CallUUID ?? req.body?.call_uuid ?? "");
-  req.log.info({ callUuid, machineFlag }, "VoBiz AMD callback (persistence-only)");
-  if (machineFlag) await persistAmdResult(callUuid, machineFlag);
+  const callUuid    = String(req.body?.CallUUID    ?? req.body?.call_uuid    ?? "");
+  const requestUuid = String(req.body?.RequestUUID ?? req.body?.request_uuid ?? "");
+  req.log.info(
+    { callUuid, requestUuid, machineFlag, event: req.body?.Event, agentId: req.query["agentId"] ?? null },
+    "VoBiz AMD callback received",
+  );
+  if (!machineFlag) { res.sendStatus(204); return; }
+
+  // 1. Direct match: the answer-webhook CallUUID is threaded into createSession
+  //    as externalCallId — the fastest and most common lookup.
+  let session = callUuid ? getSessionByExternalCallId(callUuid) : undefined;
+  let matchedBy = session ? "callUuid" : null;
+
+  // 2. Fallback: correlate via the call record's metadata (calls.ts persists the
+  //    dial-response requestUuid; the WS session writes providerCallId/externalCallId),
+  //    then find the live session by DB call id. Covers UUID-plane mismatches.
+  if (!session) {
+    for (const needle of [requestUuid, callUuid]) {
+      if (!needle) continue;
+      try {
+        const [row] = await db
+          .select({ id: callsTable.id })
+          .from(callsTable)
+          .where(sql`metadata::text like ${"%" + needle + "%"}`)
+          .limit(1);
+        if (row) {
+          session = getSessionByCallId(row.id);
+          if (session) { matchedBy = needle === requestUuid ? "requestUuid" : "callUuid-metadata"; break; }
+        }
+      } catch { /* non-critical — fall through */ }
+    }
+  }
+
+  if (session) {
+    req.log.info(
+      { callUuid, requestUuid, matchedBy, machineFlag, callId: session.callId },
+      "VoBiz AMD callback → feeding live session's acoustic confirmation",
+    );
+    // Do NOT persist the raw flag here — the pipeline persists the CONFIRMED
+    // verdict once its confirmation window resolves (single resolution).
+    session.pipeline.onExternalAmdSignal(machineFlag === "machine" ? "machine" : "human", "vobiz-callback");
+    res.sendStatus(204);
+    return;
+  }
+
+  // No live session (late callback, call already ended, or pre-session race) —
+  // best-effort persistence so the call record still reflects the raw verdict.
+  req.log.info({ callUuid, requestUuid, machineFlag }, "VoBiz AMD callback — no live session; persistence-only");
+  await persistAmdResult(callUuid || requestUuid, machineFlag);
   res.sendStatus(204);
 });
 

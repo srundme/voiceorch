@@ -86,6 +86,10 @@ interface ActiveSession {
   callId: number;
   agentId: number;
   pipeline: OrchestrationPipeline;
+  /** Provider-side call id (VoBiz answer-webhook CallUUID / Twilio CallSid / …)
+   *  when known at session creation. Lets async provider callbacks (e.g. the
+   *  VoBiz machine_detection_url AMD verdict) find the LIVE session directly. */
+  externalCallId: string | null;
   startedAt: Date;
   metricsAcc: MetricsAcc;
   wasTransferred: boolean;
@@ -168,6 +172,12 @@ export async function createSession(params: {
    *  machine enacts the configured voicemailAction; anything ambiguous falls through to
    *  a normal greeting so a live human is never harmed. See confirmAmdMachineThenBranch. */
   amdMachineHint?: boolean;
+  /** When true, AMD is enabled for this VoBiz outbound call and acoustic
+   *  confirmation must be armed UNCONDITIONALLY — per VoBiz docs the real verdict
+   *  arrives via the ASYNC machine_detection_url callback (not the answer webhook),
+   *  which feeds the live pipeline mid-window via onExternalAmdSignal(). Works
+   *  with or without a synchronous machine hint. */
+  amdArmed?: boolean;
   /** When this call was spawned by a scheduled callback, the callback's reason string
    *  (e.g. "network_drop"). Stored in session state and used in endSession to prevent
    *  a dropped retry call from scheduling yet another callback (single-retry invariant). */
@@ -1001,7 +1011,7 @@ export async function createSession(params: {
     campaignLeadId: params.campaignLeadId ?? null,
     onAudioOut: params.onAudioOut,
     rawPcmOutput: params.rawPcmOutput ?? (params.telephonyProvider === "vobiz"),
-    voicemailDelivery: (params.voicemailDelivery || (params.amdMachineHint && amdVoicemailAction === "leave_message"))
+    voicemailDelivery: (params.voicemailDelivery || ((params.amdMachineHint || params.amdArmed) && amdVoicemailAction === "leave_message"))
       ? {
           message: (typeof agentCfg["voicemailMessage"] === "string" && (agentCfg["voicemailMessage"] as string).trim())
             ? (agentCfg["voicemailMessage"] as string)
@@ -1009,10 +1019,17 @@ export async function createSession(params: {
           ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
         }
       : undefined,
-    // Acoustic AMD confirmation (VoBiz unreliable machine-hint): the pipeline holds
-    // the greeting and confirms the machine verdict acoustically before enacting.
-    amdConfirm: params.amdMachineHint
-      ? { action: amdVoicemailAction, ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}) }
+    // Acoustic AMD confirmation: armed either by a synchronous machine hint
+    // (legacy path) or UNCONDITIONALLY for AMD-enabled VoBiz outbound calls
+    // (amdArmed — the real verdict arrives via the async machine_detection_url
+    // callback and corroborates the acoustic analysis mid-window). The pipeline
+    // holds the greeting and confirms acoustically before enacting.
+    amdConfirm: (params.amdMachineHint || params.amdArmed)
+      ? {
+          action: amdVoicemailAction,
+          hint: !!params.amdMachineHint,
+          ...(amdLeadInSeconds !== undefined ? { leadInSeconds: amdLeadInSeconds } : {}),
+        }
       : undefined,
     // Persist the acoustically-confirmed AMD verdict (not the raw untrusted flag).
     onAmdResult: (result) => {
@@ -1280,6 +1297,7 @@ export async function createSession(params: {
     callId: callRecord.id,
     agentId: params.agentId,
     pipeline,
+    externalCallId: params.externalCallId ?? null,
     // Anchor the duration clock to the carrier answer time when known, so the
     // gap between carrier answer and media-stream connect/session creation is
     // counted. Falls back to now for webcall (no carrier answer gap).
@@ -1324,9 +1342,11 @@ export async function createSession(params: {
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
 
-  if (params.amdMachineHint) {
-    // Acoustic AMD confirmation: the answer webhook reported an UNRELIABLE "machine"
-    // hint. Open the normal stream but confirm the machine verdict acoustically BEFORE
+  if (params.amdMachineHint || params.amdArmed) {
+    // Acoustic AMD confirmation — armed by an (unreliable) synchronous machine
+    // hint OR unconditionally for AMD-enabled VoBiz outbound calls (amdArmed;
+    // the async machine_detection_url callback corroborates mid-window). Open
+    // the normal stream but confirm the machine verdict acoustically BEFORE
     // greeting — only a confirmed machine enacts the voicemail action; anything
     // ambiguous falls through to a normal greeting so a live human is never harmed.
     pipeline.confirmAmdMachineThenBranch().catch((err) => {
@@ -1354,6 +1374,17 @@ export function getSession(sessionId: string): ActiveSession | undefined {
 export function getSessionByCallId(callDbId: number): ActiveSession | undefined {
   for (const session of sessions.values()) {
     if (session.callId === callDbId) return session;
+  }
+  return undefined;
+}
+
+/** Find the LIVE session by its provider-side call id (e.g. the VoBiz answer-webhook
+ *  CallUUID). Used by async provider callbacks — notably the VoBiz
+ *  machine_detection_url AMD verdict — to feed the running pipeline directly. */
+export function getSessionByExternalCallId(externalCallId: string): ActiveSession | undefined {
+  if (!externalCallId) return undefined;
+  for (const session of sessions.values()) {
+    if (session.externalCallId === externalCallId) return session;
   }
   return undefined;
 }

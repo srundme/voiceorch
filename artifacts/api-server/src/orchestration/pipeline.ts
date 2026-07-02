@@ -188,6 +188,16 @@ const AMD_NO_SPEECH_HUMAN_MS =                                      // no greeti
   Number(process.env["AMD_NO_SPEECH_HUMAN_MS"]) || 1500;
 const AMD_CONFIRM_ENERGY_THRESHOLD =                               // RMS bar for "someone is speaking" during confirm
   Number(process.env["AMD_CONFIRM_ENERGY_THRESHOLD"]) || VOICEMAIL_GREETING_ENERGY_THRESHOLD;
+// External (async provider callback) AMD corroboration — VoBiz delivers its
+// verdict via the machine_detection_url callback mid-window. A "machine"
+// callback is NOT blindly trusted: it lowers the continuous-speech bar to this
+// reduced threshold (still requiring real acoustic corroboration) …
+const AMD_EXTERNAL_MACHINE_CONTINUOUS_MS =
+  Number(process.env["AMD_EXTERNAL_MACHINE_CONTINUOUS_MS"]) || 2000;
+// … and extends the hard confirmation cap by this much (once), giving the
+// acoustics time to corroborate a callback that arrives late in the window.
+const AMD_EXTERNAL_MACHINE_EXTEND_MS =
+  Number(process.env["AMD_EXTERNAL_MACHINE_EXTEND_MS"]) || 2000;
 const KB_CONTEXT_RACE_MS      = 200;    // Max time the turn waits for KB-context retrieval before
                                          // starting the LLM. If the prefetch is slower than this, the
                                          // turn proceeds with whatever context resolved (possibly none)
@@ -442,12 +452,22 @@ export class OrchestrationPipeline {
   private vmDelivering = false;
   // Acoustic AMD confirmation (VoBiz unreliable machine-hint). When set, the
   // pipeline runs confirmAmdMachineThenBranch() instead of greeting immediately.
-  private readonly amdConfirm: { action: "leave_message" | "hangup" | "continue"; leadInSeconds?: number } | null;
+  private readonly amdConfirm: { action: "leave_message" | "hangup" | "continue"; hint?: boolean; leadInSeconds?: number } | null;
   private amdConfirming = false;   // true only during the confirmation window
   private amdHeardSpeech = false;  // true once ANY speech energy is heard during confirm
   private amdRunStartAt = 0;       // start (ms) of the current continuous speech run; 0 = in silence
   private amdLastSpeechAt = 0;     // ms timestamp of the last energetic frame during confirm
   private amdMaxContinuousMs = 0;  // longest continuous speech run observed during confirm
+  // External AMD verdict from the async provider callback (VoBiz
+  // machine_detection_url → /webhooks/vobiz/amd → onExternalAmdSignal). Read by
+  // the confirmation loop: "human" resolves human immediately; "machine" lowers
+  // the continuous-speech bar (still requiring acoustic corroboration) and
+  // extends the window once. Null until a callback arrives.
+  private amdExternalVerdict: "machine" | "human" | null = null;
+  private amdExternalSource: string | null = null;
+  // Single-resolution latch: set once confirmAmdMachineThenBranch() resolves its
+  // verdict. Late/duplicate external callbacks after this are logged + ignored.
+  private amdResolved = false;
 
   // P1-D: Per-agent VAD / barge-in settings (set from agent config in constructor)
   private readonly vadSilenceMs: number;
@@ -1921,6 +1941,42 @@ export class OrchestrationPipeline {
    * Only a confirmed machine enacts `action` (leave_message / hangup / continue). The
    * confirmed verdict — not the raw flag — is persisted via onAmdResult.
    */
+  /**
+   * Feed an EXTERNAL AMD verdict (async provider callback — VoBiz
+   * machine_detection_url → /webhooks/vobiz/amd) into the acoustic confirmation
+   * window. Single-resolution semantics: signals arriving after the window has
+   * resolved (or when no confirmation was armed) are logged and ignored.
+   * A "human" signal resolves human immediately; a "machine" signal is a
+   * corroborating input only — it lowers the continuous-speech bar and extends
+   * the window, but acoustic evidence still decides.
+   */
+  onExternalAmdSignal(verdict: "machine" | "human", source: string): void {
+    if (this.closed || !this.amdConfirm || this.amdResolved) {
+      logger.info(
+        {
+          callId: this.config.callId, agentId: this.agent.id, verdict, source,
+          closed: this.closed, armed: !!this.amdConfirm, resolved: this.amdResolved,
+          priorExternalVerdict: this.amdExternalVerdict,
+        },
+        "External AMD signal ignored (late/duplicate or confirmation not armed)",
+      );
+      return;
+    }
+    if (this.amdExternalVerdict !== null) {
+      logger.info(
+        { callId: this.config.callId, agentId: this.agent.id, verdict, source, priorExternalVerdict: this.amdExternalVerdict },
+        "External AMD signal ignored (duplicate — first signal wins)",
+      );
+      return;
+    }
+    this.amdExternalVerdict = verdict;
+    this.amdExternalSource = source;
+    logger.info(
+      { callId: this.config.callId, agentId: this.agent.id, verdict, source, confirming: this.amdConfirming },
+      "External AMD signal accepted — feeding acoustic confirmation window",
+    );
+  }
+
   async confirmAmdMachineThenBranch(): Promise<void> {
     if (this.closed) return;
     const action = this.amdConfirm?.action ?? "hangup";
@@ -1933,35 +1989,67 @@ export class OrchestrationPipeline {
     this.amdConfirming = true;
     const startedAt = Date.now();
     logger.info(
-      { callId: this.config.callId, agentId: this.agent.id, action, windowMs: AMD_CONFIRM_WINDOW_MS },
-      "AMD acoustic confirmation: machine hint received — holding greeting to confirm before enacting",
+      {
+        callId: this.config.callId, agentId: this.agent.id, action,
+        windowMs: AMD_CONFIRM_WINDOW_MS, hint: this.amdConfirm?.hint ?? false,
+      },
+      this.amdConfirm?.hint
+        ? "AMD acoustic confirmation: machine hint received — holding greeting to confirm before enacting"
+        : "AMD acoustic confirmation: armed unconditionally (AMD enabled, async callback pending) — holding greeting to confirm",
     );
 
     let verdict: "human" | "machine" = "human";
     let signal = "window-elapsed";
     let nextTick = Date.now() + FRAME_MS;
+    // Window may be extended ONCE when an external "machine" callback arrives,
+    // giving the acoustics time to corroborate a late verdict.
+    let windowMs = AMD_CONFIRM_WINDOW_MS;
+    let windowExtended = false;
     while (!this.closed) {
       this.config.onAudioOut(silenceFrame);
       const now = Date.now();
       const elapsed = now - startedAt;
       const sinceSpeech = this.amdLastSpeechAt ? now - this.amdLastSpeechAt : Infinity;
+      // External async callback said HUMAN → trust it, greet immediately.
+      if (this.amdExternalVerdict === "human") {
+        verdict = "human"; signal = `external-human:${this.amdExternalSource}`; break;
+      }
+      // External "machine" pending: extend the hard cap once and lower the
+      // continuous-speech bar — but still require acoustic corroboration.
+      if (this.amdExternalVerdict === "machine" && !windowExtended) {
+        windowExtended = true;
+        windowMs = elapsed + AMD_EXTERNAL_MACHINE_EXTEND_MS > AMD_CONFIRM_WINDOW_MS
+          ? elapsed + AMD_EXTERNAL_MACHINE_EXTEND_MS
+          : AMD_CONFIRM_WINDOW_MS;
+      }
+      const continuousBarMs = this.amdExternalVerdict === "machine"
+        ? Math.min(AMD_CONTINUOUS_GREETING_MS, AMD_EXTERNAL_MACHINE_CONTINUOUS_MS)
+        : AMD_CONTINUOUS_GREETING_MS;
       // Machine: sustained continuous greeting monologue.
-      if (this.amdMaxContinuousMs >= AMD_CONTINUOUS_GREETING_MS) {
-        verdict = "machine"; signal = "continuous-greeting"; break;
+      if (this.amdMaxContinuousMs >= continuousBarMs) {
+        verdict = "machine";
+        signal = this.amdExternalVerdict === "machine"
+          ? "continuous-greeting+external-machine" : "continuous-greeting";
+        break;
       }
       // Human: short utterance ("hello?") then a pause, with no long run so far.
-      if (this.amdHeardSpeech && this.amdRunStartAt === 0
+      // Skipped while an external "machine" verdict is pending corroboration —
+      // some voicemail greetings start with a short phrase + pause.
+      if (this.amdExternalVerdict !== "machine"
+          && this.amdHeardSpeech && this.amdRunStartAt === 0
           && this.amdMaxContinuousMs < AMD_CONTINUOUS_GREETING_MS
           && sinceSpeech >= AMD_HUMAN_PAUSE_MS) {
         verdict = "human"; signal = "short-utterance-pause"; break;
       }
       // Human: no greeting heard at all shortly after answer (a machine greets at once).
-      if (!this.amdHeardSpeech && elapsed >= AMD_NO_SPEECH_HUMAN_MS) {
+      // Also skipped while an external "machine" verdict awaits corroboration.
+      if (this.amdExternalVerdict !== "machine"
+          && !this.amdHeardSpeech && elapsed >= AMD_NO_SPEECH_HUMAN_MS) {
         verdict = "human"; signal = "no-speech"; break;
       }
       // Ambiguous by the hard cap → human (bias toward not harming a live caller).
-      if (elapsed >= AMD_CONFIRM_WINDOW_MS) {
-        verdict = "human"; signal = "window-elapsed"; break;
+      if (elapsed >= windowMs) {
+        verdict = "human"; signal = windowExtended ? "window-elapsed-extended" : "window-elapsed"; break;
       }
       const delay = Math.max(0, nextTick - now);
       nextTick += FRAME_MS;
@@ -1969,12 +2057,16 @@ export class OrchestrationPipeline {
     }
 
     this.amdConfirming = false;
+    this.amdResolved = true; // single resolution — later external callbacks are ignored
     if (this.closed) return;
 
     logger.info(
       {
         callId: this.config.callId, agentId: this.agent.id,
         verdict, signal, action,
+        hint: this.amdConfirm?.hint ?? false,
+        externalVerdict: this.amdExternalVerdict,
+        externalSource: this.amdExternalSource,
         waitedMs: Date.now() - startedAt,
         heardSpeech: this.amdHeardSpeech,
         maxContinuousMs: this.amdMaxContinuousMs,

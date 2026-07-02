@@ -295,7 +295,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
             answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&dir=out&corr=${vobizCorrToken}`,
             hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
             maxDurationSeconds,
-            ...(amd.enabled && { machineDetectionEnabled: true }),
+            ...(amd.enabled && { machineDetectionEnabled: true, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}` }),
           });
           vobizRequestUuid = dialRes.requestUuid;
           providerCallId = dialRes.callUuid ?? "";
@@ -372,7 +372,7 @@ router.post("/calls/outbound", requireAuth, async (req, res): Promise<void> => {
             answerUrl: `${baseUrl}/api/webhooks/vobiz/voice?agentId=${agentId}&pt=1&dir=out&corr=${vobizCorrToken}`,
             hangupUrl:  `${baseUrl}/api/webhooks/vobiz/status`,
             maxDurationSeconds,
-            ...(amd.enabled && { machineDetectionEnabled: true }),
+            ...(amd.enabled && { machineDetectionEnabled: true, machineDetectionUrl: `${baseUrl}/api/webhooks/vobiz/amd?agentId=${agentId}` }),
           });
           vobizRequestUuid = dialRes.requestUuid;
           providerCallId = dialRes.callUuid ?? "";

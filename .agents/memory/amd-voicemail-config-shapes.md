@@ -1,6 +1,6 @@
 ---
 name: AMD / voicemail-detection config shapes
-description: Outbound AMD gating is synchronous on the answer webhook; agent voicemail config has two incompatible shapes normalized by resolveAmdConfig
+description: Twilio/Plivo AMD is synchronous on the answer webhook; VoBiz verdict ONLY arrives via async machine_detection_url; agent voicemail config has two incompatible shapes normalized by resolveAmdConfig
 ---
 
 # Outbound AMD (answering-machine / voicemail detection)
@@ -12,15 +12,17 @@ The dashboard writes the voicemail-detection setting in TWO incompatible shapes:
 
 **How to apply:** Never check one field alone. Use `resolveAmdConfig(agentConfig)` (exported from `orchestration/telephony/dial.ts`) which returns `{ enabled, twilioMode }` and handles both shapes. Used by calls.ts + campaignCaller.ts.
 
-## Synchronous gating, not async callback
-**Why:** AMD must complete BEFORE the AI conversation starts. The old design dialed with an async `machine_detection_url`/`MachineDetectionUrl` callback that fired after the stream was already open — too late.
+## Twilio/Plivo: synchronous gating. VoBiz: async callback ONLY (the trap)
+**Why:** AMD should complete BEFORE the AI conversation starts. Twilio/Plivo deliver a trusted verdict ON the answer webhook (Twilio `AnsweredBy`, Plivo `Machine`), so `applyAmdGate()` branches synchronously there: human/unknown/absent → open AI stream; machine → enact `voicemailAction` via static XML. **VoBiz does NOT**: per its docs, `machine_detection=true` alone never puts a verdict on the answer_url — the verdict arrives ONLY via the asynchronous `machine_detection_url` callback. Waiting for the sync flag meant voicemail was never detected on live VoBiz calls.
 
-**How it works now:**
-- Dial requests synchronous detection only: Twilio `MachineDetection` (no AsyncAmd/Url), Plivo `machine_detection:"true"`, Vobiz `machine_detection:"true"` (Plivo-clone assumption — UNVERIFIED on live Vobiz).
-- The provider delivers the result ON the answer/voice webhook: Twilio `AnsweredBy`, Plivo `Machine`, Vobiz `MachineDetected`/`Machine`.
-- `applyAmdGate()` in webhooks.ts branches there: human/unknown/absent → open AI stream; machine → enact `voicemailAction` (leave_message=speak voicemailMessage+hangup / hangup default / continue=open stream). `unknown` is treated as human.
-- The three `/webhooks/{provider}/amd` routes are now persistence-only (204) — they no longer control flow.
-- `amd_result` (human/machine/unknown) persisted best-effort by matching `metadata::text LIKE %providerCallId%`.
+**How it works now (VoBiz):**
+- AMD-enabled VoBiz outbound dials set `machine_detection_url` = `/api/webhooks/vobiz/amd?agentId=…` + `machine_detection_time` (env `AMD_VOBIZ_DETECTION_TIME_MS`, default 3000, clamped 2000–10000) on the dial (calls.ts + campaignCaller.ts → dialVobiz).
+- The answer webhook arms acoustic confirmation UNCONDITIONALLY (hint-independent): `?amdArm=1` on the WS URL → `createSession({ amdArmed })` → `amdConfirm` set with `hint:false`. The greeting is held while `confirmAmdMachineThenBranch()` listens.
+- `/webhooks/vobiz/amd` is now an in-call trigger: it resolves the LIVE session (CallUUID → `getSessionByExternalCallId`, fallback RequestUUID/CallUUID → call metadata LIKE → `getSessionByCallId`) and calls `pipeline.onExternalAmdSignal(verdict, source)`. No live session → legacy persistence-only fallback.
+- The external verdict CORROBORATES, never decides alone: "human" → greet immediately; "machine" → lowers the continuous-speech bar to `AMD_EXTERNAL_MACHINE_CONTINUOUS_MS` (2000) and extends the window once by `AMD_EXTERNAL_MACHINE_EXTEND_MS` (2000), but acoustic evidence still confirms.
+- Single-resolution: `amdResolved` latch set when the window resolves; late/duplicate callbacks are logged + ignored (first external signal wins).
+- Twilio/Plivo `/webhooks/{provider}/amd` routes remain persistence-only (204).
+- `amd_result` persists the CONFIRMED verdict via `onAmdResult`; raw-flag persistence only when no live session was found.
 
 ## VoBiz synchronous AMD is UNRELIABLE — flag is a HINT, confirm acoustically
 **Why:** VoBiz's synchronous machine flag false-positives on LIVE HUMANS. On a real
