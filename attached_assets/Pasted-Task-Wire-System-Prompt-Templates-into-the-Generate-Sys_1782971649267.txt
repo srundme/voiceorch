@@ -1,0 +1,35 @@
+Task: Wire System Prompt Templates into the "Generate System Prompt" Modal
+Core problem
+The Control Panel (where the 7 prompt templates live — Foundation, 5 Domain templates, Client Details structure — versioned and editable) and the "Generate System Prompt" modal (Agent name, Company name, Use case, Call direction, Language, Call flow description, Key knowledge/FAQs → Generate) are disconnected. The Generate button likely calls an LLM with a static/hardcoded prompt, unaware of the versioned templates in the Control Panel. This task makes the Control Panel templates the actual source of truth for generation.
+Step 1: Verify before building
+
+Confirm templates are stored as DB records (Postgres) with CRUD, not flat files.
+Locate what the Generate button currently does — find where its prompt (static or otherwise) lives in the codebase.
+Check how "Use case" values in the modal map to the Domain template list in the Control Panel — confirm whether that mapping exists at all today.
+Check whether the agent's System Prompt field is currently overwritten directly on Generate, or if there's already an intermediate preview step.
+
+Correct the plan below if any of these assumptions don't hold.
+Step 2: Build
+
+GET /api/templates/active — returns all 7 templates (Foundation, 5 Domain templates, Client Details structure) as one JSON object. Single source of truth; nothing else stores a copy.
+Generate action pulls live templates at click time — on Generate, backend calls this endpoint, selects the Domain template matching "Use case," and assembles Foundation + selected Domain + form inputs (Agent name, Company name, Call direction, Language, Call flow description, Key knowledge/FAQs) into the LLM call. If the fetch fails, show an error and block generation — no silent fallback to a cached/hardcoded prompt.
+Version tracking — each template carries a version number or timestamp. Every generated prompt logs which Foundation version + Domain version it was built from, plus the form inputs used.
+Use case → Domain template mapping — explicit, maintained mapping from the "Use case" dropdown to the Domain template list, so renaming/adding a Domain template in the Control Panel updates the dropdown without a code change. "Custom / Other" maps to Foundation-only (no domain layer).
+Read-only preview before injecting — after Generate, show the assembled prompt in a preview state before it touches the System Prompt field. If the field already has content, show a diff, not a silent overwrite. Changes happen by editing form inputs and re-generating — no hand-editing the preview text.
+"Use this prompt" action — appears once preview is shown. On click: fills the System Prompt field with the assembled text. User still must hit normal Save — no auto-commit.
+
+Step 3: Guardrail gate
+"Use this prompt" stays disabled until:
+
+All required modal fields are filled (Agent name, Company name, Use case, Call direction, Language, Call flow description — description can't be empty or trivially short)
+The assembled output doesn't contradict a Foundation-locked rule (identity lock, AI-honesty policy, salutation protocol, spoken-form rules, silent tool-call rule, off-script/silence/closing/opt-out rules) — run this check post-generation
+The selected Use case resolves to a Domain template, or is explicitly Custom/Other — no silent fallback if mapping is missing
+
+If any check fails, the button stays blocked and the modal shows exactly what's missing.
+Definition of done
+
+Editing a template in the Control Panel is reflected automatically the next time "Generate System Prompt" runs — no manual sync
+Every generated prompt is ordered Foundation → Domain → form inputs, runtime variables left as placeholders
+"Use this prompt" fills the field but never auto-saves
+"Use this prompt" is blocked if required fields are missing or a Foundation rule is contradicted
+Every generated prompt is traceable back to the exact template versions and form inputs used

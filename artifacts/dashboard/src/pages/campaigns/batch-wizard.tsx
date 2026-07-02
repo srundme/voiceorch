@@ -69,6 +69,41 @@ interface CrmImportSummary {
   invalidPhones: number;
 }
 
+// ── Timezone helpers (mirrors [batchId].tsx) ──────────────────────────────────
+
+/** Convert a UTC ISO string to a "YYYY-MM-DDTHH:MM" for a datetime-local input in the given IANA tz. */
+function utcToTzInput(isoString: string, tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(new Date(isoString));
+    const g = (t: string) => parts.find(p => p.type === t)?.value ?? "00";
+    return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}`;
+  } catch {
+    return "";
+  }
+}
+
+/** Convert a "YYYY-MM-DDTHH:MM" string (local time in `tz`) to a UTC ISO string for the server. */
+function tzInputToUtc(localStr: string, tz: string): string {
+  try {
+    const approx = new Date(localStr + ":00Z");
+    const tzParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, timeZoneName: "shortOffset",
+    }).formatToParts(approx);
+    const offsetStr = tzParts.find(p => p.type === "timeZoneName")?.value ?? "+00:00";
+    const m = offsetStr.match(/GMT([+-])(\d+)(?::(\d+))?/);
+    if (!m) return approx.toISOString();
+    const sign = m[1] === "+" ? 1 : -1;
+    const offsetMs = sign * (parseInt(m[2]!) * 60 + parseInt(m[3] ?? "0")) * 60_000;
+    return new Date(approx.getTime() - offsetMs).toISOString();
+  } catch {
+    return new Date(localStr).toISOString();
+  }
+}
+
 interface WizardState {
   batchName: string;
   batchDescription: string;
@@ -1880,10 +1915,8 @@ function Step7({
               type="button"
               onClick={() => {
                 const d = new Date(Date.now() + minutes * 60 * 1000);
-                const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                  .toISOString()
-                  .slice(0, 16);
-                setState({ scheduledStartAt: local });
+                const tz = state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                setState({ scheduledStartAt: utcToTzInput(d.toISOString(), tz) });
               }}
               className="text-xs px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors"
             >
@@ -1981,7 +2014,18 @@ function Step8({
             <DetailRow label="Retry Delay"     value={`${state.retryDelayMinutes}m`} />
             {state.timezone && <DetailRow icon={<Globe className="w-3.5 h-3.5" />} label="Timezone" value={state.timezone} />}
             {state.scheduledStartAt
-              ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Run At" value={new Date(state.scheduledStartAt).toLocaleString()} />
+              ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Run At" value={
+                  (() => {
+                    const tz = state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    const utc = tzInputToUtc(state.scheduledStartAt!, tz);
+                    try {
+                      return new Intl.DateTimeFormat("en-GB", {
+                        timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit", hour12: false,
+                      }).format(new Date(utc));
+                    } catch { return state.scheduledStartAt!; }
+                  })()
+                } />
               : state.autoStart
                 ? <DetailRow icon={<Play className="w-3.5 h-3.5 text-emerald-400" />} label="Start" value="Immediately after import" />
                 : <DetailRow label="Start" value="Manual — stays in Draft" />
@@ -2036,8 +2080,12 @@ function Step8({
           businessHoursStart: state.businessHoursStart ?? undefined,
           businessHoursEnd:   state.businessHoursEnd ?? undefined,
           maxDailyCalls:      state.maxDailyCalls ?? undefined,
-          scheduledStartAt:   state.scheduledStartAt ?? undefined,
-          scheduledEndAt:     state.scheduledEndAt ?? undefined,
+          scheduledStartAt:   state.scheduledStartAt
+            ? tzInputToUtc(state.scheduledStartAt, state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
+            : undefined,
+          scheduledEndAt:     state.scheduledEndAt
+            ? tzInputToUtc(state.scheduledEndAt, state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
+            : undefined,
           autoStart:          state.autoStart,
           countryCode:        state.phoneCountryCode,
         },

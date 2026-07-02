@@ -1,0 +1,40 @@
+The core problem
+Two features exist separately right now: the Control Panel (where the 7 prompt templates live and get edited) and the Prompt Architect chatbot (which interviews someone and assembles a system prompt). They don't talk to each other — the chatbot might be using stale/hardcoded templates, and its output has to be manually copy-pasted into the agent's System Prompt field. This task connects them.
+What Replit needs to verify first (don't skip this)
+Before building, it should confirm or correct three assumptions:
+
+Templates are stored as DB records (Postgres) with CRUD, not flat files
+The chatbot is a service that takes a system prompt + conversation history per session
+The agent's "System Prompt" field currently just accepts pasted text
+
+If any of these are wrong, the implementation plan changes, so it should check the actual codebase first.
+The six pieces of work
+
+One read endpoint for templates — GET /api/templates/active returns all 7 templates (Foundation, 5 domain templates, Client Details structure) as one JSON object. This becomes the single source of truth — nothing else stores a copy.
+Chatbot pulls live templates at session start — every new chat session calls that endpoint before the first message. If the fetch fails, the bot should say so and stop — never silently fall back to a cached/guessed version.
+Version tracking — each template needs a version number or timestamp, and every assembled prompt should log which template versions it was built from. This makes it traceable later.
+A machine-readable "done" signal — when the 9-step interview finishes, the bot should emit something structured (JSON block or distinct message type) that the UI can detect — not something the UI has to guess by parsing the bot's prose.
+The "Use this prompt" button — appears once that completion signal fires. Clicking it:
+
+Fills the agent's System Prompt field with the assembled text
+Shows a diff/preview first if the field already has content (no silent overwrites)
+Still requires the user to hit normal Save — no auto-committing
+
+
+Read-only preview before injecting — user sees the assembled prompt before the button appears. If they want changes, they go back into the chat rather than hand-editing the preview text directly — this keeps it from drifting out of sync with the actual templates.
+
+One more gate: the guardrail check
+Before the completion signal is even allowed to fire, three things must be true:
+
+All 9 interview steps have real answers, none skipped
+At least 3 example conversations exist and were user-confirmed (not just auto-generated and left unchecked)
+Nothing in the Client Details contradicts a Foundation-locked rule (identity lock, AI-honesty policy, salutation protocol, spoken-form rules, silent tool-call rule, off-script/silence/closing/opt-out rules)
+
+If any of these fail, the button stays blocked and the UI shows what's missing.
+How you'll know it's done
+
+Editing a template in the Control Panel + starting a new chat session shows the change automatically, no manual sync
+Finished interviews produce one correctly ordered prompt (Foundation → Domain → Client Details, runtime variables left as placeholders)
+"Use this prompt" fills the field but never auto-saves
+Can't mark complete if examples are missing or a Foundation rule got silently overridden
+Every prompt is traceable back to the template versions used
