@@ -1912,7 +1912,6 @@ function VoicemailTab({ form }: { form: any }) {
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="disabled">Disabled</SelectItem>
-              <SelectItem value="enable">Enable — detect at call start</SelectItem>
               <SelectItem value="detect_message_end">Detect Message End — wait for beep</SelectItem>
             </SelectContent>
           </Select>
@@ -1929,7 +1928,6 @@ function VoicemailTab({ form }: { form: any }) {
                 <SelectContent>
                   <SelectItem value="hangup">Hang up immediately</SelectItem>
                   <SelectItem value="leave_message">Leave a voicemail message</SelectItem>
-                  <SelectItem value="continue">Continue — AI talks to the recording</SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>

@@ -1263,7 +1263,6 @@ export default function AgentEdit() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="disabled">Disabled — no detection</SelectItem>
-                      <SelectItem value="enable">Enable — detect at call start</SelectItem>
                       <SelectItem value="detect_message_end">Detect Message End — wait for beep</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1280,7 +1279,6 @@ export default function AgentEdit() {
                         <SelectContent>
                           <SelectItem value="hangup">Hang up immediately</SelectItem>
                           <SelectItem value="leave_message">Leave a voicemail message</SelectItem>
-                          <SelectItem value="continue">Continue — let the AI talk to the voicemail</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
