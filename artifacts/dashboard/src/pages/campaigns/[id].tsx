@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -1379,26 +1380,32 @@ export default function CampaignDetailPage() {
 
   // Campaign health: derived purely from already-fetched batch/analytics data.
   const failureRate = called > 0 ? failed / called : 0;
-  const campaignHealth: { label: string; accent: string } = (() => {
+  const campaignHealth: { label: string; accent: string; dotCls: string; icon: React.ReactNode } = (() => {
     // No activity yet → neutral.
     if (imported === 0 && called === 0) {
-      return { label: "Healthy", accent: "text-emerald-500" };
+      return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
     }
     // Fully completed (everything processed) → healthy.
     if (imported > 0 && called >= imported) {
-      return { label: "Healthy", accent: "text-emerald-500" };
+      return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
     }
     // Unfinished work but nothing running → stalled.
     if (imported > called && activeBatches === 0) {
-      return { label: "Stalled", accent: "text-red-500" };
+      return { label: "Stalled", accent: "text-red-500", dotCls: "bg-red-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
     }
     // Something running but high failure rate or mixed stopped batches → needs attention.
     if (activeBatches > 0 && (failureRate >= 0.3 || stoppedBatches > 0)) {
-      return { label: "Needs Attention", accent: "text-amber-500" };
+      return { label: "Needs Attention", accent: "text-amber-500", dotCls: "bg-amber-500", icon: <AlertCircle className="h-3.5 w-3.5" /> };
     }
     // Otherwise running cleanly.
-    return { label: "Healthy", accent: "text-emerald-500" };
+    return { label: "Healthy", accent: "text-emerald-500", dotCls: "bg-emerald-500", icon: <CheckCircle2 className="h-3.5 w-3.5" /> };
   })();
+
+  // Outcome metrics sourced directly from the analytics endpoint — these are
+  // what a user actually acts on (vs administrative batch bookkeeping).
+  const connectedCalls  = analytics?.connected ?? 0;
+  const successRatePct  = analytics?.successRate ?? 0;
+  const leadsRemaining  = Math.max(imported - called, 0);
 
   async function handleDeleteBatch() {
     if (!deletingBatch) return;
@@ -1505,7 +1512,7 @@ export default function CampaignDetailPage() {
             {/* Delete campaign — always visible */}
             <Button
               size="icon" variant="ghost"
-              className="h-8 w-8 text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10"
+              className="h-8 w-8 text-foreground/70 hover:text-red-500 hover:bg-red-500/10"
               title="Delete campaign"
               onClick={() => { setDeleteNameInput(""); setShowDeleteCamp(true); }}
             >
@@ -1780,15 +1787,31 @@ export default function CampaignDetailPage() {
           {/* ── OVERVIEW continued: stats + batches ──────────────────────── */}
           {activeTab === "overview" && (<>
 
-          {/* Campaign-level summary tiles — connected strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-px bg-border/60 border border-border/60 rounded-xl overflow-hidden">
-            <KpiCard icon={<Layers className="h-3 w-3" />}       label="Total Batches"        value={totalBatches} />
-            <KpiCard icon={<Users className="h-3 w-3" />}        label="Total Leads Imported" value={imported.toLocaleString()} />
-            <KpiCard icon={<PlayCircle className="h-3 w-3" />}   label="Active Batches"       value={activeBatches} color="text-sky-500" />
-            <KpiCard icon={<CheckCircle2 className="h-3 w-3" />} label="Completed Batches"    value={completedBatches} color="text-emerald-500" />
-            <KpiCard icon={<Calendar className="h-3 w-3" />}     label="Campaign Created"     value={campaignCreated} />
-            <KpiCard icon={<Activity className="h-3 w-3" />}     label="Campaign Health"      value={campaignHealth.label} color={campaignHealth.accent} />
-            <KpiCard icon={<TrendingUp className="h-3 w-3" />}   label="Overall Progress"     value={overallProgress} color="text-emerald-500" />
+          {/* Campaign-level summary — health + progress, then outcome metrics that
+              actually help judge performance (vs. flat administrative counts). */}
+          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8 px-4 py-3.5 border-b border-border/50">
+              <div className="flex items-center gap-2 shrink-0" title={campaignHealth.label}>
+                <span className={cn("h-2 w-2 rounded-full shrink-0", campaignHealth.dotCls)} />
+                <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold", campaignHealth.accent)}>
+                  {campaignHealth.icon}
+                  {campaignHealth.label}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/40">Overall Progress</span>
+                  <span className="text-xs font-mono font-semibold text-foreground/80 tabular-nums">{overallProgress}</span>
+                </div>
+                <Progress value={overallPct} className="h-1.5" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/60">
+              <KpiCard icon={<PhoneCall className="h-3 w-3" />} label="Connected"       value={connectedCalls.toLocaleString()} color="text-sky-500" />
+              <KpiCard icon={<Target className="h-3 w-3" />}    label="Success Rate"    value={`${successRatePct}%`} color="text-emerald-500" />
+              <KpiCard icon={<Users className="h-3 w-3" />}     label="Leads Remaining" value={leadsRemaining.toLocaleString()} color="text-amber-500" />
+              <KpiCard icon={<XCircle className="h-3 w-3" />}   label="Failed"          value={failed.toLocaleString()} color="text-red-500" />
+            </div>
           </div>
 
           {/* Batches — batch-mode campaigns only */}
