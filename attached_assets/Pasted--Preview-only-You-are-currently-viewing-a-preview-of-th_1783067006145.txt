@@ -1,0 +1,41 @@
+
+
+Preview only
+You are currently viewing a preview of the main version.
+i have doubt... if i hoode gemini llm... it is correctly getting chosen right?? or is any other llm is being used?
+
+58 minutes ago
+
+3 messages & 13 actions
+
+Worked for 1 minute
+Time worked
+1 minute
+Work done
+7 actions
+Items read
+117 lines
+Agent Usage
+$1.46
+A latent bug: the LLM factory has a "gemini" alias that incorrectly routes to the Qwen (Groq) adapter instead of Google. Nothing in the current UI stores "gemini" (it stores "google"), so you're not affected today — but if any agent ever got saved with provider gemini (e.g. via API or older data), it would silently run Qwen instead of Gemini.
+
+what does this mean, is this happening now or used to happen
+
+4 minutes ago
+
+Verifying dormant risk status
+Let me check whether any agent in the database actually has gemini stored as its LLM provider — that will tell us if this is real or just theoretical.
+
+
+2 actions
+Good question — let me explain it simply.
+
+Is it happening now? No. I just checked your database: every agent's LLM provider is stored as google, qwen, openai, or sarvam. Zero agents have gemini stored. Your 25 Gemini agents all use google, which routes correctly to the real Gemini.
+
+Did it used to happen? Also no evidence of that. The dropdown in your dashboard has only ever saved google when you pick "Google Gemini", so there was never a path for this bug to trigger through normal use.
+
+So what did I mean? Think of it like a mislabeled spare key on a keyring. There's a line of code that says: "if a provider is ever named gemini, use Qwen." That's wrong — it should say "use Google." But since nothing ever writes the name gemini into the database, that wrong line has never been used. It's a landmine that nobody has stepped on — and based on your data, nobody ever did.
+
+One small note: I checked your development database here. Your production database on Railway is separate — but since the same UI code runs there too (it only ever saves google), the same conclusion almost certainly holds.
+
+It's still worth deleting that wrong line eventually so it can never bite you (e.g. if someone creates an agent through the API directly and types gemini). It's a tiny, zero-risk fix. Want me to create a task for it?
