@@ -42,7 +42,7 @@ registerTransientKey({ prefix: OTP_RATE_LIMIT_PREFIX, windowMs: OTP_RATE_LIMIT_W
 const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
 
-const FREE_CREDIT_CENTS = 10_000; // $100 welcome credit
+const FREE_CREDIT_CENTS = 500; // $5 welcome credit
 
 async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");

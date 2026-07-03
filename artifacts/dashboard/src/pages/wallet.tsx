@@ -178,18 +178,6 @@ export default function WalletPage() {
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto space-y-6">
 
-          {/* Beta notice — payments temporarily paused */}
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 flex items-start gap-3">
-            <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-amber-300">Payments paused during beta</p>
-              <p className="text-xs text-amber-400/80 mt-0.5">
-                We're finalising our payment gateway. Top-ups and auto-pay will be available at official launch in ~20 days.
-                Your existing balance and free credits remain active in the meantime.
-              </p>
-            </div>
-          </div>
-
           {/* Balance Card */}
           <div className={`rounded-xl border p-6 ${balanceLow ? "border-border bg-zinc-500/5" : "border-border bg-card"}`}>
             <div className="flex items-start justify-between">
@@ -259,11 +247,10 @@ export default function WalletPage() {
               <Button
                 className="w-full bg-primary hover:opacity-90 text-primary-foreground font-semibold"
                 onClick={handleTopup}
-                disabled={true}
-                title="Payments paused during beta"
+                disabled={loading}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Funds — Available at Launch
+                {loading ? "Processing…" : `Add Funds — $${effectiveAmount}`}
               </Button>
             </div>
 
@@ -279,8 +266,13 @@ export default function WalletPage() {
                     </span>
                   )}
                 </div>
-                <button disabled className="text-muted-foreground opacity-40 cursor-not-allowed">
-                  <ToggleLeft className="w-6 h-6" />
+                <button
+                  onClick={handleToggleAutopay}
+                  disabled={!mandateActive}
+                  className={mandateActive ? "text-foreground" : "text-muted-foreground opacity-40 cursor-not-allowed"}
+                  title={mandateActive ? undefined : "Set up a mandate first"}
+                >
+                  {wallet?.autoPayEnabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
                 </button>
               </div>
 
@@ -318,16 +310,17 @@ export default function WalletPage() {
                 </div>
               </div>
 
-              {/* Mandate setup — disabled during beta */}
-              <Button
-                variant="outline"
-                className="w-full"
-                disabled={true}
-                title="Available at launch"
-              >
-                <ShieldCheck className="w-4 h-4 mr-2" />
-                Auto-pay — Available at Launch
-              </Button>
+              {!mandateActive && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSetupMandate}
+                  disabled={mandateLoading}
+                >
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  {mandateLoading ? "Setting up…" : "Set Up Auto-pay"}
+                </Button>
+              )}
             </div>
           </div>
 

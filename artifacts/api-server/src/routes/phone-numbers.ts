@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, usersTable, walletTransactionsTable, phoneNumbersTable, agentsTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
@@ -437,14 +437,35 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  // 2. Phone numbers are free during beta — no wallet deduction.
-  //    Vobiz carrier cost is absorbed by the platform master wallet.
+  // 2. Compute the real charge: one-time setup fee + first month's marked-up
+  //    rate. Phone numbers are a paid purchase — deducted from the user's
+  //    wallet up front, same as any other billable action.
   const setupCents           = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
   const carrierMonthlyCents  = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
   const markedUpMonthlyCents = addMarkup(carrierMonthlyCents);
-  const totalCents           = 0; // free beta — skip all user charges
+  const totalCents           = setupCents + markedUpMonthlyCents;
 
-  // 3. Record in SnapServe DB (no deduction)
+  // Re-read the latest balance (may have changed since the top of the
+  // handler) and require it to cover the full charge before we commit the
+  // number to this user. The carrier purchase above already succeeded, so on
+  // insufficient funds we release the number back to Vobiz instead of
+  // silently giving it away for free.
+  const [freshUser] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
+    .from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!freshUser || freshUser.walletBalanceCents < totalCents) {
+    try {
+      await releaseVobizNumber(authId!, authToken!, number);
+    } catch (err) {
+      req.log.error({ err, number }, "Failed to release Vobiz number after insufficient-balance rejection");
+    }
+    res.status(402).json({
+      error: `Insufficient balance. This number costs ₹${(totalCents / 100).toFixed(2)}. Top up your wallet and try again.`,
+      code: "INSUFFICIENT_BALANCE",
+    });
+    return;
+  }
+
+  // 3. Record in SnapServe DB and deduct the charge from the user's wallet.
 
   const [row] = await db.insert(phoneNumbersTable).values({
     userId:           clerkId,
@@ -457,6 +478,18 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     // Store the marked-up monthly rate — this is what we show and charge the user
     monthlyRateCents: markedUpMonthlyCents,
   }).returning();
+
+  await db.update(usersTable)
+    .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} - ${totalCents}` })
+    .where(eq(usersTable.clerkId, clerkId));
+
+  await db.insert(walletTransactionsTable).values({
+    userId:      user.id,
+    type:        "debit",
+    amountCents: -totalCents,
+    description: `Phone number ${number} purchased (setup ₹${(setupCents / 100).toFixed(2)} + first month ₹${(markedUpMonthlyCents / 100).toFixed(2)})`,
+    status:      "completed",
+  });
 
   await logActivity({
     userId:       clerkId,

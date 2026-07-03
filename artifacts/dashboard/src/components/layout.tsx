@@ -323,11 +323,6 @@ function SidebarContent({
               <span style={{ fontWeight: 400, opacity: 0.5 }}>Serve</span>
             </span>
           )}
-          {!collapsed && (
-            <span className="text-[8.5px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded border border-border bg-elevated text-muted-foreground/40 whitespace-nowrap ml-0.5">
-              Beta
-            </span>
-          )}
         </Link>
 
         {onToggleCollapse && (
