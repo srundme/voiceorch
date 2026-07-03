@@ -17,12 +17,14 @@ import {
 const router: IRouter = Router();
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
-// SnapServe adds a ₹250/mo reseller margin on top of the carrier's monthly fee.
-// The original carrier price is never surfaced to end-users.
-const RESELLER_MARKUP_CENTS = 25000; // ₹250 in paisa
+// SnapServe charges a flat $10.00/mo (USD) for any phone number, regardless of
+// the underlying carrier's local-currency cost. The carrier's raw price (which
+// VoBiz returns in INR) is never surfaced to end-users — all user-facing
+// pricing and wallet balances on SnapServe are USD.
+const FLAT_MONTHLY_RATE_CENTS = 1000; // $10.00 USD
 
 function addMarkup(monthlyRateCents: number): number {
-  return monthlyRateCents > 0 ? monthlyRateCents + RESELLER_MARKUP_CENTS : 0;
+  return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
 }
 
 // ── Platform-level Vobiz credentials ────────────────────────────────────────
@@ -437,13 +439,12 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     return;
   }
 
-  // 2. Compute the real charge: one-time setup fee + first month's marked-up
-  //    rate. Phone numbers are a paid purchase — deducted from the user's
-  //    wallet up front, same as any other billable action.
-  const setupCents           = Math.round((vobizNumber.setup_fee   ?? 0) * 100);
-  const carrierMonthlyCents  = Math.round((vobizNumber.monthly_fee ?? 0) * 100);
-  const markedUpMonthlyCents = addMarkup(carrierMonthlyCents);
-  const totalCents           = setupCents + markedUpMonthlyCents;
+  // 2. Compute the real charge: a flat $10.00 USD covers the first month.
+  //    Phone numbers are a paid purchase — deducted from the user's wallet
+  //    up front, same as any other billable action. The carrier's own
+  //    setup/monthly fees (in INR) are absorbed by SnapServe and never
+  //    passed through to the user.
+  const totalCents = FLAT_MONTHLY_RATE_CENTS;
 
   // Re-read the latest balance (may have changed since the top of the
   // handler) and require it to cover the full charge before we commit the
@@ -459,7 +460,7 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
       req.log.error({ err, number }, "Failed to release Vobiz number after insufficient-balance rejection");
     }
     res.status(402).json({
-      error: `Insufficient balance. This number costs ₹${(totalCents / 100).toFixed(2)}. Top up your wallet and try again.`,
+      error: `Insufficient balance. This number costs $${(totalCents / 100).toFixed(2)}. Top up your wallet and try again.`,
       code: "INSUFFICIENT_BALANCE",
     });
     return;
@@ -475,8 +476,8 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     numberType:       numberType ?? "local",
     vobizNumberId:    vobizNumber.id,
     status:           "active",
-    // Store the marked-up monthly rate — this is what we show and charge the user
-    monthlyRateCents: markedUpMonthlyCents,
+    // Store the flat USD monthly rate — this is what we show and charge the user
+    monthlyRateCents: FLAT_MONTHLY_RATE_CENTS,
   }).returning();
 
   await db.update(usersTable)
@@ -487,7 +488,7 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     userId:      user.id,
     type:        "debit",
     amountCents: -totalCents,
-    description: `Phone number ${number} purchased (setup ₹${(setupCents / 100).toFixed(2)} + first month ₹${(markedUpMonthlyCents / 100).toFixed(2)})`,
+    description: `Phone number ${number} purchased (first month $${(totalCents / 100).toFixed(2)})`,
     status:      "completed",
   });
 
@@ -496,7 +497,7 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     eventType:    "phone_number.purchased",
     resourceType: "phone_number",
     resourceId:   String(row.id),
-    description:  `Phone number ${number} purchased${totalCents > 0 ? ` (₹${(totalCents / 100).toFixed(0)})` : ""}`,
+    description:  `Phone number ${number} purchased${totalCents > 0 ? ` ($${(totalCents / 100).toFixed(2)})` : ""}`,
   });
 
   req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased and provisioned");

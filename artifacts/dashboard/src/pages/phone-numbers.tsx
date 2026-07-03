@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, IndianRupee, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, Wrench } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, DollarSign, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, Wrench } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -361,12 +361,12 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-muted-foreground">Monthly fee</span>
-              <span className="font-semibold text-foreground">{totalCents > 0 ? `₹${(totalCents / 100).toFixed(0)}/mo` : "Free"}</span>
+              <span className="font-semibold text-foreground">{totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}/mo` : "Free"}</span>
             </div>
           </div>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Setup fee + first month's fee will be deducted from your SnapServe wallet immediately. This action cannot be undone.</span>
+            <span>The first month's fee will be deducted from your SnapServe wallet immediately. This action cannot be undone.</span>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
@@ -466,7 +466,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
                       </div>
                       <div className="flex items-center gap-2 text-xs shrink-0">
                         <span className="text-foreground font-medium">
-                          {(n.monthlyRateCents ?? 0) > 0 ? `₹${((n.monthlyRateCents ?? 0) / 100).toFixed(0)}/mo` : "Free"}
+                          {(n.monthlyRateCents ?? 0) > 0 ? `$${((n.monthlyRateCents ?? 0) / 100).toFixed(2)}/mo` : "Free"}
                         </span>
                         <Badge variant="outline" className="text-[10px] capitalize">{n.numberType.replace("_", " ")}</Badge>
                       </div>
@@ -487,7 +487,7 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
           >
             <Plus className="h-3.5 w-3.5" />
             {selected && totalCents > 0
-              ? `Purchase — ₹${(totalCents / 100).toFixed(0)}/mo`
+              ? `Purchase — $${(totalCents / 100).toFixed(2)}/mo`
               : "Purchase Number"}
           </Button>
         </DialogFooter>
@@ -821,8 +821,8 @@ export default function PhoneNumbersPage() {
 
                 {(n.monthlyRateCents ?? 0) > 0 && (
                   <div className="flex items-center gap-0.5 text-xs text-muted-foreground shrink-0">
-                    <IndianRupee className="h-3 w-3" />
-                    <span>{((n.monthlyRateCents ?? 0) / 100).toFixed(0)}/mo</span>
+                    <DollarSign className="h-3 w-3" />
+                    <span>{((n.monthlyRateCents ?? 0) / 100).toFixed(2)}/mo</span>
                   </div>
                 )}
 

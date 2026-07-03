@@ -28,10 +28,6 @@ function centsToUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function paiseToinr(paise: number): string {
-  return `₹${(paise / 100).toLocaleString("en-IN")}`;
-}
-
 function txTypeLabel(type: string): { label: string; color: string; icon: React.ReactNode } {
   switch (type) {
     case "free_credit": return { label: "Free Credit",   color: "text-foreground",        icon: <Zap          className="w-3.5 h-3.5" /> };

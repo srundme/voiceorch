@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
-import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, IndianRupee } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, DollarSign } from "lucide-react";
 import { 
   useListAgents, 
   useCreateAgent,
@@ -320,9 +320,9 @@ export default function AgentsList() {
                     if (costCents <= 0) return null;
                     return (
                       <div className="flex items-center gap-1.5 mb-3 px-2 py-1.5 rounded-md border border-border bg-muted/30 w-fit text-xs">
-                        <IndianRupee className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <DollarSign className="h-3 w-3 text-muted-foreground shrink-0" />
                         <span className="font-semibold text-foreground">
-                          ₹{(costCents / 100).toFixed(2)}
+                          {(costCents / 100).toFixed(3)}
                         </span>
                         <span className="text-muted-foreground">/ min</span>
                       </div>
