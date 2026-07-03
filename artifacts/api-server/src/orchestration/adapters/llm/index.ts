@@ -29,9 +29,8 @@ export function createLLMAdapter(
     case "groq":
       return new GroqLLM(apiKey, model, genParams);
     case "google":
-      return new GoogleLLM(apiKey, model, genParams);
     case "gemini":
-      return new QwenLLM(apiKey, model, genParams);
+      return new GoogleLLM(apiKey, model, genParams);
     case "sarvam":
       return new SarvamLLM(apiKey, model, genParams, callId);
     case "deepseek":
