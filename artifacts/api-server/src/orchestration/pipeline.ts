@@ -4597,7 +4597,11 @@ export class OrchestrationPipeline {
 
   /** Layer 3: Summarize old conversation turns and compress them into a single block. */
   private async summarizeOldTurns(turns: ConversationTurn[], replaceCount: number): Promise<void> {
+    // Same tool-plumbing exclusions as getTranscript() — don't feed raw tool
+    // results or empty placeholder turns to the summarizer as if they were
+    // spoken lines.
     const transcript = turns
+      .filter((t) => t.role !== "tool" && !(t.role === "user" && t.content.startsWith("[Tool result for")) && t.content.trim() !== "")
       .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
       .join("\n");
     let summary = "";
@@ -4632,6 +4636,16 @@ export class OrchestrationPipeline {
 
   getTranscript(): string {
     return this.conversationHistory
+      // Internal tool plumbing must never surface as a spoken turn in the
+      // human-readable transcript:
+      //  - role "tool": the raw structured tool-result string fed back to the
+      //    LLM (e.g. "Callback recorded for ...") — only the LLM's natural
+      //    follow-up reply (the NEXT assistant turn) should appear as "Agent:".
+      //  - role "user" with the "[Tool result for ...]" prefix: same thing for
+      //    the inline-function-tag path, which piggybacks on the user role.
+      //  - empty-content assistant turns: the placeholder turn recorded when
+      //    the LLM's entire reply was a tool call (no text alongside it).
+      .filter((t) => t.role !== "tool" && !(t.role === "user" && t.content.startsWith("[Tool result for")) && t.content.trim() !== "")
       .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
       .join("\n");
   }

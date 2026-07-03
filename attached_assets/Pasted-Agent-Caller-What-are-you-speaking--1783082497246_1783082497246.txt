@@ -1,0 +1,34 @@
+Agent: கார்த்திக், நம்முடைய அழைப்பு தடைபட்டுவிட்டது போல் தோன்றுகிறது.
+Caller: What are you speaking?
+Agent: Sorry, it looks like we got cut off. Is there anything else I can help you with regarding the SnapServe AI enterprise account and the BYOP pricing we discussed earlier?
+Caller: I want The pricing structure of managed platform
+Agent: The managed platform for SnapServe AI is priced at $0.05 per minute, where we supply all the necessary provider keys for LLM, ASR, and TTS. Would you like me to explain how this pricing works in more detail?
+Caller: I know the breakdown of
+Agent: Sorry, I didn't quite catch that — could you please say that again?
+Caller: this pricing
+Agent: You're already aware of the $0.05 per minute pricing for the managed platform, so is there anything else you'd like to know about this plan or would you like to compare it with the BYOP pricing?
+Caller: No no I want Breakdown
+Agent: The breakdown for the managed platform's $0.05 per minute pricing includes the costs for the LLM, ASR, and TTS providers, as well as SnapServe's orchestration fee.
+Caller: and also telephony.
+Agent: You're right, telephony costs are also included in that $0.05 per minute. What specific part of the breakdown would you like me to elaborate on?
+Caller: No no no
+Agent: I've noted that. To confirm, the managed plan's $0.05 per minute includes LLM, ASR, TTS, and telephony costs, correct?
+Caller: Yes Yes.
+Agent: You've confirmed the breakdown. Is there anything else I can help you with regarding the SnapServe AI pricing or would you like to proceed with the next steps?
+Caller: What are the next steps to start with? but
+Agent: To start with SnapServe AI, the next step would be to sign up on the website, which includes creating an agent and choosing your preferred providers.
+Caller: uh Partnering with with Snapshop
+Agent: You mentioned partnering with Snapshop, can you tell me more about what you have in mind for this partnership?
+Caller: I want to want to be the reseller.
+Agent: So you're interested in becoming a reseller for SnapServe AI, is that correct?
+Caller: Yes, you heard me correct.
+Agent: I'll go ahead and note that you're interested in the reseller program for SnapServe AI, what kind of support or information are you looking for to get started with this?
+Caller: Okay if I choose the recent platform what will be my basic discount
+Agent: As a reseller, if you choose the managed platform, you can expect a discount on the $0.05 per minute rate, typically around 10-15% off, but I'd need to confirm the exact discount with the team.
+Caller: Can you discuss it and call back me?
+Agent: 
+Agent: Callback recorded for 2026-07-03T18:10:00.000Z. Now speak naturally to the caller: confirm the time back to them (e.g. "Great, I've noted that — we'll call you at [time]"), thank them, then close the conversation. Do NOT call end_call automatically — only end the call after you have spoken a proper goodbye.
+Agent: Great, I've noted that — we'll call you at 6:10 pm to discuss the reseller discount for the managed platform. Thank you for your time, and I look forward to speaking with you then. Is there anything else I can help you with before we hang up?
+Caller: Perfect. Bye
+Agent: 
+Agent: Thank you for calling. Have a great day. Goodbye!
