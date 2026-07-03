@@ -1,3 +1,4 @@
+- [Webhook payment verification pattern](webhook-payment-verification.md) — payment webhooks must not trust body-supplied order/payment IDs when the signing secret is optional/unset; always re-verify with a live provider API call before crediting
 - [Sarvam TTS API quirks](sarvam-tts-api.md) — bulbul:v1 gone; v2 has 7 voices, v3 has 38; streaming endpoint 404s; speaker sets are model-specific
 - [Sarvam LLM Chat Completions quirks](sarvam-llm-api.md) — thinking OFF by default (reasoning_effort:null); streaming tool calls UNRELIABLE — sometimes structured delta.tool_calls, sometimes a JSON blob in delta.content (buffer-and-sniff or it gets spoken to TTS)
 - [Sarvam STT WebSocket protocol](sarvam-stt-ws-protocol.md) — valid streaming models: saarika:v2.5 + saaras:v3 only; audio must be WAV-wrapped in AudioContent {data,encoding:"audio/wav",sample_rate}
