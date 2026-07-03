@@ -1776,9 +1776,9 @@ export interface TopupOrder {
   orderId: string;
   /** Amount in USD cents (used for wallet credit) */
   amountCents: number;
-  /** Amount in INR paise (used for Razorpay checkout) */
-  amountPaise: number;
-  /** Always INR */
+  /** Amount in the Razorpay order's smallest currency unit — USD cents for a regular top-up, INR paise for a UPI autopay-mandate order (UPI has no USD rail, so mandate setup always stays INR). */
+  amount: number;
+  /** USD for regular top-ups; INR for UPI autopay-mandate setup */
   currency: string;
   keyId: string;
   /**

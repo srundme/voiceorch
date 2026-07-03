@@ -1716,8 +1716,8 @@ export const CreateTopupBody = zod.object({
 export const CreateTopupResponse = zod.object({
   "orderId": zod.string(),
   "amountCents": zod.number().describe('Amount in USD cents (used for wallet credit)'),
-  "amountPaise": zod.number().describe('Amount in INR paise (used for Razorpay checkout)'),
-  "currency": zod.string().describe('Always INR'),
+  "amount": zod.number().describe('Amount in the Razorpay order\'s smallest currency unit — USD cents for a regular top-up, INR paise for a UPI autopay-mandate order (UPI has no USD rail, so mandate setup always stays INR).'),
+  "currency": zod.string().describe('USD for regular top-ups; INR for UPI autopay-mandate setup'),
   "keyId": zod.string(),
   "customerId": zod.string().nullish().describe('Razorpay customer ID (present when setupMandate=true)')
 })

@@ -23,9 +23,10 @@ async function getDbUser(clerkId: string) {
   return user ?? null;
 }
 
-// Cache the USD→INR rate for 5 minutes to avoid per-request DB hits
+// Only used for UPI autopay-mandate setup orders, which MUST be INR (UPI has
+// no USD rail). Regular top-ups are charged in native USD — see above.
 let _inrRateCache: { rate: number; expiresAt: number } | null = null;
-async function getUsdToInrRate(): Promise<number> {
+async function getUsdToInrRateForMandate(): Promise<number> {
   if (_inrRateCache && Date.now() < _inrRateCache.expiresAt) return _inrRateCache.rate;
   const [row] = await db
     .select({ value: platformSettingsTable.value })
@@ -59,7 +60,7 @@ router.get("/wallet", requireAuth, async (req, res) => {
   res.json(walletInfoPayload(user));
 });
 
-// POST /api/wallet/topup — create Razorpay order (INR, optionally recurring for mandate setup)
+// POST /api/wallet/topup — create Razorpay order (USD; INR only for UPI mandate setup)
 router.post("/wallet/topup", requireAuth, async (req, res) => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
     res.status(503).json({ error: "Payment gateway not configured" });
@@ -76,9 +77,6 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-
-  const usdToInr = await getUsdToInrRate();
-  const amountPaise = Math.round(amountCents * usdToInr);
 
   const razorpay = getRazorpay();
 
@@ -102,12 +100,20 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
     }
   }
 
+  // Autopay mandates ride on UPI, which is an INR-only domestic payment rail —
+  // NPCI/UPI has no USD equivalent, so mandate-setup orders must stay in INR.
+  // A plain one-time top-up has no such constraint and is charged in real USD
+  // (this Razorpay account supports native USD orders — verified against the
+  // live API rather than assumed).
+  const currency = setupMandate ? "INR" : "USD";
+  const amount = setupMandate ? Math.round(amountCents * (await getUsdToInrRateForMandate())) : amountCents;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let order: any;
   try {
     const orderPayload: Record<string, unknown> = {
-      amount:          amountPaise,
-      currency:        "INR",
+      amount,
+      currency,
       receipt:         `uid_${user.id}_${Date.now()}`,
       notes:           { userId: String(user.id), clerkId },
       payment_capture: 1,
@@ -135,8 +141,8 @@ router.post("/wallet/topup", requireAuth, async (req, res) => {
   res.json({
     orderId:    order.id,
     amountCents,
-    amountPaise,
-    currency:   "INR",
+    amount,
+    currency,
     keyId:      process.env.RAZORPAY_KEY_ID,
     customerId: setupMandate ? customerId : null,
   });

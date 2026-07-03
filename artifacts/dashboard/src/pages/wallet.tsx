@@ -67,7 +67,7 @@ export default function WalletPage() {
 
       const opts: Record<string, unknown> = {
         key:       order.keyId,
-        amount:    order.amountPaise,
+        amount:    order.amount,
         currency:  order.currency,
         order_id:  order.orderId,
         name:      "SnapServe",

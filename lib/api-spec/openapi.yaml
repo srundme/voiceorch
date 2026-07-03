@@ -8282,19 +8282,22 @@ components:
 
     TopupOrder:
       type: object
-      required: [orderId, amountCents, amountPaise, currency, keyId]
+      required: [orderId, amountCents, amount, currency, keyId]
       properties:
         orderId:
           type: string
         amountCents:
           type: integer
           description: Amount in USD cents (used for wallet credit)
-        amountPaise:
+        amount:
           type: integer
-          description: Amount in INR paise (used for Razorpay checkout)
+          description: >-
+            Amount in the Razorpay order's smallest currency unit — USD cents
+            for a regular top-up, INR paise for a UPI autopay-mandate order
+            (UPI has no USD rail, so mandate setup always stays INR).
         currency:
           type: string
-          description: Always INR
+          description: "USD for regular top-ups; INR for UPI autopay-mandate setup"
         keyId:
           type: string
         customerId:

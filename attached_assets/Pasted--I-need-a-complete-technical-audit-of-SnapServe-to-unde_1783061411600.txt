@@ -1,0 +1,73 @@
+
+I need a complete technical audit of SnapServe to understand how different configurations affect the features available to users.
+
+This is an investigation and documentation task only. Do not make any code changes.
+
+Please inspect the actual current implementation of SnapServe end-to-end and create a detailed configuration-to-feature compatibility report.
+
+The goal is to answer:
+
+When a user selects a particular combination of configurations while creating an agent, which features will work, which features will not work, which features will work partially, and which combinations are incompatible?
+
+Do not limit this investigation only to LLM models. Audit the complete SnapServe configuration stack, including:
+
+- STT/transcriber providers and models
+- LLM providers and models
+- TTS/voice providers and models
+- Languages
+- Live outbound calls
+- Inbound calls
+- Web Calls
+- Campaign calls
+- Tool calling
+- Call transfer
+- Calendar booking
+- Custom tools
+- Voicemail detection (AMD)
+- Hang up on voicemail
+- Leave voicemail message
+- Interruption/barge-in
+- Fillers/backchannels
+- Multilingual switching
+- Agent memory / CRM memory
+- Knowledge/RAG
+- Structured outputs and outcome tagging
+- First-message behavior
+- Response timing and latency-related features
+- Streaming support
+- Provider fallback behavior
+- Temperature and other generation parameters
+- Any provider-specific or model-specific functionality
+
+For every configuration or model, trace the real code path and identify:
+
+1. What features are fully supported.
+2. What features are not supported.
+3. What features are partially supported.
+4. What features depend on another provider or configuration.
+5. What configuration combinations are incompatible.
+6. What features are visible in the UI but have no effect for that configuration.
+7. What features silently fall back to another provider or behavior.
+8. Any model-specific limitations, especially tool/function calling.
+9. Any differences between Live Call, Inbound Call, Web Call, and Campaign pipelines.
+10. Any configuration that can cause a feature to fail silently or behave differently from what the UI suggests.
+
+For example, if one LLM model supports tool calling and another model does not, clearly document that difference and explain which SnapServe features are affected, such as call transfer, booking, or custom tools.
+
+Please produce clear compatibility matrices where possible, such as:
+
+LLM Model × Features
+STT Model × Languages/Features
+TTS Provider × Languages/Features
+Telephony Provider × Call Features
+Call Type × Supported Features
+Configuration Combination × Known Limitations
+
+Important:
+- Base the report only on the current codebase and actual implementation.
+- Do not assume a feature works just because it appears in the UI.
+- Trace each important feature through UI/config → storage → orchestration → provider adapter → actual runtime usage.
+- Clearly separate confirmed behavior from uncertain behavior that requires live testing.
+- Include file names and relevant code locations for every important finding.
+- Do not modify any code.
+
