@@ -303,7 +303,9 @@ router.patch("/wallet/autopay", requireAuth, async (req, res) => {
 
 // POST /api/wallet/webhook — Razorpay server-to-server webhook
 // Handles async payment confirmation (UPI, netbanking) that may not trigger
-// the client-side handler callback. No auth — verified by signature instead.
+// the client-side handler callback. No auth — verified by signature AND,
+// for the money-moving payment.captured event, an independent server-side
+// confirmation against the Razorpay Payments API (see below).
 // Register this URL in Razorpay Dashboard → Webhooks → payment.captured
 router.post("/wallet/webhook", async (req, res) => {
   res.sendStatus(200); // Ack fast — Razorpay retries on non-2xx
@@ -311,7 +313,11 @@ router.post("/wallet/webhook", async (req, res) => {
   const signature = req.headers["x-razorpay-signature"] as string | undefined;
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
-  if (webhookSecret && signature) {
+  if (webhookSecret) {
+    if (!signature) {
+      logger.warn("Razorpay webhook: RAZORPAY_WEBHOOK_SECRET set but no signature header — ignoring");
+      return;
+    }
     const expectedSig = crypto
       .createHmac("sha256", webhookSecret)
       .update(JSON.stringify(req.body))
@@ -320,11 +326,16 @@ router.post("/wallet/webhook", async (req, res) => {
       logger.warn({ signature }, "Razorpay webhook: invalid signature — ignoring");
       return;
     }
-  } else if (webhookSecret && !signature) {
-    logger.warn("Razorpay webhook: RAZORPAY_WEBHOOK_SECRET set but no signature header — ignoring");
-    return;
   }
-  // If RAZORPAY_WEBHOOK_SECRET is not set, we accept all webhooks (less secure but functional)
+  // NOTE: when RAZORPAY_WEBHOOK_SECRET is not configured, the request body's
+  // event/order_id/payment_id are UNAUTHENTICATED — anyone can POST a forged
+  // payment.captured event. We never credit a wallet on the body's say-so
+  // alone: below, the payment.captured branch always independently re-fetches
+  // the payment from the Razorpay Payments API (using our server-side secret
+  // key) and only credits if Razorpay itself confirms status "captured" for
+  // the exact order_id/payment_id pair. That live lookup cannot be forged by
+  // a third party, so this is safe even with no webhook secret configured —
+  // configuring RAZORPAY_WEBHOOK_SECRET is still recommended defense-in-depth.
 
   const event = (req.body as { event?: string; payload?: Record<string, unknown> }).event;
   if (event !== "payment.captured" && event !== "payment.failed") return;
@@ -365,6 +376,29 @@ router.post("/wallet/webhook", async (req, res) => {
     // payment.captured
     if (!paymentId) {
       logger.warn({ event, payment }, "Razorpay webhook payment.captured: missing payment id");
+      return;
+    }
+
+    // SECURITY: never credit on the webhook body's say-so alone — the body is
+    // unauthenticated whenever RAZORPAY_WEBHOOK_SECRET is not configured (and
+    // is defense-in-depth even when it is). Independently re-fetch the payment
+    // from Razorpay using our own server-side secret key and require Razorpay
+    // to confirm: status is actually "captured", AND the payment's order_id
+    // matches the order_id claimed in this webhook body. A forged request
+    // cannot fabricate what the live Razorpay API returns for a real order.
+    let verifiedPayment: { status?: string; order_id?: string; amount?: number } | undefined;
+    try {
+      const razorpay = getRazorpay();
+      verifiedPayment = await (razorpay.payments as any).fetch(paymentId);
+    } catch (err) {
+      logger.error({ err, orderId, paymentId }, "Razorpay webhook: could not verify payment via Razorpay API — refusing to credit");
+      return;
+    }
+    if (!verifiedPayment || verifiedPayment.status !== "captured" || verifiedPayment.order_id !== orderId) {
+      logger.warn(
+        { orderId, paymentId, verifiedStatus: verifiedPayment?.status, verifiedOrderId: verifiedPayment?.order_id },
+        "Razorpay webhook: payment.captured event failed independent verification — possible forged webhook, refusing to credit",
+      );
       return;
     }
 
