@@ -181,6 +181,7 @@ router.get("/campaigns/:id/leads/:leadId/workspace", async (req, res): Promise<v
       operationalOutcome: lead.operationalOutcome,
       leadScore:          lead.leadScore,
       source:             lead.source,
+      notes:              lead.notes,
       lastAttemptAt:      lead.lastAttemptAt?.toISOString() ?? null,
       createdAt:          lead.createdAt.toISOString(),
     },

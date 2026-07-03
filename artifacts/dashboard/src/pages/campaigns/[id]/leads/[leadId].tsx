@@ -81,7 +81,7 @@ type LeadWorkspace = {
     callStatus: string; callAttempts: number;
     disposition: string | null;
     operationalOutcome: string | null; leadScore: number | null;
-    source: string; lastAttemptAt: string | null; createdAt: string;
+    source: string; notes: string | null; lastAttemptAt: string | null; createdAt: string;
   };
   campaign: { id: number; name: string; agentName: string | null; fromNumber: string | null };
   batch:    { id: number; name: string; status: string } | null;
@@ -349,6 +349,14 @@ function OverviewTab({ ws }: { ws: LeadWorkspace }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Skip reason */}
+      {lead.callStatus === "skipped" && lead.notes && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-[9px] uppercase tracking-widest font-semibold text-amber-600/70 mb-1.5">Skip Reason</p>
+          <p className="text-sm text-foreground/80">{lead.notes}</p>
         </div>
       )}
 

@@ -244,7 +244,7 @@ type BatchWorkspaceLead = {
   callStatus: string; operationalOutcome: string;
   disposition: string | null; callAttempts: number;
   lastAttemptAt: string | null; nextRetryAt: string | null; callId: number | null; createdAt: string;
-  durationSeconds: number | null; costCents: number | null; executionId: string | null;
+  durationSeconds: number | null; costCents: number | null; executionId: string | null; notes: string | null;
   callback: { status: string; callbackAt: string | null } | null;
   booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
   transfer: { status: string; transferTo: string } | null;
@@ -562,9 +562,16 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                     </td>
                     {/* Status */}
                     <td className="px-3 py-2.5">
-                      <span className={cn("inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border", sc.cls)}>
+                      <span
+                        className={cn("inline-flex text-[10px] font-semibold px-2 py-0.5 rounded border", sc.cls)}
+                        title={lead.callStatus === "skipped" && lead.notes ? lead.notes : undefined}>
                         {sc.label}
                       </span>
+                      {lead.callStatus === "skipped" && lead.notes && (
+                        <p className="text-[10px] text-muted-foreground/50 truncate max-w-[160px] mt-0.5" title={lead.notes}>
+                          {lead.notes}
+                        </p>
+                      )}
                     </td>
                     {/* Outcome */}
                     <td className="px-3 py-2.5 hidden sm:table-cell">

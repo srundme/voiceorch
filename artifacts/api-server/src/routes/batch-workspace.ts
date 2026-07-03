@@ -255,6 +255,7 @@ router.get("/campaigns/:id/batches/:batchId/workspace/leads", async (req, res): 
     callAttempts:       campaignLeadsTable.callAttempts,
     lastAttemptAt:      campaignLeadsTable.lastAttemptAt,
     callId:             campaignLeadsTable.callId,
+    notes:              campaignLeadsTable.notes,
     createdAt:          campaignLeadsTable.createdAt,
     nextRetryAt:        sql<string | null>`(
       select min(t.scheduled_at) from (

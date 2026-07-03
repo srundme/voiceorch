@@ -10,7 +10,7 @@
  *  - reject_with_report:  Discard and include in error report with reason
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, not } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type * as schema from "@workspace/db/schema";
 import { campaignLeadsTable } from "@workspace/db/schema";
@@ -51,6 +51,17 @@ export interface ImportSummary {
 /**
  * Check whether a normalized phone already exists in the campaign.
  * Returns the action to take and report entry if needed.
+ *
+ * Scope note: a prior row that was pre-dial `skipped` (no agent assigned /
+ * DNC / TRAI block) and never actually dialed (call_attempts = 0) is NOT
+ * treated as a blocking duplicate. Those rows are excluded here so that a
+ * lead which never got a real call can be re-imported and re-dialed once the
+ * underlying condition (agent assigned, DNC/TRAI cleared) is resolved —
+ * otherwise "Skip duplicates" would match the phone against itself forever
+ * and the number can never be dialed. DNC/TRAI are independently re-checked
+ * at import/dial time, so excluding them here does not bypass those gates.
+ * Rows that are pending, actively calling, or have a genuine call outcome
+ * (connected/completed/failed/etc.) still count as duplicates as before.
  */
 export async function checkDuplicate(
   db: NodePgDatabase<typeof schema>,
@@ -63,6 +74,12 @@ export async function checkDuplicate(
       and(
         eq(campaignLeadsTable.campaignId, input.campaignId),
         eq(campaignLeadsTable.normalizedPhone, input.normalizedPhone),
+        not(
+          and(
+            eq(campaignLeadsTable.callStatus, "skipped"),
+            eq(campaignLeadsTable.callAttempts, 0),
+          )!,
+        ),
       ),
     )
     .limit(1);
