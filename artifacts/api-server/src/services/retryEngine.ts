@@ -9,8 +9,15 @@ import { db, callRetriesTable, campaignLeadsTable, campaignsTable, campaignBatch
 import { and, eq, lte } from "drizzle-orm";
 import { withDbRetry } from "../orchestration/db-retry.js";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
-import { isCampaignDialable } from "./campaign-dialable.js";
+import { isCampaignDialable, NON_DIALABLE_CAMPAIGN_STATUSES } from "./campaign-dialable.js";
 import { logger } from "../lib/logger.js";
+
+/**
+ * How long to push a due retry forward when it is blocked ONLY by calling
+ * hours (not by an explicit pause/stop). Short enough that the lead dials
+ * promptly once the window reopens, without hammering the DB every tick.
+ */
+const CALLING_HOURS_REQUEUE_DELAY_MS = 5 * 60 * 1000;
 
 /**
  * Resolve the effective retry config (Max Attempts / Retry Delay) for a lead.
@@ -88,9 +95,32 @@ export async function processRetries(): Promise<void> {
       const wasAutoCompleted = campaign.status === "completed";
       const dialableCampaign = wasAutoCompleted ? { ...campaign, status: "active" } : campaign;
       if (!isCampaignDialable(dialableCampaign)) {
-        await db.update(callRetriesTable)
-          .set({ status: "cancelled" })
-          .where(eq(callRetriesTable.id, retry.id));
+        // Distinguish an explicit halt (paused/stopped/cancelled — user intent,
+        // never auto-resurrect) from a retry that is merely outside the
+        // configured calling-hours window. Cancelling the latter used to
+        // permanently orphan the lead: with no pending retry left,
+        // evaluateBatchCompletion() would see zero pending/queued/active/retry
+        // rows and mark the batch "completed" on the very next poll tick — after
+        // which the batch is invisible to refillCampaignConcurrency (it only
+        // scans batches with status = "running"). Widening the calling-hours
+        // window later did nothing because there was no retry and no running
+        // batch left to pick the lead back up. Instead, push the retry forward
+        // so it stays "pending" (keeping the batch open) and re-checks shortly —
+        // it will fire automatically as soon as the window reopens.
+        const explicitlyHalted = NON_DIALABLE_CAMPAIGN_STATUSES.has(dialableCampaign.status ?? "");
+        if (explicitlyHalted) {
+          await db.update(callRetriesTable)
+            .set({ status: "cancelled" })
+            .where(eq(callRetriesTable.id, retry.id));
+        } else {
+          await db.update(callRetriesTable)
+            .set({ scheduledAt: new Date(Date.now() + CALLING_HOURS_REQUEUE_DELAY_MS) })
+            .where(eq(callRetriesTable.id, retry.id));
+          logger.info(
+            { leadId: retry.leadId, campaignId: retry.campaignId, retryId: retry.id },
+            "Retry blocked by calling hours — requeued instead of cancelled",
+          );
+        }
         continue;
       }
 
