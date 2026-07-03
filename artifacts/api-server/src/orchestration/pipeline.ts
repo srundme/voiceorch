@@ -3534,6 +3534,9 @@ export class OrchestrationPipeline {
             `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
             `immediately switch your response to match their new language. ` +
             `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
+            `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
+            `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
+            `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
             `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
             `EXACTLY as written in your instructions; never translate or transliterate them.`;
         }
@@ -3556,6 +3559,10 @@ export class OrchestrationPipeline {
           `This applies to EVERY reply without exception — including when you are confused, ` +
           `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
           `Never switch to English or any other language under any circumstances. ` +
+          `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
+          `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
+          `into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; ` +
+          `this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. ` +
           `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
           `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
       }
