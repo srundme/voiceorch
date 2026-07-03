@@ -1729,10 +1729,16 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-xs font-semibold text-foreground/80">Gender Identification</span>
+                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Beta</span>
               </div>
               <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
                 Detects caller gender from voice at the start of the call. When enabled, the agent uses gender-appropriate salutations — "Sir", "Ma'am", or a neutral fallback.
               </p>
+              {genderEnabled && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed mt-1.5">
+                  Beta feature — detection accuracy is roughly 80% and can occasionally misgender a caller. This also requires the voice-analysis service to be configured on your account; if it isn't reachable, calls fall back to a neutral greeting instead of failing.
+                </p>
+              )}
             </div>
             <div className="shrink-0 mt-1">
               <Switch
