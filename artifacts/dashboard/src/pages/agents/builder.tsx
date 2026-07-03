@@ -536,36 +536,29 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 }} />
                 <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => {
                   const preferredManaged = form.watch("preferredManagedNumber");
-                  const selectValue = field.value
-                    ? String(field.value)
+                  const assigned = phoneNumbers.find(p => String(p.id) === String(field.value ?? ""));
+                  const displayLabel = assigned
+                    ? assigned.number
                     : preferredManaged
-                    ? `managed:${preferredManaged}`
-                    : "__none__";
+                    ? `${preferredManaged} ★ Platform`
+                    : null;
                   return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Outbound Caller ID</FormLabel>
-                    <SmallSelect
-                      value={selectValue}
-                      onChange={(v) => {
-                        if (v === "__none__") {
-                          field.onChange(null);
-                          form.setValue("preferredManagedNumber", null);
-                        } else if (v.startsWith("managed:")) {
-                          field.onChange(null);
-                          form.setValue("preferredManagedNumber", v.slice(8));
-                        } else {
-                          field.onChange(parseInt(v, 10));
-                          form.setValue("preferredManagedNumber", null);
-                        }
-                      }}
-                      options={[
-                        { value: "__none__", label: "— None —" },
-                        ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
-                        ...managedNumbers.map(n => ({ value: `managed:${n}`, label: `${n} ★ Platform` })),
-                      ]}
-                      placeholder="Select number"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Caller ID for outbound calls</p>
+                    {/* Read-only: outbound caller ID always mirrors the Inbound Number
+                        (auto-synced server-side on assignment). It can't drift from it,
+                        so there is nothing to pick here — change it via Phone Numbers. */}
+                    <button
+                      type="button"
+                      onClick={() => navigate("/app/phone-numbers")}
+                      className="w-full flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-left text-[12px] hover:border-border hover:bg-background/60 transition-colors"
+                    >
+                      <span className={cn(displayLabel ? "text-foreground" : "text-muted-foreground")}>
+                        {displayLabel ?? "Not assigned"}
+                      </span>
+                      <span className="text-[10px] font-medium text-primary whitespace-nowrap">Manage →</span>
+                    </button>
+                    <p className="text-[10px] text-muted-foreground">Caller ID for outbound calls — follows Inbound Number</p>
                   </FormItem>
                   );
                 }} />
