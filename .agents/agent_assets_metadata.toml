@@ -228,3 +228,9 @@ id = "Ggruu5izGge1MW4SMn0ig"
 uri = "file://docs/config-feature-compatibility-report.pdf"
 type = "pdf"
 title = "SnapServe Config-Compatibility Audit (PDF)"
+
+[[outputs]]
+id = "H9zlY3xQqbMZCk8PlFrZi"
+uri = "file://reports/llm-model-inventory.pdf"
+type = "pdf"
+title = "LLM Model Compatibility Inventory"
