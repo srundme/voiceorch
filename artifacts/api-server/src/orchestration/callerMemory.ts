@@ -750,7 +750,11 @@ async function runLLMExtraction(opts: {
         `- Only include facts the caller EXPLICITLY stated — never infer or assume\n` +
         `- confidence: 0.9+ = directly stated, 0.7-0.9 = clearly implied, below 0.7 = skip\n` +
         `- Return empty array for facts if nothing was clearly stated\n` +
-        `- Be concise with values (e.g. "4" not "a family of four people")\n\n` +
+        `- Be concise with values (e.g. "4" not "a family of four people")\n` +
+        `- The "name" field is ONLY for the caller's own personal/human name. Never put a\n` +
+        `  plan tier, product, package, price, or topic of discussion in "name" — if the\n` +
+        `  caller never stated their personal name, "name" MUST be null. Example: if the\n` +
+        `  caller says "I want the managed plan", that is NOT a name — return name: null.\n\n` +
         `Transcript:\n${transcript.slice(0, 8000)}`,
     }],
     "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), 'sentiment' (string), and 'facts' (array of {key,value,confidence}). Be conservative and factual.",
@@ -1083,6 +1087,18 @@ export async function updateCallerProfile(opts: {
     return;
   }
 
+  // Guard against the LLM hallucinating a "name" out of a topic/product phrase
+  // (e.g. caller says "I want the managed plan" → LLM mistakes "managed plan"
+  // for their name). Applies the same structural check used for the real-time
+  // regex latch so both paths agree on what counts as a plausible name.
+  if (extracted.name && !isPlausibleName(extracted.name)) {
+    logger.warn(
+      { agentId, phoneNumber, callId, rejectedName: extracted.name },
+      "Caller memory: LLM-extracted name failed plausibility check — discarding",
+    );
+    extracted.name = null;
+  }
+
   // ── Phase 3a: save L0 facts with supersession + fact_sources provenance ───
   // Promote the top-level `name` field into the facts array so it gets
   // stored in caller_facts and shows up in the UI Facts count.
@@ -1197,7 +1213,10 @@ export async function updateCallerProfile(opts: {
 const NAME_PATTERNS: RegExp[] = [
   /\bmy name is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
   /\bi(?:'m| am) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
-  /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)(?:\s+(?:speaking|calling|here))?\b/iu,
+  // "this is X" alone is too ambiguous in real speech (introduces topics as
+  // often as identities — "this is regarding the managed plan"); require an
+  // explicit speaker cue so only genuine self-introductions match.
+  /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\s+(?:speaking|calling|here)\b/iu,
   /\bcall me ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
   /\bname(?:'s| is) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
   // Tamil: "என் பேர் <name>" / "என்னோட பேர் <name>"
@@ -1211,6 +1230,40 @@ const NAME_STOPWORDS = new Set([
   "calling", "speaking", "back", "checking", "looking", "trying",
   "not", "also", "right", "ready", "interested",
 ]);
+
+// Product/business vocabulary and generic phrase-continuation words that must
+// never be latched as a person's name. "this is X" and "I am X" are common
+// non-identity sentence starters too (e.g. "this is regarding the managed
+// plan", "I am fine with the basic plan") — without this guard those get
+// saved verbatim as the caller's name and then read back to them as a greeting.
+const NAME_BLOCKLIST = new Set([
+  "managed", "byop", "plan", "plans", "provider", "providers", "agent", "agents",
+  "minute", "minutes", "credit", "credits", "wallet", "dashboard", "subscription",
+  "free", "trial", "basic", "premium", "addon", "add-on", "pricing", "price",
+  "cost", "billing", "payment", "regarding", "about", "for", "with", "the",
+  "your", "our", "service", "services", "call", "calls", "issue", "problem",
+  "question", "help", "support", "account", "number", "phone",
+]);
+
+/**
+ * Rejects candidates that don't structurally look like a human name — either
+ * because they're too long/short, contain digits/punctuation, or contain a
+ * word from the product/business vocabulary blocklist (a strong signal the
+ * LLM or regex mistook a topic phrase for an identity statement).
+ */
+function isPlausibleName(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 40) return false;
+  if (/\d/.test(trimmed)) return false;
+  const words = trimmed.split(/\s+/);
+  if (words.length > 3) return false;
+  for (const w of words) {
+    const lw = w.toLowerCase().replace(/[^\p{L}\p{M}]/gu, "");
+    if (!lw) return false;
+    if (NAME_STOPWORDS.has(lw) || NAME_BLOCKLIST.has(lw)) return false;
+  }
+  return true;
+}
 
 export async function latchCallerName(opts: {
   agentId: number;
@@ -1226,7 +1279,7 @@ export async function latchCallerName(opts: {
   for (const pattern of NAME_PATTERNS) {
     const match = transcript.match(pattern);
     const candidate = match?.[1]?.trim();
-    if (candidate && !NAME_STOPWORDS.has(candidate.toLowerCase())) {
+    if (candidate && isPlausibleName(candidate)) {
       detected = candidate;
       break;
     }
