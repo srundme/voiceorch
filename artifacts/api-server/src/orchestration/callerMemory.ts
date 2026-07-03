@@ -558,6 +558,25 @@ export function injectEnhancedMemory(
       `Continue the relationship rather than starting cold.${riskInstruction}${intentInstruction}`,
     );
   }
+  // Blanket "don't re-ask" rule: the agent's base script below was written as
+  // if this were always a first-time caller, so on its own it will walk
+  // through its scripted questions (name, what they're calling about, etc.)
+  // regardless of what's already known. This directive overrides that for
+  // any field already answered by the memory above, on EVERY returning-caller
+  // path (normal repeat call, resumed drop) — not just the "don't
+  // re-introduce yourself" case.
+  if (!suppressDomain && (callCount >= 1 || resumeDrop)) {
+    lines.push(
+      "⚠️ DO NOT RE-ASK KNOWN INFORMATION: The base instructions below may include scripted " +
+      "questions (e.g. asking for the caller's name, what they're calling about, or other " +
+      "details) written as if this were a brand-new caller. If the answer to any such question " +
+      "is already present above (Name, KNOWN FACTS, Prior context, RECENT EPISODES, or the " +
+      "predicted reason), treat it as already answered — do NOT ask that question again. " +
+      "Instead, confirm it naturally in passing if needed (e.g. \"I see you were asking about " +
+      "X earlier, want to pick that back up?\") and move the conversation forward. Only ask a " +
+      "scripted question if its answer is genuinely missing from the memory above.",
+    );
+  }
 
   lines.push("=====================================");
 
