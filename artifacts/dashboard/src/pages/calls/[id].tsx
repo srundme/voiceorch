@@ -21,6 +21,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { getExecutionId } from "@/lib/execution-id";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -1128,7 +1129,7 @@ export function CallDetailContent({
                 )}
               </div>
               <p className="text-muted-foreground text-xs flex items-center gap-2 mt-0.5">
-                <span className="font-mono">{call.executionId ?? `EXE-${String(call.id).padStart(7, '0')}`}</span>
+                <span className="font-mono">{getExecutionId(call)}</span>
                 <span className="text-muted-foreground/30">•</span>
                 {format(parseISO(call.createdAt), "MMM d, yyyy 'at' h:mm:ss a")}
               </p>
@@ -1562,7 +1563,7 @@ export function CallDetailContent({
                   }
                   icon={<Receipt className="h-3 w-3" />}
                 />
-                <DetailRow label="Execution ID" value={call.executionId ?? `—`} icon={<Hash className="h-3 w-3" />} />
+                <DetailRow label="Execution ID" value={getExecutionId(call)} icon={<Hash className="h-3 w-3" />} />
                 <DetailRow
                   label="Disposition"
                   icon={<ClipboardList className="h-3 w-3" />}

@@ -9,6 +9,7 @@
     "seed-provider-pricing": "tsx ./src/seed-provider-pricing.ts",
     "backfill-user-identity": "tsx ./src/backfill-user-identity.ts",
     "backfill-caller-identity": "tsx ./src/backfill-caller-identity.ts",
+    "backfill-execution-id": "tsx ./src/backfill-execution-id.ts",
     "merge-user-identities": "tsx ./src/merge-user-identities.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
     "loadtest-calls": "tsx ./src/loadtest-calls.ts",

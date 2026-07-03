@@ -2905,6 +2905,7 @@ export interface MetaLeadItem {
   callStatus: string;
   disposition?: string | null;
   callId?: number | null;
+  executionId?: string | null;
   fromNumber?: string | null;
   toNumber?: string | null;
   durationSeconds?: number | null;
@@ -3935,6 +3936,7 @@ export interface LiveQueueLead {
   disposition?: string | null;
   callAttempts: number;
   durationSeconds?: number | null;
+  executionId?: string | null;
   lastAttemptAt?: string | null;
   nextRetryAt?: string | null;
   callbackAt?: string | null;

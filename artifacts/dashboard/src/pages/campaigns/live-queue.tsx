@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { getExecutionId } from "@/lib/execution-id";
 import {
   Search, Download, RefreshCw, PauseCircle, RotateCcw,
   ChevronLeft, ChevronRight, User, Clock, Calendar,
@@ -44,6 +45,7 @@ type LiveQueueLead = {
   disposition: string | null;
   callAttempts: number;
   callId: number | null;
+  executionId: string | null;
   durationSeconds: number | null;
   costCents: number | null;
   lastAttemptAt: string | null;
@@ -674,10 +676,10 @@ export default function LiveQueueTab({ campaignId }: { campaignId: number }) {
                         <div className="text-[11px] text-foreground/70 font-medium">{format(parseISO(ts), "MMM d, yyyy")}</div>
                         <div className="text-[10px] font-mono text-muted-foreground/40">{format(parseISO(ts), "HH:mm:ss")}</div>
                       </td>
-                      {/* Call ID */}
+                      {/* Execution ID */}
                       <td className="px-3 py-2.5 hidden md:table-cell">
                         <span className="font-mono text-[10px] text-muted-foreground/40">
-                          {lead.callId ? `#${lead.callId}` : "—"}
+                          {getExecutionId(lead)}
                         </span>
                       </td>
                       {/* Status */}

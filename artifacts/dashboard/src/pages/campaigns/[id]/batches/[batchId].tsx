@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
+import { getExecutionId } from "@/lib/execution-id";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format, parseISO } from "date-fns";
 import { BATCH_STATUS_MAP, callStatusCfg, outcomeCfg } from "@/lib/campaign-status";
@@ -243,7 +244,7 @@ type BatchWorkspaceLead = {
   callStatus: string; operationalOutcome: string;
   disposition: string | null; callAttempts: number;
   lastAttemptAt: string | null; nextRetryAt: string | null; callId: number | null; createdAt: string;
-  durationSeconds: number | null; costCents: number | null;
+  durationSeconds: number | null; costCents: number | null; executionId: string | null;
   callback: { status: string; callbackAt: string | null } | null;
   booking: { meetingTime: string | null; meetingStatus: string; meetingLink: string | null } | null;
   transfer: { status: string; transferTo: string } | null;
@@ -553,10 +554,10 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
                       <div className="text-[11px] text-foreground/70 font-medium">{format(parseISO(ts), "MMM d, yyyy")}</div>
                       <div className="text-[10px] font-mono text-muted-foreground/40">{format(parseISO(ts), "HH:mm:ss")}</div>
                     </td>
-                    {/* Call ID */}
+                    {/* Execution ID */}
                     <td className="px-3 py-2.5 hidden md:table-cell">
                       <span className="font-mono text-[10px] text-muted-foreground/40">
-                        {lead.callId ? `#${lead.callId}` : "—"}
+                        {getExecutionId(lead)}
                       </span>
                     </td>
                     {/* Status */}

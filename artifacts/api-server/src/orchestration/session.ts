@@ -870,6 +870,7 @@ export async function createSession(params: {
         status: "in_progress",
         toNumber: params.toNumber,
         fromNumber: params.fromNumber,
+        executionId: `exec_${randomBytes(4).toString("hex")}`,
         metadata: JSON.stringify({
           ...(params.externalCallId ? { externalCallId: params.externalCallId } : {}),
           ...(params.platformTelephony ? { platformTelephony: true } : {}),

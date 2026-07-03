@@ -9504,6 +9504,9 @@ components:
         callId:
           type: integer
           nullable: true
+        executionId:
+          type: string
+          nullable: true
         fromNumber:
           type: string
           nullable: true
@@ -10702,6 +10705,7 @@ components:
         disposition:      { type: string, nullable: true }
         callAttempts:     { type: integer }
         durationSeconds:  { type: integer, nullable: true }
+        executionId:      { type: string, nullable: true }
         lastAttemptAt:    { type: string, format: date-time, nullable: true }
         nextRetryAt:      { type: string, format: date-time, nullable: true }
         callbackAt:       { type: string, format: date-time, nullable: true }

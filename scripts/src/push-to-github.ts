@@ -9,24 +9,34 @@ const OWNER = "srundme", REPO = "voiceorch", BRANCH = "main";
 
 // All files changed in this session
 const FILES_TO_PUSH = [
+  "artifacts/api-server/src/orchestration/session.ts",
+  "artifacts/api-server/src/routes/batch-workspace.ts",
+  "artifacts/api-server/src/routes/live-queue.ts",
+  "artifacts/dashboard/src/pages/calls/[id].tsx",
+  "artifacts/dashboard/src/pages/calls/index.tsx",
+  "artifacts/dashboard/src/pages/campaigns/[id]/batches/[batchId].tsx",
+  "artifacts/dashboard/src/pages/campaigns/live-queue.tsx",
+  "artifacts/dashboard/src/pages/command-center/index.tsx",
+  "artifacts/dashboard/src/lib/execution-id.ts",
+  "lib/api-client-react/src/generated/api.schemas.ts",
   "lib/api-spec/openapi.yaml",
   "lib/api-zod/src/generated/api.ts",
-  "lib/api-client-react/src/generated/api.schemas.ts",
-  "artifacts/api-server/src/routes/platform-analytics.ts",
-  "artifacts/dashboard/src/pages/analytics.tsx",
+  "scripts/package.json",
+  "scripts/src/backfill-execution-id.ts",
 ];
 
 const COMMIT_MESSAGE = [
-  "fix(analytics): scope Analytics page overview to the selected campaign",
+  "feat(execution-id): make exec_xxxxxxxx the single canonical Execution ID",
   "",
-  "- GET /platform/analytics/overview now accepts an optional campaignId query param",
-  "  (mirrors the ownership-check pattern already used by /platform/analytics/funnel)",
-  "- When campaignId is present, every sub-query (lead funnel, callback stats,",
-  "  avg call duration, daily trend) is scoped to that single campaign instead of",
-  "  the user's full campaign-ID list; 403 if the campaign isn't owned by the user",
-  "- OpenAPI + regenerated Orval hooks/Zod schemas for the new param",
-  "- Frontend Analytics page passes campaignId from the URL through to the hook and",
-  "  shows a campaign-scoped subtitle (fetches campaign name via useGetCampaign)",
+  "- createSession now generates a real executionId (exec_<8 hex>) at call creation",
+  "  (routes/calls.ts insert paths already did this)",
+  "- Added idempotent backfill-execution-id script for existing NULL/empty rows",
+  "- New shared frontend helper getExecutionId() — never fabricates EXE-.../#<id>,",
+  "  shows \"Not available\" only when truly missing",
+  "- Applied consistently in Call Log, Call Detail (header + Details panel),",
+  "  Campaign batch view, Live Queue, and Command Center recent/failed call lists",
+  "- Live Queue + batch workspace API responses now include executionId",
+  "  (OpenAPI schemas + route mappings updated, Orval hooks/Zod regenerated)",
 ].join("\n");
 
 async function ghFetch(apiPath: string, options: RequestInit = {}) {
@@ -48,7 +58,7 @@ async function pushFile(relPath: string) {
   const content = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
   const encoded = Buffer.from(content).toString("base64");
   let sha: string | undefined;
-  try { sha = ((await ghFetch(`contents/${relPath}?ref=${BRANCH}`)) as { sha: string }).sha; } catch { /* */ }
+  try { sha = ((await ghFetch(`contents/${relPath}?ref=${BRANCH}`)) as { sha: string }).sha; } catch { /* new file */ }
   await ghFetch(`contents/${relPath}`, {
     method: "PUT",
     body: JSON.stringify({
@@ -58,11 +68,11 @@ async function pushFile(relPath: string) {
       ...(sha ? { sha } : {}),
     }),
   });
-  console.log(`  ✓ ${relPath}`);
+  console.log(`  \u2713 ${relPath}`);
 }
 
 (async () => {
-  console.log(`Pushing ${FILES_TO_PUSH.length} file(s)…`);
+  console.log(`Pushing ${FILES_TO_PUSH.length} file(s)\u2026`);
   for (const f of FILES_TO_PUSH) await pushFile(f);
   console.log("Done.");
 })().catch(e => { console.error(e); process.exit(1); });

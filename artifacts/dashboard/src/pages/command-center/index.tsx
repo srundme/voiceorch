@@ -5,6 +5,7 @@ import {
   Cpu, Radio, AudioWaveform, Phone, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getExecutionId } from "@/lib/execution-id";
 import {
   useGetDashboardStats,
   useListCalls,
@@ -320,7 +321,7 @@ export default function CommandCenterPage() {
                   >
                     {/* Exec ID */}
                     <p className="text-[10px] font-mono text-muted-foreground/50 truncate pr-2 self-center">
-                      {call.executionId ?? `#${call.id}`}
+                      {getExecutionId(call)}
                     </p>
                     {/* Agent */}
                     <p className="text-[11px] text-foreground/70 truncate pr-2 self-center">{call.agentName}</p>
@@ -463,7 +464,7 @@ export default function CommandCenterPage() {
                 .map(c => (
                   <div key={c.id} className="flex flex-col gap-0.5 py-1.5 border-b border-red-500/10 last:border-0">
                     <p className="text-[10px] font-mono text-muted-foreground/40 truncate">
-                      {c.executionId ?? `#${c.id}`}
+                      {getExecutionId(c)}
                     </p>
                     <p className="text-[11px] text-foreground/60 truncate">{c.agentName}</p>
                     {c.errorMessage && (

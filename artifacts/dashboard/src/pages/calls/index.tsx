@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
+import { getExecutionId } from "@/lib/execution-id";
 import { format, parseISO } from "date-fns";
 import {
   Search, Phone, Mic, Cpu, Volume2, DollarSign,
@@ -684,7 +685,7 @@ export default function CallsList() {
                         </div>
                       </TableCell>
                       <TableCell className="font-mono text-[10px] text-muted-foreground/40">
-                        {(call as any).executionId ?? `#${call.id}`}
+                        {getExecutionId(call)}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
