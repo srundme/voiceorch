@@ -20,6 +20,7 @@ import ManagingLeadsPage from "./pages/managing-leads";
 import SchedulingPage from "./pages/scheduling";
 import GoogleCalendarPage from "./pages/google-calendar";
 import WebhooksPage from "./pages/webhooks";
+import SdksPage from "./pages/sdks";
 import PricingPage from "./pages/pricing";
 import ChangelogPage from "./pages/changelog";
 
@@ -68,6 +69,7 @@ export default function DocsPage() {
     case "scheduling":         Content = SchedulingPage; break;
     case "google-calendar":    Content = GoogleCalendarPage; break;
     case "webhooks":           Content = WebhooksPage; break;
+    case "sdks":               Content = SdksPage; break;
     case "pricing":            Content = PricingPage; break;
     case "changelog":          Content = ChangelogPage; break;
     default:

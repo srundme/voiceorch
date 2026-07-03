@@ -49,6 +49,7 @@ const NAV_GROUPS = [
     items: [
       { title: "Webhooks", slug: "webhooks" },
       { title: "API Reference", slug: "api-reference" },
+      { title: "SDKs & Claude Skill", slug: "sdks" },
       { title: "Pricing & Usage", slug: "pricing" },
       { title: "Changelog", slug: "changelog" },
     ],

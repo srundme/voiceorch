@@ -102,6 +102,21 @@ const { sub, email, name, exp } = decodeJWT(token);
 // name  — display name
 // exp   — expiry timestamp (Unix seconds)`} />
 
+      <h2 id="api-key-auth">API key authentication (SDKs &amp; server-to-server)</h2>
+      <p>
+        Session tokens are meant for the browser. For servers, scripts, or the{" "}
+        <a href="/docs/sdks">official SDKs</a>, create a long-lived developer API key instead from{" "}
+        <strong>Dashboard → API Keys</strong> (up to 5 active keys per account). The full key (
+        <code>sk_live_...</code>) is shown once at creation — store it securely, it cannot be
+        retrieved again.
+      </p>
+      <CodeBlock language="bash" code={`curl https://app.snapserve.ai/api/agents \\
+  -H "Authorization: Bearer sk_live_your_key_here"`} />
+      <p>
+        API keys authenticate exactly like a session token for tenant-scoped routes and can be
+        revoked at any time from the same page. They never expire on their own.
+      </p>
+
       <h2 id="admin-auth">Admin authentication</h2>
       <p>
         Platform admin endpoints (<code>/api/admin/*</code>) use a separate token passed via the{" "}

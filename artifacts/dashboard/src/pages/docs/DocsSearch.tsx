@@ -13,6 +13,7 @@ const SEARCH_DATA = [
   { title: "Scheduling", section: "Core Concepts", slug: "scheduling", content: "SnapServe includes a full multi-tenant scheduling engine. Your agents can book appointments, reschedule, and cancel — all via voice, mid-call." },
   { title: "Campaigns", section: "Core Concepts", slug: "campaigns", content: "Campaigns let you run outbound voice calling at scale — upload a lead list, configure your dial logic, and SnapServe handles the rest." },
   { title: "API Reference", section: "Reference", slug: "api-reference", content: "The SnapServe REST API is available at https://app.snapserve.ai/api. All endpoints require Authorization: Bearer <token>." },
+  { title: "SDKs & Claude Skill", section: "Reference", slug: "sdks", content: "Official Node.js and Python SDKs (@snapserve/sdk, pip install snapserve) and a Claude Skill for managing agents, calls, and analytics with your API key." },
   { title: "Changelog", section: "Reference", slug: "changelog", content: "Changelog fetches the live changelog from the SnapServe GitHub repository." }
 ];
 

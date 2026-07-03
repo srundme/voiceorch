@@ -6462,6 +6462,25 @@ paths:
           description: Invalid deviceId
 
 components:
+  securitySchemes:
+    SessionAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Platform session token issued after Google OAuth sign-in (dashboard use).
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: sk_live_...
+      description: >-
+        Developer API key created in Dashboard → API Keys. Programmatic/SDK access; behaves
+        identically to SessionAuth for tenant-scoped routes.
+    AdminTokenAuth:
+      type: apiKey
+      in: header
+      name: x-admin-token
+      description: Platform admin token (matches ADMIN_TOKEN env var). Admin routes only.
   parameters:
     AdminToken:
       name: X-Admin-Token
