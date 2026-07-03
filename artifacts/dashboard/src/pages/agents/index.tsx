@@ -35,6 +35,8 @@ import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import { getIrdaiBlock, getIrdaiBlockedError } from "@/lib/irdai-block";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
+import { RecentNumbersList } from "@/components/recent-numbers-list";
+import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 
 export default function AgentsList() {
   const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -46,6 +48,7 @@ export default function AgentsList() {
   const [, navigate] = useLocation();
   const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
   const [pendingCallNumber, setPendingCallNumber] = useState("");
+  const { recentNumbers, recordNumber } = useRecentNumbers();
 
   // Mirror the search into the URL so returning to this list restores it.
   useEffect(() => {
@@ -107,6 +110,7 @@ export default function AgentsList() {
   const handleOutboundSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!outboundAgent || !toNumber.trim()) return;
+    recordNumber(toNumber);
     initiateOutbound.mutate(
       { data: { agentId: outboundAgent.id, toNumber: toNumber.trim() } },
       {
@@ -373,6 +377,7 @@ export default function AgentsList() {
         onVerified={() => {
           setOtpDialogOpen(false);
           if (!outboundAgent) return;
+          recordNumber(pendingCallNumber);
           initiateOutbound.mutate(
             { data: { agentId: outboundAgent.id, toNumber: pendingCallNumber } },
             {
@@ -417,6 +422,7 @@ export default function AgentsList() {
               />
               <p className="text-[11px] text-muted-foreground">E.164 format recommended (e.g. +14155552671)</p>
             </div>
+            <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOutboundAgent(null)}>
                 Cancel

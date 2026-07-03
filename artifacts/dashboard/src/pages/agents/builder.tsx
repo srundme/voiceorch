@@ -74,6 +74,8 @@ import {
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
+import { RecentNumbersList } from "@/components/recent-numbers-list";
+import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 import { GeneratePromptSheet } from "./generate-prompt-sheet";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const DASH_API   = `${_DASH_BASE}/api`;
@@ -4323,6 +4325,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const queryClient = useQueryClient();
   const rateMap = useMinuteRatesMap();
   const [, navigate] = useLocation();
+  const { recentNumbers, recordNumber } = useRecentNumbers();
 
   const { data: agent, isLoading } = useGetAgent(agentId, {
     query: { queryKey: getGetAgentQueryKey(agentId) },
@@ -4519,6 +4522,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const handleOutbound = (e: React.FormEvent) => {
     e.preventDefault();
     if (!callNumber.trim()) return;
+    recordNumber(callNumber);
     initiateOutbound.mutate(
       { data: { agentId, toNumber: callNumber } } as any,
       {
@@ -4646,6 +4650,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <form onSubmit={handleOutbound} className="space-y-4">
             <Input value={callNumber} onChange={e => setCallNumber(e.target.value)}
               placeholder="+12125551234" className="h-10" autoFocus />
+            <RecentNumbersList numbers={recentNumbers} onSelect={setCallNumber} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCallDialog(false)}>Cancel</Button>
               <Button type="submit" disabled={initiateOutbound.isPending}>

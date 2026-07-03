@@ -35,6 +35,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
+import { RecentNumbersList } from "@/components/recent-numbers-list";
+import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 /* ── Caller Memory Tab ────────────────────────────────────────────────────── */
 
 interface CallerRow {
@@ -472,6 +474,7 @@ export default function AgentDetail() {
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
   const { toast } = useToast();
+  const { recentNumbers, recordNumber } = useRecentNumbers();
 
   const { data: agent, isLoading: agentLoading } = useGetAgent(id, {
     query: { enabled: !!id, queryKey: getGetAgentQueryKey(id) }
@@ -492,6 +495,7 @@ export default function AgentDetail() {
   function handleMakeCall(overrideNumber?: string) {
     const dest = (overrideNumber ?? toNumber).trim();
     if (!dest) return;
+    recordNumber(dest);
     outboundCall.mutate(
       { data: { agentId: id, toNumber: dest, webhookBaseUrl: window.location.origin } },
       {
@@ -575,6 +579,7 @@ export default function AgentDetail() {
               <p className="text-xs text-muted-foreground">
                 Include country code, e.g. <code className="font-mono bg-muted px-1 rounded">+14155552671</code>
               </p>
+              <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} />
             </div>
             <div className="rounded-md bg-muted/50 border p-3 text-xs text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">Before making a call, ensure:</p>
