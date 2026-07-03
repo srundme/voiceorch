@@ -112,7 +112,6 @@ export const agentFormSchema = z.object({
 
   // Auto-redial on drop
   autoRedialEnabled:      z.boolean().optional(),
-  autoRedialDelayMinutes: z.number().min(1).max(60).optional(),
   autoRedialMaxAttempts:  z.number().min(1).max(10).optional(),
 
 }).superRefine((data, ctx) => {

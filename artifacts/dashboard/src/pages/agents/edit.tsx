@@ -71,7 +71,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     ambientNoiseEnabled, ambientNoiseTrack,
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
-    autoRedialEnabled, autoRedialDelayMinutes, autoRedialMaxAttempts,
+    autoRedialEnabled, autoRedialMaxAttempts,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};
@@ -100,7 +100,6 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
   agentConfig["autoRedial"] = {
     enabled:      !!autoRedialEnabled,
-    delayMinutes: autoRedialDelayMinutes ?? 2,
     maxAttempts:  autoRedialMaxAttempts  ?? 3,
   };
   agentConfig["startSpeakingPlan"] = {
@@ -337,7 +336,6 @@ export default function AgentEdit() {
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
       autoRedialEnabled: false,
-      autoRedialDelayMinutes: 2,
       autoRedialMaxAttempts: 3,
     },
   });
@@ -560,7 +558,6 @@ export default function AgentEdit() {
       complianceDpdp:  ((agent as any).agentConfig?.compliance?.dpdp  as boolean | undefined) ?? false,
       complianceTrai:  ((agent as any).agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
-      autoRedialDelayMinutes: ((agent as any).agentConfig?.autoRedial?.delayMinutes as number | undefined) ?? 2,
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
     });
   }, [agent]);

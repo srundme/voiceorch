@@ -2211,33 +2211,6 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   </FormControl>
                 </FormItem>
               )} />
-              <FormField control={form.control} name="autoRedialDelayMinutes" render={({ field }) => {
-                const val = field.value ?? 2;
-                return (
-                  <FormItem className="space-y-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div>
-                        <FormLabel className="text-[12px] font-medium text-foreground/90">Redial Delay</FormLabel>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">How long to wait before calling back</p>
-                      </div>
-                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}m</span>
-                    </div>
-                    <FormControl>
-                      <div className="relative h-5 flex items-center">
-                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-border/60" />
-                        <div className="absolute left-0 h-1.5 rounded-full bg-primary/70 pointer-events-none" style={{ width: `${((val - 1) / (60 - 1)) * 100}%` }} />
-                        <input type="range" min={1} max={60} step={1} value={val}
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          className="absolute inset-x-0 w-full opacity-0 h-5 cursor-pointer" />
-                      </div>
-                    </FormControl>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-[9px] text-muted-foreground/50">1 min</span>
-                      <span className="text-[9px] text-muted-foreground/50">60 min</span>
-                    </div>
-                  </FormItem>
-                );
-              }} />
               <FormField control={form.control} name="autoRedialMaxAttempts" render={({ field }) => {
                 const val = field.value ?? 3;
                 return (
@@ -4395,7 +4368,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
       autoRedialEnabled: false,
-      autoRedialDelayMinutes: 2,
       autoRedialMaxAttempts: 3,
     },
   });
@@ -4469,7 +4441,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       linearDelayMs:                   (agent as any).agentConfig?.incrementalDelay ?? 0,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
-      autoRedialDelayMinutes: (agent as any).agentConfig?.autoRedial?.delayMinutes ?? 2,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
     });
     if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
@@ -4507,7 +4478,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         bargeInMinFrames:         "advanced",
         timezone:                 "advanced",
         autoRedialEnabled:        "advanced",
-        autoRedialDelayMinutes:   "advanced",
         autoRedialMaxAttempts:    "advanced",
         machineDetectionMode:     "voicemail",
         voicemailAction:          "voicemail",
