@@ -12,6 +12,7 @@
     "backfill-execution-id": "tsx ./src/backfill-execution-id.ts",
     "merge-user-identities": "tsx ./src/merge-user-identities.ts",
     "wipe-beta-data": "tsx ./src/wipe-beta-data.ts",
+    "fix-phone-number-pricing": "tsx ./src/fix-phone-number-pricing.ts",
     "loadtest-calls": "tsx ./src/loadtest-calls.ts",
     "loadtest-api": "tsx ./src/loadtest-api.ts",
     "sync-to-github": "tsx ./src/sync-to-github.ts",

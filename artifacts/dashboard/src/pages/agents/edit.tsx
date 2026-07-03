@@ -72,6 +72,14 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
     autoRedialEnabled, autoRedialMaxAttempts,
+    // Inbound/outbound phone number assignment is read-only in the agent form —
+    // it's managed exclusively from the Phone Numbers page now. Never forward
+    // these to the server: they're populated from the agent's own (potentially
+    // stale) columns at form-load time, and resending them on every unrelated
+    // save re-triggers the server's assignment-sync logic with that stale
+    // value, silently reassigning/stealing the number from whoever currently
+    // owns it on the Phone Numbers page.
+    inboundPhoneNumberId, outboundPhoneNumberId,
     ...rest
   } = data;
   const agentConfig: Record<string, unknown> = {};

@@ -326,7 +326,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   // Fetch user's phone numbers for inbound/outbound assignment
   const { data: phoneNumbersRaw } = useQuery({
     queryKey: ["phone-numbers", "list"],
-    queryFn: () => customFetch<Array<{ id: number; number: string; countryCode: string | null }>>(`${DASH_API}/phone-numbers`),
+    queryFn: () => customFetch<Array<{ id: number; number: string; countryCode: string | null; agentId: number | null }>>(`${DASH_API}/phone-numbers`),
     staleTime: 60 * 1000,
   });
   const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
@@ -513,7 +513,12 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="inboundPhoneNumberId" render={({ field }) => {
-                  const assigned = phoneNumbers.find(p => String(p.id) === String(field.value ?? ""));
+                  // Assignment is derived from the phone number's own agentId (the
+                  // real routing source of truth set by Phone Numbers page), NOT
+                  // from this agent's own inboundPhoneNumberId column — that column
+                  // isn't kept in sync by every assignment path and can go stale,
+                  // making a number look assigned to agents that don't own it.
+                  const assigned = agent?.id != null ? phoneNumbers.find(p => p.agentId === agent.id) : undefined;
                   return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Inbound Number</FormLabel>
@@ -536,7 +541,9 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 }} />
                 <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => {
                   const preferredManaged = form.watch("preferredManagedNumber");
-                  const assigned = phoneNumbers.find(p => String(p.id) === String(field.value ?? ""));
+                  // Same fix as Inbound Number above: derive from phoneNumbers.agentId,
+                  // not this agent's own (potentially stale) outboundPhoneNumberId column.
+                  const assigned = agent?.id != null ? phoneNumbers.find(p => p.agentId === agent.id) : undefined;
                   const displayLabel = assigned
                     ? assigned.number
                     : preferredManaged
