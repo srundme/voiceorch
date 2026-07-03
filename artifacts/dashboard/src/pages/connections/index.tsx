@@ -15,6 +15,7 @@ import {
   useUpdateCrmConnection,
   getListCrmConnectionsQueryKey,
   useListCampaignLeads,
+  useListCampaignBatches,
   useStartCampaignBatch,
   customFetch,
 } from "@workspace/api-client-react";
@@ -1180,6 +1181,10 @@ export function CrmImportDialog({
   // Step 4 state — duplicate policy
   const [duplicatePolicy, setDuplicatePolicy] = useState<"ignore" | "skip" | "reject_with_report">("skip");
 
+  // Step 5 state — batch name (pre-filled with the auto-generated default, editable)
+  const defaultBatchName = `${connection.accountName ?? connection.provider} Import ${new Date().toLocaleDateString()}`;
+  const [batchName, setBatchName]                   = useState(defaultBatchName);
+
   // Step 5 state — execution rules
   const [maxAttempts, setMaxAttempts]               = useState(2);
   const [retryDelayMinutes, setRetryDelayMinutes]   = useState(60);
@@ -1211,6 +1216,21 @@ export function CrmImportDialog({
   const importMut     = useImportCrmContacts();
   const updateConnMut = useUpdateCrmConnection();
   const startBatchMut = useStartCampaignBatch();
+
+  // Existing batch names in the selected campaign — used to enforce unique batch names client-side
+  const { data: existingBatches = [] } = useListCampaignBatches(
+    campaignId ?? 0,
+    { query: { enabled: open && !!campaignId, queryKey: ["crm-existing-batches", campaignId] } },
+  );
+  const [batchNameServerError, setBatchNameServerError] = useState<string | null>(null);
+  const trimmedBatchName = batchName.trim();
+  const batchNameTaken = trimmedBatchName.length > 0
+    && existingBatches.some(b => b.name.trim().toLowerCase() === trimmedBatchName.toLowerCase());
+  const batchNameError = trimmedBatchName.length === 0
+    ? "Batch name is required"
+    : batchNameTaken
+      ? `A batch named "${trimmedBatchName}" already exists in this campaign. Choose a different name.`
+      : batchNameServerError;
 
   // Fetch existing leads for the selected campaign to detect previously imported contacts
   const { data: existingLeadsPage } = useListCampaignLeads(
@@ -1334,6 +1354,8 @@ export function CrmImportDialog({
     if (!campaignId) return;
     // Only send contacts with a valid normalized phone (skips no-phone + invalid format)
     if (withPhone.length === 0) return;
+    if (batchNameError) return;
+    setBatchNameServerError(null);
     setImporting(true);
     try {
       // Persist updated field mapping to the connection before importing
@@ -1343,6 +1365,7 @@ export function CrmImportDialog({
         id: connection.id,
         data: {
           campaignId,
+          batchName: trimmedBatchName,
           contacts: withPhone.map(r => ({
             id:        r.contact.id,
             phone:     r.normalized!,       // E.164 normalized phone
@@ -1376,7 +1399,14 @@ export function CrmImportDialog({
       onImported?.(result.batchId, result.leadsCreated, result.duplicatesFound ?? 0, result.invalidPhones ?? 0);
       onClose();
     } catch (err) {
-      toast({ title: "Import failed", description: String(err), variant: "destructive" });
+      const message = err instanceof Error ? err.message : String(err);
+      if (/already exists in this campaign/i.test(message)) {
+        setBatchNameServerError(message);
+        setStep(5);
+        toast({ title: "Batch name already used", description: message, variant: "destructive" });
+      } else {
+        toast({ title: "Import failed", description: message, variant: "destructive" });
+      }
     } finally {
       setImporting(false);
     }
@@ -1388,6 +1418,8 @@ export function CrmImportDialog({
       setModule("contacts");
       setFieldMapping((connection.fieldMapping as Record<string, string> | null) ?? { phone: "phone" });
       setDuplicatePolicy("skip");
+      setBatchName(`${connection.accountName ?? connection.provider} Import ${new Date().toLocaleDateString()}`);
+      setBatchNameServerError(null);
       setMaxAttempts(2);
       setRetryDelayMinutes(60);
       setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -1397,7 +1429,12 @@ export function CrmImportDialog({
       setAutoStart(false);
       setPhoneCountryCode("91");
     }
-  }, [open, connection.fieldMapping]);
+  }, [open, connection.fieldMapping, connection.accountName, connection.provider]);
+
+  // Clear a stale server-side duplicate error once the user edits the name
+  useEffect(() => {
+    setBatchNameServerError(null);
+  }, [batchName]);
 
   const providerName = connection.provider === "hubspot" ? "HubSpot" : "Zoho CRM";
   const listLabel    = connection.provider === "hubspot" ? "list" : "view";
@@ -1783,6 +1820,22 @@ export function CrmImportDialog({
         {/* ── Step 5: Execution Rules ───────────────────────────────────────── */}
         {step === 5 && (
           <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Batch Name</p>
+              <Input
+                value={batchName}
+                onChange={e => setBatchName(e.target.value)}
+                placeholder={defaultBatchName}
+                className={cn("h-9 text-sm", batchNameError && "border-red-500/60 focus-visible:ring-red-500/40")}
+              />
+              {batchNameError && (
+                <p className="text-xs text-red-400 flex items-center gap-1.5">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  {batchNameError}
+                </p>
+              )}
+            </div>
+
             <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Retry Settings</p>
               <div className="grid grid-cols-2 gap-4">
@@ -1909,6 +1962,7 @@ export function CrmImportDialog({
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Execution</p>
               <div className="space-y-1.5">
                 {([
+                  ["Batch Name",       trimmedBatchName],
                   ["Duplicate Policy", duplicatePolicy.replace(/_/g, " ")],
                   ["Max Attempts",     String(maxAttempts)],
                   ["Retry Delay",      `${retryDelayMinutes} min`],
@@ -1944,7 +1998,7 @@ export function CrmImportDialog({
               </Button>
               <Button
                 size="sm"
-                disabled={step === 3 && withPhone.length === 0}
+                disabled={(step === 3 && withPhone.length === 0) || (step === 5 && !!batchNameError)}
                 onClick={() => setStep((step + 1) as typeof step)}
               >
                 {step === 5 ? "Review →" : "Next →"}
@@ -1953,7 +2007,7 @@ export function CrmImportDialog({
           ) : (
             <>
               <Button variant="ghost" size="sm" onClick={() => setStep(5)} className="text-muted-foreground">← Back</Button>
-              <Button size="sm" disabled={importing || withPhone.length === 0} onClick={handleImport}>
+              <Button size="sm" disabled={importing || withPhone.length === 0 || !!batchNameError} onClick={handleImport}>
                 {importing ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : null}
                 Import {withPhone.length} {recordLabel}{withPhone.length !== 1 ? "s" : ""}
               </Button>

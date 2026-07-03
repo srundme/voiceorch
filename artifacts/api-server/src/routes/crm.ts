@@ -572,6 +572,22 @@ router.post("/crm/connections/:id/import", requireAuth, async (req, res): Promis
   const batchName      = body.batchName?.trim() || `${conn.accountName ?? conn.provider} Import ${new Date().toLocaleDateString()}`;
   const duplicatePolicy: DuplicatePolicy = body.duplicatePolicy ?? "ignore";
 
+  // Batch names must be unique within a campaign — check before creating anything
+  // (defense in depth: the wizard also validates this client-side).
+  const [existingBatch] = await db.select({ id: campaignBatchesTable.id })
+    .from(campaignBatchesTable)
+    .where(and(
+      eq(campaignBatchesTable.campaignId, body.campaignId),
+      eq(campaignBatchesTable.name, batchName),
+    ));
+  if (existingBatch) {
+    res.status(400).json({
+      error: `A batch named "${batchName}" already exists in this campaign. Please choose a different name.`,
+      field: "batchName",
+    });
+    return;
+  }
+
   // Resolve which raw field holds the phone number
   const phoneField = fieldMapping["phone"] ?? "phone";
 
