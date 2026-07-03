@@ -48,7 +48,7 @@ export default function AgentsList() {
   const [, navigate] = useLocation();
   const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
   const [pendingCallNumber, setPendingCallNumber] = useState("");
-  const { recentNumbers, recordNumber } = useRecentNumbers();
+  const { recentNumbers, recordNumber, removeNumber } = useRecentNumbers();
 
   // Mirror the search into the URL so returning to this list restores it.
   useEffect(() => {
@@ -422,7 +422,7 @@ export default function AgentsList() {
               />
               <p className="text-[11px] text-muted-foreground">E.164 format recommended (e.g. +14155552671)</p>
             </div>
-            <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} />
+            <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} onRemove={removeNumber} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOutboundAgent(null)}>
                 Cancel

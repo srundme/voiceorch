@@ -59,5 +59,19 @@ export function useRecentNumbers() {
     [userId],
   );
 
-  return { recentNumbers, recordNumber };
+  const removeNumber = useCallback(
+    (number: string) => {
+      if (!userId) return;
+      const next = readList(userId).filter((e) => e.number !== number);
+      try {
+        localStorage.setItem(storageKey(userId), JSON.stringify(next));
+      } catch {
+        // storage unavailable — ignore
+      }
+      setRecentNumbers(next);
+    },
+    [userId],
+  );
+
+  return { recentNumbers, recordNumber, removeNumber };
 }

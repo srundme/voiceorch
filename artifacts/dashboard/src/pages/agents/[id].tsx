@@ -474,7 +474,7 @@ export default function AgentDetail() {
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [toNumber, setToNumber] = useState("");
   const { toast } = useToast();
-  const { recentNumbers, recordNumber } = useRecentNumbers();
+  const { recentNumbers, recordNumber, removeNumber } = useRecentNumbers();
 
   const { data: agent, isLoading: agentLoading } = useGetAgent(id, {
     query: { enabled: !!id, queryKey: getGetAgentQueryKey(id) }
@@ -579,7 +579,7 @@ export default function AgentDetail() {
               <p className="text-xs text-muted-foreground">
                 Include country code, e.g. <code className="font-mono bg-muted px-1 rounded">+14155552671</code>
               </p>
-              <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} />
+              <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} onRemove={removeNumber} />
             </div>
             <div className="rounded-md bg-muted/50 border p-3 text-xs text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">Before making a call, ensure:</p>

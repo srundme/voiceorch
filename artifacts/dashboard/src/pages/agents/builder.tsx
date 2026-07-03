@@ -4325,7 +4325,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const queryClient = useQueryClient();
   const rateMap = useMinuteRatesMap();
   const [, navigate] = useLocation();
-  const { recentNumbers, recordNumber } = useRecentNumbers();
+  const { recentNumbers, recordNumber, removeNumber } = useRecentNumbers();
 
   const { data: agent, isLoading } = useGetAgent(agentId, {
     query: { queryKey: getGetAgentQueryKey(agentId) },
@@ -4650,7 +4650,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <form onSubmit={handleOutbound} className="space-y-4">
             <Input value={callNumber} onChange={e => setCallNumber(e.target.value)}
               placeholder="+12125551234" className="h-10" autoFocus />
-            <RecentNumbersList numbers={recentNumbers} onSelect={setCallNumber} />
+            <RecentNumbersList numbers={recentNumbers} onSelect={setCallNumber} onRemove={removeNumber} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCallDialog(false)}>Cancel</Button>
               <Button type="submit" disabled={initiateOutbound.isPending}>
