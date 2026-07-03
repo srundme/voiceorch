@@ -1,4 +1,4 @@
-// trigger rebuild — dynamic billing display fix (dashboard Vite bundle)
+// trigger rebuild — campaigns list CSV export button (dashboard Vite bundle)
 import http from "http";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
