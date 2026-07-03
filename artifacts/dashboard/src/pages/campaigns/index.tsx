@@ -1191,6 +1191,18 @@ export default function CampaignsPage() {
             >
               <HelpCircle className="h-3.5 w-3.5" />
             </button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => {
+                const token = localStorage.getItem("voiceorch:session");
+                const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+                window.open(url, "_blank");
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" /> Export
+            </Button>
             <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> New Campaign
             </Button>

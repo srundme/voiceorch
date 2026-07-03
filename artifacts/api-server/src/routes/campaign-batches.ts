@@ -719,6 +719,93 @@ router.get("/campaigns/:id/batches/:batchId/leads", async (req, res): Promise<vo
   res.json({ leads: items, total: Number(total) });
 });
 
+// ── GET /campaigns/:id/batches/:batchId/export.csv ────────────────────────────
+const BATCH_EXPORT_STATUS_LABEL: Record<string, string> = {
+  pending:   "Pending",
+  calling:   "Calling",
+  connected: "In Progress",
+  completed: "Completed",
+  voicemail: "Voicemail",
+  failed:    "Failed",
+  busy:      "Busy",
+  skipped:   "Skipped",
+};
+
+const BATCH_EXPORT_OUTCOME_LABEL: Record<string, string> = {
+  pending:            "Pending",
+  booking_created:    "Booked",
+  transfer_completed: "Transferred",
+  callback_requested: "Callback",
+  interest_confirmed: "Interested",
+  no_contact:         "No Contact",
+  dnc_blocked:        "DNC",
+  failed:             "Failed",
+};
+
+function csvCell(value: unknown): string {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+router.get("/campaigns/:id/batches/:batchId/export.csv", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaignId = parseInt(req.params["id"]!, 10);
+  const batchId    = parseInt(req.params["batchId"]!, 10);
+  const campaign = await requireCampaign(campaignId, userId);
+  if (!campaign) { res.status(404).json({ error: "Not found" }); return; }
+
+  const batch = await requireBatch(batchId, campaignId);
+  if (!batch) { res.status(404).json({ error: "Not found" }); return; }
+
+  const leads = await db.select().from(campaignLeadsTable)
+    .where(and(
+      eq(campaignLeadsTable.campaignId, campaignId),
+      sql`${campaignLeadsTable.batchId} = ${batchId}`,
+    ))
+    .orderBy(desc(campaignLeadsTable.createdAt));
+
+  const callIds = leads.filter(l => l.callId).map(l => l.callId!);
+  const callsMap = new Map<number, typeof callsTable.$inferSelect>();
+  if (callIds.length > 0) {
+    const calls = await db.select().from(callsTable).where(inArray(callsTable.id, callIds));
+    for (const c of calls) callsMap.set(c.id, c);
+  }
+
+  const maxAttempts = batch.maxAttempts ?? campaign.maxAttempts ?? 1;
+
+  const headers = [
+    "Lead Name", "Phone Number", "Email", "Date & Time", "Call ID",
+    "Status", "Outcome", "Attempts", "Duration (s)", "Cost ($)",
+    "Disposition", "Notes",
+  ];
+
+  const rows = leads.map(lead => {
+    const call = lead.callId ? callsMap.get(lead.callId) : undefined;
+    const currentAttempt = Math.min(Math.max(1, lead.callAttempts), maxAttempts);
+    return [
+      csvCell(lead.name ?? ""),
+      csvCell(lead.phone),
+      csvCell(lead.email ?? ""),
+      csvCell(lead.lastAttemptAt ? lead.lastAttemptAt.toISOString() : ""),
+      csvCell(lead.callId ?? ""),
+      csvCell(BATCH_EXPORT_STATUS_LABEL[lead.callStatus] ?? lead.callStatus),
+      csvCell(BATCH_EXPORT_OUTCOME_LABEL[lead.operationalOutcome] ?? lead.operationalOutcome),
+      csvCell(`${currentAttempt} of ${maxAttempts}`),
+      csvCell(call?.durationSeconds ?? ""),
+      csvCell(call?.costCents != null ? (call.costCents / 100).toFixed(3) : ""),
+      csvCell(lead.disposition ?? ""),
+      csvCell(lead.notes ?? ""),
+    ].join(",");
+  });
+
+  const csv = [headers.map(csvCell).join(","), ...rows].join("\r\n");
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="batch-${batchId}-report.csv"`);
+  res.send(csv);
+});
+
 // ── GET /campaigns/:id/batches/:batchId/import-runs/:runId/report.csv ─────────
 router.get("/campaigns/:id/batches/:batchId/import-runs/:runId/report.csv", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);

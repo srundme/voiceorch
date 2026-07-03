@@ -156,6 +156,84 @@ router.get("/campaigns", async (req, res): Promise<void> => {
   res.json(rows.map(toCampaign));
 });
 
+function csvCell(value: unknown): string {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+// ── GET /campaigns/export.csv ─────────────────────────────────────────────────
+router.get("/campaigns/export.csv", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const campaigns = await db.select().from(campaignsTable)
+    .where(eq(campaignsTable.userId, userId))
+    .orderBy(desc(campaignsTable.createdAt));
+
+  const agentIds = [...new Set(campaigns.filter(c => c.agentId != null).map(c => c.agentId!))];
+  const agentsMap = new Map<number, string>();
+  if (agentIds.length > 0) {
+    const agents = await db.select({ id: agentsTable.id, name: agentsTable.name })
+      .from(agentsTable).where(inArray(agentsTable.id, agentIds));
+    for (const a of agents) agentsMap.set(a.id, a.name);
+  }
+
+  const headers = [
+    "Campaign Name", "Status", "Agent", "From Number", "Lead Source",
+    "Total Leads", "Called Leads", "Progress %", "Connected", "Booked",
+    "Transferred", "Callbacks", "Failed", "Success Rate %", "Total Cost ($)",
+    "Created Date",
+  ];
+
+  const rows = await Promise.all(campaigns.map(async campaign => {
+    const leads = await db.select({
+      callStatus:         campaignLeadsTable.callStatus,
+      operationalOutcome: campaignLeadsTable.operationalOutcome,
+      callId:             campaignLeadsTable.callId,
+    }).from(campaignLeadsTable).where(eq(campaignLeadsTable.campaignId, campaign.id));
+
+    const connected   = leads.filter(l => l.callStatus === "completed").length;
+    const booked      = leads.filter(l => l.operationalOutcome === "booking_created").length;
+    const transferred = leads.filter(l => l.operationalOutcome === "transfer_completed").length;
+    const callbacks   = leads.filter(l => l.operationalOutcome === "callback_requested").length;
+    const failed      = leads.filter(l => l.callStatus === "failed").length;
+    const progressPct = campaign.totalLeads > 0 ? Math.round((campaign.calledLeads / campaign.totalLeads) * 100) : 0;
+    const successPct  = campaign.calledLeads > 0 ? Math.round((connected / campaign.calledLeads) * 100) : 0;
+
+    const callIds = leads.filter(l => l.callId != null).map(l => l.callId!);
+    let totalCostCents = 0;
+    if (callIds.length > 0) {
+      const calls = await db.select({ costCents: callsTable.costCents })
+        .from(callsTable).where(inArray(callsTable.id, callIds));
+      totalCostCents = calls.reduce((sum, c) => sum + (c.costCents ?? 0), 0);
+    }
+
+    return [
+      csvCell(campaign.name),
+      csvCell(campaign.status),
+      csvCell(campaign.agentId != null ? (agentsMap.get(campaign.agentId) ?? "") : ""),
+      csvCell(campaign.fromNumber ?? ""),
+      csvCell(campaign.leadSource),
+      csvCell(campaign.totalLeads),
+      csvCell(campaign.calledLeads),
+      csvCell(progressPct),
+      csvCell(connected),
+      csvCell(booked),
+      csvCell(transferred),
+      csvCell(callbacks),
+      csvCell(failed),
+      csvCell(successPct),
+      csvCell((totalCostCents / 100).toFixed(3)),
+      csvCell(campaign.createdAt.toISOString()),
+    ].join(",");
+  }));
+
+  const csv = [headers.map(csvCell).join(","), ...rows].join("\r\n");
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="campaigns-report.csv"`);
+  res.send(csv);
+});
+
 // ── POST /campaigns ────────────────────────────────────────────────────────
 router.post("/campaigns", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);

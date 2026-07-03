@@ -23,7 +23,7 @@ import {
   TrendingUp, Bell, PhoneIncoming, Voicemail,
   Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
-  Info, ChevronDown,
+  Info, ChevronDown, FileDown,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -868,6 +868,18 @@ export default function BatchWorkspacePage() {
 
           {/* Controls */}
           <div className="flex items-center gap-2 ml-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => {
+                const exportToken = localStorage.getItem("voiceorch:session");
+                const url = `${BASE}/api/campaigns/${campaignId}/batches/${batchId}/export.csv${exportToken ? `?token=${encodeURIComponent(exportToken)}` : ""}`;
+                window.open(url, "_blank");
+              }}
+            >
+              <FileDown className="h-3.5 w-3.5" /> Export
+            </Button>
             {finished ? (
               <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md border bg-emerald-500/10 text-emerald-600 border-emerald-500/30 select-none">
                 <CheckCircle2 className="h-3.5 w-3.5" /> Batch Completed
