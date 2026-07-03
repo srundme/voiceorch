@@ -282,6 +282,25 @@ export class SarvamSTT implements STTAdapter {
       if (/\bका$|\bकी$|\bके$|\bको$|\bसे$|\bमें$|\bने$|\bपर$/u.test(last)) return true;
       // Generic English connectives that signal more is coming
       if (/^(and|or|but|also|with|for|of|to|the|a|an|in|on|at)$/i.test(last)) return true;
+      // English transitive / mental-state verbs that virtually always need a
+      // following object or complement. A bare utterance ending in one of these
+      // (no terminal punctuation, no object yet) means the caller is still
+      // mid-thought — e.g. "I want" → "I want to know the pricing…". Confirmed
+      // from call-1659: "I want" was flushed as a complete turn and produced a
+      // garbled follow-on ("I want a No good. worth pricing"). Skip this check
+      // when the text already ends with terminal punctuation — STT smart_format
+      // already judged it complete.
+      if (!/[.?!]$/.test(t)) {
+        const NEEDS_OBJECT_VERBS = new Set([
+          "want", "need", "like", "love", "hate", "have", "get", "know",
+          "think", "mean", "see", "hear", "feel", "believe", "wish", "hope",
+          "prefer", "use", "try", "check", "understand", "remember", "ask",
+          "tell", "show", "give", "take", "make", "do", "call", "book",
+          "send", "discuss", "explain", "mention", "consider", "suggest",
+          "recommend",
+        ]);
+        if (NEEDS_OBJECT_VERBS.has(last.toLowerCase())) return true;
+      }
       // All-caps token ≥ 2 chars (e.g. "DTDC", "KYC") — check both first and last word
       if (/^[A-Z]{2,}$/.test(last) || /^[A-Z]{2,}$/.test(first)) return true;
       // Tamil interrogative words — ALWAYS require a predicate; can never end a sentence.
