@@ -16,7 +16,7 @@ import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
-import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, ToolDefinition } from "./types.js";
+import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMulti } from "./kb-retrieval.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
@@ -501,6 +501,11 @@ export class OrchestrationPipeline {
   // wordsForInterruption×20 floor must NOT override the configured sensitivity.
   private readonly stopSpeakingPlanConfigured: boolean;
 
+  // Sample rate actually fed to the STT adapter for this call — 8000 for
+  // telephony (native PSTN rate, avoids the lossy linear-interpolation
+  // upsample) or 16000 for webcall (native mic rate). See STTConfig.nativeSampleRate.
+  private readonly sttSampleRate: 8000 | 16000;
+
   // Streaming STT (Deepgram live transcription)
   private streamSTT: StreamSTT | null = null;
   /** Queue of streaming STT final transcripts that arrived while a turn is still processing. */
@@ -755,7 +760,15 @@ export class OrchestrationPipeline {
     const ttsKey = keys.get(this.agent.ttsProvider);
     if (!ttsKey) throw new Error(`No API key found for TTS provider: ${this.agent.ttsProvider}`);
 
-    const sttCfg = this.agent.sttConfig;
+    // Sarvam telephony calls: stream/send native 8kHz PSTN audio instead of the
+    // naive linear-interpolation upsample to 16000 (see STTConfig.nativeSampleRate).
+    // Webcall's native mic rate is already 16kHz, so it keeps the default.
+    const isTelephonySarvam =
+      this.agent.asrProvider.toLowerCase() === "sarvam" && config.telephonyProvider !== "webcall";
+    this.sttSampleRate = isTelephonySarvam ? 8000 : 16000;
+    const sttCfg: STTConfig = isTelephonySarvam
+      ? { ...this.agent.sttConfig, nativeSampleRate: 8000 }
+      : this.agent.sttConfig;
 
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
@@ -1686,7 +1699,10 @@ export class OrchestrationPipeline {
       // sentence and would re-preserve the "can't interrupt Sarvam" bug, so we
       // rely only on the per-sentence echo grace + greeting hold (see helper).
       this.tryEnergyBargeIn(pcm8k, hasSpeech, "streaming_energy", /* respectHoldUntil */ false);
-      this.streamSTT.sendAudio(pcm16k);
+      // Send native 8kHz telephony audio directly when the adapter is configured
+      // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
+      // avoids manufacturing samples on already-lossy phone audio (see sttSampleRate).
+      this.streamSTT.sendAudio(this.sttSampleRate === 8000 ? pcm8k : pcm16k);
       return;
     }
 
@@ -4499,14 +4515,18 @@ export class OrchestrationPipeline {
     let processed = false;
 
     try {
-      const pcm16k = upsample8to16(pcm8k);
-      logger.info({ callId: this.config.callId, bytes: pcm16k.length }, "Sending to STT");
+      // Send native 8kHz telephony audio directly when the adapter is configured
+      // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
+      // avoids manufacturing samples on already-lossy phone audio (see sttSampleRate).
+      const useNative8k = this.sttSampleRate === 8000;
+      const sttAudio = useNative8k ? pcm8k : upsample8to16(pcm8k);
+      logger.info({ callId: this.config.callId, bytes: sttAudio.length, sampleRate: this.sttSampleRate }, "Sending to STT");
 
       this._tTurnVadFlush = performance.now();
       const sttStart = Date.now();
       let transcript: string | null | undefined;
       try {
-        transcript = await this.stt.transcribe(pcm16k, 16000);
+        transcript = await this.stt.transcribe(sttAudio, this.sttSampleRate);
       } catch (sttErr) {
         const reason = toReadableError(sttErr, "STT error");
         logger.error({ callId: this.config.callId, err: sttErr }, reason);

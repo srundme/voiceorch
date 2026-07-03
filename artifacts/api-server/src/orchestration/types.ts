@@ -199,6 +199,15 @@ export interface STTConfig {
   /** Azure STT: ms of silence after last spoken word before emitting a final phrase.
    *  Default 400ms. Range 100–2000ms. Lower = faster response, higher = fewer split turns. */
   endpointingSilenceMs?: number;
+  /**
+   * Sarvam only: the sample rate to actually stream/send to the API. Telephony
+   * audio is native 8kHz (narrowband PSTN); Sarvam's docs support sample_rate=8000
+   * directly, so telephony calls should set this to 8000 rather than forcing the
+   * naive linear-interpolation upsample to 16000 (which manufactures samples that
+   * aren't really there and can degrade recognition on already-lossy phone audio).
+   * Webcall (native 16kHz mic) should leave this unset (defaults to 16000).
+   */
+  nativeSampleRate?: 8000 | 16000;
 }
 
 /**

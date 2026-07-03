@@ -96,6 +96,8 @@ export class SarvamSTT implements STTAdapter {
   private readonly langCode: string;
   private readonly mode: string;
   private readonly cfg: STTConfig;
+  /** Native sample rate to actually stream to Sarvam — 8000 for telephony, 16000 for webcall. */
+  private readonly sampleRate: 8000 | 16000;
 
   constructor(
     apiKey: string,
@@ -105,6 +107,7 @@ export class SarvamSTT implements STTAdapter {
   ) {
     this.key = apiKey;
     this.cfg = cfg;
+    this.sampleRate = cfg.nativeSampleRate === 8000 ? 8000 : 16000;
 
     const extra = extraConfig
       ? (JSON.parse(extraConfig) as { mode?: string })
@@ -125,7 +128,7 @@ export class SarvamSTT implements STTAdapter {
 
   // ── Batch REST ──────────────────────────────────────────────────────────────
 
-  async transcribe(audioBuffer: Buffer, sampleRate = 16000): Promise<string> {
+  async transcribe(audioBuffer: Buffer, sampleRate = this.sampleRate): Promise<string> {
     const wav = pcmToWav(audioBuffer, sampleRate);
 
     const formData = new FormData();
@@ -163,15 +166,16 @@ export class SarvamSTT implements STTAdapter {
   ): StreamSTT {
     // Capture class fields as locals so closures (plain object methods, nested
     // functions) can reference them without relying on `this` binding.
-    const langCode = this.langCode;
-    const model    = this.model;
-    const mode     = this.mode;
-    const key      = this.key;
+    const langCode   = this.langCode;
+    const model      = this.model;
+    const mode       = this.mode;
+    const key        = this.key;
+    const sampleRate = this.sampleRate;
 
     const params = new URLSearchParams({
       model:              model,
       language_code:      langCode,
-      sample_rate:        "16000",
+      sample_rate:        String(this.sampleRate),
       input_audio_codec:  "pcm_s16le",
       high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappy for voice agents
       vad_signals:        "true",    // emit speech_start / speech_end events
@@ -344,7 +348,7 @@ export class SarvamSTT implements STTAdapter {
           audio: {
             data:        chunk.toString("base64"),
             encoding:    "audio/wav",   // enum must be "audio/wav"; actual codec is set via URL param
-            sample_rate: 16000,
+            sample_rate: sampleRate,
           },
         }),
       );
@@ -543,7 +547,7 @@ export class SarvamSTT implements STTAdapter {
             audio: {
               data:        emptyData.toString("base64"),
               encoding:    "audio/wav",
-              sample_rate: 16000,
+              sample_rate: sampleRate,
             },
             flush: true,
           }),
