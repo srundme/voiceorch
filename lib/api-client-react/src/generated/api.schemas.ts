@@ -1842,6 +1842,15 @@ export interface PhoneNumber {
   purchasedAt: string;
   /** Monthly cost in cents (from Vobiz, 0 = no recurring fee) */
   monthlyRateCents?: number;
+  /** Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days) */
+  renewalRateCents?: number;
+  /**
+     * When the next $8 renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
+     * @nullable
+     */
+  nextRenewalAt?: string | null;
+  /** @nullable */
+  lastRenewalAt?: string | null;
   /** @nullable */
   releasedAt?: string | null;
   createdAt: string;
@@ -1882,6 +1891,27 @@ export interface PurchasePhoneNumberInput {
   countryCode: string;
   region?: string;
   numberType?: PurchasePhoneNumberInputNumberType;
+}
+
+export interface InitiatePhoneNumberPurchaseResponse {
+  /** Internal order id — pass back in ConfirmPhoneNumberPurchaseInput */
+  purchaseOrderId: number;
+  /** Razorpay order id */
+  orderId: string;
+  /** First-purchase fee in cents (currently $10.00 = 1000) */
+  amountCents: number;
+  /** Amount in the smallest currency unit, as required by the Razorpay checkout widget */
+  amount: number;
+  currency: string;
+  /** Razorpay publishable key id for the checkout widget */
+  keyId: string;
+}
+
+export interface ConfirmPhoneNumberPurchaseInput {
+  purchaseOrderId: number;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
 }
 
 export interface AssignPhoneNumberInput {

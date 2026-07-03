@@ -1,13 +1,16 @@
 import { Router, type IRouter } from "express";
+import crypto from "crypto";
+import Razorpay from "razorpay";
 import { eq, and, sql } from "drizzle-orm";
-import { db, usersTable, walletTransactionsTable, phoneNumbersTable, agentsTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
+import { db, usersTable, walletTransactionsTable, phoneNumbersTable, phoneNumberOrdersTable, agentsTable, vobizAccountsTable, platformSettingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logActivity } from "../lib/activity.js";
 import {
   ListPhoneNumbersResponse,
   ListAvailablePhoneNumbersQueryParams,
   ListAvailablePhoneNumbersResponse,
-  PurchasePhoneNumberBody,
+  InitiatePhoneNumberPurchaseBody,
+  ConfirmPhoneNumberPurchaseBody,
   AssignPhoneNumberParams,
   AssignPhoneNumberBody,
   AssignPhoneNumberResponse,
@@ -17,11 +20,25 @@ import {
 const router: IRouter = Router();
 
 // ── Pricing ───────────────────────────────────────────────────────────────────
-// SnapServe charges a flat $10.00/mo (USD) for any phone number, regardless of
-// the underlying carrier's local-currency cost. The carrier's raw price (which
-// VoBiz returns in INR) is never surfaced to end-users — all user-facing
-// pricing and wallet balances on SnapServe are USD.
-const FLAT_MONTHLY_RATE_CENTS = 1000; // $10.00 USD
+// SnapServe charges a flat $10.00 (USD) first-purchase fee for any phone
+// number, regardless of the underlying carrier's local-currency cost. The
+// carrier's raw price (which VoBiz returns in INR) is never surfaced to
+// end-users — all user-facing pricing and wallet balances on SnapServe are USD.
+// This first-purchase fee requires an ACTUAL completed payment (Razorpay
+// checkout) — it is never silently deducted from the wallet balance. Once
+// purchased, the number auto-renews every 30 days at RENEWAL_RATE_CENTS,
+// deducted from the wallet balance (see services/phone-renewal.ts). Deleting
+// the number stops all future renewal charges.
+const FLAT_MONTHLY_RATE_CENTS = 1000; // $10.00 USD — first-purchase fee (real payment)
+export const RENEWAL_RATE_CENTS = 800; // $8.00 USD — recurring monthly renewal (wallet debit)
+export const RENEWAL_INTERVAL_DAYS = 30;
+
+function getRazorpay() {
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID!,
+    key_secret: process.env.RAZORPAY_KEY_SECRET!,
+  });
+}
 
 function addMarkup(monthlyRateCents: number): number {
   return monthlyRateCents > 0 ? FLAT_MONTHLY_RATE_CENTS : 0;
@@ -297,9 +314,11 @@ async function enrichNumber(row: typeof phoneNumbersTable.$inferSelect) {
   return {
     ...row,
     agentName,
-    purchasedAt:  row.purchasedAt.toISOString(),
-    releasedAt:   row.releasedAt?.toISOString() ?? null,
-    createdAt:    row.createdAt.toISOString(),
+    purchasedAt:    row.purchasedAt.toISOString(),
+    nextRenewalAt:  row.nextRenewalAt?.toISOString() ?? null,
+    lastRenewalAt:  row.lastRenewalAt?.toISOString() ?? null,
+    releasedAt:     row.releasedAt?.toISOString() ?? null,
+    createdAt:      row.createdAt.toISOString(),
   };
 }
 
@@ -376,11 +395,20 @@ router.get("/phone-numbers/available", requireAuth, async (req, res): Promise<vo
   }
 });
 
-// ── POST /phone-numbers/purchase ──────────────────────────────────────────────
+// ── POST /phone-numbers/purchase/initiate ─────────────────────────────────────
+// Creates a real Razorpay order for the $10 first-purchase fee. The number is
+// NOT touched (not purchased from Vobiz, not inserted into phone_numbers)
+// until the payment is confirmed via /purchase/confirm below. This guarantees
+// a completed payment always precedes granting the number.
 
-router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<void> => {
+router.post("/phone-numbers/purchase/initiate", requireAuth, async (req, res): Promise<void> => {
+  if (!process.env["RAZORPAY_KEY_ID"] || !process.env["RAZORPAY_KEY_SECRET"]) {
+    res.status(503).json({ error: "Payment gateway not configured" });
+    return;
+  }
+
   const clerkId = (req as any).clerkUserId as string;
-  const parsed = PurchasePhoneNumberBody.safeParse(req.body);
+  const parsed = InitiatePhoneNumberPurchaseBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
   const { number, countryCode, region, numberType } = parsed.data;
@@ -403,70 +431,148 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     }
   }
 
-  // Check not already claimed by another user
+  // Check not already claimed by another user, and no other pending order for this number.
   const [existing] = await db.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable)
     .where(and(eq(phoneNumbersTable.number, number), eq(phoneNumbersTable.status, "active")));
   if (existing) { res.status(409).json({ error: "This number is already taken." }); return; }
 
-  const { authId, authToken, configured } = getPlatformVobizCreds();
+  const [pendingOrder] = await db.select({ id: phoneNumberOrdersTable.id }).from(phoneNumberOrdersTable)
+    .where(and(eq(phoneNumberOrdersTable.number, number), eq(phoneNumberOrdersTable.status, "pending")));
+  if (pendingOrder) { res.status(409).json({ error: "A pending purchase already exists for this number." }); return; }
 
+  const { configured } = getPlatformVobizCreds();
   if (!configured) {
     res.status(503).json({ error: "Platform carrier credentials not configured.", code: "PLATFORM_NOT_CONFIGURED" });
     return;
   }
 
-  // 1a. Get/create the SnapServe VoBiz Application before purchase so we can
-  //     pass application_id in the purchase body — this links the number at
-  //     creation time (most reliable approach for VoBiz).
+  const amountCents = FLAT_MONTHLY_RATE_CENTS;
+  const razorpay = getRazorpay();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let order: any;
+  try {
+    order = await razorpay.orders.create({
+      amount:          amountCents,
+      currency:        "USD",
+      receipt:         `phone_${user.id}_${Date.now()}`,
+      notes:           { userId: String(user.id), clerkId, number },
+      payment_capture: 1,
+    } as any);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Razorpay error";
+    res.status(502).json({ error: `Failed to create payment order: ${msg}` });
+    return;
+  }
+
+  const [orderRow] = await db.insert(phoneNumberOrdersTable).values({
+    userId:          clerkId,
+    number,
+    countryCode:     countryCode.toUpperCase(),
+    region:          region ?? null,
+    numberType:      numberType ?? "local",
+    amountCents,
+    status:          "pending",
+    razorpayOrderId: order.id,
+  }).returning();
+
+  req.log.info({ userId: clerkId, number, orderId: order.id }, "Phone number purchase order initiated");
+
+  res.json({
+    purchaseOrderId: orderRow!.id,
+    orderId:         order.id,
+    amountCents,
+    amount:          amountCents,
+    currency:        "USD",
+    keyId:           process.env["RAZORPAY_KEY_ID"],
+  });
+});
+
+// ── POST /phone-numbers/purchase/confirm ──────────────────────────────────────
+// Verifies the Razorpay payment signature and ONLY THEN provisions the number
+// from Vobiz. If provisioning fails after a successful payment, the payment
+// is refunded so the user is never charged for a number they didn't receive.
+
+router.post("/phone-numbers/purchase/confirm", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const parsed = ConfirmPhoneNumberPurchaseBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
+  const { purchaseOrderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = parsed.data;
+
+  const secret = process.env["RAZORPAY_KEY_SECRET"]!;
+  const expectedSig = crypto
+    .createHmac("sha256", secret)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest("hex");
+
+  if (expectedSig !== razorpaySignature) {
+    res.status(400).json({ error: "Invalid payment signature" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Atomically claim the order — WHERE status='pending' ensures only one
+  // concurrent confirm request wins; duplicates find 0 rows and are rejected.
+  const [claimed] = await db
+    .update(phoneNumberOrdersTable)
+    .set({ status: "processing", razorpayPaymentId })
+    .where(
+      and(
+        eq(phoneNumberOrdersTable.id, purchaseOrderId),
+        eq(phoneNumberOrdersTable.razorpayOrderId, razorpayOrderId),
+        eq(phoneNumberOrdersTable.userId, clerkId),
+        eq(phoneNumberOrdersTable.status, "pending"),
+      ),
+    )
+    .returning();
+
+  if (!claimed) {
+    res.status(400).json({ error: "Order not found or already processed" });
+    return;
+  }
+
+  const { number, countryCode, region, numberType, amountCents } = claimed;
+
+  const { authId, authToken, configured } = getPlatformVobizCreds();
+  if (!configured) {
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "failed", failureReason: "Platform carrier credentials not configured" })
+      .where(eq(phoneNumberOrdersTable.id, claimed.id));
+    res.status(503).json({ error: "Platform carrier credentials not configured.", code: "PLATFORM_NOT_CONFIGURED" });
+    return;
+  }
+
+  // Re-check the number wasn't claimed by someone else while payment was in flight.
+  const [existing] = await db.select({ id: phoneNumbersTable.id }).from(phoneNumbersTable)
+    .where(and(eq(phoneNumbersTable.number, number), eq(phoneNumbersTable.status, "active")));
+  if (existing) {
+    await refundOrder(req, claimed.id, razorpayPaymentId, amountCents, "Number claimed by another user before confirmation");
+    res.status(409).json({ error: "This number was just taken by another user. Your payment has been refunded." });
+    return;
+  }
+
   const webhookBase = deriveWebhookBase(req);
   const snapserveAppId = await configureVobizNumberWebhook(authId!, authToken!, number, webhookBase);
 
-  // 1b. Purchase number from Vobiz (deducts from platform master account balance).
-  //     Pass application_id so VoBiz links the number to our app at purchase time.
   let vobizNumber: VobizOwnedNumber;
   try {
     vobizNumber = await purchaseVobizNumber(authId!, authToken!, number, snapserveAppId ?? undefined);
   } catch (err: any) {
     const msg: string = err?.message ?? "";
-    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-      res.status(404).json({ error: "This number is no longer available. Please search again." });
-    } else if (msg.includes("500") || msg.toLowerCase().includes("balance")) {
-      res.status(402).json({ error: "Platform balance insufficient to complete this purchase. Contact support." });
-    } else {
-      req.log.error({ err, number }, "Vobiz purchase failed");
-      res.status(502).json({ error: "Failed to provision number. Please try again." });
-    }
-    return;
-  }
-
-  // 2. Compute the real charge: a flat $10.00 USD covers the first month.
-  //    Phone numbers are a paid purchase — deducted from the user's wallet
-  //    up front, same as any other billable action. The carrier's own
-  //    setup/monthly fees (in INR) are absorbed by SnapServe and never
-  //    passed through to the user.
-  const totalCents = FLAT_MONTHLY_RATE_CENTS;
-
-  // Re-read the latest balance (may have changed since the top of the
-  // handler) and require it to cover the full charge before we commit the
-  // number to this user. The carrier purchase above already succeeded, so on
-  // insufficient funds we release the number back to Vobiz instead of
-  // silently giving it away for free.
-  const [freshUser] = await db.select({ walletBalanceCents: usersTable.walletBalanceCents })
-    .from(usersTable).where(eq(usersTable.clerkId, clerkId));
-  if (!freshUser || freshUser.walletBalanceCents < totalCents) {
-    try {
-      await releaseVobizNumber(authId!, authToken!, number);
-    } catch (err) {
-      req.log.error({ err, number }, "Failed to release Vobiz number after insufficient-balance rejection");
-    }
-    res.status(402).json({
-      error: `Insufficient balance. This number costs $${(totalCents / 100).toFixed(2)}. Top up your wallet and try again.`,
-      code: "INSUFFICIENT_BALANCE",
+    req.log.error({ err, number }, "Vobiz purchase failed after payment confirmed — refunding");
+    await refundOrder(req, claimed.id, razorpayPaymentId, amountCents, `Vobiz provisioning failed: ${msg.slice(0, 200)}`);
+    res.status(502).json({
+      error: msg.toLowerCase().includes("not found")
+        ? "This number is no longer available. Your payment has been refunded."
+        : "Failed to provision number. Your payment has been refunded.",
     });
     return;
   }
 
-  // 3. Record in SnapServe DB and deduct the charge from the user's wallet.
+  const now = new Date();
+  const nextRenewalAt = new Date(now.getTime() + RENEWAL_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
 
   const [row] = await db.insert(phoneNumbersTable).values({
     userId:           clerkId,
@@ -476,33 +582,61 @@ router.post("/phone-numbers/purchase", requireAuth, async (req, res): Promise<vo
     numberType:       numberType ?? "local",
     vobizNumberId:    vobizNumber.id,
     status:           "active",
-    // Store the flat USD monthly rate — this is what we show and charge the user
     monthlyRateCents: FLAT_MONTHLY_RATE_CENTS,
+    renewalRateCents: RENEWAL_RATE_CENTS,
+    purchasedAt:      now,
+    nextRenewalAt,
+    lastRenewalAt:    now,
   }).returning();
 
-  await db.update(usersTable)
-    .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} - ${totalCents}` })
-    .where(eq(usersTable.clerkId, clerkId));
+  await db.update(phoneNumberOrdersTable)
+    .set({ status: "completed", phoneNumberId: row!.id })
+    .where(eq(phoneNumberOrdersTable.id, claimed.id));
 
+  // Audit-trail record only — this is a direct payment, NOT a wallet debit,
+  // so the wallet balance is intentionally left untouched here.
   await db.insert(walletTransactionsTable).values({
-    userId:      user.id,
-    type:        "debit",
-    amountCents: -totalCents,
-    description: `Phone number ${number} purchased (first month $${(totalCents / 100).toFixed(2)})`,
-    status:      "completed",
+    userId:            user.id,
+    type:              "debit",
+    amountCents:       -amountCents,
+    description:       `Phone number ${number} purchased (first purchase $${(amountCents / 100).toFixed(2)}, paid by card/UPI)`,
+    status:            "completed",
+    razorpayOrderId,
+    razorpayPaymentId,
   });
 
   await logActivity({
     userId:       clerkId,
     eventType:    "phone_number.purchased",
     resourceType: "phone_number",
-    resourceId:   String(row.id),
-    description:  `Phone number ${number} purchased${totalCents > 0 ? ` ($${(totalCents / 100).toFixed(2)})` : ""}`,
+    resourceId:   String(row!.id),
+    description:  `Phone number ${number} purchased ($${(amountCents / 100).toFixed(2)}, paid via Razorpay)`,
   });
 
-  req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id }, "Phone number purchased and provisioned");
-  res.status(201).json(await enrichNumber(row));
+  req.log.info({ number, userId: clerkId, vobizId: vobizNumber.id, nextRenewalAt }, "Phone number purchased and provisioned after confirmed payment");
+  res.status(201).json(await enrichNumber(row!));
 });
+
+/** Best-effort refund of a failed/aborted phone-number purchase payment. */
+async function refundOrder(
+  req: import("express").Request,
+  orderRowId: number,
+  razorpayPaymentId: string,
+  amountCents: number,
+  reason: string,
+): Promise<void> {
+  try {
+    const razorpay = getRazorpay();
+    await (razorpay.payments as any).refund(razorpayPaymentId, { amount: amountCents, speed: "optimum" });
+    req.log.info({ orderRowId, razorpayPaymentId, reason }, "Phone number purchase payment refunded");
+  } catch (err) {
+    req.log.error({ err, orderRowId, razorpayPaymentId, reason }, "Failed to refund phone number purchase payment — needs manual review");
+  } finally {
+    await db.update(phoneNumberOrdersTable)
+      .set({ status: "failed", failureReason: reason })
+      .where(eq(phoneNumberOrdersTable.id, orderRowId));
+  }
+}
 
 // ── PATCH /phone-numbers/:id/assign ──────────────────────────────────────────
 

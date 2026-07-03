@@ -1510,11 +1510,11 @@ paths:
         "401":
           description: Unauthorized
 
-  /phone-numbers/purchase:
+  /phone-numbers/purchase/initiate:
     post:
-      operationId: purchasePhoneNumber
+      operationId: initiatePhoneNumberPurchase
       tags: [phone-numbers]
-      summary: Purchase a phone number ($5 deducted from wallet)
+      summary: Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
       requestBody:
         required: true
         content:
@@ -1522,16 +1522,43 @@ paths:
             schema:
               $ref: "#/components/schemas/PurchasePhoneNumberInput"
       responses:
+        "200":
+          description: Razorpay order created — open checkout with these details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InitiatePhoneNumberPurchaseResponse"
+        "401":
+          description: Unauthorized
+        "409":
+          description: Number already purchased or a pending order already exists
+        "503":
+          description: Payment platform not configured
+
+  /phone-numbers/purchase/confirm:
+    post:
+      operationId: confirmPhoneNumberPurchase
+      tags: [phone-numbers]
+      summary: Confirm a Razorpay payment and provision the purchased number. Only called after the Razorpay checkout succeeds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmPhoneNumberPurchaseInput"
+      responses:
         "201":
-          description: Phone number purchased and assigned to user
+          description: Payment verified and phone number provisioned
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PhoneNumber"
-        "402":
-          description: Insufficient balance
+        "400":
+          description: Invalid signature or order already processed
         "401":
           description: Unauthorized
+        "502":
+          description: Payment verified but number provisioning failed (payment refunded)
 
   /phone-numbers/{id}/assign:
     patch:
@@ -8363,6 +8390,16 @@ components:
         monthlyRateCents:
           type: integer
           description: Monthly cost in cents (from Vobiz, 0 = no recurring fee)
+        renewalRateCents:
+          type: integer
+          description: Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days)
+        nextRenewalAt:
+          type: ["string", "null"]
+          format: date-time
+          description: When the next $8 renewal charge is due (30 days after purchasedAt/lastRenewalAt). Null once released.
+        lastRenewalAt:
+          type: ["string", "null"]
+          format: date-time
         releasedAt:
           type: ["string", "null"]
           format: date-time
@@ -8403,6 +8440,41 @@ components:
           type: string
           enum: [local, toll_free, mobile]
           default: local
+
+    InitiatePhoneNumberPurchaseResponse:
+      type: object
+      required: [purchaseOrderId, orderId, amountCents, amount, currency, keyId]
+      properties:
+        purchaseOrderId:
+          type: integer
+          description: Internal order id — pass back in ConfirmPhoneNumberPurchaseInput
+        orderId:
+          type: string
+          description: Razorpay order id
+        amountCents:
+          type: integer
+          description: First-purchase fee in cents (currently $10.00 = 1000)
+        amount:
+          type: integer
+          description: Amount in the smallest currency unit, as required by the Razorpay checkout widget
+        currency:
+          type: string
+        keyId:
+          type: string
+          description: Razorpay publishable key id for the checkout widget
+
+    ConfirmPhoneNumberPurchaseInput:
+      type: object
+      required: [purchaseOrderId, razorpayOrderId, razorpayPaymentId, razorpaySignature]
+      properties:
+        purchaseOrderId:
+          type: integer
+        razorpayOrderId:
+          type: string
+        razorpayPaymentId:
+          type: string
+        razorpaySignature:
+          type: string
 
     AssignPhoneNumberInput:
       type: object

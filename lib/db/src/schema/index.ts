@@ -6,6 +6,7 @@ export * from "./calls";
 export * from "./providers";
 export * from "./activity-logs";
 export * from "./phone-numbers";
+export * from "./phone-number-orders";
 export * from "./webhook-endpoints";
 export * from "./callerProfiles";
 export * from "./scheduledCallbacks";

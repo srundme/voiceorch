@@ -13,6 +13,11 @@ export const phoneNumbersTable = pgTable("phone_numbers", {
   agentId:       integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   status:        text("status").notNull().default("active"),
   monthlyRateCents: integer("monthly_rate_cents").notNull().default(0),
+  // Recurring monthly renewal charge (billed on the purchase-date anniversary,
+  // i.e. exactly 30 days after purchasedAt / lastRenewalAt — NOT calendar month).
+  renewalRateCents: integer("renewal_rate_cents").notNull().default(800), // $8.00 USD
+  nextRenewalAt: timestamp("next_renewal_at", { withTimezone: true }),
+  lastRenewalAt: timestamp("last_renewal_at", { withTimezone: true }),
   purchasedAt:   timestamp("purchased_at", { withTimezone: true }).notNull().defaultNow(),
   releasedAt:    timestamp("released_at", { withTimezone: true }),
   createdAt:     timestamp("created_at",  { withTimezone: true }).notNull().defaultNow(),

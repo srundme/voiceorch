@@ -4,7 +4,8 @@ import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCirc
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
-  usePurchasePhoneNumber,
+  useInitiatePhoneNumberPurchase,
+  useConfirmPhoneNumberPurchase,
   useAssignPhoneNumber,
   useReleasePhoneNumber,
   useListAgents,
@@ -39,6 +40,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PhoneNumber } from "@workspace/api-client-react";
+
+declare global {
+  interface Window {
+    Razorpay: new (opts: Record<string, unknown>) => { open(): void };
+  }
+}
+
+function loadRazorpay(): Promise<void> {
+  return new Promise((resolve) => {
+    if (window.Razorpay) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
+    document.body.appendChild(s);
+  });
+}
 
 const COUNTRY_OPTIONS = [
   { code: "IN", name: "India" },
@@ -288,9 +305,13 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
     searchError != null &&
     (searchError as any)?.response?.status === 503;
 
-  const purchase = usePurchasePhoneNumber();
+  const initiate = useInitiatePhoneNumberPurchase();
+  const confirm  = useConfirmPhoneNumberPurchase();
+  const [payingViaCheckout, setPayingViaCheckout] = useState(false);
 
   const selectedNum = available?.find(n => n.number === selected);
+  // The $10 first-purchase fee (real payment) — shown here, distinct from the
+  // $8/mo auto-renewal charged from the wallet balance every 30 days.
   const totalCents = selectedNum ? (selectedNum.monthlyRateCents ?? 0) : 0;
 
   function handleSearch() {
@@ -299,39 +320,83 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
     void refetch();
   }
 
-  function handlePurchase() {
+  async function handlePurchase() {
     if (!selected) return;
-    purchase.mutate(
-      {
+    setPayingViaCheckout(true);
+    try {
+      const order = await initiate.mutateAsync({
         data: {
           number: selected,
           countryCode: country,
           region: selectedNum?.region ?? undefined,
           numberType: selectedNum?.numberType ?? "local",
         },
-      },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
-          toast({ title: "Phone number purchased!", description: `${selected} is now in your account.` });
-          onClose();
-        },
-        onError: (err: unknown) => {
-          const code = (err as { data?: { code?: string } })?.data?.code;
-          if (code === "KYC_REQUIRED") {
-            toast({
-              title: "Identity verification required",
-              description: "Complete KYC verification first using the banner on the Phone Numbers page.",
-              variant: "destructive",
-            });
-            onClose();
-          } else {
-            toast({ title: "Purchase failed", description: formatApiError(err), variant: "destructive" });
-            setConfirming(false);
-          }
-        },
+      });
+
+      await loadRazorpay();
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+
+        const opts: Record<string, unknown> = {
+          key:      order.keyId,
+          amount:   order.amount,
+          currency: order.currency,
+          order_id: order.orderId,
+          name:     "SnapServe",
+          description: `Phone number purchase — ${selected}`,
+          theme: { color: "#ededed" },
+          modal: {
+            ondismiss: () => settle(() => reject(new Error("cancelled"))),
+          },
+          handler: async (response: {
+            razorpay_order_id: string;
+            razorpay_payment_id: string;
+            razorpay_signature: string;
+          }) => {
+            try {
+              await confirm.mutateAsync({
+                data: {
+                  purchaseOrderId:   order.purchaseOrderId,
+                  razorpayOrderId:   response.razorpay_order_id,
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpaySignature: response.razorpay_signature,
+                },
+              });
+              settle(() => resolve());
+            } catch (err) {
+              settle(() => reject(err instanceof Error ? err : new Error("Payment verification failed")));
+            }
+          },
+        };
+
+        new window.Razorpay(opts).open();
+      });
+
+      queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
+      toast({ title: "Phone number purchased!", description: `${selected} is now in your account.` });
+      onClose();
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === "cancelled") {
+        setPayingViaCheckout(false);
+        return;
       }
-    );
+      const code = (err as { data?: { code?: string } })?.data?.code;
+      if (code === "KYC_REQUIRED") {
+        toast({
+          title: "Identity verification required",
+          description: "Complete KYC verification first using the banner on the Phone Numbers page.",
+          variant: "destructive",
+        });
+        onClose();
+      } else {
+        toast({ title: "Purchase failed", description: formatApiError(err), variant: "destructive" });
+        setConfirming(false);
+      }
+    } finally {
+      setPayingViaCheckout(false);
+    }
   }
 
   if (confirming && selected) {
@@ -360,23 +425,27 @@ function BuyNumberDialog({ onClose }: { onClose: () => void }) {
               <span className="text-foreground font-medium">Aitel</span>
             </div>
             <div className="flex justify-between px-4 py-2.5">
-              <span className="text-muted-foreground">Monthly fee</span>
-              <span className="font-semibold text-foreground">{totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}/mo` : "Free"}</span>
+              <span className="text-muted-foreground">First purchase (pay now)</span>
+              <span className="font-semibold text-foreground">{totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : "Free"}</span>
+            </div>
+            <div className="flex justify-between px-4 py-2.5">
+              <span className="text-muted-foreground">Renews monthly (from wallet)</span>
+              <span className="text-foreground">$8.00/mo</span>
             </div>
           </div>
           <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-500/20 bg-zinc-500/5 text-foreground text-xs">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>The first month's fee will be deducted from your SnapServe wallet immediately. This action cannot be undone.</span>
+            <span>You'll be charged ${(totalCents / 100).toFixed(2)} now via card/UPI to activate this number. It then renews automatically at $8.00/mo from your wallet balance every 30 days until you release the number.</span>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirming(false)}>Back</Button>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={payingViaCheckout}>Back</Button>
             <Button
               className="bg-black/85 hover:bg-black/90 text-foreground"
               onClick={handlePurchase}
-              disabled={purchase.isPending}
+              disabled={payingViaCheckout}
             >
-              {purchase.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              Confirm Purchase
+              {payingViaCheckout ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              Pay ${(totalCents / 100).toFixed(2)} & Get Number
             </Button>
           </DialogFooter>
         </DialogContent>

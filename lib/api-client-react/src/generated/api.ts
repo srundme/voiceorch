@@ -124,6 +124,7 @@ import type {
   CheckPasswordResetOtp200,
   CommandCenterKpis,
   CompleteCampaignCallback200,
+  ConfirmPhoneNumberPurchaseInput,
   Connection,
   ConsentBasisRecord,
   CreateAmbientSoundBody,
@@ -175,6 +176,7 @@ import type {
   HealthStatus,
   IncomingCallsPage,
   IncomingMetrics,
+  InitiatePhoneNumberPurchaseResponse,
   KnowledgeEntry,
   KnowledgeEntryInput,
   KnowledgeSearchInput,
@@ -5050,20 +5052,20 @@ export function useListAvailablePhoneNumbers<TData = Awaited<ReturnType<typeof l
 
 
 
-export const getPurchasePhoneNumberUrl = () => {
+export const getInitiatePhoneNumberPurchaseUrl = () => {
 
 
 
 
-  return `/api/phone-numbers/purchase`
+  return `/api/phone-numbers/purchase/initiate`
 }
 
 /**
- * @summary Purchase a phone number ($5 deducted from wallet)
+ * @summary Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
-export const purchasePhoneNumber = async (purchasePhoneNumberInput: PurchasePhoneNumberInput, options?: RequestInit): Promise<PhoneNumber> => {
+export const initiatePhoneNumberPurchase = async (purchasePhoneNumberInput: PurchasePhoneNumberInput, options?: RequestInit): Promise<InitiatePhoneNumberPurchaseResponse> => {
 
-  return customFetch<PhoneNumber>(getPurchasePhoneNumberUrl(),
+  return customFetch<InitiatePhoneNumberPurchaseResponse>(getInitiatePhoneNumberPurchaseUrl(),
   {
     ...options,
     method: 'POST',
@@ -5076,11 +5078,11 @@ export const purchasePhoneNumber = async (purchasePhoneNumberInput: PurchasePhon
 
 
 
-export const getPurchasePhoneNumberMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof purchasePhoneNumber>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof purchasePhoneNumber>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext> => {
+export const getInitiatePhoneNumberPurchaseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext> => {
 
-const mutationKey = ['purchasePhoneNumber'];
+const mutationKey = ['initiatePhoneNumberPurchase'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -5090,10 +5092,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof purchasePhoneNumber>>, {data: BodyType<PurchasePhoneNumberInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>, {data: BodyType<PurchasePhoneNumberInput>}> = (props) => {
           const {data} = props ?? {};
 
-          return  purchasePhoneNumber(data,requestOptions)
+          return  initiatePhoneNumberPurchase(data,requestOptions)
         }
 
 
@@ -5103,22 +5105,93 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PurchasePhoneNumberMutationResult = NonNullable<Awaited<ReturnType<typeof purchasePhoneNumber>>>
-    export type PurchasePhoneNumberMutationBody = BodyType<PurchasePhoneNumberInput>
-    export type PurchasePhoneNumberMutationError = ErrorType<void>
+    export type InitiatePhoneNumberPurchaseMutationResult = NonNullable<Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>>
+    export type InitiatePhoneNumberPurchaseMutationBody = BodyType<PurchasePhoneNumberInput>
+    export type InitiatePhoneNumberPurchaseMutationError = ErrorType<void>
 
     /**
- * @summary Purchase a phone number ($5 deducted from wallet)
+ * @summary Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
-export const usePurchasePhoneNumber = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof purchasePhoneNumber>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useInitiatePhoneNumberPurchase = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>, TError,{data: BodyType<PurchasePhoneNumberInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof purchasePhoneNumber>>,
+        Awaited<ReturnType<typeof initiatePhoneNumberPurchase>>,
         TError,
         {data: BodyType<PurchasePhoneNumberInput>},
         TContext
       > => {
-      return useMutation(getPurchasePhoneNumberMutationOptions(options));
+      return useMutation(getInitiatePhoneNumberPurchaseMutationOptions(options));
+    }
+
+export const getConfirmPhoneNumberPurchaseUrl = () => {
+
+
+
+
+  return `/api/phone-numbers/purchase/confirm`
+}
+
+/**
+ * @summary Confirm a Razorpay payment and provision the purchased number. Only called after the Razorpay checkout succeeds.
+ */
+export const confirmPhoneNumberPurchase = async (confirmPhoneNumberPurchaseInput: ConfirmPhoneNumberPurchaseInput, options?: RequestInit): Promise<PhoneNumber> => {
+
+  return customFetch<PhoneNumber>(getConfirmPhoneNumberPurchaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      confirmPhoneNumberPurchaseInput,)
+  }
+);}
+
+
+
+
+export const getConfirmPhoneNumberPurchaseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPhoneNumberPurchase>>, TError,{data: BodyType<ConfirmPhoneNumberPurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmPhoneNumberPurchase>>, TError,{data: BodyType<ConfirmPhoneNumberPurchaseInput>}, TContext> => {
+
+const mutationKey = ['confirmPhoneNumberPurchase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmPhoneNumberPurchase>>, {data: BodyType<ConfirmPhoneNumberPurchaseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  confirmPhoneNumberPurchase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmPhoneNumberPurchaseMutationResult = NonNullable<Awaited<ReturnType<typeof confirmPhoneNumberPurchase>>>
+    export type ConfirmPhoneNumberPurchaseMutationBody = BodyType<ConfirmPhoneNumberPurchaseInput>
+    export type ConfirmPhoneNumberPurchaseMutationError = ErrorType<void>
+
+    /**
+ * @summary Confirm a Razorpay payment and provision the purchased number. Only called after the Razorpay checkout succeeds.
+ */
+export const useConfirmPhoneNumberPurchase = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPhoneNumberPurchase>>, TError,{data: BodyType<ConfirmPhoneNumberPurchaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmPhoneNumberPurchase>>,
+        TError,
+        {data: BodyType<ConfirmPhoneNumberPurchaseInput>},
+        TContext
+      > => {
+      return useMutation(getConfirmPhoneNumberPurchaseMutationOptions(options));
     }
 
 export const getAssignPhoneNumberUrl = (id: number,) => {

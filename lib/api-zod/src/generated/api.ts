@@ -1901,6 +1901,9 @@ export const ListPhoneNumbersResponseItem = zod.object({
   "status": zod.enum(['active', 'released']),
   "purchasedAt": zod.coerce.date(),
   "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (from Vobiz, 0 = no recurring fee)'),
+  "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days)'),
+  "nextRenewalAt": zod.coerce.date().nullish().describe('When the next $8 renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
+  "lastRenewalAt": zod.coerce.date().nullish(),
   "releasedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -1929,15 +1932,35 @@ export const ListAvailablePhoneNumbersResponse = zod.array(ListAvailablePhoneNum
 
 
 /**
- * @summary Purchase a phone number ($5 deducted from wallet)
+ * @summary Start a phone-number purchase — creates a Razorpay order for the $10 first-purchase fee. The number is NOT provisioned until payment is confirmed via purchase/confirm.
  */
-export const purchasePhoneNumberBodyNumberTypeDefault = `local`;
+export const initiatePhoneNumberPurchaseBodyNumberTypeDefault = `local`;
 
-export const PurchasePhoneNumberBody = zod.object({
+export const InitiatePhoneNumberPurchaseBody = zod.object({
   "number": zod.string().describe('E.164 number to purchase (from the available list)'),
   "countryCode": zod.string(),
   "region": zod.string().optional(),
-  "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(purchasePhoneNumberBodyNumberTypeDefault)
+  "numberType": zod.enum(['local', 'toll_free', 'mobile']).default(initiatePhoneNumberPurchaseBodyNumberTypeDefault)
+})
+
+export const InitiatePhoneNumberPurchaseResponse = zod.object({
+  "purchaseOrderId": zod.number().describe('Internal order id — pass back in ConfirmPhoneNumberPurchaseInput'),
+  "orderId": zod.string().describe('Razorpay order id'),
+  "amountCents": zod.number().describe('First-purchase fee in cents (currently $10.00 = 1000)'),
+  "amount": zod.number().describe('Amount in the smallest currency unit, as required by the Razorpay checkout widget'),
+  "currency": zod.string(),
+  "keyId": zod.string().describe('Razorpay publishable key id for the checkout widget')
+})
+
+
+/**
+ * @summary Confirm a Razorpay payment and provision the purchased number. Only called after the Razorpay checkout succeeds.
+ */
+export const ConfirmPhoneNumberPurchaseBody = zod.object({
+  "purchaseOrderId": zod.number(),
+  "razorpayOrderId": zod.string(),
+  "razorpayPaymentId": zod.string(),
+  "razorpaySignature": zod.string()
 })
 
 
@@ -1965,6 +1988,9 @@ export const AssignPhoneNumberResponse = zod.object({
   "status": zod.enum(['active', 'released']),
   "purchasedAt": zod.coerce.date(),
   "monthlyRateCents": zod.number().optional().describe('Monthly cost in cents (from Vobiz, 0 = no recurring fee)'),
+  "renewalRateCents": zod.number().optional().describe('Recurring monthly renewal fee in cents, charged from wallet balance on the purchase-date anniversary (30 days)'),
+  "nextRenewalAt": zod.coerce.date().nullish().describe('When the next $8 renewal charge is due (30 days after purchasedAt\/lastRenewalAt). Null once released.'),
+  "lastRenewalAt": zod.coerce.date().nullish(),
   "releasedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
