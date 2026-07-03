@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
@@ -13,10 +13,15 @@ const DEFAULT_MODEL = "mistral-small-latest";
 export class MistralLLM implements LLMAdapter {
   private client: OpenAI;
   private model: string;
+  // Mistral's API accepts temperature in the range 0–1.5 (unlike the shared
+  // 0–2 UI slider), so clamp down rather than passing 0–2 through.
+  private temperature: number | undefined;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({ apiKey, baseURL: "https://api.mistral.ai/v1" });
     this.model = model ?? DEFAULT_MODEL;
+    const t = genParams?.temperature;
+    this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(1.5, Math.max(0, t)) : undefined;
   }
 
   async chat(
@@ -46,6 +51,7 @@ export class MistralLLM implements LLMAdapter {
         ...toOpenAIMessages(messages),
       ] as any,
       ...(tools ? { tools, tool_choice: "auto" } : {}),
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
     });
 
     let full = "";

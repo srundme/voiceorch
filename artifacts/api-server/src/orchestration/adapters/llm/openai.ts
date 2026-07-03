@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
@@ -9,10 +9,13 @@ import { toOpenAIMessages } from "./openai-messages.js";
 export class OpenAILLM implements LLMAdapter {
   private client: OpenAI;
   private model: string;
+  private temperature: number | undefined;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({ apiKey });
     this.model = model ?? "gpt-4o-mini";
+    const t = genParams?.temperature;
+    this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
   }
 
   async chat(
@@ -46,6 +49,7 @@ export class OpenAILLM implements LLMAdapter {
         ...toOpenAIMessages(messages),
       ] as any,
       ...(openAiTools ? { tools: openAiTools, tool_choice: "auto" } : {}),
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
     });
 
     let full = "";

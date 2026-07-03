@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { FunctionDeclarationSchema, FunctionDeclarationSchemaProperty } from "@google/generative-ai";
-import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 
 // ── Gemini-scoped reasoning/preamble backstop (GEMINI ONLY) ──────────────────
 // Defense-in-depth for the rare case where Gemini emits its planning narration as
@@ -108,10 +108,13 @@ export function makeGeminiPreambleGuard(): (token: string) => string {
 export class GoogleLLM implements LLMAdapter {
   private genAI: GoogleGenerativeAI;
   private model: string;
+  private temperature: number | undefined;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = model ?? "gemini-2.5-flash";
+    const t = genParams?.temperature;
+    this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
   }
 
   async chat(
@@ -161,6 +164,7 @@ export class GoogleLLM implements LLMAdapter {
       // passed through to the REST endpoint by the legacy SDK (which does not type them).
       generationConfig: {
         thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
+        ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       } as any,
     });
 

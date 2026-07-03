@@ -69,6 +69,7 @@ export class GroqLLM implements LLMAdapter {
   private client: OpenAI;
   private model: string;
   private maxTokens: number | undefined;
+  private temperature: number | undefined;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -77,6 +78,8 @@ export class GroqLLM implements LLMAdapter {
     });
     this.model     = resolveGroqModel(model);
     this.maxTokens = genParams?.maxTokens ?? undefined;
+    const t = genParams?.temperature;
+    this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
   }
 
   async chat(
@@ -123,6 +126,7 @@ export class GroqLLM implements LLMAdapter {
       // chunked into sentences and played incrementally, so the cap doesn't
       // truncate natural speech.
       ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       messages: [
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),

@@ -25,27 +25,30 @@ export function createLLMAdapter(
   if (STUB_PROVIDERS_ENABLED) return createStubLLM();
   switch (provider.toLowerCase()) {
     case "openai":
-      return new OpenAILLM(apiKey, model);
+      return new OpenAILLM(apiKey, model, genParams);
     case "groq":
       return new GroqLLM(apiKey, model, genParams);
     case "google":
-      return new GoogleLLM(apiKey, model);
+      return new GoogleLLM(apiKey, model, genParams);
     case "gemini":
       return new QwenLLM(apiKey, model, genParams);
     case "sarvam":
       return new SarvamLLM(apiKey, model, genParams, callId);
     case "deepseek":
-      return new DeepSeekLLM(apiKey, model);
+      return new DeepSeekLLM(apiKey, model, genParams);
     case "anthropic":
     case "claude":
-      return new AnthropicLLM(apiKey, model);
+      return new AnthropicLLM(apiKey, model, genParams);
     case "mistral":
-      return new MistralLLM(apiKey, model);
+      return new MistralLLM(apiKey, model, genParams);
     case "cohere":
-      return new CohereLLM(apiKey, model);
+      return new CohereLLM(apiKey, model, genParams);
     case "qwen":
       return new QwenLLM(apiKey, model, genParams);
     case "ultravox":
+      // Ultravox is a multimodal speech-language model; its OpenAI-compatible
+      // endpoint does not document a comparable text-generation temperature
+      // control, so it intentionally does not receive genParams (out of scope).
       return new UltravoxLLM(apiKey, model, baseUrl);
     default:
       throw new Error(`Unknown LLM provider: ${provider}`);

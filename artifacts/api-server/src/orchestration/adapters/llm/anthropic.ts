@@ -1,4 +1,4 @@
-import type { ConversationTurn, LLMAdapter, LLMUsage, ToolDefinition } from "../../types.js";
+import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 
 /**
  * Convert ConversationTurn[] to Anthropic's message format.
@@ -60,10 +60,15 @@ interface AnthropicStreamEvent {
 export class AnthropicLLM implements LLMAdapter {
   private key: string;
   private model: string;
+  // Anthropic's Messages API accepts temperature in the range 0–1 (unlike the
+  // shared 0–2 UI slider), so clamp down rather than passing 0–2 through.
+  private temperature: number | undefined;
 
-  constructor(apiKey: string, model: string | null) {
+  constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.key = apiKey;
     this.model = model ?? DEFAULT_MODEL;
+    const t = genParams?.temperature;
+    this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : undefined;
   }
 
   async chat(
@@ -89,6 +94,7 @@ export class AnthropicLLM implements LLMAdapter {
         : systemPrompt,
       messages: toAnthropicMessages(messages),
       stream: true,
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
     };
 
     if (options?.tools?.length) {
