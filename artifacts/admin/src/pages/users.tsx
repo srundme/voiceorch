@@ -46,6 +46,7 @@ export default function UsersList() {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="font-mono text-xs">User</TableHead>
+              <TableHead className="font-mono text-xs">Signup Info</TableHead>
               <TableHead className="font-mono text-xs text-right">Balance</TableHead>
               <TableHead className="font-mono text-xs text-right">Spent</TableHead>
               <TableHead className="font-mono text-xs text-right">Calls</TableHead>
@@ -57,19 +58,19 @@ export default function UsersList() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground animate-pulse">
+                <TableCell colSpan={8} className="text-center h-24 text-muted-foreground animate-pulse">
                   Loading users...
                 </TableCell>
               </TableRow>
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center h-24 text-destructive">
+                <TableCell colSpan={8} className="text-center h-24 text-destructive">
                   Failed to load users: {(error as Error)?.message}
                 </TableCell>
               </TableRow>
             ) : filteredUsers?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
                   No users found
                 </TableCell>
               </TableRow>
@@ -82,6 +83,20 @@ export default function UsersList() {
                       <div className="text-xs text-muted-foreground truncate max-w-[200px]">{user.name || 'Unnamed'}</div>
                       <div className="text-[10px] text-muted-foreground font-mono mt-1 opacity-50 group-hover:opacity-100">{user.clerkId}</div>
                     </Link>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {user.onboardingData ? (
+                      <div className="space-y-0.5">
+                        {user.onboardingData.role && (
+                          <div className="capitalize">{user.onboardingData.role}</div>
+                        )}
+                        {user.onboardingData.referralSource && (
+                          <div className="text-[10px] opacity-70 capitalize">via {user.onboardingData.referralSource.replace(/_/g, " ")}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="opacity-50">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
                     <span className={user.walletBalanceCents < 0 ? "text-destructive" : ""}>

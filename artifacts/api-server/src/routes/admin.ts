@@ -120,6 +120,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       walletBalanceCents: u.walletBalanceCents,
       freeCreditsGranted: u.freeCreditsGranted,
       onboardingCompleted: u.onboardingCompleted,
+      onboardingData: u.onboardingData,
       callCount: callCountMap.get(u.clerkId) ?? 0,
       agentCount: agentCountMap.get(u.clerkId) ?? 0,
       totalDurationSeconds: durationMap.get(u.clerkId) ?? 0,

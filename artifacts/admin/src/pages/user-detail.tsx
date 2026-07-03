@@ -292,6 +292,44 @@ export default function UserDetail() {
               </CardContent>
             </Card>
           </div>
+
+          {user.onboardingData && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Signup Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <span className="block text-xs text-muted-foreground mb-0.5">Role</span>
+                  <span className="font-medium capitalize">{user.onboardingData.role || "—"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground mb-0.5">Referral Source</span>
+                  <span className="font-medium capitalize">{user.onboardingData.referralSource?.replace(/_/g, " ") || "—"}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground mb-0.5">Used Voice Agents Before</span>
+                  <span className="font-medium">
+                    {user.onboardingData.usedVoiceAgents === true
+                      ? "Yes"
+                      : user.onboardingData.usedVoiceAgents === false
+                      ? "No"
+                      : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground mb-0.5">Prior Platforms</span>
+                  <span className="font-medium">
+                    {Array.isArray(user.onboardingData.priorPlatforms) && user.onboardingData.priorPlatforms.length > 0
+                      ? user.onboardingData.priorPlatforms.join(", ")
+                      : "—"}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
