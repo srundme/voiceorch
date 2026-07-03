@@ -1547,6 +1547,7 @@ export default function CampaignsPage() {
         activeCampaigns={campaigns as unknown as Campaign[]}
       />
       <CampaignFormDialog
+        key={editing?.id ?? "new"}
         open={!!editing}
         onClose={() => setEditing(null)}
         editing={editing}
