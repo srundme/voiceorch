@@ -300,7 +300,10 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
   if (updateSourceIds !== undefined) {
     await setAgentKnowledgeSources(agent.id, updateSourceIds);
   }
-  // Sync phone_numbers.agent_id when inbound phone number assignment changes
+  // Sync phone_numbers.agent_id when inbound phone number assignment changes.
+  // Whenever a number becomes this agent's inbound number, it also becomes the
+  // agent's outbound caller ID automatically — inbound and outbound should stay
+  // the same number unless the user explicitly picks a different one.
   if ("inboundPhoneNumberId" in parsed.data) {
     await db.update(phoneNumbersTable)
       .set({ agentId: null })
@@ -312,6 +315,11 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
           eq(phoneNumbersTable.id, parsed.data.inboundPhoneNumberId as number),
           eq(phoneNumbersTable.userId, agent.userId),
         ));
+      const [updatedAgent] = await db.update(agentsTable)
+        .set({ outboundPhoneNumberId: parsed.data.inboundPhoneNumberId as number })
+        .where(eq(agentsTable.id, agent.id))
+        .returning();
+      if (updatedAgent) Object.assign(agent, updatedAgent);
     }
   }
   const sourceIdMap = await getKnowledgeSourceIdsByAgent([agent]);
