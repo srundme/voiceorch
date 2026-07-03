@@ -234,3 +234,9 @@ id = "H9zlY3xQqbMZCk8PlFrZi"
 uri = "file://reports/llm-model-inventory.pdf"
 type = "pdf"
 title = "LLM Model Compatibility Inventory"
+
+[[outputs]]
+id = "SzKopZpAw64IArzYxLBPh"
+uri = "file://FUTURE_UPDATES.md"
+type = "text"
+title = "VoiceOrch Future Updates & Ideas"
