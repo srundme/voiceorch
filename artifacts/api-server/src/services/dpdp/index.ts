@@ -23,8 +23,12 @@ import {
   dpdpCallComplianceLogTable,
   dpdpErasureRequestsTable,
   agentsTable,
+  callerProfilesTable,
+  callerFactsTable,
+  callerCallArchiveTable,
+  callerSentencesTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, lt, inArray } from "drizzle-orm";
 import { normalizePhone } from "../../lib/phone-normalize.js";
 import { logger } from "../../lib/logger.js";
 
@@ -211,6 +215,92 @@ export async function anonymizeExpiredDpdpCalls(retentionDays: number): Promise<
     return n;
   } catch (err) {
     logger.warn({ err, retentionDays }, "DPDP: retention sweep failed");
+    return 0;
+  }
+}
+
+/**
+ * Daily retention sweep for the caller-memory graph — separate from
+ * `anonymizeExpiredDpdpCalls`, which only covers the `calls` table.
+ * `caller_profiles` / `caller_facts` / `caller_call_archive` /
+ * `caller_sentences` previously had NO retention policy at all: raw
+ * transcripts and structured facts were kept forever. This applies the same
+ * DPDP retention window to that memory graph, gated per-agent on
+ * `agentConfig.compliance.dpdp`.
+ *
+ * Only touches a caller's memory once they've gone quiet for the FULL
+ * retention window (`caller_profiles.updated_at < cutoff`) — an active
+ * repeat caller's memory is never erased mid-relationship, only abandoned
+ * threads age out. Deletes facts and per-utterance sentences outright, and
+ * clears the profile name/summary/predicted-intent plus each episode's raw
+ * transcript/summary (kept as a placeholder row so call-count history and
+ * duration/sentiment aggregates survive for analytics). Best-effort; never
+ * throws.
+ */
+export async function anonymizeExpiredCallerMemory(retentionDays: number): Promise<number> {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  let anonymized = 0;
+  try {
+    const allAgents = await db
+      .select({ id: agentsTable.id, agentConfig: agentsTable.agentConfig })
+      .from(agentsTable);
+    const dpdpAgentIds = allAgents
+      .filter((a) => !!(a.agentConfig as { compliance?: { dpdp?: boolean } } | null)?.compliance?.dpdp)
+      .map((a) => a.id);
+    if (dpdpAgentIds.length === 0) return 0;
+
+    const staleProfiles = await db
+      .select({ agentId: callerProfilesTable.agentId, phoneNumber: callerProfilesTable.phoneNumber })
+      .from(callerProfilesTable)
+      .where(and(
+        inArray(callerProfilesTable.agentId, dpdpAgentIds),
+        lt(callerProfilesTable.updatedAt, cutoff),
+      ));
+
+    for (const p of staleProfiles) {
+      try {
+        await db.transaction(async (tx) => {
+          await tx.update(callerProfilesTable)
+            .set({ name: null, summary: null, predictedIntent: null })
+            .where(and(
+              eq(callerProfilesTable.agentId, p.agentId),
+              eq(callerProfilesTable.phoneNumber, p.phoneNumber),
+            ));
+          await tx.delete(callerFactsTable)
+            .where(and(
+              eq(callerFactsTable.agentId, p.agentId),
+              eq(callerFactsTable.phoneNumber, p.phoneNumber),
+            ));
+          const episodes = await tx
+            .select({ id: callerCallArchiveTable.id })
+            .from(callerCallArchiveTable)
+            .where(and(
+              eq(callerCallArchiveTable.agentId, p.agentId),
+              eq(callerCallArchiveTable.phoneNumber, p.phoneNumber),
+            ));
+          if (episodes.length > 0) {
+            await tx.delete(callerSentencesTable)
+              .where(inArray(callerSentencesTable.episodeId, episodes.map((e) => e.id)));
+          }
+          await tx.update(callerCallArchiveTable)
+            .set({ transcript: "[erased — DPDP retention window expired]", summary: null })
+            .where(and(
+              eq(callerCallArchiveTable.agentId, p.agentId),
+              eq(callerCallArchiveTable.phoneNumber, p.phoneNumber),
+            ));
+        });
+        anonymized++;
+      } catch (err) {
+        logger.warn({ err, agentId: p.agentId }, "DPDP: caller-memory anonymization failed for one profile");
+      }
+    }
+
+    if (anonymized > 0) {
+      logger.info({ retentionDays, anonymized }, "DPDP: caller-memory retention sweep anonymized stale profiles");
+    }
+    return anonymized;
+  } catch (err) {
+    logger.warn({ err, retentionDays }, "DPDP: caller-memory retention sweep failed");
     return 0;
   }
 }

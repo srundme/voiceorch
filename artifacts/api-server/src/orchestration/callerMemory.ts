@@ -485,7 +485,7 @@ export function injectEnhancedMemory(
     lines.push("KNOWN FACTS:");
     for (const f of displayFacts) {
       const ageDays = Math.floor((now - f.createdAt.getTime()) / 86_400_000);
-      const staleTag = ageDays > STALE_DAYS ? "  ⚠️ may be outdated" : "";
+      const staleTag = ageDays > STALE_DAYS ? "  ⚠️ STALE — re-verify with the caller before relying on this" : "";
       const ageLabel = daysSinceLabel(f.createdAt);
       lines.push(`• ${f.key}: ${f.value}${ageLabel ? `  [${ageLabel}]` : ""}${staleTag}`);
     }
@@ -607,53 +607,64 @@ async function supersedeFact(opts: {
   const { agentId, phoneNumber, key, value, confidence, sourceCallId, sourceSentenceIds = [] } = opts;
 
   try {
-    // Find current (non-superseded) fact with this key
-    const [existing] = await db
-      .select({ id: callerFactsTable.id, value: callerFactsTable.value })
-      .from(callerFactsTable)
-      .where(and(
-        eq(callerFactsTable.agentId, agentId),
-        eq(callerFactsTable.phoneNumber, phoneNumber),
-        eq(callerFactsTable.key, key),
-        isNull(callerFactsTable.supersededById),
-      ))
-      .orderBy(desc(callerFactsTable.createdAt))
-      .limit(1);
+    // Wrapped in a transaction so the check-then-insert-then-update sequence
+    // is atomic: without it, two near-simultaneous calls to supersedeFact for
+    // the same key (e.g. rapid back-to-back caller utterances) could both
+    // read the same "current" fact, both insert a new row, and both try to
+    // supersede the same old row — forking the supersession chain so two
+    // facts end up marked "current" at once. A row lock (FOR UPDATE) on the
+    // read makes the second transaction wait for the first to commit its
+    // supersede-edge before it sees the fact as current.
+    return await db.transaction(async (tx) => {
+      // Find current (non-superseded) fact with this key
+      const [existing] = await tx
+        .select({ id: callerFactsTable.id, value: callerFactsTable.value })
+        .from(callerFactsTable)
+        .where(and(
+          eq(callerFactsTable.agentId, agentId),
+          eq(callerFactsTable.phoneNumber, phoneNumber),
+          eq(callerFactsTable.key, key),
+          isNull(callerFactsTable.supersededById),
+        ))
+        .orderBy(desc(callerFactsTable.createdAt))
+        .limit(1)
+        .for("update");
 
-    // Same value → no-op
-    if (existing && existing.value === value) return existing.id;
+      // Same value → no-op
+      if (existing && existing.value === value) return existing.id;
 
-    // Insert new fact node
-    const [newRow] = await db
-      .insert(callerFactsTable)
-      .values({
-        agentId,
-        phoneNumber,
-        key,
-        value:        value.slice(0, 512),
-        confidence:   Math.min(1, Math.max(0, confidence)),
-        sourceCallId,
-      })
-      .returning({ id: callerFactsTable.id });
+      // Insert new fact node
+      const [newRow] = await tx
+        .insert(callerFactsTable)
+        .values({
+          agentId,
+          phoneNumber,
+          key,
+          value:        value.slice(0, 512),
+          confidence:   Math.min(1, Math.max(0, confidence)),
+          sourceCallId,
+        })
+        .returning({ id: callerFactsTable.id });
 
-    if (!newRow) return null;
+      if (!newRow) return null;
 
-    // Draw superseded_by edge: old → new
-    if (existing) {
-      await db
-        .update(callerFactsTable)
-        .set({ supersededById: newRow.id })
-        .where(eq(callerFactsTable.id, existing.id));
-    }
+      // Draw superseded_by edge: old → new
+      if (existing) {
+        await tx
+          .update(callerFactsTable)
+          .set({ supersededById: newRow.id })
+          .where(eq(callerFactsTable.id, existing.id));
+      }
 
-    // Write fact_sources edges (L0 → L2) via junction table
-    if (sourceSentenceIds.length > 0) {
-      await db.insert(callerFactSentenceLinksTable).values(
-        sourceSentenceIds.map(sid => ({ factId: newRow.id, sentenceId: sid })),
-      );
-    }
+      // Write fact_sources edges (L0 → L2) via junction table
+      if (sourceSentenceIds.length > 0) {
+        await tx.insert(callerFactSentenceLinksTable).values(
+          sourceSentenceIds.map(sid => ({ factId: newRow.id, sentenceId: sid })),
+        );
+      }
 
-    return newRow.id;
+      return newRow.id;
+    });
   } catch (err) {
     logger.warn({ err, agentId, phoneNumber, key }, "supersedeFact DB error");
     return null;
@@ -1049,32 +1060,40 @@ export async function updateCallerProfile(opts: {
         agentId, phoneNumber,
         key: PERSONA_HASH_FACT_KEY, value: personaHash!, confidence: 1, sourceCallId: callId,
       });
-      if (markerId) {
-        await db.update(callerFactsTable)
-          .set({ supersededById: markerId })
+      // These three retirement steps must land together — if one throws
+      // partway through (e.g. transient DB error), a non-transactional
+      // sequence could leave old facts retired but the profile/episodes
+      // still carrying the stale domain's summary/sentiment, which then
+      // leaks back into predictCallerIntent on the very next call. Wrapping
+      // in a transaction makes the retirement all-or-nothing.
+      await db.transaction(async (tx) => {
+        if (markerId) {
+          await tx.update(callerFactsTable)
+            .set({ supersededById: markerId })
+            .where(and(
+              eq(callerFactsTable.agentId, agentId),
+              eq(callerFactsTable.phoneNumber, phoneNumber),
+              isNull(callerFactsTable.supersededById),
+              ne(callerFactsTable.key, PERSONA_HASH_FACT_KEY),
+            ));
+        }
+        await tx.update(callerProfilesTable)
+          .set({ predictedIntent: null, summary: null, riskScore: null, sentimentTrend: null, updatedAt: now })
           .where(and(
-            eq(callerFactsTable.agentId, agentId),
-            eq(callerFactsTable.phoneNumber, phoneNumber),
-            isNull(callerFactsTable.supersededById),
-            ne(callerFactsTable.key, PERSONA_HASH_FACT_KEY),
+            eq(callerProfilesTable.agentId, agentId),
+            eq(callerProfilesTable.phoneNumber, phoneNumber),
           ));
-      }
-      await db.update(callerProfilesTable)
-        .set({ predictedIntent: null, summary: null, riskScore: null, sentimentTrend: null, updatedAt: now })
-        .where(and(
-          eq(callerProfilesTable.agentId, agentId),
-          eq(callerProfilesTable.phoneNumber, phoneNumber),
-        ));
-      // Retire pre-swap episodes (keep THIS call's archive) so old-domain
-      // summaries and sentiment can't resurface via RECENT EPISODES later.
-      await db.update(callerCallArchiveTable)
-        .set({ summary: null, sentiment: null })
-        .where(and(
-          eq(callerCallArchiveTable.agentId, agentId),
-          eq(callerCallArchiveTable.phoneNumber, phoneNumber),
-          // Keep THIS call's archive row intact when we know its id.
-          archiveId != null ? ne(callerCallArchiveTable.id, archiveId) : undefined,
-        ));
+        // Retire pre-swap episodes (keep THIS call's archive) so old-domain
+        // summaries and sentiment can't resurface via RECENT EPISODES later.
+        await tx.update(callerCallArchiveTable)
+          .set({ summary: null, sentiment: null })
+          .where(and(
+            eq(callerCallArchiveTable.agentId, agentId),
+            eq(callerCallArchiveTable.phoneNumber, phoneNumber),
+            // Keep THIS call's archive row intact when we know its id.
+            archiveId != null ? ne(callerCallArchiveTable.id, archiveId) : undefined,
+          ));
+      });
       priorFacts = [];     // extraction must start cold for the new persona
       priorContext = "";   // and must NOT inherit the retired domain's summary
       logger.info({ agentId, phoneNumber, callId }, "Caller memory: retired stale persona memory after agent repurpose");
@@ -1330,6 +1349,34 @@ interface FactPattern {
   patterns: RegExp[];
   extract: (match: RegExpMatchArray) => string;
   confidence: number;
+  /** Optional guard rejecting structurally-matched-but-implausible values
+   * (e.g. "Saturday" matching the location pattern). Same defense-in-depth
+   * idea as isPlausibleName. */
+  isPlausible?: (value: string) => boolean;
+}
+
+// Words that structurally match the location regex (capitalized word after
+// "calling from"/"based in") but are never real place names — days, months,
+// and common sentence-continuation words a caller might say right after
+// "calling from" without stating a location at all.
+const LOCATION_BLOCKLIST = new Set([
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+  "january", "february", "march", "april", "may", "june", "july", "august",
+  "september", "october", "november", "december",
+  "home", "work", "office", "here", "there", "abroad", "outside", "inside",
+  "the", "your", "our", "my", "this", "that",
+]);
+
+function isPlausibleLocation(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 40) return false;
+  if (/\d/.test(trimmed)) return false;
+  const words = trimmed.split(/\s+/);
+  if (words.length > 4) return false;
+  for (const w of words) {
+    if (LOCATION_BLOCKLIST.has(w.toLowerCase())) return false;
+  }
+  return true;
 }
 
 const FACT_PATTERNS: FactPattern[] = [
@@ -1370,6 +1417,7 @@ const FACT_PATTERNS: FactPattern[] = [
     ],
     extract: m => m[1]!.trim(),
     confidence: 0.85,
+    isPlausible: isPlausibleLocation,
   },
   {
     key: "occupation",
@@ -1382,10 +1430,14 @@ const FACT_PATTERNS: FactPattern[] = [
   },
   {
     key: "budget_range",
+    // Deliberately anchored to phrases where the CALLER is stating their own
+    // budget ("my budget is...", "I can afford..."). A bare currency mention
+    // (e.g. the caller repeating back a price the agent just quoted, "Rs 500?
+    // okay") is NOT evidence of a budget and must not be latched — removed
+    // the old unanchored `/₹?\d+/` pattern that matched any number mention.
     patterns: [
       /\bbudget (?:of |is |around )?(?:₹|rs\.?|inr)?\s?(\d[\d,]*)\b/i,
       /\bcan (?:spend|afford|pay) (?:up to |around |about )?(?:₹|rs\.?|inr)?\s?(\d[\d,]*)\b/i,
-      /\b(?:₹|rs\.?|inr)\s?(\d[\d,]+)\s*(?:per year|monthly|p\.?a\.?|\/year|\/month)?\b/i,
     ],
     extract: m => m[1]!.replace(/,/g, ""),
     confidence: 0.85,
@@ -1419,6 +1471,10 @@ export async function latchCallerFact(opts: {
       let value: string;
       try { value = fp.extract(match).trim(); } catch { continue; }
       if (!value || value.length > 200) continue;
+      if (fp.isPlausible && !fp.isPlausible(value)) {
+        logger.warn({ callId, agentId, phoneNumber, key: fp.key, rejected: value }, "Caller fact latch failed plausibility check — discarding");
+        continue;
+      }
 
       // Use supersedeFact — handles insert vs supersession automatically
       const factId = await supersedeFact({

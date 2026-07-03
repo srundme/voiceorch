@@ -1,4 +1,4 @@
-import { anonymizeExpiredDpdpCalls } from "./dpdp/index.js";
+import { anonymizeExpiredDpdpCalls, anonymizeExpiredCallerMemory } from "./dpdp/index.js";
 import { logger } from "../lib/logger.js";
 
 let started = false;
@@ -27,6 +27,9 @@ export function startDpdpRetentionSweep(): void {
   const tick = (): void => {
     void anonymizeExpiredDpdpCalls(retentionDays).catch((err) => {
       logger.warn({ err }, "DPDP retention sweep tick failed");
+    });
+    void anonymizeExpiredCallerMemory(retentionDays).catch((err) => {
+      logger.warn({ err }, "DPDP caller-memory retention sweep tick failed");
     });
   };
 
