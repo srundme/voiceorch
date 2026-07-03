@@ -1,0 +1,18 @@
+Task: LLM Model-Level Compatibility Inventory (Investigation Only — No Code Changes)
+Scope constraint (mandatory): This is a read-only documentation task. Do not modify, refactor, or touch any code, schema, or config files. Do not change shared code in any way. Output should be a markdown report only.
+Objective:
+The previous Config-to-Feature Audit documented LLM behavior at the provider level (OpenAI, Anthropic, Google, Groq, etc.) but did not enumerate the specific models available under each provider. I need a model-level inventory so end users can pick the right model, not just the right provider.
+For each LLM provider adapter in adapters/llm/, extract:
+
+Exact model ID strings accepted/selectable for that provider (e.g. gpt-4o, claude-sonnet-4-5, gemini-2.5-pro, llama-3.3-70b-versatile) — pull from the adapter code, any model allow-list/enum, and the dashboard dropdown source (builder.tsx / edit.schema.ts).
+Default model used when llm_model is left empty for that provider.
+Per-model differences within the same provider, if any exist in code — e.g. does tool-calling reliability, max context window, max output tokens, or streaming support vary between models of the same provider (not just between providers)?
+Deprecated/remapped models — any model name that gets silently substituted for another (like the Groq mixtral-8x7b-32768 → llama-3.3-70b-versatile remap already found) — flag all such cases across all providers, not just Groq.
+Hardcoded limits per model or provider — e.g. the Anthropic max_tokens: 1024 hardcode — check if this is provider-wide or specific to certain Anthropic models, and check every other provider adapter for similar hardcoded caps.
+Model availability gating — is model selection restricted by billing plan (managed vs BYOP), client vertical, or any other config flag?
+Pricing/cost tier signals, if present in code (e.g. comments, cost-per-token constants) — flag only if explicitly present, don't infer.
+
+Output format:
+A table per provider: Model ID | Default? (Y/N) | Tool Calling | Streaming | Max Output Tokens | Known Quirks.
+Label every claim [confirmed] (traced directly in code, with file + line citation) or [uncertain] (inferred, not directly verifiable). Do not guess at model names not found in code — mark as "not enumerated in code" if the dashboard allows free-text model entry rather than a fixed list.
+Out of scope: No live API calls to verify model availability upstream (e.g. don't check if a model ID is still valid on OpenAI's actual API) — code-level tracing only, same as the prior audit.
