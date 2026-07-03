@@ -382,22 +382,6 @@ export function injectCallerMemory(systemPrompt: string, profile: CallerProfile)
 
 // ── Enhanced memory injection (all layers) ────────────────────────────────────
 
-const SENTIMENT_EMOJI: Record<string, string> = {
-  positive:  "😊",
-  neutral:   "😐",
-  negative:  "😞",
-  frustrated:"😤",
-  resolved:  "✅",
-};
-
-const TREND_LABEL: Record<string, string> = {
-  improving:       "📈 improving",
-  declining:       "📉 declining",
-  stable_positive: "✅ consistently positive",
-  stable_negative: "⚠️ consistently negative",
-  mixed:           "↕ mixed",
-};
-
 const STALE_DAYS = 90;  // facts older than this get a stale marker
 
 export function injectEnhancedMemory(
@@ -412,11 +396,10 @@ export function injectEnhancedMemory(
   // name and the name-priority safety rule survive.
   const personaChanged = ctx.personaChanged ?? false;
 
-  const lines: string[] = ["=== CALLER MEMORY — NEVER FORGETS ==="];
+  const lines: string[] = ["=== CALLER MEMORY ==="];
 
   const namePart   = profile?.name ?? facts.find(f => f.key === "name")?.value ?? "unknown";
   const callCount  = profile?.callCount ?? 0;
-  const lastLabel  = daysSinceLabel(profile?.lastCalledAt ?? null);
 
   const headerParts: string[] = [`Name: ${namePart}`];
 
@@ -436,41 +419,24 @@ export function injectEnhancedMemory(
   const unresumableDrop = isRecentDrop && !resumeDrop;
   const suppressDomain = personaChanged || unresumableDrop;
 
-  if (!suppressDomain) {
+  if (!suppressDomain && callCount > 0) {
     headerParts.push(`Calls: ${callCount}`);
-    if (lastLabel) headerParts.push(`Last: ${lastLabel}`);
   }
   if (resumeDrop) headerParts.push("⚠️ LAST CALL DROPPED");
   lines.push(headerParts.join("  |  "));
 
-  // ── Predicted intent (if available) ───────────────────────────────────────
-  if (!suppressDomain && profile?.predictedIntent) {
+  // ── Previous call summary (single line — most recent call only) ───────────
+  const latestSummary = suppressDomain
+    ? null
+    : (recentCalls.find(c => c.summary)?.summary ?? profile?.summary ?? null);
+  if (latestSummary) {
     lines.push("");
-    lines.push(`🎯 PREDICTED REASON FOR THIS CALL: ${profile.predictedIntent}`);
-  }
-
-  // ── Risk signal ───────────────────────────────────────────────────────────
-  const risk = profile?.riskScore ?? 0;
-  if (!suppressDomain && risk >= 0.7) {
-    lines.push(`🚨 HIGH RISK CALLER (score: ${(risk * 100).toFixed(0)}%) — approach with extra patience, proactively address pain points`);
-  } else if (!suppressDomain && risk >= 0.4) {
-    lines.push(`⚠️ ELEVATED RISK (score: ${(risk * 100).toFixed(0)}%) — caller may be frustrated, handle with care`);
-  }
-
-  // ── Sentiment arc ─────────────────────────────────────────────────────────
-  const sentimentsWithData = suppressDomain ? [] : recentCalls.filter(c => c.sentiment);
-  if (sentimentsWithData.length >= 2) {
-    const trend = profile?.sentimentTrend;
-    const arc = sentimentsWithData
-      .slice(0, 5)
-      .reverse()
-      .map(c => SENTIMENT_EMOJI[c.sentiment!] ?? "•")
-      .join(" → ");
-    const trendLabel = trend ? ` (${TREND_LABEL[trend] ?? trend})` : "";
-    lines.push(`📊 SENTIMENT ARC: ${arc}${trendLabel}`);
+    lines.push(`Previous call summary: ${latestSummary.trim()}`);
   }
 
   // ── L0: current (non-superseded) structured facts ─────────────────────────
+  // These are the details already known about the caller — the agent must
+  // rely on them instead of re-asking questions the caller already answered.
   const now = Date.now();
   const displayFacts = suppressDomain ? [] : facts.filter(f => {
     if (f.key === "name") return false;
@@ -482,27 +448,11 @@ export function injectEnhancedMemory(
   });
   if (displayFacts.length > 0) {
     lines.push("");
-    lines.push("KNOWN FACTS:");
+    lines.push("KNOWN DETAILS ABOUT THIS CALLER:");
     for (const f of displayFacts) {
       const ageDays = Math.floor((now - f.createdAt.getTime()) / 86_400_000);
       const staleTag = ageDays > STALE_DAYS ? "  ⚠️ STALE — re-verify with the caller before relying on this" : "";
-      const ageLabel = daysSinceLabel(f.createdAt);
-      lines.push(`• ${f.key}: ${f.value}${ageLabel ? `  [${ageLabel}]` : ""}${staleTag}`);
-    }
-  } else if (!suppressDomain && profile?.summary) {
-    lines.push("");
-    lines.push(`Prior context: ${profile.summary}`);
-  }
-
-  // ── L1: recent episode summaries with sentiment ───────────────────────────
-  const callsWithSummary = suppressDomain ? [] : recentCalls.filter(c => c.summary);
-  if (callsWithSummary.length > 0) {
-    lines.push("");
-    lines.push("RECENT EPISODES:");
-    for (const c of callsWithSummary) {
-      const label = daysSinceLabel(c.createdAt) ?? "—";
-      const sentEmoji = c.sentiment ? (SENTIMENT_EMOJI[c.sentiment] ?? "") + " " : "";
-      lines.push(`[${label}] ${sentEmoji}${c.summary!.trim()}`);
+      lines.push(`• ${f.key}: ${f.value}${staleTag}`);
     }
   }
 
@@ -542,20 +492,12 @@ export function injectEnhancedMemory(
         : "continue naturally from the prior context above."),
     );
   } else if (!suppressDomain && callCount >= 1) {
-    const riskInstruction = risk >= 0.7
-      ? " Caller has shown frustration recently — proactively address concerns before they escalate."
-      : risk >= 0.4
-        ? " Handle with care — caller may be frustrated."
-        : "";
-    const intentInstruction = profile?.predictedIntent
-      ? ` They are likely calling about: ${profile.predictedIntent} — address this proactively if appropriate.`
-      : "";
     const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";
     lines.push(
       `⚠️ IMPORTANT — THIS IS A RETURNING CALLER YOU ALREADY KNOW (call #${callCount + 1}). ` +
       `Do NOT introduce yourself or your company as if meeting for the first time, and do NOT speak a generic first-time intro. ` +
       `Open by greeting them${namePhrase} and naturally reference what you already know about them from the memory above. ` +
-      `Continue the relationship rather than starting cold.${riskInstruction}${intentInstruction}`,
+      `Continue the relationship rather than starting cold.`,
     );
   }
   // Blanket "don't re-ask" rule: the agent's base script below was written as
@@ -570,11 +512,11 @@ export function injectEnhancedMemory(
       "⚠️ DO NOT RE-ASK KNOWN INFORMATION: The base instructions below may include scripted " +
       "questions (e.g. asking for the caller's name, what they're calling about, or other " +
       "details) written as if this were a brand-new caller. If the answer to any such question " +
-      "is already present above (Name, KNOWN FACTS, Prior context, RECENT EPISODES, or the " +
-      "predicted reason), treat it as already answered — do NOT ask that question again. " +
-      "Instead, confirm it naturally in passing if needed (e.g. \"I see you were asking about " +
-      "X earlier, want to pick that back up?\") and move the conversation forward. Only ask a " +
-      "scripted question if its answer is genuinely missing from the memory above.",
+      "is already present above (Name, Previous call summary, or Known details), treat it as " +
+      "already answered — do NOT ask that question again. Instead, confirm it naturally in " +
+      "passing if needed (e.g. \"I see you were asking about X earlier, want to pick that back " +
+      "up?\") and move the conversation forward. Only ask a scripted question if its answer is " +
+      "genuinely missing from the memory above.",
     );
   }
 
