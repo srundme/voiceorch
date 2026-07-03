@@ -512,21 +512,28 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone Numbers</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="inboundPhoneNumberId" render={({ field }) => (
+                <FormField control={form.control} name="inboundPhoneNumberId" render={({ field }) => {
+                  const assigned = phoneNumbers.find(p => String(p.id) === String(field.value ?? ""));
+                  return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Inbound Number</FormLabel>
-                    <SmallSelect
-                      value={field.value ? String(field.value) : "__none__"}
-                      onChange={(v) => field.onChange(v === "__none__" ? null : parseInt(v, 10))}
-                      options={[
-                        { value: "__none__", label: "— None —" },
-                        ...phoneNumbers.map(p => ({ value: String(p.id), label: p.number })),
-                      ]}
-                      placeholder="Select number"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Calls to this number route here</p>
+                    {/* Read-only: number → agent routing is assigned/reassigned from the
+                        Phone Numbers page (the source of truth for inbound call routing).
+                        Editing it here too let two screens fight over the same setting. */}
+                    <button
+                      type="button"
+                      onClick={() => navigate("/app/phone-numbers")}
+                      className="w-full flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-left text-[12px] hover:border-border hover:bg-background/60 transition-colors"
+                    >
+                      <span className={cn(assigned ? "text-foreground" : "text-muted-foreground")}>
+                        {assigned ? assigned.number : "Not assigned"}
+                      </span>
+                      <span className="text-[10px] font-medium text-primary whitespace-nowrap">Manage →</span>
+                    </button>
+                    <p className="text-[10px] text-muted-foreground">Calls to this number route here — assign/reassign from Phone Numbers</p>
                   </FormItem>
-                )} />
+                  );
+                }} />
                 <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => {
                   const preferredManaged = form.watch("preferredManagedNumber");
                   const selectValue = field.value
