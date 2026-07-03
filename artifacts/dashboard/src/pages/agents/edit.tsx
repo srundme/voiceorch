@@ -84,8 +84,8 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (timezone) agentConfig["timezone"] = timezone;
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   agentConfig["languageAutoDetect"] = !!languageAutoDetect;
-  if (machineDetectionMode && machineDetectionMode !== "disabled") agentConfig["machineDetectionMode"] = machineDetectionMode;
-  if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
+  agentConfig["machineDetectionMode"] = machineDetectionMode ?? "disabled";
+  agentConfig["voicemailAction"] = voicemailAction ?? "hangup";
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   if (voicemailLeadInSeconds != null && voicemailLeadInSeconds !== 2) agentConfig["voicemailLeadInSeconds"] = voicemailLeadInSeconds;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;

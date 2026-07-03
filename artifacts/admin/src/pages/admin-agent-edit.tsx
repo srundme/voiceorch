@@ -161,8 +161,8 @@ function buildUpdateAgentPayload(data: AgentFormValues) {
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
   if (timezone) agentConfig["timezone"] = timezone;
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
-  if (machineDetectionMode && machineDetectionMode !== "disabled") agentConfig["machineDetectionMode"] = machineDetectionMode;
-  if (voicemailAction && voicemailAction !== "hangup") agentConfig["voicemailAction"] = voicemailAction;
+  agentConfig["machineDetectionMode"] = machineDetectionMode ?? "disabled";
+  agentConfig["voicemailAction"] = voicemailAction ?? "hangup";
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
