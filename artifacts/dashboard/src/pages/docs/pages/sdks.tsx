@@ -1,5 +1,6 @@
 import { CodeBlock } from "../CodeBlock";
 
+// Node.js/Python SDKs + Claude Skill reference for developers integrating with the API.
 export default function SdksPage() {
   return (
     <div>
