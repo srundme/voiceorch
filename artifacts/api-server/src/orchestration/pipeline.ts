@@ -2701,17 +2701,24 @@ export class OrchestrationPipeline {
     logToolExecutionStarted(this.logFn, { tool: toolName, turnNumber: this._activeTurnIndex });
     try {
       const result = await this.handleToolCallInner(toolName, args);
+      // A handful of built-in/terminal tools (end_call, webhook, send_sms,
+      // cal_com) intentionally return undefined — they don't hand a string
+      // back to the LLM for a follow-up turn because they act directly
+      // (speak + hang up, fire a webhook, etc). That's a legitimate success,
+      // not a missing/failed result, so label it clearly instead of the
+      // confusing "unavailable" (which reads like an error in the Tools tab).
+      const displayResult = result ?? "(no reply needed — tool completed directly)";
       this.logExec("Tool", "system", {
         status: "success",
         durationMs: Date.now() - _toolStart,
         turnNumber: this._activeTurnIndex,
-        metadata: { event: "Tool Executed", tool: toolName, result: (result ?? "unavailable").substring(0, 800) },
+        metadata: { event: "Tool Executed", tool: toolName, result: displayResult.substring(0, 800) },
       });
       this.logFn("Tool", "system", {
         status: "success",
         durationMs: Date.now() - _toolStart,
         turnNumber: this._activeTurnIndex,
-        metadata: { event: "Execution Completed", result: (result ?? "unavailable").substring(0, 800) },
+        metadata: { event: "Execution Completed", result: displayResult.substring(0, 800) },
       });
       this.logExec("Tool", "response", {
         status: "success",
@@ -2719,7 +2726,7 @@ export class OrchestrationPipeline {
         turnNumber: this._activeTurnIndex,
         durationMs: Date.now() - _toolStart,
         requestPayload: { tool: toolName },
-        responsePayload: { result: (result ?? "unavailable").substring(0, 800) },
+        responsePayload: { result: displayResult.substring(0, 800) },
       });
       return result;
     } catch (err) {
