@@ -222,3 +222,9 @@ id = "SW9xONcvxahGIeoNVS3ZE"
 uri = "file://docs/advanced-call-settings-report.md"
 type = "text"
 title = "Advanced Call Settings — Detailed Reference & Interaction Report"
+
+[[outputs]]
+id = "Ggruu5izGge1MW4SMn0ig"
+uri = "file://docs/config-feature-compatibility-report.pdf"
+type = "pdf"
+title = "SnapServe Config-Compatibility Audit (PDF)"
