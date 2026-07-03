@@ -906,6 +906,10 @@ function CampaignWizard({
 
 type FieldMappings = { phone: string; name: string; email: string };
 const DEFAULT_MAPPINGS: FieldMappings = { phone: "phone", name: "name", email: "email" };
+const MAX_CONCURRENT_CALLS = 10;
+const LEAD_SOURCE_LABELS: Record<string, string> = {
+  csv: "CSV Upload", webhook: "Webhook", meta_ads: "Meta Ads", crm: "CRM",
+};
 
 function CampaignFormDialog({
   open,
@@ -932,21 +936,19 @@ function CampaignFormDialog({
   const [desc, setDesc] = useState(editing?.description ?? "");
   const [agentId, setAgentId] = useState(editing?.agentId ? String(editing.agentId) : "");
   const [fromNum, setFromNum] = useState(editing?.fromNumber ?? "");
-  const [delay, setDelay] = useState(String(editing?.callDelaySeconds ?? 5));
-  const [maxAtt, setMaxAtt] = useState(String(editing?.maxAttempts ?? 1));
-  const [mappings, setMappings] = useState<FieldMappings>(
-    editing?.fieldMappings
-      ? {
-          phone: (editing.fieldMappings as Record<string, string>)["phone"] ?? "phone",
-          name: (editing.fieldMappings as Record<string, string>)["name"] ?? "name",
-          email: (editing.fieldMappings as Record<string, string>)["email"] ?? "email",
-        }
-      : DEFAULT_MAPPINGS
-  );
+  const [maxConcurrent, setMaxConcurrent] = useState(String(editing?.concurrentCallLimit ?? MAX_CONCURRENT_CALLS));
+  const leadSource = editing?.leadSource ?? "csv";
+  // Preserved on save so existing per-lead field mappings aren't wiped by this quick-edit form.
+  const mappings: FieldMappings = editing?.fieldMappings
+    ? {
+        phone: (editing.fieldMappings as Record<string, string>)["phone"] ?? "phone",
+        name: (editing.fieldMappings as Record<string, string>)["name"] ?? "name",
+        email: (editing.fieldMappings as Record<string, string>)["email"] ?? "email",
+      }
+    : DEFAULT_MAPPINGS;
 
   function reset() {
-    setName(""); setDesc(""); setAgentId(""); setFromNum(""); setDelay("5"); setMaxAtt("1");
-    setMappings(DEFAULT_MAPPINGS);
+    setName(""); setDesc(""); setAgentId(""); setFromNum(""); setMaxConcurrent(String(MAX_CONCURRENT_CALLS));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -957,8 +959,7 @@ function CampaignFormDialog({
       description: desc.trim() || undefined,
       agentId: parseInt(agentId, 10),
       fromNumber: fromNum.trim() || undefined,
-      callDelaySeconds: parseInt(delay, 10),
-      maxAttempts: parseInt(maxAtt, 10),
+      concurrentCallLimit: Math.min(parseInt(maxConcurrent, 10) || MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CALLS),
       fieldMappings: { phone: mappings.phone, name: mappings.name, email: mappings.email },
     };
     try {
@@ -1018,35 +1019,27 @@ function CampaignFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label className="text-xs">Field Mappings <span className="text-[10px] text-muted-foreground/40">(CSV column → role)</span></Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["phone", "name", "email"] as const).map(role => (
-                <div key={role}>
-                  <p className="text-[10px] text-muted-foreground/40 uppercase mb-1">{role}</p>
-                  <Input
-                    placeholder={role}
-                    value={mappings[role]}
-                    onChange={e => setMappings(m => ({ ...m, [role]: e.target.value }))}
-                    className="h-8 text-xs"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Call Delay (seconds)</Label>
-              <Input type="number" min={0} value={delay} onChange={e => setDelay(e.target.value)} className="h-9 text-xs" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Max Attempts</Label>
-              <Input type="number" min={1} value={maxAtt} onChange={e => setMaxAtt(e.target.value)} className="h-9 text-xs" />
-            </div>
-          </div>
           <div className="space-y-1.5">
             <Label className="text-xs">From Number <span className="text-muted-foreground/40">(optional override)</span></Label>
             <Input placeholder="+1234567890" value={fromNum} onChange={e => setFromNum(e.target.value)} className="h-9 text-xs" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Max Concurrent Calls</Label>
+              <Input
+                type="number" min={1} max={MAX_CONCURRENT_CALLS}
+                value={maxConcurrent}
+                onChange={e => setMaxConcurrent(e.target.value)}
+                className="h-9 text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground/40">Platform ceiling: {MAX_CONCURRENT_CALLS}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Lead Source</Label>
+              <div className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/30 text-xs text-muted-foreground">
+                {LEAD_SOURCE_LABELS[leadSource] ?? leadSource}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => { reset(); onClose(); }}>Cancel</Button>
