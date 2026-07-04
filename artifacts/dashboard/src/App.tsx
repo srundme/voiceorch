@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { PhoneCall, Sparkles, AudioLines, ShieldCheck } from "lucide-react";
 import { AuthProvider, useAuth, SignedIn, SignedOut } from "@/lib/auth";
 import { setAuthTokenGetter, setDefaultTimeoutMs, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
@@ -127,6 +128,88 @@ function inputBlur(e: React.FocusEvent<HTMLInputElement>) {
 
 type SignInMode = "login" | "register" | "forgot";
 type ForgotStep = "email" | "otp" | "newPassword";
+
+const authFeatures = [
+  { icon: PhoneCall, text: "Launch voice agents on your own ASR, LLM & TTS keys — or go fully managed" },
+  { icon: AudioLines, text: "Real-time transcripts, call analytics & campaign performance" },
+  { icon: ShieldCheck, text: "Enterprise-grade orchestration with your data, your rules" },
+];
+
+function VoiceBars() {
+  const heights = [14, 26, 18, 34, 22, 30, 16, 28, 20, 12, 24, 32, 18, 26, 14, 20];
+  return (
+    <div className="flex items-end gap-[3px] h-9">
+      {heights.map((h, i) => (
+        <div
+          key={i}
+          className="voice-bar w-[3px] rounded-full bg-gradient-to-t from-purple-500/70 to-fuchsia-300/90"
+          style={{ height: h, animationDelay: `${i * 90}ms` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AuthShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-screen w-full bg-black flex overflow-hidden">
+      <div className="pointer-events-none absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-purple-600/20 blur-[120px]" />
+      <div className="pointer-events-none absolute bottom-[-180px] right-[-140px] w-[480px] h-[480px] rounded-full bg-fuchsia-500/10 blur-[130px]" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+
+      {/* Left visual panel — desktop only */}
+      <div className="hidden lg:flex lg:w-[44%] xl:w-[40%] relative z-10 flex-col justify-between p-14 border-r border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent animate-in fade-in slide-in-from-left-4 duration-700">
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-[5px] w-7">
+            <div className="h-2 w-full rounded-full bg-white" />
+            <div className="h-2 w-[78%] rounded-full bg-white/60" />
+            <div className="h-2 w-[58%] rounded-full bg-white/35" />
+          </div>
+          <span className="text-sm font-semibold tracking-tight text-white">
+            Snap<span className="font-normal text-white/55">Serve</span>
+          </span>
+        </div>
+
+        <div className="max-w-md">
+          <div className="inline-flex items-center gap-1.5 mb-5 px-3 py-1 rounded-full border border-purple-400/20 bg-purple-400/10 text-[0.7rem] font-medium tracking-wide text-purple-200">
+            <Sparkles size={12} /> $5 free credit · 100 minutes on us
+          </div>
+          <h2 className="text-3xl font-semibold tracking-tight text-white leading-[1.15] mb-4">
+            Voice agents that sound like your best rep, on call 24/7.
+          </h2>
+          <p className="text-sm text-white/45 leading-relaxed mb-8">
+            Orchestrate ASR, LLM and TTS providers behind one reliable pipeline — bring your own keys or let SnapServe run it for you.
+          </p>
+          <div className="flex flex-col gap-4 mb-9">
+            {authFeatures.map(({ icon: Icon, text }) => (
+              <div key={text} className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.08] text-purple-300">
+                  <Icon size={14} />
+                </div>
+                <span className="text-[0.83rem] text-white/60 leading-snug">{text}</span>
+              </div>
+            ))}
+          </div>
+          <VoiceBars />
+        </div>
+
+        <p className="text-[0.72rem] text-white/25">© {new Date().getFullYear()} SnapServe. All rights reserved.</p>
+      </div>
+
+      {/* Right — auth card */}
+      <div className="flex-1 flex items-center justify-center p-6 relative z-10">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function SignInPage() {
   const { signIn } = useAuth();
@@ -292,16 +375,17 @@ function SignInPage() {
   }
 
   const cardStyle: React.CSSProperties = {
-    width: 460,
+    width: 440,
     maxWidth: "calc(100vw - 32px)",
-    background: "rgba(10,8,20,0.9)",
+    background: "linear-gradient(180deg, rgba(20,16,32,0.92), rgba(8,6,16,0.94))",
     borderRadius: 24,
-    padding: "44px 40px 40px",
-    boxShadow: "0 0 0 1px rgba(168,85,247,0.15), 0 32px 80px rgba(0,0,0,0.7)",
+    padding: "40px 36px 36px",
+    boxShadow: "0 0 0 1px rgba(168,85,247,0.16), 0 0 60px rgba(168,85,247,0.08), 0 32px 80px rgba(0,0,0,0.7)",
     backdropFilter: "blur(16px)",
     position: "relative" as const,
     zIndex: 1,
   };
+  const cardClassName = "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500";
 
   const submitBtnStyle = (isLoading: boolean): React.CSSProperties => ({
     marginTop: 6,
@@ -406,8 +490,8 @@ function SignInPage() {
     // Google-only hint
     if (googleOnly) {
       return (
-        <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-          <div style={cardStyle}>
+        <AuthShell>
+          <div style={cardStyle} className={cardClassName}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Google account detected</h1>
@@ -418,15 +502,15 @@ function SignInPage() {
             {googleBtn}
             {backToLogin}
           </div>
-        </div>
+        </AuthShell>
       );
     }
 
     // Step: enter email
     if (forgotStep === "email") {
       return (
-        <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-          <div style={cardStyle}>
+        <AuthShell>
+          <div style={cardStyle} className={cardClassName}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 28 }}>
               <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Reset your password</h1>
@@ -458,15 +542,15 @@ function SignInPage() {
             </form>
             {backToLogin}
           </div>
-        </div>
+        </AuthShell>
       );
     }
 
     // Step: enter OTP
     if (forgotStep === "otp") {
       return (
-        <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-          <div style={cardStyle}>
+        <AuthShell>
+          <div style={cardStyle} className={cardClassName}>
             {logoIcon}
             <div style={{ textAlign: "center", marginBottom: 28 }}>
               <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Check your email</h1>
@@ -526,14 +610,14 @@ function SignInPage() {
             </p>
             {backToLogin}
           </div>
-        </div>
+        </AuthShell>
       );
     }
 
     // Step: set new password
     return (
-      <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-        <div style={cardStyle}>
+      <AuthShell>
+        <div style={cardStyle} className={cardClassName}>
           {logoIcon}
           <div style={{ textAlign: "center", marginBottom: 28 }}>
             <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Set new password</h1>
@@ -577,14 +661,14 @@ function SignInPage() {
           </form>
           {backToLogin}
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   // ── Login / Register ──────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" }}>
-      <div style={cardStyle}>
+    <AuthShell>
+      <div style={cardStyle} className={cardClassName}>
         {logoIcon}
 
         {/* Heading */}
@@ -694,7 +778,7 @@ function SignInPage() {
           )}
         </p>
       </div>
-    </div>
+    </AuthShell>
   );
 }
 

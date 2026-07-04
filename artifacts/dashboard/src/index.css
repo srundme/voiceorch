@@ -516,3 +516,13 @@
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ── Auth page voice-bar decoration ─────────────────────────────────────── */
+@keyframes voice-bar-pulse {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.35; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+.voice-bar {
+  animation: voice-bar-pulse 1.4s ease-in-out infinite;
+  transform-origin: bottom;
+}
