@@ -1,0 +1,62 @@
+Fair enough — here's the full brief, copy-paste this into Replit:
+
+Build a 11-slide investor pitch deck (16:9) for SnapServe, applying to Surge by Peak XV.
+Design direction: Deep violet (#2A1670) dark slides for title + closing, white slides for content. Primary violet #4B2ED6, amber accent #F59E0B, ink text #1A1033. Serif headers (Cambria style), sans body. Motif: icons in colored circles, rounded cards with soft shadows. No accent stripes or underlines. Premium, minimal, lots of whitespace.
+Slide 1 — Title (dark bg):
+SnapServe
+Tagline: "AI voice agents that remember every caller."
+Sub: "Every other AI calls like it's the first time. Ours remembers." (amber highlight on "Ours remembers")
+Footer: Karthikeyan · Gopi | Chennai, India | Surge Application 2026
+Slide 2 — Problem: "Customer calling in India is broken"
+Two cards side by side:
+Card 1 — Human call centers: expensive to scale + high attrition, agents forget context between calls, follow-ups missed and dropped calls never resumed, quality depends on which human picks up.
+Card 2 — Today's AI voice agents: stateless (every call starts from zero), weak on Indian languages/accents, US-hosted latency kills conversation flow, no IRDAI/TRAI/DPDP compliance built in.
+Slide 3 — Solution: "SnapServe: voice AI with a memory"
+4 feature cards:
+
+Persistent cross-call memory — caller history, commitments and context carry across calls, conversations resume not restart.
+Drop → auto-redial → resume — call drops mid-sentence, agent redials and picks up exactly where it left off.
+Built for Indian languages — Tamil, Hinglish, Indian accents native, low in-country latency.
+Compliance built in — IRDAI, TRAI, DPDP designed in from day one.
+
+Slide 4 — How it works:
+Pipeline: STT → LLM → TTS as three cards (provider-agnostic orchestration in TypeScript, swap best/cheapest engine at every layer).
+Below, a wide "Memory layer (the moat)" bar: facts, commitments and episodes stored per caller, injected into every conversation. Also works as an OpenAI-compatible proxy — other platforms point their api_base at SnapServe and get caller memory with zero code change.
+Slide 5 — Why now:
+
+Voice AI just crossed the quality bar — Indian language STT/LLM/TTS became good and cheap in the last 12-18 months.
+India-first models have arrived — home-grown speech models handle Indian accents and code-switching; global platforms treat India as an afterthought.
+Regulation is forcing the shift — DPDP, TRAI, IRDAI tightening rules make compliant-by-design automation a purchase driver.
+
+Slide 6 — Competition table: "Where we win"
+Sub: "Vapi, Retell, Bolna and others orchestrate calls. None of them remember callers."
+Table, SnapServe vs Vapi/Retell/Bolna:
+
+Persistent cross-call memory: ✓ / ✗
+Dropped-call resume with full context: ✓ / ✗
+Tamil/Hinglish native handling: ✓ / ✗
+In-India latency: ✓ / ✗
+IRDAI/TRAI/DPDP compliance built in: ✓ / ✗
+Provider-agnostic STT/LLM/TTS: ✓ / Partial
+
+Slide 7 — Market:
+Three big stat cards: "$40B+" India BPM/contact-center industry, voice still the largest channel · "Millions" of outbound calls daily across insurance, lending, collections, support · "10x" cost advantage of AI calls vs human agents at scale.
+Below: Beachhead = insurance & BFSI outbound in India (renewals, collections, verification) — high volume, compliance-heavy, badly served. Expansion: UAE and Philippines on the same India cost base.
+Slide 8 — Go-to-market:
+
+Direct: insurance & BFSI — outbound campaigns for insurers/lenders, compliance-first pitch.
+Channel: SAP system integrators — SIs take SnapServe into SAP enterprise accounts, collections/FSCM as the wedge.
+Product-led: the memory proxy — platforms on Vapi/Bolna/Retell plug in SnapServe's memory with zero switching cost, we grow inside competitors' ecosystems.
+
+Slide 9 — Team:
+Karthikeyan (Founder · Product & Business): CMA US background, strong on unit economics and compliance; non-technical founder who learnt AI hands-on and built the first prototype solo; knows the product to every nuance.
+Gopi (Co-founder · Engineering): software engineer from CGI; took SnapServe from prototype to production platform running live calls; owns the TypeScript orchestration stack end to end.
+Slide 10 — Where we are (Built / Now / Next timeline):
+Built: full platform live in production, multilingual calls with cross-call memory working in real conditions.
+Now: just launched, onboarding first pilot clients in insurance and enterprise, SI partner outreach underway.
+Next: convert pilots to paid campaigns, ship the memory proxy publicly, expand language coverage.
+Footer note: "Honest status: pre-revenue, product-complete, launch week."
+Slide 11 — Closing (dark bg):
+"The voice AI wave is here." / "The winner in India will be the one that remembers." (amber)
+Sub: SnapServe — persistent-memory voice agents, built for India, live in production.
+Footer: Karthikeyan · SnapServe (AITEL) · Chennai
