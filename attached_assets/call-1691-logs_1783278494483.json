@@ -1,0 +1,1601 @@
+[
+  {
+    "id": 84587,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 66,
+      "agentName": "friend",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1691,
+      "sessionId": "live-1691",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-05T19:05:57.886Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 84584,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "tomorrow by",
+        "callCount": 23
+      },
+      "factCount": 28,
+      "facts": {
+        "callback_time": "5 PM",
+        "project_type": "unspecified",
+        "context": "wife's college",
+        "interested_in": "SnapServe",
+        "wait_time": "10_minutes",
+        "video_app_interest": "basketball_team",
+        "desired_discount": "90%",
+        "interested_in_partnership": "yes",
+        "number_of_new_clients": "100",
+        "number_of_clients_to_refer": "100",
+        "requested_information": "founder_contact_number",
+        "desired_contact": "founder",
+        "callback_reason": "reseller_discount",
+        "requested_callback": "true",
+        "preferred_platform": "managed_platform",
+        "implementation_plan": "managed_plan",
+        "preferred_price_per_minute": "0.035",
+        "preferred_pricing_plan": "byop",
+        "pricing_preference": "better_pricing_option",
+        "preferred_provider": "IPR",
+        "name": "Kartik",
+        "has_telephony_number": "yes",
+        "number_of_doctors": "5_to_6",
+        "business_use_case": "outbound_sales",
+        "primary_use_case": "medical_review_appointments",
+        "cost_per_minute": "$0.05",
+        "appointment_type": "medical reviews",
+        "callback_requested": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 84588,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "friend",
+        "caller_number": "917971442376",
+        "date": "Sunday, July 5, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent scheduled a callback for the next day to continue the discussion. The caller confirmed a callback time of 5 PM for the next day.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• callback_time: 5 PM\n• project_type: unspecified\n• context: wife's college\n• interested_in: SnapServe\n• wait_time: 10_minutes\n• video_app_interest: basketball_team\n• desired_discount: 90%\n• interested_in_partnership: yes\n• number_of_new_cli"
+    },
+    "metadata": null
+  },
+  {
+    "id": 84586,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 84589,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 84585,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 84591,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "1440a94acda0",
+      "promptLength": 18107,
+      "preview": "=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent sche"
+    }
+  },
+  {
+    "id": 84590,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:57.937Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    }
+  },
+  {
+    "id": 84592,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:58.237Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 84593,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:05:58.237Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hi tomorrow by, I wanted to follow up on our previous discussion about SnapServe for your wife's college, how can I assist you further today?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 84594,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:06.414Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 7511,
+      "turnNumber": 0,
+      "durationMs": 8178
+    }
+  },
+  {
+    "id": 84595,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:06.414Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 8178,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 240354,
+      "textLength": 141,
+      "firstByteMs": 397
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 8178
+    }
+  },
+  {
+    "id": 84596,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:08.930Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "What did you call me?",
+      "endDetectToFinalMs": 99,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84597,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:08.933Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. Respond in clear, plain English ONLY for this entire response. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, or any other language — the caller has explicitly asked for English. Do not mix Hindi or regional words into your reply. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent scheduled a callback for the next day to continue the disc",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84598,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:09.466Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 535,
+      "turnNumber": 1,
+      "durationMs": 535
+    }
+  },
+  {
+    "id": 84599,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:09.548Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84600,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:09.548Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You mentioned your name wasn't tomorrow by"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84601,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:09.580Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 535,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "You mentioned your name wasn't tomorrow by, can you please tell me your name so I can address you correctly?"
+    },
+    "metadata": {
+      "inputTokens": 5440,
+      "outputTokens": 24,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84603,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:12.097Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2548,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 71394,
+      "textLength": 42,
+      "firstByteMs": 265
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2548
+    }
+  },
+  {
+    "id": 84602,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:12.097Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2231,
+      "turnNumber": 1,
+      "durationMs": 2548
+    }
+  },
+  {
+    "id": 84605,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:12.097Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84604,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:12.097Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "can you please tell me your name so I can address you correctly?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 84606,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:15.013Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2916,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89314,
+      "textLength": 64,
+      "firstByteMs": 132
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2916
+    }
+  },
+  {
+    "id": 84607,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:15.013Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2791,
+      "turnNumber": 1,
+      "durationMs": 2916
+    }
+  },
+  {
+    "id": 84608,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:18.873Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "You don't know my name?",
+      "endDetectToFinalMs": 102,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84609,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:18.874Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. Respond in clear, plain English ONLY for this entire response. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, or any other language — the caller has explicitly asked for English. Do not mix Hindi or regional words into your reply. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent scheduled a callback for the next day to continue the disc",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84610,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:19.398Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 526,
+      "turnNumber": 2,
+      "durationMs": 526
+    }
+  },
+  {
+    "id": 84611,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:19.479Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84612,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:19.479Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I actually do have a name associated with your number"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84613,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:19.548Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 526,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "I actually do have a name associated with your number, it's tomorrow by, but you're right, I should confirm, what is your name?"
+    },
+    "metadata": {
+      "inputTokens": 5473,
+      "outputTokens": 31,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84616,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:22.566Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3087,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 53,
+      "firstByteMs": 143
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 3087
+    }
+  },
+  {
+    "id": 84614,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:22.566Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 2,
+      "durationMs": 3087
+    }
+  },
+  {
+    "id": 84615,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:22.566Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84617,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:22.566Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "it's tomorrow by, but you're right, I should confirm"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84619,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:25.837Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84620,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:25.837Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3270,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99554,
+      "textLength": 52,
+      "firstByteMs": 130
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 3270
+    }
+  },
+  {
+    "id": 84618,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:25.837Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3111,
+      "turnNumber": 2,
+      "durationMs": 3271
+    }
+  },
+  {
+    "id": 84621,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:25.837Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "what is your name?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 84622,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:26.923Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1086,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 30434,
+      "textLength": 18,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 1086
+    }
+  },
+  {
+    "id": 84623,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:26.923Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 951,
+      "turnNumber": 2,
+      "durationMs": 1086
+    }
+  },
+  {
+    "id": 84624,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:30.559Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Okay. Okay.",
+      "endDetectToFinalMs": 68,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 84625,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:30.559Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. Respond in clear, plain English ONLY for this entire response. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, or any other language — the caller has explicitly asked for English. Do not mix Hindi or regional words into your reply. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent scheduled a callback for the next day to continue the disc",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 84626,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:31.076Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 519,
+      "turnNumber": 3,
+      "durationMs": 519
+    }
+  },
+  {
+    "id": 84627,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:31.154Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 84628,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:31.154Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You've confirmed tomorrow by is your name"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 84629,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:31.178Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 519,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "You've confirmed tomorrow by is your name, so I'll make sure to address you correctly from now on."
+    },
+    "metadata": {
+      "inputTokens": 5524,
+      "outputTokens": 23,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 84630,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.166Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 2,
+      "threshold": 2,
+      "turnNumber": 3,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 84631,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.169Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2071,
+      "turnNumber": 3,
+      "durationMs": 1014,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 84632,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.169Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1014,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 66274,
+      "textLength": 41,
+      "firstByteMs": 131
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1014
+    }
+  },
+  {
+    "id": 84633,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.169Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "what is",
+      "endDetectToFinalMs": 76,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84634,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.169Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. Respond in clear, plain English ONLY for this entire response. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, or any other language — the caller has explicitly asked for English. Do not mix Hindi or regional words into your reply. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent scheduled a callback for the next day to continue the disc",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84635,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.761Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 593,
+      "turnNumber": 4,
+      "durationMs": 593
+    }
+  },
+  {
+    "id": 84636,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.870Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84637,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.870Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Let's get back to SnapServe, you had previously inquired about it for your wife's college"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84638,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:32.935Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 593,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Let's get back to SnapServe, you had previously inquired about it for your wife's college, what would you like to know or discuss about it now?"
+    },
+    "metadata": {
+      "inputTokens": 5550,
+      "outputTokens": 34,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84639,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:37.992Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 5123,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 150754,
+      "textLength": 89,
+      "firstByteMs": 322
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 5123
+    }
+  },
+  {
+    "id": 84640,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:37.992Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84642,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:37.992Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4711,
+      "turnNumber": 4,
+      "durationMs": 5123
+    }
+  },
+  {
+    "id": 84641,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:37.992Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "what would you like to know or discuss about it now?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 84644,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:40.737Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2745,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 52,
+      "firstByteMs": 141
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 2745
+    }
+  },
+  {
+    "id": 84643,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:40.737Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2551,
+      "turnNumber": 4,
+      "durationMs": 2745
+    }
+  },
+  {
+    "id": 84645,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:43.589Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "explain",
+      "endDetectToFinalMs": 69,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84646,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:43.592Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. Respond in clear, plain English ONLY for this entire response. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, or any other language — the caller has explicitly asked for English. Do not mix Hindi or regional words into your reply. EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions; never translate or transliterate them.\n\n=== CALLER MEMORY ===\nName: tomorrow by  |  Calls: 23\n\nPrevious call summary: Kartik inquired about SnapServe for his wife's college and had a previous conversation that was cut off, so the agent scheduled a callback for the next day to continue the disc",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84647,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:44.120Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 531,
+      "turnNumber": 5,
+      "durationMs": 531
+    }
+  },
+  {
+    "id": 84648,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:44.260Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84649,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:44.260Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You'd like an explanation, so let's start with what SnapServe is - it's an AI voice agent orchestration platform that simplifies the process of building and managing voice AI systems"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84650,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:44.274Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 531,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "You'd like an explanation, so let's start with what SnapServe is - it's an AI voice agent orchestration platform that simplifies the process of building and managing voice AI systems, would you like me to elaborate on how it works?"
+    },
+    "metadata": {
+      "inputTokens": 5606,
+      "outputTokens": 50,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84651,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:54.268Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 10007,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 304354,
+      "textLength": 182,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 10007
+    }
+  },
+  {
+    "id": 84652,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:54.268Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 9511,
+      "turnNumber": 5,
+      "durationMs": 10008
+    }
+  },
+  {
+    "id": 84653,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:54.268Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84654,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:54.268Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "would you like me to elaborate on how it works?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 84656,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:56.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2231,
+      "turnNumber": 5,
+      "durationMs": 2427
+    }
+  },
+  {
+    "id": 84655,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:06:56.694Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2427,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 71394,
+      "textLength": 47,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 2427
+    }
+  },
+  {
+    "id": 84657,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:07:00.156Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 84658,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:07:00.242Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1691"
+    }
+  },
+  {
+    "id": 84659,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:07:00.242Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1691"
+    }
+  },
+  {
+    "id": 84660,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:07:00.268Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 62,
+        "turns": 5,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "explain",
+        "lastAgentResponse": "You'd like an explanation, so let's start with what SnapServe is - it's an AI voice agent orchestration platform that simplifies the process of building and managing voice AI systems, would you like me to elaborate on how it works?",
+        "recordingStatus": "saved",
+        "warningCount": 2,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 62,
+      "turns": 5,
+      "avgSttMs": 0,
+      "avgLlmMs": 541,
+      "avgTtsMs": 842
+    }
+  },
+  {
+    "id": 84661,
+    "callId": 1691,
+    "agentId": 66,
+    "ts": "2026-07-05T19:07:01.001Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]

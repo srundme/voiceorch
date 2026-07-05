@@ -303,6 +303,31 @@ export async function loadCallerContext(
     preferredLanguage: (profile as any).preferredLanguage ?? null,
   } : null;
 
+  // Self-heal previously-corrupted names on read (e.g. "tomorrow by" latched
+  // before the NAME_STOPWORDS fix below existed). isPlausibleName is only a
+  // structural check, not a semantic one, so a bad value written under the
+  // old rules can sit in the DB indefinitely otherwise. Prefer the most
+  // recent "name" fact (written via the more careful LLM extraction path) as
+  // the fallback; if that's also implausible or missing, clear to null so the
+  // agent asks the caller for their name instead of repeating garbage back.
+  if (normalizedProfile?.name && !isPlausibleName(normalizedProfile.name)) {
+    const badName = normalizedProfile.name;
+    const factName = currentFacts.find(r => r.key === "name")?.value ?? null;
+    const healedName = factName && isPlausibleName(factName) ? factName : null;
+    normalizedProfile.name = healedName;
+    logger.warn(
+      { agentId, phoneNumber, badName, healedName },
+      "Caller memory: discarded implausible stored name on read (self-heal)",
+    );
+    db.update(callerProfilesTable)
+      .set({ name: healedName, updatedAt: new Date() })
+      .where(and(
+        eq(callerProfilesTable.agentId,     agentId),
+        eq(callerProfilesTable.phoneNumber, phoneNumber),
+      ))
+      .catch((err) => logger.warn({ err, agentId, phoneNumber }, "Caller memory: self-heal name DB write failed"));
+  }
+
   // ── Resume support: when the previous call ended abruptly (dropped within the
   //    window), load the tail of that last episode so the agent can pick the
   //    thread back up instead of restarting. Best-effort — never blocks memory. ──
@@ -1209,6 +1234,15 @@ const NAME_STOPWORDS = new Set([
   "sure", "sorry", "good", "fine", "here", "happy", "okay", "just",
   "calling", "speaking", "back", "checking", "looking", "trying",
   "not", "also", "right", "ready", "interested",
+  // Scheduling/time words. "call me tomorrow by 5" / "call me back later" are
+  // callback-scheduling phrases, not self-introductions, but they structurally
+  // match the "call me X" / "I am X" patterns above. Without these, a captured
+  // group like "tomorrow by" passes isPlausibleName() and gets latched as the
+  // caller's name (confirmed from call-1691: caller was greeted "Hi tomorrow
+  // by" after an earlier call said "you can call me tomorrow by 5 PM").
+  "tomorrow", "today", "tonight", "yesterday", "later", "then", "again",
+  "morning", "evening", "afternoon", "night", "noon", "soon", "now",
+  "shortly", "eod", "asap",
 ]);
 
 // Product/business vocabulary and generic phrase-continuation words that must
