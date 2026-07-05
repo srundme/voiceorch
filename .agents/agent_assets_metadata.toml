@@ -240,3 +240,9 @@ id = "SzKopZpAw64IArzYxLBPh"
 uri = "file://FUTURE_UPDATES.md"
 type = "text"
 title = "VoiceOrch Future Updates & Ideas"
+
+[[outputs]]
+id = "2QEfgbZ3OkB4KcT2kKkz2"
+uri = "file://lib/api-spec/openapi.yaml"
+type = "unspecified"
+title = "SnapServe OpenAPI Spec (for Fern)"
