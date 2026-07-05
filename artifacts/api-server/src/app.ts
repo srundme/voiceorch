@@ -1,6 +1,7 @@
 // build: 2026-06-29
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import path from "path";
@@ -13,6 +14,18 @@ import { ipRateLimit, authRateLimit, isRateLimitExempt } from "./lib/rate-limit.
 
 const app: Express = express();
 app.set("trust proxy", 1);
+
+// Security headers (clickjacking, MIME sniffing, etc.). CSP is left to the
+// static SPA builds (Vite) so we don't break their inline/hashed assets, and
+// cross-origin embedder/resource policies stay permissive so the lead-capture
+// embed widget script and Instagram/Meta browser flows keep working.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 
 app.use(
   pinoHttp({

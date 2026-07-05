@@ -406,6 +406,13 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
   const body = req.body as Record<string, unknown>;
 
   // ── HMAC Signature verification ──────────────────────────────────────────
+  // Meta always signs genuine leadgen webhook deliveries with X-Hub-Signature-256
+  // (computed from the App Secret configured on the Meta app's webhook subscription).
+  // A payload shaped like a Meta leadgen event ({object:"page", entry:[...]}) but with
+  // NO verifiable signature is indistinguishable from a forged request by anyone who
+  // has found/guessed this campaign's webhook URL — so for that shape we require a
+  // signature to be configured and to verify, rather than silently trusting the body.
+  const looksLikeMetaLeadgen = body["object"] === "page" && Array.isArray(body["entry"]);
   if (campaign.hmacSecret) {
     const rawBody: Buffer | string = (req as any).rawBody ?? JSON.stringify(body);
     const sig = req.headers["x-hub-signature-256"] as string | undefined
@@ -417,6 +424,16 @@ router.post("/webhooks/lead/:token", publicCors, async (req, res): Promise<void>
       res.status(401).json({ error: "Invalid signature" });
       return;
     }
+  } else if (looksLikeMetaLeadgen) {
+    logger.warn(
+      { campaignId: campaign.id },
+      "Meta leadgen-shaped payload rejected — no App Secret (hmacSecret) configured on this campaign to verify X-Hub-Signature-256",
+    );
+    touchWebhookStatus(campaign.id, "error");
+    res.status(428).json({
+      error: "This campaign has not configured a Meta App Secret. Set one under Campaign → Meta Integration before Instagram/Facebook leads can be accepted.",
+    });
+    return;
   }
 
   // ── Meta "Send to My Server" test ping ───────────────────────────────────

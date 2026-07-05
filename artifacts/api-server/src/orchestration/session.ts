@@ -2045,10 +2045,13 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
             const debitCents      = Math.round(billableMinutes * rateCentsPerMin);
             if (debitCents > 0) {
               await db.update(callsTable).set({ costCents: debitCents }).where(eq(callsTable.id, session.callId));
-              const [billingUser] = await db.select().from(usersTable).where(eq(usersTable.clerkId, sessionCallUserId));
+              const [billingUser] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.clerkId, sessionCallUserId));
               if (billingUser) {
-                const newBalance = Math.max(0, billingUser.walletBalanceCents - debitCents);
-                await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, billingUser.id));
+                // Atomic in-DB decrement (GREATEST clamps at 0) so two calls debiting the
+                // same wallet concurrently never overwrite each other's write (lost update).
+                await db.update(usersTable)
+                  .set({ walletBalanceCents: sql`GREATEST(0, ${usersTable.walletBalanceCents} - ${debitCents})` })
+                  .where(eq(usersTable.id, billingUser.id));
                 await db.insert(walletTransactionsTable).values({
                   userId:      billingUser.id,
                   type:        "call_debit",

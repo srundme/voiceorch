@@ -1023,8 +1023,13 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
   if (callUserId && debitCents > 0) {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, callUserId));
     if (user) {
-      const newBalance = Math.max(0, user.walletBalanceCents - debitCents);
-      await db.update(usersTable).set({ walletBalanceCents: newBalance }).where(eq(usersTable.id, user.id));
+      // Atomic in-DB decrement (GREATEST clamps at 0) so two calls debiting the
+      // same wallet concurrently never overwrite each other's write (lost update).
+      const [updatedUser] = await db.update(usersTable)
+        .set({ walletBalanceCents: sql`GREATEST(0, ${usersTable.walletBalanceCents} - ${debitCents})` })
+        .where(eq(usersTable.id, user.id))
+        .returning({ walletBalanceCents: usersTable.walletBalanceCents });
+      const newBalance = updatedUser?.walletBalanceCents ?? Math.max(0, user.walletBalanceCents - debitCents);
       await db.insert(walletTransactionsTable).values({
         userId:      user.id,
         type:        "call_debit",

@@ -25,6 +25,7 @@ import {
 } from "@workspace/api-zod";
 import { buildSlotLockKey } from "../../services/scheduling/lock.js";
 import { logger } from "../../lib/logger.js";
+import { schedulingSlotsRateLimit, schedulingBookingRateLimit } from "../../lib/rate-limit.js";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
@@ -85,7 +86,7 @@ router.get("/scheduling/public/event-types/:slug", async (req, res): Promise<voi
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-router.get("/scheduling/public/slots", async (req, res): Promise<void> => {
+router.get("/scheduling/public/slots", schedulingSlotsRateLimit, async (req, res): Promise<void> => {
   const { slug, startDate, endDate } = req.query as Record<string, string>;
   if (!slug) { res.status(400).json({ error: "slug is required" }); return; }
   if (!startDate || !DATE_RE.test(startDate)) {
@@ -106,7 +107,7 @@ router.get("/scheduling/public/slots", async (req, res): Promise<void> => {
   }))));
 });
 
-router.post("/scheduling/public/bookings", async (req, res): Promise<void> => {
+router.post("/scheduling/public/bookings", schedulingBookingRateLimit, async (req, res): Promise<void> => {
   const parsed = CreatePublicBookingBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
 
