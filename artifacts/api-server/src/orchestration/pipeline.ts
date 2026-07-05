@@ -26,6 +26,7 @@ import {
   TurnSafetyNet,
   recoveryReprompt,
   neutralGreeting,
+  AFFIRMATIONS,
   type TurnCloseReason,
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "./transcriptQuality.js";
@@ -683,11 +684,35 @@ export class OrchestrationPipeline {
     if (!norm) return false;
     const tokens = norm.split(" ").filter(Boolean);
     if (tokens.length === 0) return false;
+    // Genuine one-word replies ("yes", "okay", "sure", "no", …) are extremely
+    // common caller turns, and the SAME words routinely appear somewhere in the
+    // agent's own recent line ("Okay, let me check that for you"). With only one
+    // token, a single incidental match is a 100% overlap ratio, so the ratio
+    // check below would misclassify almost every short affirmation as an echo of
+    // the agent's own voice — the exact bug that made single-word replies vanish.
+    // These words are never suppressed here; the real filters for them are the
+    // time-window tail-echo guard (caller says "yes" a beat after our own line
+    // ends) and the 600 ms per-sentence echo grace, both upstream of this call.
+    if (tokens.length === 1 && AFFIRMATIONS.has(tokens[0])) return false;
     const now = Date.now();
     for (const entry of this.recentAgentSpeech) {
       if (now > entry.estEndAt + SELF_ECHO_TAIL_MS) continue;
       let matched = 0;
       for (const t of tokens) if (entry.tokens.has(t)) matched++;
+      // For very short transcripts (1-2 tokens) a ratio alone is too easy to
+      // saturate by chance overlap with common words — additionally require at
+      // least 2 matched tokens UNLESS the transcript itself has only 1 token, in
+      // which case require an exact single-token match against the agent's LAST
+      // spoken word (true echo bleeds in at the tail of our own audio, not from
+      // the middle of the sentence).
+      if (tokens.length <= 2) {
+        if (tokens.length === 1) {
+          const lastToken = entry.tokens.size > 0 ? [...entry.tokens].at(-1) : undefined;
+          if (lastToken !== tokens[0]) continue;
+        } else if (matched < 2) {
+          continue;
+        }
+      }
       if (matched / tokens.length >= SELF_ECHO_MIN_OVERLAP) return true;
     }
     return false;

@@ -247,7 +247,9 @@ export class TurnSafetyNet {
 }
 
 // ── Affirmation / clearly-complete single words ───────────────────────────────
-const AFFIRMATIONS = new Set([
+// Exported so other modules (e.g. the pipeline's self-echo guard) can exempt
+// these common short replies from logic that would otherwise misfire on them.
+export const AFFIRMATIONS = new Set([
   "yes", "no", "yeah", "nope", "yep", "yup", "sure", "ok", "okay",
   "correct", "right", "true", "false", "done", "bye", "goodbye",
   "thanks", "thank", "fine", "good", "great", "perfect", "proceed",
