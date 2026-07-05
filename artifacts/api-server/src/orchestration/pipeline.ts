@@ -4304,7 +4304,9 @@ export class OrchestrationPipeline {
       };
       const langPrefix = (this.agent.language ?? "en").split("-")[0] ?? "en";
       // Strict, language-based fillers only — no English fallback for non-English agents.
-      const filler = TOOL_FILLERS[langPrefix];
+      // Skip entirely for end_call: the call is terminating anyway, so a "One moment…"
+      // filler just plays an awkward extra phrase right before/instead of the goodbye.
+      const filler = triggeredToolName === "end_call" ? undefined : TOOL_FILLERS[langPrefix];
       if (filler && !this.closed && !this.bargeInRequested) {
         logger.info(
           {
