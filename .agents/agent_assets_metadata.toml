@@ -246,3 +246,9 @@ id = "2QEfgbZ3OkB4KcT2kKkz2"
 uri = "file://lib/api-spec/openapi.yaml"
 type = "unspecified"
 title = "SnapServe OpenAPI Spec (for Fern)"
+
+[[outputs]]
+id = "EHjTHHpVJbS-KMJNIpV8j"
+uri = "file://snapserve-openapi.yaml"
+type = "unspecified"
+title = "SnapServe OpenAPI Spec (download for Fern)"
