@@ -3,11 +3,14 @@
 @theme inline {
   --color-primary: var(--slide-primary);
   --color-accent: var(--slide-accent);
+  --color-dark: var(--slide-dark);
+  --color-darker: var(--slide-darker);
+  --color-ink: var(--slide-ink);
   --color-bg: var(--slide-bg);
-  --color-text: var(--slide-text);
-  --color-muted: var(--slide-muted);
   --color-surface: var(--slide-surface);
   --color-border-line: var(--slide-border);
+  --color-muted: var(--slide-muted);
+  --color-dark-muted: var(--slide-dark-muted);
   --font-display: var(--font-display-family);
   --font-body: var(--font-body-family);
 
@@ -40,15 +43,18 @@
 }
 
 :root {
-  --slide-primary: #1C1C1C;
-  --slide-accent: #1C1C1C;
+  --slide-primary: #4B2ED6;
+  --slide-accent: #F59E0B;
+  --slide-dark: #2A1670;
+  --slide-darker: #1F0F52;
+  --slide-ink: #1A1033;
   --slide-bg: #FFFFFF;
-  --slide-text: #1C1C1C;
-  --slide-muted: #666666;
-  --slide-surface: #F5F5F5;
-  --slide-border: #E0E0E0;
-  --font-display-family: "Inter", sans-serif;
-  --font-body-family: "Inter", sans-serif;
+  --slide-surface: #F6F2FC;
+  --slide-border: #E7DFF6;
+  --slide-muted: #6B6280;
+  --slide-dark-muted: #C7BCEA;
+  --font-display-family: Cambria, Georgia, "Times New Roman", serif;
+  --font-body-family: "Work Sans", sans-serif;
   color-scheme: light;
 }
 
@@ -62,7 +68,8 @@ body,
 
 body {
   background: var(--slide-bg);
-  color: var(--slide-text);
+  color: var(--slide-ink);
+  font-family: var(--font-body-family);
 }
 
 .slide {

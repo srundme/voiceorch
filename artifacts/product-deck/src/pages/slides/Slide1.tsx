@@ -1,46 +1,144 @@
 export default function Slide1() {
   return (
-    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
-      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
-        <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
-        <div style={{ fontSize: "0.9vw", color: "#888888", fontFamily: "'DM Mono', monospace" }}>Product &amp; Market Overview — June 2026</div>
+    <div
+      className="w-screen h-screen overflow-hidden relative"
+      style={{
+        background: "radial-gradient(120% 100% at 20% 0%, #38208A 0%, #2A1670 45%, #1F0F52 100%)",
+        fontFamily: "var(--font-body-family)",
+        color: "#FFFFFF",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: "-18vh",
+          right: "-10vw",
+          width: "48vw",
+          height: "48vw",
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(245,158,11,0.14) 0%, rgba(245,158,11,0) 70%)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          top: "6vh",
+          left: "8vw",
+          display: "flex",
+          alignItems: "center",
+          gap: "1.1vw",
+        }}
+      >
+        <div
+          style={{
+            width: "4.2vw",
+            height: "4.2vw",
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.10)",
+            border: "0.08vw solid rgba(255,255,255,0.22)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg width="2.1vw" height="2.1vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#FFFFFF" opacity="1" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.6" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.36" />
+          </svg>
+        </div>
+        <span style={{ fontSize: "1.4vw", fontWeight: 700, letterSpacing: "-0.01em" }}>SnapServe</span>
       </div>
-      <div style={{ position: "absolute", top: "28vh", right: "4vw", fontSize: "22vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 1, zIndex: 0, userSelect: "none", letterSpacing: "-0.06em" }}>01</div>
-      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center", zIndex: 1, position: "relative" }}>
-        <div style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: "#888888", fontFamily: "'DM Mono', monospace", marginBottom: "2.5vh" }}>Voice AI Orchestration Infrastructure</div>
-        <h1 style={{ fontSize: "7.5vw", fontWeight: 700, margin: "0 0 2.5vh 0", lineHeight: 1.0, letterSpacing: "-0.04em" }}>SnapServe</h1>
-        <p style={{ fontSize: "1.65vw", fontWeight: 400, color: "#4A4A4A", maxWidth: "58vw", lineHeight: 1.55, margin: 0 }}>The engine businesses use to build, deploy, and run voice AI agents — on any telephony, in any language, at any scale.</p>
-        <div style={{ display: "flex", gap: "4vw", marginTop: "5vh" }}>
-          <div style={{ borderLeft: "0.25vh solid #E0E0E0", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'DM Mono', monospace", marginBottom: "0.5vh" }}>Category</div>
-            <div style={{ fontSize: "1.4vw", fontWeight: 600 }}>Voice AI Orchestration</div>
-          </div>
-          <div style={{ borderLeft: "0.25vh solid #E0E0E0", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'DM Mono', monospace", marginBottom: "0.5vh" }}>Competing With</div>
-            <div style={{ fontSize: "1.4vw", fontWeight: 600 }}>Vapi AI · Bolna AI</div>
-          </div>
-          <div style={{ borderLeft: "0.25vh solid #E0E0E0", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "'DM Mono', monospace", marginBottom: "0.5vh" }}>Status</div>
-            <div style={{ fontSize: "1.4vw", fontWeight: 600 }}>Live in Production</div>
-          </div>
-        </div>
+
+      <div
+        style={{
+          position: "absolute",
+          top: "7vh",
+          right: "8vw",
+          fontSize: "0.9vw",
+          fontWeight: 500,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "#C7BCEA",
+        }}
+      >
+        Surge by Peak XV — Application 2026
       </div>
-      <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", borderTop: "0.1vh solid #E0E0E0", paddingTop: "2.5vh", fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#4A4A4A", zIndex: 1 }}>
-        <div style={{ display: "flex", gap: "5vw" }}>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Date</div>
-            <div>June 2026</div>
-          </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
-            <div style={{ fontWeight: 600, color: "#1C1C1C" }}>Live</div>
-          </div>
+
+      <div
+        style={{
+          position: "absolute",
+          top: "0",
+          left: "8vw",
+          right: "8vw",
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "0.95vw",
+            fontWeight: 600,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            color: "#F59E0B",
+            marginBottom: "3vh",
+          }}
+        >
+          AI Voice Agents
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>01 / 12</div>
-        </div>
+
+        <h1
+          style={{
+            fontFamily: "var(--font-display-family)",
+            fontSize: "5.4vw",
+            fontWeight: 700,
+            lineHeight: 1.08,
+            margin: 0,
+            maxWidth: "72vw",
+            color: "#FFFFFF",
+          }}
+        >
+          AI voice agents that remember every caller.
+        </h1>
+
+        <p
+          style={{
+            fontSize: "1.85vw",
+            fontWeight: 400,
+            lineHeight: 1.5,
+            color: "#DCD3F2",
+            maxWidth: "56vw",
+            marginTop: "3.5vh",
+            marginBottom: 0,
+          }}
+        >
+          Every other AI calls like it&apos;s the first time.{" "}
+          <span style={{ color: "#F59E0B", fontWeight: 600 }}>Ours remembers.</span>
+        </p>
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: "6vh",
+          left: "8vw",
+          right: "8vw",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "1vw",
+          color: "#B7ABDD",
+          borderTop: "0.06vh solid rgba(255,255,255,0.16)",
+          paddingTop: "2.5vh",
+        }}
+      >
+        <span>Karthikeyan &middot; Gopi</span>
+        <span>Chennai, India</span>
+        <span>Surge Application 2026</span>
       </div>
     </div>
   );

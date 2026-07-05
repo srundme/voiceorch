@@ -1,62 +1,72 @@
 export default function Slide5() {
+  const rowStyle: React.CSSProperties = {
+    display: "flex",
+    gap: "2vw",
+    alignItems: "flex-start",
+    background: "#FFFFFF",
+    border: "0.06vh solid #E7DFF6",
+    borderRadius: "1.2vw",
+    padding: "2.6vh 2.4vw",
+    boxShadow: "0 1vh 2.6vh rgba(42,22,112,0.06)",
+  };
+
   return (
-    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
-      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
-        <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
-        <div style={{ fontSize: "0.9vw", fontWeight: 400, color: "#888888", fontFamily: "'DM Mono', monospace" }}>05 — The Moat</div>
+    <div
+      className="w-screen h-screen overflow-hidden relative"
+      style={{
+        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
+        fontFamily: "var(--font-body-family)",
+        color: "#1A1033",
+        padding: "6vh 8vw 5vh 8vw",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
+          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
+          </svg>
+          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+        </div>
+        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
+          05 / 11
+        </span>
       </div>
-      <div style={{ position: "absolute", top: "28vh", right: "4vw", fontSize: "22vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 1, zIndex: 0, userSelect: "none", letterSpacing: "-0.06em" }}>06</div>
-      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "5vh" }}>
-        <h2 style={{ fontSize: "3.4vw", fontWeight: 700, margin: "0 0 1.5vh 0", lineHeight: 1.1, letterSpacing: "-0.025em" }}>Caller memory. No competitor has it.</h2>
-        <p style={{ fontSize: "1.2vw", color: "#4A4A4A", maxWidth: "62vw", lineHeight: 1.6, marginBottom: "4vh" }}>Vapi and Bolna treat every call as stateless. SnapServe maintains a persistent three-layer memory graph per caller — facts, episodes, and semantic context — that every agent accesses on every call. The agent that remembers is the agent customers prefer.</p>
-        <div style={{ display: "flex", gap: "4vw", marginBottom: "3.5vh" }}>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Layer 1 — Facts</div>
-            <div style={{ fontSize: "1.2vw", fontWeight: 600, marginBottom: "0.5vh" }}>Structured caller profile</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Name, account details, language preference, stated goals. Extracted and structured from every call.</div>
-          </div>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Layer 2 — Episodes</div>
-            <div style={{ fontSize: "1.2vw", fontWeight: 600, marginBottom: "0.5vh" }}>Interaction history</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Every past call, its outcome, any complaints, follow-up actions. The agent never asks the same question twice.</div>
-          </div>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "0.8vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Layer 3 — Semantic</div>
-            <div style={{ fontSize: "1.2vw", fontWeight: 600, marginBottom: "0.5vh" }}>Inferred intent graph</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>Patterns, preferences, predicted next action. Enables proactive outreach before the customer calls in.</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "3vw", alignItems: "center", backgroundColor: "#FAFAFA", padding: "2.5vh 2.5vw", border: "0.1vh solid #E0E0E0" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "1.1vw", fontWeight: 600, marginBottom: "0.5vh" }}>Why this is a defensible moat</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", lineHeight: 1.5 }}>The more calls a business runs on SnapServe, the richer every caller's memory gets. Switching to a competitor resets all that context. Data gravity compounds with usage — this is how platform stickiness is built.</div>
-          </div>
-          <div style={{ width: "0.1vw", height: "8vh", backgroundColor: "#E0E0E0" }} />
-          <div style={{ textAlign: "center", minWidth: "14vw" }}>
-            <div style={{ fontSize: "3.5vw", fontWeight: 700, letterSpacing: "-0.03em" }}>3×</div>
-            <div style={{ fontSize: "0.9vw", color: "#666666", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.5vh" }}>Higher FCR with memory</div>
-          </div>
-        </div>
+
+      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+        Why Now
       </div>
-      <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", borderTop: "0.1vh solid #E0E0E0", paddingTop: "2.5vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#4A4A4A", zIndex: 1 }}>
-        <div style={{ display: "flex", gap: "5vw" }}>
+      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4.5vh 0", lineHeight: 1.15 }}>
+        Three shifts are converging
+      </h1>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "2vh", flex: 1, justifyContent: "center" }}>
+        <div style={rowStyle}>
+          <div style={{ minWidth: "3vw", fontSize: "1.6vw", fontFamily: "var(--font-display-family)", fontWeight: 700, color: "#4B2ED6" }}>01</div>
           <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Date</div>
-            <div>June 2026</div>
-          </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Prepared By</div>
-            <div>SnapServe</div>
-          </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
-            <div>Live</div>
+            <div style={{ fontSize: "1.35vw", fontWeight: 700, marginBottom: "0.9vh" }}>Voice AI just crossed the quality bar</div>
+            <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.55 }}>Indian-language STT, LLM and TTS became good and cheap in the last 12–18 months.</div>
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>06 / 12</div>
+
+        <div style={rowStyle}>
+          <div style={{ minWidth: "3vw", fontSize: "1.6vw", fontFamily: "var(--font-display-family)", fontWeight: 700, color: "#4B2ED6" }}>02</div>
+          <div>
+            <div style={{ fontSize: "1.35vw", fontWeight: 700, marginBottom: "0.9vh" }}>India-first models have arrived</div>
+            <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.55 }}>Home-grown speech models handle Indian accents and code-switching; global platforms treat India as an afterthought.</div>
+          </div>
+        </div>
+
+        <div style={rowStyle}>
+          <div style={{ minWidth: "3vw", fontSize: "1.6vw", fontFamily: "var(--font-display-family)", fontWeight: 700, color: "#4B2ED6" }}>03</div>
+          <div>
+            <div style={{ fontSize: "1.35vw", fontWeight: 700, marginBottom: "0.9vh" }}>Regulation is forcing the shift</div>
+            <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.55 }}>DPDP, TRAI and IRDAI tightening rules make compliant-by-design automation a purchase driver.</div>
+          </div>
         </div>
       </div>
     </div>

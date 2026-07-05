@@ -1,68 +1,117 @@
 export default function Slide6() {
+  const th: React.CSSProperties = {
+    textAlign: "center",
+    padding: "1.6vh 1.4vw",
+    fontSize: "0.85vw",
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "#2A1670",
+    borderBottom: "0.14vh solid #E7DFF6",
+  };
+  const td: React.CSSProperties = {
+    padding: "1.6vh 1.4vw",
+    fontSize: "1.05vw",
+    color: "#3A3350",
+    borderBottom: "0.06vh solid #EFE9FA",
+  };
+  const tdCenter: React.CSSProperties = { ...td, textAlign: "center" };
+
+  const Check = () => (
+    <span style={{ color: "#4B2ED6", fontWeight: 700, fontSize: "1.2vw" }}>&#10003;</span>
+  );
+  const Cross = () => (
+    <span style={{ color: "#C7BCEA", fontWeight: 700, fontSize: "1.1vw" }}>&#10005;</span>
+  );
+
   return (
-    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
-      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
-        <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
-        <div style={{ fontSize: "0.9vw", fontWeight: 400, color: "#888888", fontFamily: "'DM Mono', monospace" }}>06 — Who It's For</div>
+    <div
+      className="w-screen h-screen overflow-hidden relative"
+      style={{
+        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
+        fontFamily: "var(--font-body-family)",
+        color: "#1A1033",
+        padding: "6vh 8vw 5vh 8vw",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "3.6vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
+          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
+          </svg>
+          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+        </div>
+        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
+          06 / 11
+        </span>
       </div>
-      <div style={{ position: "absolute", top: "28vh", right: "4vw", fontSize: "22vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 1, zIndex: 0, userSelect: "none", letterSpacing: "-0.06em" }}>07</div>
-      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "5vh" }}>
-        <h2 style={{ fontSize: "3.4vw", fontWeight: 700, margin: "0 0 1.5vh 0", lineHeight: 1.1, letterSpacing: "-0.025em", maxWidth: "70vw" }}>Built for any business that lives on the phone.</h2>
-        <p style={{ fontSize: "1.2vw", color: "#4A4A4A", maxWidth: "62vw", lineHeight: 1.6, marginBottom: "4vh" }}>The highest-value deployments cluster in four verticals where call volume is large, repetitive, and revenue-critical — every one of them multilingual, high-concurrency, and powered by returning callers.</p>
-        <div style={{ display: "flex", gap: "1.5vw", marginBottom: "3.5vh", alignItems: "stretch" }}>
-          <div style={{ flex: 1, borderTop: "0.3vh solid #1C1C1C", paddingTop: "1.5vh" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "1vh" }}>01 · BFSI &amp; Lending</div>
-            <div style={{ fontSize: "1.15vw", fontWeight: 600, marginBottom: "0.5vh" }}>Collections &amp; servicing</div>
-            <div style={{ fontSize: "0.95vw", color: "#4A4A4A", lineHeight: 1.5 }}>EMI and payment reminders, KYC verification, balance and policy queries — multilingual outbound at scale without expanding the call floor.</div>
-          </div>
-          <div style={{ flex: 1, borderTop: "0.3vh solid #1C1C1C", paddingTop: "1.5vh" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "1vh" }}>02 · Logistics &amp; Delivery</div>
-            <div style={{ fontSize: "1.15vw", fontWeight: 600, marginBottom: "0.5vh" }}>Confirm &amp; reschedule</div>
-            <div style={{ fontSize: "0.95vw", color: "#4A4A4A", lineHeight: 1.5 }}>Delivery confirmation, address correction, failed-delivery reattempts, COD verification — thousands of concurrent calls per route.</div>
-          </div>
-          <div style={{ flex: 1, borderTop: "0.3vh solid #1C1C1C", paddingTop: "1.5vh" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "1vh" }}>03 · Healthcare &amp; Clinics</div>
-            <div style={{ fontSize: "1.15vw", fontWeight: 600, marginBottom: "0.5vh" }}>Book &amp; remind</div>
-            <div style={{ fontSize: "0.95vw", color: "#4A4A4A", lineHeight: 1.5 }}>Appointment booking and reminders, report-ready alerts, refill follow-ups. Caller memory means returning patients never repeat themselves.</div>
-          </div>
-          <div style={{ flex: 1, borderTop: "0.3vh solid #1C1C1C", paddingTop: "1.5vh" }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginBottom: "1vh" }}>04 · E-commerce &amp; Services</div>
-            <div style={{ fontSize: "1.15vw", fontWeight: 600, marginBottom: "0.5vh" }}>Support &amp; win-back</div>
-            <div style={{ fontSize: "0.95vw", color: "#4A4A4A", lineHeight: 1.5 }}>Order status, returns and refunds, abandoned-cart recovery, lead qualification — 24/7 across 12 Indic languages.</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "3vw", alignItems: "stretch", backgroundColor: "#FAFAFA", padding: "2.5vh 2.5vw", border: "0.1vh solid #E0E0E0" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.75vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Buyer 01 — Self-serve SMBs</div>
-            <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>Managed plan. A phone number and a system prompt — live in 48 hours, no engineering and no provider contracts to negotiate.</div>
-          </div>
-          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.75vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1vh" }}>Buyer 02 — Enterprises &amp; BFSI</div>
-            <div style={{ fontSize: "1.05vw", color: "#4A4A4A", lineHeight: 1.5 }}>BYOP plan. Bring existing provider keys and high call volume; SnapServe runs the orchestration layer at a pure-margin rate.</div>
-          </div>
-        </div>
+
+      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+        Competitive Landscape
       </div>
-      <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", borderTop: "0.1vh solid #E0E0E0", paddingTop: "2.5vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#4A4A4A", zIndex: 1 }}>
-        <div style={{ display: "flex", gap: "5vw" }}>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Date</div>
-            <div>June 2026</div>
-          </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Prepared By</div>
-            <div>SnapServe</div>
-          </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
-            <div>Live</div>
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>07 / 12</div>
-        </div>
+      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 1.6vh 0", lineHeight: 1.15 }}>
+        Where we win
+      </h1>
+      <div style={{ fontSize: "1.15vw", color: "#5B5470", marginBottom: "3.5vh", maxWidth: "62vw" }}>
+        Vapi, Retell, Bolna and others orchestrate calls. None of them remember callers.
+      </div>
+
+      <div
+        style={{
+          background: "#FFFFFF",
+          border: "0.06vh solid #E7DFF6",
+          borderRadius: "1.2vw",
+          padding: "1vh 1.6vw 0.4vh 1.6vw",
+          boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
+          flex: 1,
+        }}
+      >
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, textAlign: "left" }}>Capability</th>
+              <th style={{ ...th, color: "#4B2ED6" }}>SnapServe</th>
+              <th style={th}>Vapi / Retell / Bolna</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={td}>Persistent cross-call memory</td>
+              <td style={tdCenter}><Check /></td>
+              <td style={tdCenter}><Cross /></td>
+            </tr>
+            <tr>
+              <td style={td}>Dropped-call resume with full context</td>
+              <td style={tdCenter}><Check /></td>
+              <td style={tdCenter}><Cross /></td>
+            </tr>
+            <tr>
+              <td style={td}>Tamil / Hinglish native handling</td>
+              <td style={tdCenter}><Check /></td>
+              <td style={tdCenter}><Cross /></td>
+            </tr>
+            <tr>
+              <td style={td}>In-India latency</td>
+              <td style={tdCenter}><Check /></td>
+              <td style={tdCenter}><Cross /></td>
+            </tr>
+            <tr>
+              <td style={td}>IRDAI / TRAI / DPDP compliance built in</td>
+              <td style={tdCenter}><Check /></td>
+              <td style={tdCenter}><Cross /></td>
+            </tr>
+            <tr>
+              <td style={{ ...td, borderBottom: "none" }}>Provider-agnostic STT / LLM / TTS</td>
+              <td style={{ ...tdCenter, borderBottom: "none" }}><Check /></td>
+              <td style={{ ...tdCenter, borderBottom: "none", color: "#9A90B5" }}>Partial</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );

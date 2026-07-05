@@ -1,56 +1,141 @@
 export default function Slide2() {
+  const cardStyle: React.CSSProperties = {
+    flex: 1,
+    background: "#FFFFFF",
+    border: "0.06vh solid #E7DFF6",
+    borderRadius: "1.4vw",
+    padding: "3.2vh 2.6vw",
+    boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
+    display: "flex",
+    flexDirection: "column",
+  };
+  const bulletStyle: React.CSSProperties = {
+    fontSize: "1.15vw",
+    lineHeight: 1.6,
+    color: "#3A3350",
+    marginBottom: "1.4vh",
+    paddingLeft: "1.6vw",
+    position: "relative",
+  };
+  const dotStyle = (color: string): React.CSSProperties => ({
+    position: "absolute",
+    left: 0,
+    top: "0.75vh",
+    width: "0.55vw",
+    height: "0.55vw",
+    borderRadius: "50%",
+    background: color,
+  });
+
   return (
-    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
-      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
-        <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
-        <div style={{ fontSize: "0.9vw", fontWeight: 400, color: "#888888", fontFamily: "'DM Mono', monospace" }}>01 — The Market Shift</div>
+    <div
+      className="w-screen h-screen overflow-hidden relative"
+      style={{
+        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
+        fontFamily: "var(--font-body-family)",
+        color: "#1A1033",
+        padding: "6vh 8vw 5vh 8vw",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
+          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
+          </svg>
+          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+        </div>
+        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
+          02 / 11
+        </span>
       </div>
-      <div style={{ position: "absolute", top: "28vh", right: "4vw", fontSize: "22vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 1, zIndex: 0, userSelect: "none", letterSpacing: "-0.06em" }}>02</div>
-      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "5vh" }}>
-        <h2 style={{ fontSize: "3.4vw", fontWeight: 700, margin: "0 0 1.5vh 0", lineHeight: 1.1, letterSpacing: "-0.025em", maxWidth: "65vw" }}>Every business phone call is being rebuilt on AI.</h2>
-        <p style={{ fontSize: "1.3vw", color: "#4A4A4A", maxWidth: "58vw", lineHeight: 1.6, marginBottom: "4.5vh" }}>India's $11B call center industry — 4.5 million agents, billions of calls per year — is at the same inflection point banking was in 2012 when Stripe launched. The infrastructure layer is being built now.</p>
-        <div style={{ display: "flex", gap: "4vw", marginBottom: "4vh" }}>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "3.8vw", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>$11B</div>
-            <div style={{ fontSize: "0.85vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.8vh" }}>India call center industry</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", marginTop: "0.8vh", lineHeight: 1.5 }}>4.5 million agents. 70% of budget is headcount. 45% annual attrition.</div>
-          </div>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "3.8vw", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>40%</div>
-            <div style={{ fontSize: "0.85vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.8vh" }}>Calls are purely repetitive</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", marginTop: "0.8vh", lineHeight: 1.5 }}>Balance inquiries, order status, appointment booking — solved by AI in under 90 seconds.</div>
-          </div>
-          <div style={{ flex: 1, borderLeft: "0.3vh solid #1C1C1C", paddingLeft: "1.5vw" }}>
-            <div style={{ fontSize: "3.8vw", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>8 min</div>
-            <div style={{ fontSize: "0.85vw", color: "#888888", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", marginTop: "0.8vh" }}>Average hold time</div>
-            <div style={{ fontSize: "1vw", color: "#4A4A4A", marginTop: "0.8vh", lineHeight: 1.5 }}>78% of callers abandon after 2 minutes. That abandonment is direct revenue loss.</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "2vw", alignItems: "center", backgroundColor: "#FAFAFA", padding: "2.5vh 2.5vw", border: "0.1vh solid #E0E0E0" }}>
-          <div style={{ fontSize: "1.2vw", fontWeight: 600, color: "#1C1C1C" }}>The opportunity isn't automating a call center.</div>
-          <div style={{ width: "0.1vw", height: "4vh", backgroundColor: "#E0E0E0" }} />
-          <div style={{ fontSize: "1.2vw", color: "#4A4A4A" }}>It's providing the orchestration layer every business uses to deploy AI that handles calls natively.</div>
-        </div>
+
+      <div
+        style={{
+          fontSize: "0.95vw",
+          fontWeight: 600,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "#F59E0B",
+          marginBottom: "1.6vh",
+        }}
+      >
+        The Problem
       </div>
-      <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", borderTop: "0.1vh solid #E0E0E0", paddingTop: "2.5vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#4A4A4A", zIndex: 1 }}>
-        <div style={{ display: "flex", gap: "5vw" }}>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Date</div>
-            <div>June 2026</div>
+      <h1
+        style={{
+          fontFamily: "var(--font-display-family)",
+          fontSize: "3vw",
+          fontWeight: 700,
+          color: "#1A1033",
+          margin: "0 0 4.5vh 0",
+          lineHeight: 1.15,
+        }}
+      >
+        Customer calling in India is broken
+      </h1>
+
+      <div style={{ display: "flex", gap: "2.2vw", flex: 1 }}>
+        <div style={cardStyle}>
+          <div
+            style={{
+              width: "3.6vw",
+              height: "3.6vw",
+              borderRadius: "50%",
+              background: "#EEE8FB",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "2.2vh",
+            }}
+          >
+            <svg width="1.8vw" height="1.8vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
           </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Prepared By</div>
-            <div>SnapServe</div>
+          <div style={{ fontSize: "1.4vw", fontWeight: 700, color: "#1A1033", marginBottom: "2.2vh" }}>
+            Human call centers
           </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
-            <div>Live</div>
-          </div>
+          <div style={bulletStyle}><span style={dotStyle("#4B2ED6")} />Expensive to scale, high attrition</div>
+          <div style={bulletStyle}><span style={dotStyle("#4B2ED6")} />Agents forget context between calls</div>
+          <div style={bulletStyle}><span style={dotStyle("#4B2ED6")} />Follow-ups missed, dropped calls never resumed</div>
+          <div style={{ ...bulletStyle, marginBottom: 0 }}><span style={dotStyle("#4B2ED6")} />Quality depends on which human picks up</div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>02 / 12</div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              width: "3.6vw",
+              height: "3.6vw",
+              borderRadius: "50%",
+              background: "#FDF0DA",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "2.2vh",
+            }}
+          >
+            <svg width="1.8vw" height="1.8vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="8" width="16" height="12" rx="2" />
+              <path d="M12 8V4" />
+              <circle cx="9" cy="14" r="1" />
+              <circle cx="15" cy="14" r="1" />
+            </svg>
+          </div>
+          <div style={{ fontSize: "1.4vw", fontWeight: 700, color: "#1A1033", marginBottom: "2.2vh" }}>
+            Today&apos;s AI voice agents
+          </div>
+          <div style={bulletStyle}><span style={dotStyle("#F59E0B")} />Stateless — every call starts from zero</div>
+          <div style={bulletStyle}><span style={dotStyle("#F59E0B")} />Weak on Indian languages and accents</div>
+          <div style={bulletStyle}><span style={dotStyle("#F59E0B")} />US-hosted latency kills conversation flow</div>
+          <div style={{ ...bulletStyle, marginBottom: 0 }}><span style={dotStyle("#F59E0B")} />No IRDAI/TRAI/DPDP compliance built in</div>
         </div>
       </div>
     </div>

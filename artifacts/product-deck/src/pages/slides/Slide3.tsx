@@ -1,58 +1,110 @@
 export default function Slide3() {
+  const cardStyle: React.CSSProperties = {
+    background: "#FFFFFF",
+    border: "0.06vh solid #E7DFF6",
+    borderRadius: "1.4vw",
+    padding: "2.6vh 2vw",
+    boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+  };
+  const iconWrap = (bg: string): React.CSSProperties => ({
+    width: "3.2vw",
+    height: "3.2vw",
+    borderRadius: "50%",
+    background: bg,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: "1.8vh",
+  });
+
   return (
-    <div className="w-screen h-screen overflow-hidden relative" style={{ width: "100vw", height: "100vh", overflow: "hidden", backgroundColor: "#FFFFFF", fontFamily: "'Inter', sans-serif", color: "#1C1C1C", position: "relative", display: "flex", flexDirection: "column", padding: "7vh 8vw 5vh 8vw", boxSizing: "border-box" }}>
-      <div style={{ width: "84vw", height: "0.2vh", backgroundColor: "#1C1C1C", position: "absolute", top: "7vh", left: "8vw" }} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2vh", zIndex: 1 }}>
-        <div style={{ fontSize: "0.95vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "'DM Mono', monospace" }}>snapserve.ai</div>
-        <div style={{ fontSize: "0.9vw", fontWeight: 400, color: "#888888", fontFamily: "'DM Mono', monospace" }}>02 — What is SnapServe</div>
+    <div
+      className="w-screen h-screen overflow-hidden relative"
+      style={{
+        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
+        fontFamily: "var(--font-body-family)",
+        color: "#1A1033",
+        padding: "6vh 8vw 5vh 8vw",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
+          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
+          </svg>
+          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+        </div>
+        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
+          03 / 11
+        </span>
       </div>
-      <div style={{ position: "absolute", top: "28vh", right: "4vw", fontSize: "22vw", fontWeight: 700, color: "#F5F5F5", lineHeight: 1, zIndex: 0, userSelect: "none", letterSpacing: "-0.06em" }}>03</div>
-      <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-start", zIndex: 1, position: "relative", marginTop: "5vh" }}>
-        <div style={{ fontSize: "0.85vw", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.12em", color: "#888888", marginBottom: "1.5vh" }}>Infrastructure · Not a product</div>
-        <h2 style={{ fontSize: "3.4vw", fontWeight: 700, margin: "0 0 1.5vh 0", lineHeight: 1.1, letterSpacing: "-0.025em", maxWidth: "70vw" }}>The orchestration engine for voice AI — like Stripe is to payments.</h2>
-        <p style={{ fontSize: "1.2vw", color: "#4A4A4A", maxWidth: "60vw", lineHeight: 1.6, marginBottom: "4vh" }}>Any business connects their telephony numbers, configures an AI agent with their choice of ASR, LLM, and TTS providers, and SnapServe handles everything in between: real-time audio streaming, turn management, barge-in detection, memory, and handoff logic.</p>
-        <div style={{ display: "flex", gap: "3vw", marginBottom: "3vh" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.75vw", color: "#999999", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'DM Mono', monospace", marginBottom: "1.5vh", paddingBottom: "1vh", borderBottom: "0.1vh solid #E0E0E0" }}>Without SnapServe</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.2vh", fontSize: "1.05vw", color: "#666666", lineHeight: 1.5 }}>
-              <div>↳ Build WebSocket audio pipelines from scratch</div>
-              <div>↳ Manage LLM prompt engineering + memory</div>
-              <div>↳ Handle STT/TTS streaming latency</div>
-              <div>↳ Wire every telephony provider separately</div>
-              <div style={{ fontWeight: 600, color: "#888888" }}>6–9 months engineering. $200K+ cost.</div>
-            </div>
+
+      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+        The Solution
+      </div>
+      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4vh 0", lineHeight: 1.15 }}>
+        SnapServe: voice AI with a memory
+      </h1>
+
+      <div style={{ display: "flex", gap: "1.8vw", flex: 1 }}>
+        <div style={cardStyle}>
+          <div style={iconWrap("#EEE8FB")}>
+            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08A3 3 0 0 1 3 13.5a3 3 0 0 1 .34-5.62A2.5 2.5 0 0 1 6 4a2.5 2.5 0 0 1 3.5-2Z" />
+              <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08A3 3 0 0 0 21 13.5a3 3 0 0 0-.34-5.62A2.5 2.5 0 0 0 18 4a2.5 2.5 0 0 0-3.5-2Z" />
+            </svg>
           </div>
-          <div style={{ width: "0.1vw", backgroundColor: "#E0E0E0" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.75vw", color: "#1C1C1C", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "'DM Mono', monospace", marginBottom: "1.5vh", paddingBottom: "1vh", borderBottom: "0.15vh solid #1C1C1C" }}>With SnapServe</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.2vh", fontSize: "1.05vw", color: "#1C1C1C", lineHeight: 1.5 }}>
-              <div>↳ Connect telephony number → dashboard or API</div>
-              <div>↳ Choose providers or use managed keys</div>
-              <div>↳ Write a system prompt. Set tools. Go live.</div>
-              <div>↳ SnapServe orchestrates the full real-time loop</div>
-              <div style={{ fontWeight: 600, color: "#1C1C1C" }}>48 hours to production. Pay per minute.</div>
-            </div>
+          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Persistent cross-call memory</div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
+            Caller history, commitments and context carry across calls — conversations resume, not restart.
           </div>
         </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", borderTop: "0.1vh solid #E0E0E0", paddingTop: "2.5vh", marginTop: "auto", fontFamily: "'DM Mono', monospace", fontSize: "0.85vw", color: "#4A4A4A", zIndex: 1 }}>
-        <div style={{ display: "flex", gap: "5vw" }}>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Date</div>
-            <div>June 2026</div>
+
+        <div style={cardStyle}>
+          <div style={iconWrap("#FDF0DA")}>
+            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
           </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Prepared By</div>
-            <div>SnapServe</div>
-          </div>
-          <div>
-            <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Status</div>
-            <div>Live</div>
+          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Drop → auto-redial → resume</div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
+            Call drops mid-sentence, the agent redials and picks up exactly where it left off.
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "#999999", marginBottom: "0.4vh", textTransform: "uppercase", fontSize: "0.65vw" }}>Page</div>
-          <div style={{ fontWeight: 600, color: "#1C1C1C" }}>03 / 12</div>
+
+        <div style={cardStyle}>
+          <div style={iconWrap("#EEE8FB")}>
+            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          </div>
+          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Built for Indian languages</div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
+            Tamil, Hinglish and Indian accents native, with low in-country latency.
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={iconWrap("#FDF0DA")}>
+            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+            </svg>
+          </div>
+          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Compliance built in</div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
+            IRDAI, TRAI and DPDP designed in from day one.
+          </div>
         </div>
       </div>
     </div>
