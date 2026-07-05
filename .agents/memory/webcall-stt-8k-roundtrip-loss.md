@@ -25,3 +25,15 @@ results resolve in strict per-call order) pairs it with the worker's result in
 `audioBuffer`) prefer the native chunk over the worker's `pcm16k` when
 present. Telephony paths never pass the third arg, so their behavior/output is
 unchanged.
+
+**Second bug found after this "fix" made things WORSE (still-random, not
+just muffled, transcripts like "VoBiz"->"Wabis"/"24"/"obese"):** `webcall.ts`
+was handing the raw `ws` message `Buffer` straight into the new async queue
+without copying it. Before this fix, that buffer was only ever read
+*synchronously* (`downsample16to8`), so aliasing didn't matter. Once a
+reference to it sits in `nativePcm16kQueue` until the audio worker resolves
+(an async gap), a reused/overwritten receive buffer means the STT feed
+silently becomes a LATER frame's audio by consumption time. Any code that
+holds a `ws` binary-frame buffer past the synchronous handler must
+`Buffer.from(raw)` (copy) first — this is the general-purpose lesson, not
+just a webcall-only quirk.

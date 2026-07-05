@@ -75,7 +75,18 @@ export async function handleWebcallWebSocket(
       if (!sessionId) return; // dropped until session ready — acceptable
       const session = getSession(sessionId);
       if (!session) return;
-      const pcm16k = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBufferLike);
+      // COPY (not alias) the incoming frame: `raw` may be a view over a buffer
+      // that `ws` reuses/overwrites internally for the NEXT frame. The old code
+      // only ever read it synchronously (downsample16to8 below), which was safe.
+      // Now we also hand a reference to the pipeline's nativePcm16kQueue, which
+      // isn't consumed until the async audio worker resolves — an aliased buffer
+      // would silently turn into a LATER frame's audio by the time it's used,
+      // producing seemingly-random garbled STT output (e.g. "VoBiz" -> "Wabis"/
+      // "24"/"obese" with no phonetic relation at all — the classic signature of
+      // reading memory that has since been overwritten, not just muffled audio).
+      const pcm16k = Buffer.isBuffer(raw)
+        ? Buffer.from(raw)
+        : Buffer.from(raw as ArrayBufferLike);
       if (pcm16k.length < 2) return;
       // Pass noiseCancel=false: browser WebRTC already applies echo cancellation
       // and noise suppression before sending audio.  Server-side gating on top
