@@ -369,6 +369,17 @@ export class OrchestrationPipeline {
   private tts: ReturnType<typeof createTTSAdapter>;
 
   private audioBuffer: Buffer[] = [];
+  // Parallel buffer of TRUE (never downsampled) 16kHz mic audio, populated only
+  // for sources that hand us native 16k (webcall — see onRawPcm8kIn). Mirrors
+  // audioBuffer's push/reset points 1:1. Used in flushAndProcess so batch STT
+  // gets real high-frequency content instead of upsample8to16(pcm8k), which is
+  // just linear interpolation of an already 4kHz-Nyquist-limited signal and
+  // cannot recover the fricative energy ("v", "z", "s") lost at the 8k step.
+  private audioBufferNative16k: Buffer[] = [];
+  // FIFO of native 16k chunks awaiting pairing with the audio worker's async
+  // result in handleProcessedAudio. Safe because processRawPcm8kIn resolves in
+  // strict per-call order (see audioPool.ts worker routing).
+  private nativePcm16kQueue: Buffer[] = [];
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private silenceHangupTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
@@ -1339,6 +1350,7 @@ export class OrchestrationPipeline {
     await this.drainPlaybackTail();
     // Reset turn state and re-enter Listening.
     this.audioBuffer = [];
+    this.audioBufferNative16k = [];
     this.pendingTranscriptQueue = [];
     if (!this.closed) {
       this.safetyNet.beginListening();
@@ -1372,7 +1384,7 @@ export class OrchestrationPipeline {
    * that have already had noise suppression applied (e.g. browser WebRTC), so
    * the server-side gate does not zero out quiet-but-valid speech.
    */
-  onRawPcm8kIn(pcm8k: Buffer, noiseCancel?: boolean): void {
+  onRawPcm8kIn(pcm8k: Buffer, noiseCancel?: boolean, nativePcm16k?: Buffer): void {
     if (this.closed) return;
     const callId = String(this.config.callId);
     // Record raw caller audio (before noise cancellation)
@@ -1422,6 +1434,15 @@ export class OrchestrationPipeline {
     }
     // Caller-supplied `noiseCancel` wins when present; fall back to agent setting.
     const nc = noiseCancel !== undefined ? noiseCancel : this.agent.noiseCancellationEnabled;
+    // Queue the caller's TRUE 16k audio (before it was downsampled to 8k for
+    // this call) so handleProcessedAudio can use it for STT instead of the
+    // worker's upsample8to16 reconstruction, which cannot recover frequency
+    // content already destroyed by the 8k step. See field doc for why this
+    // matters ("VoBiz" → "Bobby" mishearing on webcall). Queued here (not
+    // earlier) so it only enters the FIFO on the same code path that will
+    // consume it in handleProcessedAudio — the AMD/voicemail branches above
+    // return before processing and must never leave it stranded in the queue.
+    if (nativePcm16k) this.nativePcm16kQueue.push(nativePcm16k);
     processRawPcm8kIn(callId, pcm8k, nc)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
@@ -1614,6 +1635,7 @@ export class OrchestrationPipeline {
         this.bargeInRequested = true;
         this.bargeInCallback?.();
         this.audioBuffer = [];
+        this.audioBufferNative16k = [];
         this.logExec("Agent", "system", {
           status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
           metadata: {
@@ -1671,6 +1693,15 @@ export class OrchestrationPipeline {
   /** Handles pre-processed audio returned by the audio worker pool. */
   private handleProcessedAudio({ pcm8k, pcm16k, hasSpeech }: AudioProcessResult): void {
     if (this.closed) return;
+    // Prefer the TRUE native 16k chunk queued in onRawPcm8kIn (webcall) over
+    // the worker's upsample8to16(pcm8k) reconstruction, which cannot recover
+    // frequency content already lost when the source was downsampled to 8k.
+    // FIFO order matches 1:1 because processRawPcm8kIn resolves strictly in
+    // per-call order. Telephony never queues a native chunk, so pcm16k (the
+    // worker's reconstruction) is used unchanged there, as before.
+    const effectivePcm16k = this.nativePcm16kQueue.length > 0
+      ? this.nativePcm16kQueue.shift()!
+      : pcm16k;
 
     // ── IVR DTMF detection ──
     // Run on every incoming frame when an IVR interaction is active.
@@ -1727,7 +1758,7 @@ export class OrchestrationPipeline {
       // Send native 8kHz telephony audio directly when the adapter is configured
       // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
       // avoids manufacturing samples on already-lossy phone audio (see sttSampleRate).
-      this.streamSTT.sendAudio(this.sttSampleRate === 8000 ? pcm8k : pcm16k);
+      this.streamSTT.sendAudio(this.sttSampleRate === 8000 ? pcm8k : effectivePcm16k);
       return;
     }
 
@@ -1755,9 +1786,11 @@ export class OrchestrationPipeline {
           });
       }
       this.audioBuffer.push(pcm8k);
+      this.audioBufferNative16k.push(effectivePcm16k);
       this.resetSilenceTimer();
     } else if (this.audioBuffer.length > 0) {
       this.audioBuffer.push(pcm8k);
+      this.audioBufferNative16k.push(effectivePcm16k);
       this.scheduleSilenceFlush();
     }
   }
@@ -4542,6 +4575,7 @@ export class OrchestrationPipeline {
     if (this.isProcessing || this.audioBuffer.length === 0) return;
 
     const pcmChunks = this.audioBuffer.splice(0);
+    const native16kChunks = this.audioBufferNative16k.splice(0);
     const pcm8k = Buffer.concat(pcmChunks);
     if (pcm8k.length < MIN_SPEECH_BYTES) return;
 
@@ -4553,7 +4587,18 @@ export class OrchestrationPipeline {
       // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
       // avoids manufacturing samples on already-lossy phone audio (see sttSampleRate).
       const useNative8k = this.sttSampleRate === 8000;
-      const sttAudio = useNative8k ? pcm8k : upsample8to16(pcm8k);
+      // Prefer the TRUE 16k mic audio queued alongside pcm8k (webcall) over
+      // upsample8to16(pcm8k), which is just interpolation of an already
+      // 4kHz-Nyquist-limited signal and cannot recover the fricative energy
+      // ("v"/"z"/"s") that distinguishes words like "VoBiz" from "Bobby".
+      // Falls back to the interpolated version for telephony, which never has
+      // a native 16k source.
+      const hasNative16k = !useNative8k && native16kChunks.length === pcmChunks.length;
+      const sttAudio = useNative8k
+        ? pcm8k
+        : hasNative16k
+          ? Buffer.concat(native16kChunks)
+          : upsample8to16(pcm8k);
       logger.info({ callId: this.config.callId, bytes: sttAudio.length, sampleRate: this.sttSampleRate }, "Sending to STT");
 
       this._tTurnVadFlush = performance.now();

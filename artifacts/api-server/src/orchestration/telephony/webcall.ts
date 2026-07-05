@@ -81,7 +81,16 @@ export async function handleWebcallWebSocket(
       // and noise suppression before sending audio.  Server-side gating on top
       // zeroes out quiet-but-valid speech (the gate threshold is calibrated for
       // telephony, not clean mic audio), causing the "only loud speech works" bug.
-      session.pipeline.onRawPcm8kIn(downsample16to8(pcm16k), false);
+      //
+      // Also pass the TRUE native 16k buffer alongside the downsampled 8k one.
+      // The 8k copy is only needed for the internal VAD/DTMF/energy pipeline;
+      // downsample16to8 halves the Nyquist limit to 4kHz, which destroys the
+      // high-frequency fricative energy ("v", "z", "s") that distinguishes
+      // words like "VoBiz" from "Bobby". If STT only ever saw the 8k→16k
+      // round trip (upsample8to16 is pure interpolation, it can't invent lost
+      // frequencies back), that information is gone for good. Threading the
+      // real 16k mic audio through to the STT feed fixes that misrecognition.
+      session.pipeline.onRawPcm8kIn(downsample16to8(pcm16k), false, pcm16k);
       return;
     }
     // Text = control message.
