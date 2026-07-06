@@ -233,9 +233,23 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string):
   );
   const memoryBlock = memoryMatch?.[0] ?? "";
   const langName = LANG_DISPLAY_NAMES[language] ?? language;
+  const isEnglish = language.startsWith("en");
+  // For non-English target languages, mirror the colloquial REGISTER + proper-noun
+  // rule that buildLangGuard applies to every normal turn. Without it the greeting
+  // LLM defaults to a formal/literary/bookish register for the very first spoken
+  // line while the rest of the conversation stays colloquial. English openers stay
+  // plain English (buildLangGuard likewise adds no register rule for English).
+  const languageInstruction = isEnglish
+    ? `[LANGUAGE] Respond ONLY in ${langName}.`
+    : `[LANGUAGE] Respond ONLY in ${langName}. ` +
+      `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
+      `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
+      `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
+      `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+      `EXACTLY as written in your instructions; never translate or transliterate them.`;
   const parts = [
     memoryBlock,
-    `[LANGUAGE] Respond ONLY in ${langName}.`,
+    languageInstruction,
     "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.",
   ].filter(Boolean);
   return parts.join("\n\n");
