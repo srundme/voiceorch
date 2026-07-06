@@ -110,41 +110,67 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   try {
     const [existing] = await db
-      .select({ id: usersTable.id })
+      .select()
       .from(usersTable)
       .where(eq(usersTable.clerkId, sub));
 
-    if (existing) {
+    // A previously deleted account is a soft-delete (the row is never
+    // removed — see `PATCH /admin/users/:clerkId/status`), so its email is
+    // still "taken" as far as a raw uniqueness check goes. Product intent is
+    // that a deleted account's email should be free to sign up again, so we
+    // reactivate the existing row as a fresh account rather than blocking
+    // it — the row is reused (id/history unchanged) but the account is
+    // usable again exactly like a new signup. Suspended accounts are NOT
+    // reactivated this way — that decision stays with support/admin.
+    if (existing && existing.status !== "deleted") {
       res.status(409).json({ error: "An account with that email already exists." });
       return;
     }
 
     const passwordHash = await hashPassword(password);
+    const displayName = (name ?? "").trim() || normalizedEmail.split("@")[0];
 
-    const [user] = await db
-      .insert(usersTable)
-      .values({
-        clerkId: sub,
-        email: normalizedEmail,
-        name: (name ?? "").trim() || normalizedEmail.split("@")[0],
-        passwordHash,
-        walletBalanceCents: FREE_CREDIT_CENTS,
-        freeCreditsGranted: true,
-        apiKey: generateApiKey(),
-        orgKey: generateOrgKey(),
-      })
-      .returning();
+    let user: typeof usersTable.$inferSelect;
+    if (existing) {
+      [user] = await db
+        .update(usersTable)
+        .set({
+          name: displayName,
+          passwordHash,
+          status: "active",
+          suspendedAt: null,
+          suspendedReason: null,
+        })
+        .where(eq(usersTable.id, existing.id))
+        .returning();
+      logger.info({ sub, email: normalizedEmail }, "Previously deleted account reactivated via register");
+    } else {
+      [user] = await db
+        .insert(usersTable)
+        .values({
+          clerkId: sub,
+          email: normalizedEmail,
+          name: displayName,
+          passwordHash,
+          walletBalanceCents: FREE_CREDIT_CENTS,
+          freeCreditsGranted: true,
+          apiKey: generateApiKey(),
+          orgKey: generateOrgKey(),
+        })
+        .returning();
 
-    await db.insert(walletTransactionsTable).values({
-      userId: user.id,
-      type: "free_credit",
-      amountCents: FREE_CREDIT_CENTS,
-      description: "Welcome credit — $5.00 free to get started",
-      status: "completed",
-    });
+      await db.insert(walletTransactionsTable).values({
+        userId: user.id,
+        type: "free_credit",
+        amountCents: FREE_CREDIT_CENTS,
+        description: "Welcome credit — $5.00 free to get started",
+        status: "completed",
+      });
+
+      logger.info({ sub, email: normalizedEmail }, "User registered");
+    }
 
     const token = createSessionToken({ sub, email: normalizedEmail, name: user.name });
-    logger.info({ sub, email: normalizedEmail }, "User registered");
 
     // Welcome email — fire-and-forget, never block the signup response
     sendBrevoEmail(
@@ -665,13 +691,30 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
         ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google signup welcome email failed"));
       }
+    } else if (user.status === "deleted") {
+      // Soft-deleted account — the row is never removed, so the same
+      // uniqueness lookup above always finds it. Product intent is that a
+      // deleted account's email should be free to sign up again, so treat
+      // this as a fresh signup: reactivate the row instead of blocking it.
+      // Suspended accounts are intentionally NOT reactivated this way.
+      const [reactivated] = await db
+        .update(usersTable)
+        .set({
+          status: "active",
+          suspendedAt: null,
+          suspendedReason: null,
+          name: user.name ?? profile.name?.trim() ?? normalizedEmail?.split("@")[0] ?? "User",
+        })
+        .where(eq(usersTable.id, user.id))
+        .returning();
+      user = reactivated;
+      isNewUser = true;
+      logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: previously deleted account reactivated");
+    } else if (user.status !== "active") {
+      logger.warn({ sub: googleSub, status: user.status }, "Google Sign-In blocked: account is not active");
+      res.redirect(`${base}/?google_error=true&reason=account_suspended`);
+      return;
     } else {
-      if (user.status !== "active") {
-        logger.warn({ sub: googleSub, status: user.status }, "Google Sign-In blocked: account is not active");
-        const reasonParam = user.status === "deleted" ? "account_deleted" : "account_suspended";
-        res.redirect(`${base}/?google_error=true&reason=${reasonParam}`);
-        return;
-      }
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: existing user signed in");
     }
 
