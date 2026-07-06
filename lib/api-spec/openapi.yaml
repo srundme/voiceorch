@@ -6858,6 +6858,32 @@ components:
         secret:
           type: string
           description: (webhook) Optional secret sent as X-Webhook-Secret header
+        parameters:
+          type: object
+          description: >-
+            (webhook) JSON Schema describing the arguments the LLM should pass when invoking this custom function.
+            Serialized by the dashboard from the parameter editor rows. Optional and webhook-specific.
+          properties:
+            type:
+              type: string
+              description: JSON Schema container type — always "object"
+            properties:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    description: Parameter data type (e.g. string, number, boolean)
+                  description:
+                    type: string
+                    description: Human-readable description of the parameter for the LLM
+              description: Map of parameter name to its JSON Schema definition
+            required:
+              type: array
+              items:
+                type: string
+              description: Names of parameters that are required
         messageTemplate:
           type: string
           description: (send_sms) SMS body to send to the caller — supports plain text
