@@ -130,5 +130,10 @@ export async function trackCompleteRegistration(
     // rather than silently dropping the event.
   }
   await ensureFbqReady();
+  // TEMPORARY diagnostic logging — remove once production firing is confirmed
+  // in Meta Events Manager. Confirms this code path actually executes for
+  // real users (vs. being skipped by a gating condition upstream).
+  // eslint-disable-next-line no-console
+  console.log("CompleteRegistration fired", method);
   getFbq()?.("track", "CompleteRegistration", { method });
 }

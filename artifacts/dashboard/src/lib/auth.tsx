@@ -96,6 +96,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // never for email/password login (that flow calls signIn() directly,
       // not this effect). Gated on the server's new_user flag so it fires
       // only for a genuinely new account, never an existing-user login.
+      // TEMPORARY diagnostic logging — remove once production firing is
+      // confirmed. Shows whether this effect ever sees a captured token and
+      // whether the server's new_user flag was set for it.
+      // eslint-disable-next-line no-console
+      console.log("Google OAuth callback token capture", {
+        hasCapturedToken: true,
+        isNewGoogleUser,
+        hash: window.location.hash,
+      });
       if (isNewGoogleUser) {
         void trackCompleteRegistration("Google", captured);
       }

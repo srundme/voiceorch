@@ -218,8 +218,12 @@ function AuthShell({ children }: { children: React.ReactNode }) {
 
 function SignInPage() {
   const { signIn } = useAuth();
-  const [, navigate] = useLocation();
-  const [mode, setMode] = useState<SignInMode>("login");
+  const [location, navigate] = useLocation();
+  // Default to the register form when the user lands on /sign-up (e.g. from a
+  // marketing-site "Sign Up" CTA) instead of always showing "Welcome back".
+  const [mode, setMode] = useState<SignInMode>(() =>
+    location.startsWith("/sign-up") ? "register" : "login",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -278,6 +282,11 @@ function SignInPage() {
         // account (it 409s if the email already exists), so this is exactly
         // "new account successfully created via email+password" — never an
         // existing-user login (mode === "login" never reaches this branch).
+        // TEMPORARY diagnostic logging — remove once production firing is
+        // confirmed. Shows whether the success branch is reached and what
+        // mode it thinks it's in.
+        // eslint-disable-next-line no-console
+        console.log("Email auth success", { mode, endpoint, hasToken: Boolean(data.token) });
         if (mode === "register") {
           void trackCompleteRegistration("Email", data.token);
         }
