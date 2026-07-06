@@ -15,7 +15,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { trackGoogleCompleteRegistration } from "@/lib/meta-pixel";
+import { trackCompleteRegistration } from "@/lib/meta-pixel";
 
 const TOKEN_KEY = "voiceorch:session";
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -76,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (match && match[1]) {
       captured = decodeURIComponent(match[1]);
     }
+    // Server sets `new_user=1` on the redirect ONLY when the Google callback
+    // just inserted a brand-new users row (see routes/auth.ts) — an existing
+    // user signing back in via Google never carries this flag.
+    const isNewGoogleUser = /(?:^|[#&])new_user=1(?:&|$)/.test(window.location.hash);
 
     if (captured && decode(captured)) {
       localStorage.setItem(TOKEN_KEY, captured);
@@ -90,8 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // redirect delivers a fresh token via the URL fragment — never on a
       // returning-session page reload (that's the `stored` branch below) and
       // never for email/password login (that flow calls signIn() directly,
-      // not this effect). So this is exactly "successful Google sign-in".
-      void trackGoogleCompleteRegistration(captured);
+      // not this effect). Gated on the server's new_user flag so it fires
+      // only for a genuinely new account, never an existing-user login.
+      if (isNewGoogleUser) {
+        void trackCompleteRegistration("Google", captured);
+      }
     } else {
       const stored = localStorage.getItem(TOKEN_KEY);
       if (stored && decode(stored)) {

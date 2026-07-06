@@ -64,7 +64,7 @@ import DocsPage from "@/pages/docs/index";
 
 import ImpersonatePage from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
-import { initMetaPixel } from "@/lib/meta-pixel";
+import { initMetaPixel, trackCompleteRegistration } from "@/lib/meta-pixel";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -274,6 +274,13 @@ function SignInPage() {
       if (!res.ok || !data.token) {
         setError(data.error ?? "Something went wrong. Please try again.");
       } else {
+        // POST /api/auth/register only ever returns 200 for a brand-new
+        // account (it 409s if the email already exists), so this is exactly
+        // "new account successfully created via email+password" — never an
+        // existing-user login (mode === "login" never reaches this branch).
+        if (mode === "register") {
+          void trackCompleteRegistration("Email", data.token);
+        }
         signIn(data.token);
         navigate("/app");
       }

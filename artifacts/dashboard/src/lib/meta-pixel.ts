@@ -5,10 +5,17 @@
  *
  * - initMetaPixel(): loads the pixel script (if not already present), inits
  *   it with the shared Pixel ID, and fires a PageView.
- * - trackGoogleCompleteRegistration(): fires CompleteRegistration{method:"Google"}
- *   exactly once per successful Google sign-in. Only called from the
- *   OAuth-callback token-capture branch in auth.tsx — never on login failure,
- *   never on a returning session reload, never for email/password login.
+ * - trackCompleteRegistration(method, dedupeKey): fires Meta's standard
+ *   CompleteRegistration event with {method:"Google"|"Email"} exactly once
+ *   per NEW account creation. Callers only invoke this from code paths that
+ *   have already confirmed a brand-new account was created — never on
+ *   existing-user login, never on auth/registration failure:
+ *     - Google: auth.tsx's OAuth-callback branch, gated on the server-issued
+ *       `new_user=1` redirect flag (set only when auth.ts actually inserted a
+ *       new users row) — an existing user signing in via Google never gets
+ *       that flag, so it never fires.
+ *     - Email: App.tsx's sign-up submit handler, only on a 200 response from
+ *       POST /api/auth/register (which 409s if the account already exists).
  *
  * Deliberately avoids augmenting the global `Window` interface (that ran into
  * TS control-flow-narrowing edge cases with other `declare global` blocks in
@@ -98,23 +105,30 @@ async function ensureFbqReady(): Promise<void> {
   getFbq()?.("init", META_PIXEL_ID);
 }
 
+export type CompleteRegistrationMethod = "Google" | "Email";
+
 /**
- * Fires CompleteRegistration{method:"Google"} once per distinct login token.
- * `loginKey` should be the freshly-issued session token (or any value unique
- * to this specific sign-in) — using it (not a static flag) means a later,
- * genuinely new Google sign-in in the same browser tab still fires the event,
- * while re-renders/StrictMode double-invocation for the SAME sign-in don't.
+ * Fires Meta's standard CompleteRegistration{method} event once per distinct
+ * new-account creation. `dedupeKey` should be a value unique to this specific
+ * signup (e.g. the freshly-issued session token) — using it (not a static
+ * flag) means a later, genuinely new signup in the same browser tab still
+ * fires the event, while re-renders/StrictMode double-invocation for the SAME
+ * signup don't. Callers are responsible for only invoking this once a new
+ * account has actually been created (see module doc comment above).
  */
-export async function trackGoogleCompleteRegistration(loginKey: string): Promise<void> {
-  if (typeof window === "undefined" || !loginKey) return;
-  const dedupeKey = FIRED_KEY_PREFIX + loginKey.slice(-32);
+export async function trackCompleteRegistration(
+  method: CompleteRegistrationMethod,
+  dedupeKey: string,
+): Promise<void> {
+  if (typeof window === "undefined" || !dedupeKey) return;
+  const key = `${FIRED_KEY_PREFIX}${method}:${dedupeKey.slice(-32)}`;
   try {
-    if (sessionStorage.getItem(dedupeKey) === "1") return;
-    sessionStorage.setItem(dedupeKey, "1");
+    if (sessionStorage.getItem(key) === "1") return;
+    sessionStorage.setItem(key, "1");
   } catch {
     // sessionStorage unavailable (privacy mode, etc.) — proceed without dedupe
     // rather than silently dropping the event.
   }
   await ensureFbqReady();
-  getFbq()?.("track", "CompleteRegistration", { method: "Google" });
+  getFbq()?.("track", "CompleteRegistration", { method });
 }

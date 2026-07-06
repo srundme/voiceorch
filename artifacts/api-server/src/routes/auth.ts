@@ -617,7 +617,9 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       }
     }
 
+    let isNewUser = false;
     if (!user) {
+      isNewUser = true;
       // New user — provision with welcome credit
       const displayName = profile.name?.trim() || normalizedEmail?.split("@")[0] || "User";
       const [created] = await db
@@ -662,8 +664,12 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       name: user.name ?? profile.name,
     });
 
-    // Deliver the token via URL fragment — same pattern as email/password login
-    res.redirect(`${base}/#session=${encodeURIComponent(token)}`);
+    // Deliver the token via URL fragment — same pattern as email/password login.
+    // `new_user=1` tells the frontend this redirect is the result of a brand-new
+    // account being created (not an existing user logging back in), so it can
+    // fire the CompleteRegistration pixel event exactly once, only for signups.
+    const newUserFlag = isNewUser ? "&new_user=1" : "";
+    res.redirect(`${base}/#session=${encodeURIComponent(token)}${newUserFlag}`);
   } catch (err) {
     logger.error({ err }, "Google Sign-In callback: unexpected error");
     res.redirect(errorRedirect);
