@@ -688,11 +688,43 @@ export async function createSession(params: {
 
   // Apply knowledge base (prepended so it sits at the top of the final prompt)
   if (kbEntriesResult) {
+    // KB size cap (Gemini latency): cap the baked full-KB block that is prepended
+    // to the static system prompt. The full document is largely redundant with the
+    // live per-turn KB retrieval (retrieveKbContextMulti in pipeline.ts, which
+    // still injects the relevant slice every turn regardless of this cap), so a
+    // large baked block mostly just bloats the cached prefix and per-turn input
+    // tokens / TTFT.
+    //
+    // Default behaviour is Gemini-SCOPED and conservative: for `google` agents the
+    // baked block is capped at KB_INJECT_DEFAULT_GEMINI_CHARS so only very large
+    // KBs are trimmed; every other provider keeps full injection unchanged. The
+    // KB_INJECT_MAX_CHARS env var, when set (any value, including 0 to disable),
+    // overrides the default for ALL providers. Truncation is on a newline boundary
+    // when possible so an entry is not cut mid-sentence.
+    const KB_INJECT_DEFAULT_GEMINI_CHARS = 8000;
+    const isGeminiAgent = agent.llmProvider?.toLowerCase() === "google";
+    const kbMaxEnv = process.env["KB_INJECT_MAX_CHARS"];
+    const kbMaxChars =
+      kbMaxEnv !== undefined && kbMaxEnv.trim() !== ""
+        ? Number.parseInt(kbMaxEnv, 10)
+        : isGeminiAgent
+          ? KB_INJECT_DEFAULT_GEMINI_CHARS
+          : 0;
+    let kbInjectText = kbEntriesResult;
+    if (Number.isFinite(kbMaxChars) && kbMaxChars > 0 && kbInjectText.length > kbMaxChars) {
+      const nlBoundary = kbInjectText.lastIndexOf("\n", kbMaxChars);
+      const cut = nlBoundary > kbMaxChars * 0.5 ? nlBoundary : kbMaxChars;
+      kbInjectText = kbInjectText.slice(0, cut);
+      logger.info(
+        { agentId: params.agentId, kbMaxChars, originalChars: kbEntriesResult.length, injectedChars: kbInjectText.length },
+        "Knowledge base block capped by KB_INJECT_MAX_CHARS",
+      );
+    }
     const kbBlock = [
       "=== KNOWLEDGE BASE ===",
       "Use the following information to answer questions accurately. Always prefer this over your general training data.",
       "",
-      kbEntriesResult,
+      kbInjectText,
       "=== END KNOWLEDGE BASE ===",
     ].join("\n\n");
     agentConfig.systemPrompt = `${kbBlock}\n\n${agentConfig.systemPrompt}`;

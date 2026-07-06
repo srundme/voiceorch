@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeGeminiPreambleGuard, stripGeminiThinkingPreamble } from "./google.js";
+import { makeGeminiPreambleGuard, stripGeminiThinkingPreamble, GoogleLLM } from "./google.js";
 
 // Stream a reply through the guard in arbitrary chunks, collect the spoken output.
 function runStream(chunks: string[]): string {
@@ -44,6 +44,52 @@ describe("stripGeminiThinkingPreamble (final reply)", () => {
     expect(stripGeminiThinkingPreamble(input)).toBe(
       "Your code is [12345] and it expires soon.",
     );
+  });
+});
+
+describe("GoogleLLM.cacheEligible (context-cache gating)", () => {
+  // Access the private predicate at runtime (TS `private` is compile-time only).
+  const call = (llm: GoogleLLM, cacheBase: string | undefined, systemPrompt: string, lastIsTool: boolean) =>
+    (llm as unknown as {
+      cacheEligible(b: string | undefined, s: string, t: boolean): boolean;
+    }).cacheEligible(cacheBase, systemPrompt, lastIsTool);
+
+  // CACHE_MIN_CHARS default is 4096 — build a base comfortably above it.
+  const base = "X".repeat(5000);
+  const tail = "\n\n[CURRENT DATE & TIME] now";
+  const fresh = () => new GoogleLLM("test-key", "gemini-2.5-flash");
+
+  it("is eligible when base is long, a prefix of the prompt, and the turn is not a tool result", () => {
+    expect(call(fresh(), base, base + tail, false)).toBe(true);
+  });
+
+  it("is NOT eligible without a cacheBase", () => {
+    expect(call(fresh(), undefined, base + tail, false)).toBe(false);
+  });
+
+  it("is NOT eligible when the base is shorter than the minimum", () => {
+    const short = "X".repeat(100);
+    expect(call(fresh(), short, short + tail, false)).toBe(false);
+  });
+
+  it("is NOT eligible when the prompt does not start with the base (e.g. staged-prompt override)", () => {
+    const staged = "Y".repeat(5000) + tail;
+    expect(call(fresh(), base, staged, false)).toBe(false);
+  });
+
+  it("is NOT eligible for a tool-result turn", () => {
+    expect(call(fresh(), base, base + tail, true)).toBe(false);
+  });
+
+  it("is NOT eligible on a non-gemini model", () => {
+    const llm = new GoogleLLM("test-key", "text-bison");
+    expect(call(llm, base, base + tail, false)).toBe(false);
+  });
+
+  it("is NOT eligible once caching has been disabled for the call (fallback latch)", () => {
+    const llm = fresh();
+    (llm as unknown as { cacheDisabled: boolean }).cacheDisabled = true;
+    expect(call(llm, base, base + tail, false)).toBe(false);
   });
 });
 

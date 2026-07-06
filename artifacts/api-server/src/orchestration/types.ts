@@ -486,8 +486,19 @@ export interface LLMAdapter {
       /** Anthropic KV cache: mark system prompt block as ephemeral so it is
        *  cached between successive turns. Only honoured by AnthropicLLM. */
       kvCache?: boolean;
+      /** Gemini explicit context caching: the exact static prefix of
+       *  `systemPrompt` (language guard + base instructions + baked KB + caller
+       *  memory) that is stable turn-over-turn and should be served from a
+       *  `CachedContent`. `systemPrompt` MUST start with this string. Only
+       *  honoured by GoogleLLM; ignored by every other adapter. */
+      cacheBase?: string;
     }
   ): Promise<void>;
+  /** Optional: pre-create the provider-side context cache before the first turn
+   *  so turn 1 already benefits. `base` must equal the `cacheBase` that will be
+   *  passed to `chat()`. Non-blocking and best-effort — only implemented by
+   *  GoogleLLM (Gemini). Adapters without it are simply not warmed early. */
+  warmContextCache?(base: string, tools?: ToolDefinition[]): void;
 }
 
 export interface TTSAdapter {

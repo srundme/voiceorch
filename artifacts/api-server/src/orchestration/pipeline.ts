@@ -1896,8 +1896,114 @@ export class OrchestrationPipeline {
     );
   }
 
+  /**
+   * Build the per-turn language guard block from current instance state
+   * (currentLang + auto-detect / latch / auto-switch flags). Extracted so the
+   * greeting-time cache warm (buildCacheBase) and the per-turn prompt assembly
+   * share ONE source of truth — the cached prefix must match the turn prefix
+   * byte-for-byte or the Gemini CachedContent is not reused.
+   */
+  private buildLangGuard(): string {
+    let langGuard = "";
+    if (this.currentLang) {
+      const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
+      if (this.agent.languageAutoDetect) {
+        if (this.currentLang === "en-IN") {
+          // English gets a stronger OVERRIDE guard because many system prompts instruct
+          // the agent to speak Hinglish/Hindi by default. When the caller explicitly
+          // switches to English we must tell the LLM to supersede that instruction.
+          langGuard =
+            `[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. ` +
+            `Respond in clear, plain English ONLY for this entire response. ` +
+            `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, ` +
+            `or any other language — the caller has explicitly asked for English. ` +
+            `Do not mix Hindi or regional words into your reply. ` +
+            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+        } else {
+          langGuard =
+            `[LANGUAGE RULE] The caller is currently speaking in ${langName}. ` +
+            `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
+            `immediately switch your response to match their new language. ` +
+            `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
+            `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
+            `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
+            `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
+            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+        }
+      } else if (this.requestedLangLatch === "en-IN" || (this.agent.autoSwitchToEnglish && this.currentLang === "en-IN")) {
+        // Strict single-language mode, but the caller explicitly asked for English and
+        // the operator enabled auto-switch-to-English. Override the ABSOLUTE RULE for
+        // this reply so the agent actually answers in English instead of staying locked
+        // to its base language.
+        langGuard =
+          `[LANGUAGE RULE — OVERRIDE] The caller has explicitly requested English. ` +
+          `Respond in clear, plain English ONLY for this entire response. ` +
+          `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
+          `Tamil, Hindi, Hinglish, or any other language — the caller has asked for English. ` +
+          `Do not mix other languages into your reply. ` +
+          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+          `EXACTLY as written in your instructions; never translate or transliterate them.`;
+      } else {
+        langGuard =
+          `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
+          `This applies to EVERY reply without exception — including when you are confused, ` +
+          `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
+          `Never switch to English or any other language under any circumstances. ` +
+          `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
+          `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
+          `into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; ` +
+          `this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. ` +
+          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
+          `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+      }
+    }
+    return langGuard;
+  }
+
+  /**
+   * The static cacheable prefix for Gemini explicit context caching: the same
+   * `langGuard + base systemPrompt + langGuard` wrap that processTurn() computes
+   * before appending any per-turn volatile content. Used to warm the Gemini
+   * CachedContent during the greeting so turn 1 can already reuse it. Must stay
+   * in lock-step with the wrap in processTurn().
+   */
+  private buildCacheBase(detectedGender: "male" | "female" | null): string {
+    const langGuard = this.buildLangGuard();
+    const base = this.agent.systemPrompt;
+    const wrapped = langGuard ? `${langGuard}\n\n${base}\n\n${langGuard}` : base;
+    // Resolve {caller_salutation} the SAME way processTurn() does so the warmed
+    // prefix matches the per-turn prefix byte-for-byte (see cacheEligible()).
+    // At greeting time gender is not yet detected → neutral salutation, which
+    // matches turn 1; once gender locks the per-turn base changes and the adapter
+    // re-warms (only that one turn misses).
+    return this.substituteSalutation(wrapped, this.salutationFor(detectedGender));
+  }
+
   async greet(): Promise<void> {
     if (this.closed) return;
+    // ── Gemini context-cache warm (best-effort, non-blocking) ────────────────
+    // Fire-and-forget: register the static system-prompt prefix as a Gemini
+    // CachedContent while the greeting plays, so the caller's first real turn
+    // can already be served from cache. Honoured only by the Google adapter
+    // (no-op elsewhere). Skipped for staged-prompt agents — their per-turn
+    // prompt is REPLACED, so the warmed base would never match a turn prefix
+    // (wasted create). A base/lang mismatch is harmless: the turn's own
+    // ensureCache re-warms and only turn 1 misses.
+    if (
+      this.agent.llmProvider === "google" &&
+      typeof this.llm.warmContextCache === "function" &&
+      !(this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0)
+    ) {
+      try {
+        const warmTools = buildToolDefs(this.agent.tools);
+        warmTools.push(SCHEDULE_CALLBACK_TOOL_DEF);
+        void this.llm.warmContextCache(this.buildCacheBase(null), warmTools);
+      } catch (err) {
+        logger.debug({ callId: this.config.callId, err }, "Gemini cache warm (greeting) skipped");
+      }
+    }
     // "User speaks first" — stay silent on connect; the session listens for
     // caller audio and only responds after the user speaks.
     if (this.agent.firstSpeaker === "user") {
@@ -3585,6 +3691,11 @@ export class OrchestrationPipeline {
     // fall back to launching it here so it still overlaps with backchannel TTS.
     let systemPromptForTurn = this.agent.systemPrompt;
     const dtInjection = buildDatetimeInjection(this.agent.timezone);
+    // Resolve the caller gender up-front (before the Gemini cache base is
+    // captured) so {caller_salutation} in the base prompt is substituted INSIDE
+    // the cached prefix. effectiveGender() lets an explicit mid-call caller
+    // correction override the model-detected (and locked) gender.
+    const detectedGender = this.effectiveGender();
     // Language guard — placed at BOTH top and bottom of the system prompt so it
     // survives both long prompts (top = high attention) and recency bias (bottom).
     //
@@ -3593,61 +3704,7 @@ export class OrchestrationPipeline {
     //     language the caller is currently using and ask it to match. No "NEVER
     //     switch" clause — switching is the entire point.
     //   languageAutoDetect=false → "ABSOLUTE RULE": enforce one language forever.
-    let langGuard = "";
-    if (this.currentLang) {
-      const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
-      if (this.agent.languageAutoDetect) {
-        if (this.currentLang === "en-IN") {
-          // English gets a stronger OVERRIDE guard because many system prompts instruct
-          // the agent to speak Hinglish/Hindi by default. When the caller explicitly
-          // switches to English we must tell the LLM to supersede that instruction.
-          langGuard =
-            `[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. ` +
-            `Respond in clear, plain English ONLY for this entire response. ` +
-            `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, ` +
-            `or any other language — the caller has explicitly asked for English. ` +
-            `Do not mix Hindi or regional words into your reply. ` +
-            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-            `EXACTLY as written in your instructions; never translate or transliterate them.`;
-        } else {
-          langGuard =
-            `[LANGUAGE RULE] The caller is currently speaking in ${langName}. ` +
-            `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
-            `immediately switch your response to match their new language. ` +
-            `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
-            `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
-            `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
-            `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
-            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-            `EXACTLY as written in your instructions; never translate or transliterate them.`;
-        }
-      } else if (this.requestedLangLatch === "en-IN" || (this.agent.autoSwitchToEnglish && this.currentLang === "en-IN")) {
-        // Strict single-language mode, but the caller explicitly asked for English and
-        // the operator enabled auto-switch-to-English. Override the ABSOLUTE RULE for
-        // this reply so the agent actually answers in English instead of staying locked
-        // to its base language.
-        langGuard =
-          `[LANGUAGE RULE — OVERRIDE] The caller has explicitly requested English. ` +
-          `Respond in clear, plain English ONLY for this entire response. ` +
-          `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
-          `Tamil, Hindi, Hinglish, or any other language — the caller has asked for English. ` +
-          `Do not mix other languages into your reply. ` +
-          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
-          `EXACTLY as written in your instructions; never translate or transliterate them.`;
-      } else {
-        langGuard =
-          `[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in ${langName}. ` +
-          `This applies to EVERY reply without exception — including when you are confused, ` +
-          `do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. ` +
-          `Never switch to English or any other language under any circumstances. ` +
-          `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
-          `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
-          `into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; ` +
-          `this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. ` +
-          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names EXACTLY as written in your instructions above. ` +
-          `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
-      }
-    }
+    const langGuard = this.buildLangGuard();
     // NOTE: dtInjection ([CURRENT DATE & TIME]) is deliberately NOT placed here.
     // It changes every minute, so keeping it near the top would invalidate the
     // OpenAI prompt cache for the entire static block that follows (language
@@ -3659,6 +3716,30 @@ export class OrchestrationPipeline {
     systemPromptForTurn = langGuard
       ? `${langGuard}\n\n${systemPromptForTurn}\n\n${langGuard}`
       : systemPromptForTurn;
+
+    // Resolve {caller_salutation} in the base prompt NOW, before capturing the
+    // cache base. The full per-turn substitution still runs later (after the KB
+    // and gender-directive appends) and is idempotent on this already-resolved
+    // base, but doing it here first guarantees the captured prefix equals the
+    // corresponding leading slice of the final systemPromptForTurn. Otherwise the
+    // later substitution would mutate the prefix and GoogleLLM.cacheEligible()
+    // (systemPrompt.startsWith(cacheBase)) would fail on EVERY turn for any agent
+    // whose prompt uses {caller_salutation} — silently defeating the cache.
+    systemPromptForTurn = this.substituteSalutation(
+      systemPromptForTurn,
+      this.salutationFor(detectedGender),
+    );
+
+    // Gemini explicit context caching: capture the static prefix (language guard +
+    // salutation-resolved base instructions + baked KB) BEFORE the per-turn
+    // volatile appends below (per-turn KB slice, gender directive, tool guides,
+    // [TOOL CALLING], date/time) and BEFORE the staged-prompt override. The Google
+    // adapter registers this prefix as a CachedContent once per call and only
+    // re-sends the small volatile tail per turn. Passed to every provider but
+    // honoured ONLY by GoogleLLM (ignored elsewhere). On a staged-prompt turn the
+    // prompt is replaced, so this is no longer a prefix and the adapter's
+    // startsWith() guard safely falls back to the uncached path.
+    const cacheBaseForTurn = systemPromptForTurn;
 
 
     let kbContextPromise: Promise<string | null>;
@@ -3750,9 +3831,8 @@ export class OrchestrationPipeline {
     // Appended AFTER the language guard so it wins on recency, and the salutation is
     // marked verbatim so the strict single-language rule above cannot translate it
     // (see memory: language-rule-proper-nouns — "Sir"/"Ma'am" get transliterated otherwise).
-    // effectiveGender() lets an explicit mid-call caller correction override the
-    // model-detected (and locked) gender.
-    const detectedGender = this.effectiveGender();
+    // effectiveGender() (resolved above, before the cache base was captured) lets
+    // an explicit mid-call caller correction override the model-detected gender.
     const correctionActive = this.salutationCorrection !== null;
     // Explicit-correction exception: even when a phrasing slips past
     // detectSalutationCorrection(), the LLM must still honor a clear verbal
@@ -4154,6 +4234,7 @@ export class OrchestrationPipeline {
                 }
               },
               kvCache: useKvCache,
+              cacheBase: cacheBaseForTurn,
             }
           : {
               onUsage: (usage) => {
@@ -4170,6 +4251,7 @@ export class OrchestrationPipeline {
                 }
               },
               kvCache: useKvCache,
+              cacheBase: cacheBaseForTurn,
             }
       );
       _agnostTurn?.end(llmResponse);
