@@ -206,13 +206,27 @@ export class GoogleLLM implements LLMAdapter {
     }];
   }
 
+  /** Gemini 3.x uses a different (and INCOMPATIBLE — sending both errors) thinking
+   *  knob than 2.x: `thinkingLevel` (minimal/low/medium/high) instead of a numeric
+   *  `thinkingBudget`. Unlike 2.x, 3.x Flash/Flash-Lite CANNOT fully disable
+   *  thinking — "minimal" is the lowest-latency setting available. */
+  private get isGemini3(): boolean {
+    return /^gemini-3(\.|-)/.test(this.model);
+  }
+
   private get generationConfig() {
     // Disable thinking for voice — adds 2–5 s TTFT with no benefit for short
-    // conversational turns. thinkingBudget:0 turns thinking off; includeThoughts:
-    // false guarantees the API never returns reasoning ("thought") parts. Both are
-    // passed through to the REST endpoint by the legacy SDK (which does not type them).
+    // conversational turns. On 2.x, thinkingBudget:0 turns thinking off entirely.
+    // On 3.x there is no full "off" — thinkingLevel:"minimal" is the closest
+    // equivalent (the model may still think briefly). includeThoughts:false
+    // guarantees the API never returns reasoning ("thought") parts either way.
+    // Both fields are passed through to the REST endpoint by the legacy SDK
+    // (which does not type them).
+    const thinkingConfig = this.isGemini3
+      ? { thinkingLevel: "minimal", includeThoughts: false }
+      : { thinkingBudget: 0, includeThoughts: false };
     return {
-      thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
+      thinkingConfig,
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       // Caps output length, which directly bounds total latency (Total Latency =
       // TTFT + output_tokens / generation_speed + network) — same rationale as the
