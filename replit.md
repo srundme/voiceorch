@@ -101,7 +101,7 @@ Billing mode is resolved **dynamically** at call-end time in `minute-rates.ts â†
 ## Supported providers
 
 - **ASR:** Deepgram, Azure, Whisper
-- **LLM:** OpenAI, DeepSeek, Anthropic, Mistral, Cohere
+- **LLM:** OpenAI, DeepSeek, Anthropic, Mistral, Cohere, Groq, Qwen (via Groq), Sarvam, OpenRouter (Qwen3.5/Qwen3.6 â€” BYOP only, no managed key)
 - **TTS:** ElevenLabs, OpenAI, AWS Polly, Azure, Cartesia, Deepgram
 - **Telephony:** Twilio, Plivo, Vonage
 

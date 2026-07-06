@@ -9,6 +9,7 @@ export const LLM_PROVIDERS = [
   { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
   { value: "sarvam",    label: "Sarvam" },
+  { value: "openrouter", label: "OpenRouter (Qwen3.5 / Qwen3.6)" },
 ];
 
 export const TTS_PROVIDERS = [
@@ -46,6 +47,10 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   qwen:      [{ value: "qwen/qwen3-32b", label: "Qwen 3 32B (recommended)" }, { value: "qwen/qwen3-235b-a22b", label: "Qwen 3 235B" }],
   groq:      [{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" }, { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (fast)" }, { value: "gemma2-9b-it", label: "Gemma 2 9B" }],
   sarvam:    [{ value: "sarvam-30b", label: "Sarvam 30B (recommended)" }, { value: "sarvam-105b", label: "Sarvam 105B" }],
+  openrouter: [
+    { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, ~$0.0023/min (recommended, fastest)" },
+    { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, ~$0.0083/min, best for agentic use" },
+  ],
 };
 
 export const TTS_MODELS: Record<string, { value: string; label: string }[]> = {
