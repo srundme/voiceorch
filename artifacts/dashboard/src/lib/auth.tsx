@@ -40,8 +40,17 @@ interface AuthState {
   user: SessionUser | null;
   getToken: () => Promise<string | null>;
   signIn: (token?: string) => void;
-  signOut: () => void;
+  signOut: (reason?: SignOutReason) => void;
 }
+
+/**
+ * Why the session ended, so the sign-in page can show a helpful message.
+ * `revoked` covers both a server-side 401 (e.g. suspended/deleted account)
+ * and an expired token.
+ */
+export type SignOutReason = "revoked";
+
+const SIGNOUT_REASON_KEY = "voiceorch:signoutReason";
 
 function decode(token: string): DecodedToken | null {
   try {
@@ -137,10 +146,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback((reason?: SignOutReason) => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
-    window.location.href = `${basePath}/`;
+    if (reason) {
+      sessionStorage.setItem(SIGNOUT_REASON_KEY, reason);
+      window.location.href = `${basePath}/sign-in`;
+    } else {
+      window.location.href = `${basePath}/`;
+    }
   }, []);
 
   const decoded = token ? decode(token) : null;
@@ -155,6 +169,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/**
+ * Reads and clears the reason a previous session was force-signed-out (see
+ * `signOut(reason)`), so the sign-in page can show a one-time explanatory
+ * banner (e.g. "Your session ended because your account access changed").
+ */
+export function consumeSignOutReason(): SignOutReason | null {
+  const value = sessionStorage.getItem(SIGNOUT_REASON_KEY);
+  if (!value) return null;
+  sessionStorage.removeItem(SIGNOUT_REASON_KEY);
+  return value as SignOutReason;
 }
 
 export function useAuth(): AuthState {

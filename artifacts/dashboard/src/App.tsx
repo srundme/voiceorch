@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { PhoneCall, Sparkles, AudioLines, ShieldCheck } from "lucide-react";
-import { AuthProvider, useAuth, SignedIn, SignedOut } from "@/lib/auth";
-import { setAuthTokenGetter, setDefaultTimeoutMs, useGetOnboardingStatus } from "@workspace/api-client-react";
+import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from "@/lib/auth";
+import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -91,6 +91,22 @@ function AuthTokenSync() {
     setAuthTokenGetter(() => getToken());
     return () => setAuthTokenGetter(null);
   }, [getToken]);
+  return null;
+}
+
+// Forces a client-side sign-out the moment ANY API call comes back 401.
+// A suspended/deleted account keeps a locally valid (unexpired) JWT, so this
+// is the only signal that the server has revoked access for an already
+// "signed in" tab — without this, the app shell keeps rendering as if the
+// user were still authenticated even though every real data call fails.
+function UnauthorizedSignOutSync() {
+  const { signOut, isSignedIn } = useAuth();
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (isSignedIn) signOut("revoked");
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [signOut, isSignedIn]);
   return null;
 }
 
@@ -229,6 +245,16 @@ function SignInPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // If a previous tab/session was force-signed-out (e.g. the server started
+  // rejecting requests because the account was suspended/deleted), surface a
+  // one-time explanatory message instead of silently landing back here.
+  useEffect(() => {
+    const reason = consumeSignOutReason();
+    if (reason === "revoked") {
+      setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
+    }
+  }, []);
 
   // Forgot password flow state
   const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
@@ -919,6 +945,7 @@ function Router() {
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
         <AuthTokenSync />
+        <UnauthorizedSignOutSync />
         <QueryClientCacheInvalidator />
         <NavHistoryTracker />
         <ThemeSync />

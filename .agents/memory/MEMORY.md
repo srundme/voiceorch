@@ -1,4 +1,5 @@
 - [Webhook payment verification pattern](webhook-payment-verification.md) — payment webhooks must not trust body-supplied order/payment IDs when the signing secret is optional/unset; always re-verify with a live provider API call before crediting
+- [Client-side JWT vs server revocation gap](client-jwt-server-revocation-gap.md) — server-side login/session checks alone don't sign out already-open tabs; add a global 401→force-sign-out hook in the shared API client
 - [Self-echo guard single-word false positive](self-echo-single-word-false-positive.md) — 1-token overlap ratio silently classified genuine "yes"/"okay" replies as agent-echo and dropped them
 - [Webcall STT 8k roundtrip loses fricatives](webcall-stt-8k-roundtrip-loss.md) — webcall downsampled real 16k mic audio to 8k then upsampled back before STT, destroying "v"/"z"/"s" energy ("VoBiz"→"Bobby"); fix threads true 16k through
 - [Campaign retry hours cancel-orphan](campaign-retry-hours-cancel-orphan.md) — cancelling (not requeuing) a due retry blocked by calling hours orphans the lead AND auto-completes the batch, making later hours changes powerless

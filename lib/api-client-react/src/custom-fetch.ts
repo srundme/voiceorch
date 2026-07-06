@@ -14,6 +14,8 @@ export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
+export type UnauthorizedHandler = (error: ApiError) => void;
+
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -34,6 +36,7 @@ export class RequestTimeoutError extends Error {
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 let _defaultTimeoutMs: number = DEFAULT_TIMEOUT_MS;
+let _unauthorizedHandler: UnauthorizedHandler | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -71,6 +74,21 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
  */
 export function setDefaultTimeoutMs(ms: number): void {
   _defaultTimeoutMs = ms;
+}
+
+/**
+ * Register a handler invoked whenever ANY request receives a 401 response.
+ *
+ * This exists because a client can hold a locally valid (non-expired) JWT
+ * while the server-side account has since been suspended/deleted — the
+ * client has no other way to learn its session was revoked except by
+ * observing a 401 on a live API call. Wire this up to clear the stored
+ * session and redirect to sign-in.
+ *
+ * Pass `null` to clear the handler.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  _unauthorizedHandler = handler;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -441,7 +459,11 @@ export async function customFetch<T = unknown>(
 
     if (!response.ok) {
       const errorData = await parseErrorBody(response, method);
-      throw new ApiError(response, errorData, requestInfo);
+      const apiError = new ApiError(response, errorData, requestInfo);
+      if (response.status === 401 && _unauthorizedHandler) {
+        _unauthorizedHandler(apiError);
+      }
+      throw apiError;
     }
 
     return (await parseSuccessBody(response, responseType, requestInfo)) as T;
