@@ -1,0 +1,340 @@
+[
+  {
+    "id": 117194,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.054Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "varun bro",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1809,
+      "sessionId": "live-1809",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-06T19:22:02.973Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 117195,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.054Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 6
+      },
+      "factCount": 5,
+      "facts": {
+        "family_size": "12",
+        "interested_in": "earning wellness coins",
+        "has_wellness_program": "Gala Fit",
+        "aware_of_policy_details": "true",
+        "has_galaxy_marvel_policy": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 117196,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.054Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-59",
+        "from_number": "webcall-user-email:karthiasc12@gmail.com",
+        "agent_name": "varun bro",
+        "caller_number": "webcall-user-email:karthiasc12@gmail.com",
+        "date": "Monday, July 6, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 6\n\nPrevious call summary: The agent and caller are continuing their previous discussion about the Galaxy Marvel policy and Gala Fit wellness program, specifically regarding Wellness Coins. The caller is interested in earning Wellness Coins for discounts on policy renewal.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• family_size: 12\n• interested_in: earning wellness coins\n• has_wellness_program: Gala Fit\n• aware_of_policy_details: true\n• has_galaxy_marvel_policy: true\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call "
+    },
+    "metadata": null
+  },
+  {
+    "id": 117197,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.055Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 117198,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.055Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-3.1-flash-lite"
+    }
+  },
+  {
+    "id": 117199,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.055Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 117200,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.055Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    }
+  },
+  {
+    "id": 117201,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.055Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "e826d4fa54fb",
+      "promptLength": 21972,
+      "preview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 6\n\nPrevious call summary: The agent and caller are continuing their previous discussion about the Galaxy Marvel policy and Gala Fit wellness program, spe"
+    }
+  },
+  {
+    "id": 117203,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.888Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 117202,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.888Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம், Gala Fit-ல Wellness Coins ஏர்ன் பண்றது பத்தி நம்ம பேசிட்டு இருந்தோம்ல, அதை பத்தி இன்னும் ஏதாவது டீடைல்ஸ் வேணுமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 117204,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:03.894Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "turnNumber": 0,
+      "durationMs": 6
+    }
+  },
+  {
+    "id": 117205,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:10.270Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 117206,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:10.289Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1809"
+    }
+  },
+  {
+    "id": 117207,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:10.289Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1809"
+    }
+  },
+  {
+    "id": 117208,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:10.316Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 7,
+        "turns": 0,
+        "lastComponent": "Recording",
+        "lastUserTranscript": null,
+        "lastAgentResponse": "வணக்கம், Gala Fit-ல Wellness Coins ஏர்ன் பண்றது பத்தி நம்ம பேசிட்டு இருந்தோம்ல, அதை பத்தி இன்னும் ஏதாவது டீடைல்ஸ் வேணுமா?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 7,
+      "turns": 0,
+      "avgSttMs": null,
+      "avgLlmMs": null,
+      "avgTtsMs": null
+    }
+  },
+  {
+    "id": 117209,
+    "callId": 1809,
+    "agentId": 59,
+    "ts": "2026-07-06T19:22:10.322Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": false
+    }
+  }
+]
