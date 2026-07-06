@@ -1,4 +1,5 @@
 - [Webhook payment verification pattern](webhook-payment-verification.md) — payment webhooks must not trust body-supplied order/payment IDs when the signing secret is optional/unset; always re-verify with a live provider API call before crediting
+- [Detached method calls lose `this` binding](method-detach-this-binding.md) — hoisting `const fn = obj.method` before calling it drops the receiver; fingerprint is instant (sub-50ms) "success" with no response log
 - [TTS sentence-prefetch pipelining](tts-sentence-prefetch-pipelining.md) — synthesize sentence N+1 while N plays to close inter-sentence gaps; recording/ambient mixing MUST stay in the drain (playback-order) phase, never the synthesis phase
 - [TTS speed control field (ttsSpeed)](tts-speed-control.md) — "TTS feels slow" can be normal playback duration at default speed, not TTFB latency; verify a documented speed control is actually sent to the provider API
 - [Secrets must go through requestEnvVar, not user_query](secrets-requestenvvar-not-user-query.md) — text_query answers land in plain chat context; only requestEnvVar's secure form keeps a pasted key out of the transcript

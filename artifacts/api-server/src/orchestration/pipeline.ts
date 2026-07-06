@@ -2705,7 +2705,8 @@ export class OrchestrationPipeline {
     };
 
     if (this.tts.synthesizeStream) {
-      const synthesizeStream = this.tts.synthesizeStream;
+      const ttsAdapter = this.tts;
+      const synthesizeStream = ttsAdapter.synthesizeStream!.bind(ttsAdapter);
       let accum: Buffer[] = [];
       let accumSize = 0;
       // Carry bytes that weren't a multiple of 4 across flush() calls so
