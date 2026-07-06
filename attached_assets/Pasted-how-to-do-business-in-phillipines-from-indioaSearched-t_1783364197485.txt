@@ -1,0 +1,63 @@
+how to do business in phillipines from indioaSearched the webSearched the webHere's the full practical breakdown for an Indian founder wanting to do business in the Philippines:
+
+The honest reality first
+For a SaaS/AI product like VoiceCRM, you don't need to physically set up in Philippines initially. You can sell to Philippine BPOs from India and only formalize once you have paying customers. That's the smart path.
+
+Three routes, in order of effort:
+Route 1 — Sell from India (start here)
+Zero registration needed. You sell VoiceCRM as a SaaS to Philippine BPO clients, invoice in USD, receive via Wise or Stripe. Completely legal. This is how most Indian SaaS companies enter foreign markets. Only formalize once you hit meaningful revenue.
+Route 2 — Representative Office (when you need local presence)
+A representative office is limited to non-commercial activities — marketing, liaison, client support. It cannot earn revenue locally. Minimum capital requirement is just $30,000. Good for having a local contact person, attending meetings, building relationships without full legal commitment.
+Route 3 — Full Company Registration (when you're serious)
+For IT and SaaS businesses, 100% foreign ownership is permitted. The minimum paid-up capital for full foreign ownership is $200,000. Registration typically takes 20–35 business days.
+You must appoint at least one resident director (can be a foreigner or Filipino), a Filipino corporate secretary, and a resident treasurer.
+
+The 5 registration steps if you go full entity:
+Register with SEC → Get Barangay Clearance → Get Mayor's Office business permit → Register with BIR (Bureau of Internal Revenue) → Register with SSS, PhilHealth, and Pag-IBIG as employer.
+Taxes: Corporate income tax 25%, VAT 12%, plus social security contributions.
+
+Smartest path for VoiceCRM specifically:
+Phase 1 (now) — Sell from India. Find 1-2 Philippine BPO clients, sign contracts in USD, deliver the product remotely. No registration needed.
+Phase 2 (₹50L+ revenue from PH) — Set up a Representative Office in Manila ($30K capital). Hire one local business development person who attends meetings and demos on your behalf.
+Phase 3 (serious scale) — Full domestic corporation with a Filipino co-founder or local director. Register with BOI (Board of Investments) for tax incentives under the CREATE Act.
+
+India-Philippines specific advantage:
+India and Philippines have a Double Taxation Avoidance Agreement (DTAA) — so you won't be taxed twice on the same income in both countries. This makes the India-first model even cleaner financially.
+Practical first step: Sign up on Wise Business to receive USD payments from Philippine clients without losing money on forex. That alone unblocks you to start selling immediately without any registration.
+Want me to draft a cold outreach strategy to target Philippine BPO companies for VoiceCRM?how cookie helps businessess ?Cookies help businesses in a few key ways:
+Keeping users logged in
+Without cookies, you'd have to log in every single time you visited a website. The session cookie remembers who you are across pages and visits.
+Personalisation
+Amazon showing you "recently viewed" items, Netflix remembering where you left off, language preferences, dark mode settings — all stored in cookies. Better experience = more engagement = more revenue.
+Analytics
+Google Analytics uses cookies to tell a business how many people visited, which pages they spent time on, where they dropped off, and where they came from. This is how businesses make product decisions.
+Retargeting / Advertising
+This is the big money one. When you visit a shoe website and then see shoe ads everywhere for the next week — that's a third-party tracking cookie. The business pays to "follow" you around the internet to bring you back to buy. Conversion rates on retargeted ads are 3-5x higher than cold ads.
+Cart & Checkout
+E-commerce stores use cookies to remember what's in your cart even if you close the browser and come back later. Abandoned cart recovery is a massive revenue lever.
+A/B Testing
+When a business tests two versions of a page, cookies ensure you consistently see the same version — not a random one each visit, which would mess up the test data.
+
+For your context with VoiceCRM/SnapServe, cookies on your dashboard would handle session management, remembering which campaign view a user was on, and eventually tracking which landing page a lead came from before they filled the form — closing the attribution loop between ad spend and actual call outcomes.call-1807-logs.jsonjsoncheck my tts latencyRan 3 commandsRan 3 commandsHere's the full picture for call #1807:
+
+TTS (Cartesia) — the problem
+TurnLatencyTurn 11,692msTurn 24,799ms 🚨Turn 33,580ms 🚨Turn 41,360msAverage2,858msMin1,360msMax4,799ms
+This is bad. For a voice agent, TTS latency should ideally be under 400ms first-byte. You're averaging nearly 3 seconds — the caller is sitting in silence for 3 seconds waiting for a response. That's very noticeable and feels broken.
+LLM (Google) — actually fine
+TurnLatencyTurn 11,076msTurn 2803msAverage940ms
+LLM is not your bottleneck here. Google is performing well.
+STT (Sarvam) — no data logged
+Either Sarvam isn't logging latency to Bolna's log format, or it's happening outside the tracked pipeline. Can't assess from this file.
+
+The core issue
+Your TTS is the dominant bottleneck — 2,858ms average vs your LLM at 940ms. The 4,799ms spike on Turn 2 is particularly bad — that's nearly 5 seconds of silence mid-conversation.
+Likely causes:
+
+Cartesia cold start on the first few sentences of a call
+Tamil text specifically may be triggering slower processing (non-Latin script)
+Long sentences being sent to TTS as one chunk instead of streaming token by token
+
+What to try:
+
+Enable Cartesia streaming mode if not already on — audio should start playing before the full sentence is generated
+Break agent responses into shorter sentences so TTS starts faster
