@@ -132,6 +132,13 @@ const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
 // after a few flips we give up and stay uncached rather than churn the cache API.
 const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 3;
 
+// Hard request timeout so a stalled Gemini connection fails fast and the
+// pipeline's existing same-provider retry / fallback-LLM logic can take over,
+// instead of a live call hanging on a single slow request. The legacy SDK has
+// no default timeout of its own (only what Node's fetch/undici apply), so this
+// is a real, previously-missing bound on worst-case per-turn latency.
+const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 20000;
+
 /**
  * Google Gemini — streaming generative AI with function calling
  * Models: gemini-2.5-flash-lite (fastest), gemini-2.5-flash (recommended), gemini-2.5-pro, gemini-1.5-flash
@@ -147,6 +154,7 @@ export class GoogleLLM implements LLMAdapter {
   private apiKey: string;
   private model: string;
   private temperature: number | undefined;
+  private maxTokens: number | undefined;
 
   // ── Per-call context-cache state ───────────────────────────────────────────
   private cacheManager: GoogleAICacheManager | null = null;
@@ -167,6 +175,8 @@ export class GoogleLLM implements LLMAdapter {
     this.model = model ?? "gemini-2.5-flash";
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+    const mt = genParams?.maxTokens;
+    this.maxTokens = typeof mt === "number" && Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
   }
 
   /** Convert our ToolDefinition[] to Gemini's FunctionDeclaration (Tool[]) format.
@@ -204,7 +214,18 @@ export class GoogleLLM implements LLMAdapter {
     return {
       thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      // Caps output length, which directly bounds total latency (Total Latency =
+      // TTFT + output_tokens / generation_speed + network) — same rationale as the
+      // Groq/Qwen adapters. Only applied when the agent has one configured; Gemini's
+      // own default (up to the model's full output token limit) is otherwise unchanged.
+      ...(this.maxTokens !== undefined ? { maxOutputTokens: this.maxTokens } : {}),
     } as Record<string, unknown>;
+  }
+
+  /** Per-model-instance request options — bounds worst-case latency on a stalled
+   *  connection so the pipeline's retry/fallback can take over instead of hanging. */
+  private get requestOptions(): { timeout: number } {
+    return { timeout: REQUEST_TIMEOUT_MS };
   }
 
   /** Map ConversationTurn[] → Gemini history + current message (shared by both
@@ -425,9 +446,11 @@ export class GoogleLLM implements LLMAdapter {
         try {
           // Model, tools and systemInstruction all come from the cache — pass only
           // generationConfig (the SDK forbids re-declaring what the cache holds).
-          const model = this.genAI.getGenerativeModelFromCachedContent(this.cachedContent, {
-            generationConfig: this.generationConfig as never,
-          });
+          const model = this.genAI.getGenerativeModelFromCachedContent(
+            this.cachedContent,
+            { generationConfig: this.generationConfig as never },
+            this.requestOptions
+          );
           const chat = model.startChat({ history });
           // Setup / first-byte errors (e.g. cache expired) surface here BEFORE any
           // token is emitted, so falling back to the uncached path cannot double-speak.
@@ -446,12 +469,15 @@ export class GoogleLLM implements LLMAdapter {
     }
 
     // ── Uncached path (unchanged behaviour) ────────────────────────────────────
-    const gemini = this.genAI.getGenerativeModel({
-      model: this.model,
-      systemInstruction: systemPrompt,
-      ...(geminiTools ? { tools: geminiTools } : {}),
-      generationConfig: this.generationConfig as never,
-    });
+    const gemini = this.genAI.getGenerativeModel(
+      {
+        model: this.model,
+        systemInstruction: systemPrompt,
+        ...(geminiTools ? { tools: geminiTools } : {}),
+        generationConfig: this.generationConfig as never,
+      },
+      this.requestOptions
+    );
     const chat = gemini.startChat({ history });
     const result = await chat.sendMessageStream(lastMessage);
     await this.drainResult(result, onToken, onDone, options);

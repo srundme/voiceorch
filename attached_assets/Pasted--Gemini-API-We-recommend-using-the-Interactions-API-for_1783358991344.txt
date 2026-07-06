@@ -1,0 +1,76 @@
+# Gemini API
+
+We recommend using the **Interactions API** for all new projects. It is optimized for agentic workflows, state management, and the latest models. Learn more in the [Interactions API Overview](https://ai.google.dev/gemini-api/docs/interactions-overview).
+
+The fastest path from prompt to production with Gemini, Veo, Nano Banana, and more.
+
+### Python
+
+    from google import genai
+
+    client = genai.Client()
+
+    interaction = client.interactions.create(
+        model="gemini-3.5-flash",
+        input="Explain how AI works in a few words"
+    )
+
+    print(interaction.output_text)
+
+### JavaScript
+
+    import { GoogleGenAI } from "@google/genai";
+
+    const ai = new GoogleGenAI({});
+
+    const interaction = await ai.interactions.create({
+      model: "gemini-3.5-flash",
+      input: "Explain how AI works in a few words",
+    });
+
+    console.log(interaction.output_text);
+
+### REST
+
+    curl -X POST "https://generativelanguage.googleapis.com/v1beta/interactions" \
+      -H "x-goog-api-key: $GEMINI_API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "model": "gemini-3.5-flash",
+        "input": "Explain how AI works in a few words"
+      }'
+
+[Start building](https://ai.google.dev/gemini-api/docs/quickstart) Follow our Quickstart guide to get an API key and make your first API call in minutes.
+
+*** ** * ** ***
+
+## Meet the models
+
+[View all](https://ai.google.dev/gemini-api/docs/models) [Gemini 3.1 Pro
+New
+Our most intelligent model, the best in the world for multimodal understanding, all built on state-of-the-art reasoning.](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview) [Gemini 3.5 Flash
+New
+Frontier-class performance rivaling larger models at a fraction of the cost.](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash) [Gemini 3.1 Flash-Lite
+New
+High-volume, cost-sensitive model with the performance and quality of the Gemini 3 series.](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite) [Gemini 3 Flash
+Frontier-class performance rivaling larger models at a fraction of the cost.](https://ai.google.dev/gemini-api/docs/models/gemini-3-flash-preview) [Nano Banana 2 and Nano Banana Pro
+State-of-the-art image generation and editing models.](https://ai.google.dev/gemini-api/docs/image-generation) [Veo 3.1
+Our state-of-the-art video generation model, with native audio.](https://ai.google.dev/gemini-api/docs/video) [Gemini Robotics
+A vision-language model (VLM) that brings Gemini's agentic capabilities to robotics and enables advanced reasoning in the physical world.](https://ai.google.dev/gemini-api/docs/robotics-overview)
+
+## Explore Capabilities
+
+[Native Image Generation (Nano Banana)
+Generate and edit highly contextual images natively with Gemini 2.5 Flash Image.](https://ai.google.dev/gemini-api/docs/image-generation) [Long Context
+Input millions of tokens to Gemini models and derive understanding from unstructured images, videos, and documents.](https://ai.google.dev/gemini-api/docs/long-context) [Structured Outputs
+Constrain Gemini to respond with JSON, a structured data format suitable for automated processing.](https://ai.google.dev/gemini-api/docs/structured-output) [Function Calling
+Build agentic workflows by connecting Gemini to external APIs and tools.](https://ai.google.dev/gemini-api/docs/function-calling) [Video Generation with Veo 3.1
+Create high-quality video content from text or image prompts with our state-of-the-art model.](https://ai.google.dev/gemini-api/docs/video) [Voice Agents with Live API
+Build real-time voice applications and agents with the Live API.](https://ai.google.dev/gemini-api/docs/live) [Tools
+Connect Gemini to the world through built-in tools like Google Search, URL Context, Google Maps, Code Execution and Computer Use.](https://ai.google.dev/gemini-api/docs/tools) [Document Understanding
+Process up to 1000 pages of PDF files with full multimodal understanding or other text-based file types.](https://ai.google.dev/gemini-api/docs/document-processing) [Thinking
+Explore how thinking capabilities improve reasoning for complex tasks and agents.](https://ai.google.dev/gemini-api/docs/thinking) [Google AI Studio
+Test prompts, manage your API keys, monitor usage, and build prototypes.](https://aistudio.google.com) [Developer Community
+Ask questions and find solutions from other developers and Google engineers.](https://discuss.ai.google.dev/c/gemini-api/4) [API Reference
+Find detailed information about the Gemini API in the official reference documentation.](https://ai.google.dev/api) [Status
+Check the status of Gemini API, Google AI Studio, and our model services.](https://aistudio.google.com/status)
