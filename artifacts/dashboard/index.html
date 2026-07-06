@@ -19,6 +19,10 @@
   </head>
   <body class="dark">
     <div id="root"></div>
+    <!-- Meta Pixel noscript fallback (same Pixel ID as snapserve.ai; JS init/PageView/CompleteRegistration handled in src/lib/meta-pixel.ts) -->
+    <noscript>
+      <img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=985387470976266&ev=PageView&noscript=1" />
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

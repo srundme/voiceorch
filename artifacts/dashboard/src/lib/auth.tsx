@@ -15,6 +15,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import { trackGoogleCompleteRegistration } from "@/lib/meta-pixel";
 
 const TOKEN_KEY = "voiceorch:session";
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -85,6 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.pathname + window.location.search,
       );
       setToken(captured);
+      // This branch only runs immediately after the Google OAuth callback
+      // redirect delivers a fresh token via the URL fragment — never on a
+      // returning-session page reload (that's the `stored` branch below) and
+      // never for email/password login (that flow calls signIn() directly,
+      // not this effect). So this is exactly "successful Google sign-in".
+      void trackGoogleCompleteRegistration(captured);
     } else {
       const stored = localStorage.getItem(TOKEN_KEY);
       if (stored && decode(stored)) {

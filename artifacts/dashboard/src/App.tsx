@@ -64,6 +64,7 @@ import DocsPage from "@/pages/docs/index";
 
 import ImpersonatePage from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { initMetaPixel } from "@/lib/meta-pixel";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,6 +78,10 @@ const _storedTimeout = localStorage.getItem(TIMEOUT_STORAGE_KEY);
 if (_storedTimeout !== null) {
   setDefaultTimeoutMs(Number(_storedTimeout));
 }
+
+// Initialize the Meta Pixel once at app startup (loads the script, calls
+// fbq('init', ...), then fbq('track', 'PageView')). See lib/meta-pixel.ts.
+void initMetaPixel();
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
