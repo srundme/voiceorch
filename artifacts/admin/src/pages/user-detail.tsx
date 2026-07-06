@@ -73,6 +73,7 @@ export default function UserDetail() {
   const [suspendReason, setSuspendReason] = useState("");
 
   const [deleteUserModal, setDeleteUserModal] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
 
   const [profileModal, setProfileModal] = useState(false);
   const [profileEmail, setProfileEmail] = useState("");
@@ -119,8 +120,12 @@ export default function UserDetail() {
   };
 
   const handleDelete = () => {
+    if (deleteConfirmEmail.trim() !== (user.email || "")) {
+      toast({ title: "Email doesn't match", description: "Type the user's exact email to confirm.", variant: "destructive" });
+      return;
+    }
     setStatus.mutate({ status: "deleted" }, {
-      onSuccess: () => { toast({ title: "User deleted (soft)" }); setDeleteUserModal(false); },
+      onSuccess: () => { toast({ title: "User deleted (soft)" }); setDeleteUserModal(false); setDeleteConfirmEmail(""); },
       onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
     });
   };
@@ -651,15 +656,44 @@ export default function UserDetail() {
       </Dialog>
 
       {/* Delete user */}
-      <Dialog open={deleteUserModal} onOpenChange={setDeleteUserModal}>
+      <Dialog
+        open={deleteUserModal}
+        onOpenChange={(o) => { setDeleteUserModal(o); if (!o) setDeleteConfirmEmail(""); }}
+      >
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> Delete User</DialogTitle>
-            <DialogDescription>This soft-deletes the account. The data is retained but the user cannot log in.</DialogDescription>
+            <DialogDescription>
+              This soft-deletes the account — the data is retained but the user can no longer log in.
+              This action cannot be undone from this screen.
+            </DialogDescription>
           </DialogHeader>
+          <div className="grid gap-2 py-1">
+            <Label>
+              Type <span className="font-mono font-semibold text-foreground">{user.email}</span> to confirm
+            </Label>
+            <Input
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              placeholder={user.email || ""}
+              autoComplete="off"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && deleteConfirmEmail.trim() === (user.email || "") && !setStatus.isPending) {
+                  handleDelete();
+                }
+              }}
+            />
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteUserModal(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={setStatus.isPending}>{setStatus.isPending ? "Deleting…" : "Delete User"}</Button>
+            <Button variant="outline" onClick={() => { setDeleteUserModal(false); setDeleteConfirmEmail(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={setStatus.isPending || deleteConfirmEmail.trim() !== (user.email || "")}
+            >
+              {setStatus.isPending ? "Deleting…" : "Delete User"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
