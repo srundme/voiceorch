@@ -382,6 +382,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_qwen_key",     "GROQ_API_KEY");
       void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
       void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
+      void seedManagedKeyFromEnv("managed_gemini_key",   "GEMINI_API_KEY");
       void migrateSaarikaToSaaras();
       startCallbackPoller();
       startSpikeChecker();
