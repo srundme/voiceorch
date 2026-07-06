@@ -22,6 +22,7 @@ import { logger } from "../lib/logger.js";
 import { sendBrevoEmail } from "../services/brevo.js";
 import {
   welcomeEmail,
+  welcomeBackEmail,
   passwordResetOtpEmail,
   passwordChangedEmail,
 } from "../services/email-templates.js";
@@ -131,7 +132,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     const displayName = (name ?? "").trim() || normalizedEmail.split("@")[0];
 
     let user: typeof usersTable.$inferSelect;
+    let reactivated = false;
     if (existing) {
+      reactivated = true;
       [user] = await db
         .update(usersTable)
         .set({
@@ -172,12 +175,20 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
     const token = createSessionToken({ sub, email: normalizedEmail, name: user.name });
 
-    // Welcome email — fire-and-forget, never block the signup response
-    sendBrevoEmail(
-      normalizedEmail,
-      "Welcome to SnapServe! 🎉",
-      welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
-    ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome email send failed"));
+    // Welcome / welcome-back email — fire-and-forget, never block the signup response
+    if (reactivated) {
+      sendBrevoEmail(
+        normalizedEmail,
+        "Welcome back to SnapServe!",
+        welcomeBackEmail(user.name ?? normalizedEmail.split("@")[0]!),
+      ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome-back email send failed"));
+    } else {
+      sendBrevoEmail(
+        normalizedEmail,
+        "Welcome to SnapServe! 🎉",
+        welcomeEmail(user.name ?? normalizedEmail.split("@")[0]!, FREE_CREDIT_CENTS),
+      ).catch(err => logger.warn({ err, email: normalizedEmail }, "Welcome email send failed"));
+    }
 
     res.json({ token });
   } catch (err) {
@@ -697,7 +708,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       // deleted account's email should be free to sign up again, so treat
       // this as a fresh signup: reactivate the row instead of blocking it.
       // Suspended accounts are intentionally NOT reactivated this way.
-      const [reactivated] = await db
+      const [reactivatedRow] = await db
         .update(usersTable)
         .set({
           status: "active",
@@ -707,9 +718,17 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         })
         .where(eq(usersTable.id, user.id))
         .returning();
-      user = reactivated;
-      isNewUser = true;
+      user = reactivatedRow;
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: previously deleted account reactivated");
+
+      // Welcome-back email — fire-and-forget, distinct from the first-time welcome email
+      if (normalizedEmail) {
+        sendBrevoEmail(
+          normalizedEmail,
+          "Welcome back to SnapServe!",
+          welcomeBackEmail(user.name ?? normalizedEmail.split("@")[0]!),
+        ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google reactivation welcome-back email failed"));
+      }
     } else if (user.status !== "active") {
       logger.warn({ sub: googleSub, status: user.status }, "Google Sign-In blocked: account is not active");
       res.redirect(`${base}/?google_error=true&reason=account_suspended`);

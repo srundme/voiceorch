@@ -81,6 +81,20 @@ export function welcomeEmail(name: string, creditCents: number): string {
   );
 }
 
+// ── Welcome Back (reactivated account) ──────────────────────────────────────────
+
+export function welcomeBackEmail(name: string): string {
+  return shell(
+    h1("Welcome back to SnapServe, " + name + "!") +
+    p("Your account has been reactivated and is ready to go. Your previous settings and history are right where you left them.") +
+    '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px 24px;margin:20px 0">' +
+    '<p style="margin:0;font-size:14px;color:#166534">Pick up where you left off &mdash; check your agents, wallet balance, and call history, or start something new.</p>' +
+    "</div>" +
+    '<div style="margin:24px 0">' + btn("Open SnapServe", "https://app.snapserve.ai") + "</div>" +
+    p("If this was not you, or you did not intend to reactivate this account, please reply to this email right away.")
+  );
+}
+
 // ── Password Reset OTP ────────────────────────────────────────────────────────
 
 export function passwordResetOtpEmail(otp: string): string {

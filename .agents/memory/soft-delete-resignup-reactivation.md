@@ -25,3 +25,8 @@ all already taken by the deleted row).
 link, etc.) that does an existing-user-by-identity lookup must branch on
 `status`: `deleted` → reactivate; anything else non-active → block. Login
 routes should keep blocking both `deleted` and `suspended` unconditionally.
+
+**Welcome email variant:** a reactivation must send `welcomeBackEmail`
+(`services/email-templates.ts`), not the first-time `welcomeEmail` — no
+credit-grant mention, and it must NOT set `isNewUser`/fire the "new signup" ad
+pixel, since reactivation is not a first-time conversion event.
