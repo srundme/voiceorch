@@ -1,0 +1,792 @@
+[
+  {
+    "id": 117131,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.933Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "varun bro",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 1807,
+      "sessionId": "live-1807",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-06T18:15:17.914Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 117132,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.933Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 5
+      },
+      "factCount": 5,
+      "facts": {
+        "family_size": "12",
+        "interested_in": "earning wellness coins",
+        "has_wellness_program": "Gala Fit",
+        "aware_of_policy_details": "true",
+        "has_galaxy_marvel_policy": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 117133,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.933Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-59",
+        "from_number": "webcall-user-email:karthiasc12@gmail.com",
+        "agent_name": "varun bro",
+        "caller_number": "webcall-user-email:karthiasc12@gmail.com",
+        "date": "Monday, July 6, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 5  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller is discussing their Galaxy Marvel policy and the Gala Fit wellness program, which can help them earn wellness coins for discounts on policy renewal. The agent is clarifying how the program works, including the ability to manage policy details and earn discounts through the Galaxy Health Insurance app.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• family_size: 12\n• interested_in: earning wellness coins\n• has_wellness_program: Gala Fit\n• aware_of_policy_details: true\n• has_galaxy_marvel_policy: tru"
+    },
+    "metadata": null
+  },
+  {
+    "id": 117134,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.933Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 117135,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.933Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-3.1-flash-lite"
+    }
+  },
+  {
+    "id": 117138,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.934Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 117136,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.934Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    }
+  },
+  {
+    "id": 117137,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:17.934Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "e4132a8dc6b7",
+      "promptLength": 22770,
+      "preview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 5  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller is discussing their Galaxy Marvel policy and the Gala Fit wellness program, which can help "
+    }
+  },
+  {
+    "id": 117140,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:18.987Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 117139,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:18.987Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரிங்க, கால் கட் ஆயிடுச்சு, நம்ம பேசிட்டு இருந்த விஷயத்தை அப்படியே கண்டினியூ பண்ணலாமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 117141,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:20.674Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 200,
+      "configuredThreshold": 200,
+      "echoFloor": 0,
+      "currentRms": 0,
+      "turnNumber": 0,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 117142,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:20.678Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 5111,
+      "turnNumber": 0,
+      "durationMs": 1693,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 117143,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:20.678Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1692,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 163554,
+      "textLength": 87,
+      "firstByteMs": 429
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1692
+    }
+  },
+  {
+    "id": 117144,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:23.143Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 80,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 117145,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:23.262Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-3.1-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your Tamil speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in Tamil\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — proper ",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 117146,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:24.334Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1076,
+      "turnNumber": 1,
+      "durationMs": 1076
+    }
+  },
+  {
+    "id": 117147,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:24.339Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1076,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சாரிங்க, கால் கட் ஆயிடுச்சு, நம்ம பேசிட்டு இருந்த விஷயத்தை அப்படியே கண்டினியூ பண்ணலாமா?"
+    },
+    "metadata": {
+      "inputTokens": 6329,
+      "outputTokens": 28,
+      "cachedTokens": 5993,
+      "model": "gemini-3.1-flash-lite",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 117148,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:24.440Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 117149,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:24.441Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரிங்க, கால் கட் ஆயிடுச்சு, நம்ம பேசிட்டு இருந்த விஷயத்தை அப்படியே கண்டினியூ பண்ணலாமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 117151,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:29.240Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4799,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145634,
+      "textLength": 87,
+      "firstByteMs": 136
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 4799
+    }
+  },
+  {
+    "id": 117150,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:29.240Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4551,
+      "turnNumber": 1,
+      "durationMs": 4801
+    }
+  },
+  {
+    "id": 117152,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:31.364Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "பண்ணலாம் சொல்லுங்க.",
+      "endDetectToFinalMs": 131,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117153,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:31.366Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-3.1-flash-lite",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in Tamil. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your Tamil speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in Tamil\" does NOT mean avoiding these everyday English loanwords. EXCEPTION — proper ",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117154,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:32.167Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 803,
+      "turnNumber": 2,
+      "durationMs": 803
+    }
+  },
+  {
+    "id": 117155,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:32.175Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 803,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரிங்க, சோ அந்த Wellness Coins பத்தி சொன்னேன் இல்லையா, அதுல உங்களுக்கு வேற ஏதாவது டவுட் இருக்கா?"
+    },
+    "metadata": {
+      "inputTokens": 6366,
+      "outputTokens": 25,
+      "cachedTokens": 5993,
+      "model": "gemini-3.1-flash-lite",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117156,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:32.269Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரிங்க, சோ அந்த Wellness Coins பத்தி சொன்னேன் இல்லையா"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117157,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:32.269Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117158,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:35.850Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 2,
+      "durationMs": 3581
+    }
+  },
+  {
+    "id": 117161,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:35.850Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 3580,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 53,
+      "firstByteMs": 257
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 3580
+    }
+  },
+  {
+    "id": 117159,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:35.850Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அதுல உங்களுக்கு வேற ஏதாவது டவுட் இருக்கா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117160,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:35.850Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 117162,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:37.208Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 117164,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:37.211Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1360,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 73954,
+      "textLength": 41,
+      "firstByteMs": 131
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 1360
+    }
+  },
+  {
+    "id": 117163,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:37.211Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 2311,
+      "turnNumber": 2,
+      "durationMs": 1360
+    }
+  },
+  {
+    "id": 117165,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:37.659Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/1807"
+    }
+  },
+  {
+    "id": 117166,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:37.659Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/1807"
+    }
+  },
+  {
+    "id": 117167,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:37.695Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 19,
+        "turns": 2,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "பண்ணலாம் சொல்லுங்க.",
+        "lastAgentResponse": "சரிங்க, சோ அந்த Wellness Coins பத்தி சொன்னேன் இல்லையா, அதுல உங்களுக்கு வேற ஏதாவது டவுட் இருக்கா?",
+        "recordingStatus": "saved",
+        "warningCount": 2,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 19,
+      "turns": 2,
+      "avgSttMs": 0,
+      "avgLlmMs": 1076,
+      "avgTtsMs": 1322
+    }
+  },
+  {
+    "id": 117168,
+    "callId": 1807,
+    "agentId": 59,
+    "ts": "2026-07-06T18:15:38.391Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
