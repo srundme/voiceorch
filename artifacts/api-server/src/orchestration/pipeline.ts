@@ -860,7 +860,7 @@ export class OrchestrationPipeline {
       : (keys.get(`${this.agent.ttsProvider}:extraConfig`) ?? null);
     this.tts = createTTSAdapter(
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
-      ttsExtraConfig, agentLanguage
+      ttsExtraConfig, agentLanguage, this.agent.ttsSpeed
     );
 
     if (this.agent.noiseCancellationEnabled) {

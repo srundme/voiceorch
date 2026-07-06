@@ -436,6 +436,7 @@ export async function createSession(params: {
     // P1-G: Engine — interruption & pacing
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
     incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
+    ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
     // P1-I: Start Speaking Plan — default gives punctuated turns a small 100ms

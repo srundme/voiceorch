@@ -126,6 +126,7 @@ const agentFormSchema = z.object({
   llmMaxTokens: z.number().min(1).max(16000).optional().nullable(),
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
   linearDelayMs: z.number().min(0).max(2000).optional(),
+  ttsSpeed: z.number().min(0.7).max(1.5).optional(),
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });
@@ -396,6 +397,7 @@ export default function AdminAgentEdit() {
       asrEndpointingSilenceMs: (agent.agentConfig?.asrEndpointingSilenceMs as number | undefined) ?? 300,
       llmMaxTokens: (agent.agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: (agent.agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
+      ttsSpeed: (agent.agentConfig?.ttsSpeed as number | undefined) ?? 1,
       linearDelayMs: (agent.agentConfig?.incrementalDelay as number | undefined) ?? 0,
       greetingMessage: agent.greetingMessage ?? "",
       complianceIrdai: (agent.agentConfig?.compliance?.irdai as boolean | undefined) ?? false,
@@ -1366,6 +1368,18 @@ export default function AdminAgentEdit() {
                             onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                         </FormControl>
                         <FormDescription className="text-[11px]">0 = disabled. Adds delay between TTS sentences.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="ttsSpeed" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>TTS Playback Speed</FormLabel>
+                        <FormControl>
+                          <Input type="number" min={0.7} max={1.5} step={0.05}
+                            value={field.value ?? 1}
+                            onChange={e => field.onChange(parseFloat(e.target.value))} />
+                        </FormControl>
+                        <FormDescription className="text-[11px]">1.0 = normal. 1.1–1.2 sounds natural and slightly quicker. Cartesia + ElevenLabs only.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />

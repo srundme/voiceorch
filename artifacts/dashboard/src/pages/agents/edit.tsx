@@ -1162,6 +1162,20 @@ export default function AgentEdit() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="ttsSpeed" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>TTS Playback Speed</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={0.7} max={1.5} step={0.05}
+                        value={field.value ?? 1}
+                        onChange={e => field.onChange(parseFloat(e.target.value))} />
+                    </FormControl>
+                    <FormDescription className="text-[11px]">
+                      Playback speed multiplier. 1.0 = normal. <strong>1.1–1.2 sounds natural and slightly quicker</strong> — cuts perceived reply latency without sounding rushed. Only applied for Cartesia and ElevenLabs voices.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
               </div>
 
               <div className="mt-6">

@@ -14,13 +14,14 @@ export function createTTSAdapter(
   model: string | null = null,
   extraConfig?: string | null,
   language?: string | null,
+  speed?: number | null,
 ): TTSAdapter {
   if (STUB_PROVIDERS_ENABLED) return createStubTTS();
   switch (provider.toLowerCase()) {
     case "elevenlabs":
-      return new ElevenLabsTTS(apiKey, voice);
+      return new ElevenLabsTTS(apiKey, voice, speed);
     case "cartesia":
-      return new CartesiaTTS(apiKey, voice, model, language);
+      return new CartesiaTTS(apiKey, voice, model, language, speed);
     case "sarvam":
       return new SarvamTTS(apiKey, voice, extraConfig, language, model);
     case "openai":

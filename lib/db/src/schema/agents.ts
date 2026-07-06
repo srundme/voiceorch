@@ -22,6 +22,8 @@ export type AgentConfig = {
   ttsSamplingRate?: number;
   ttsEncoding?: string;
   ttsAudioFormat?: string;
+  /** Playback speed multiplier. 1.0 = normal. Supported by Cartesia (voice.__experimental_controls.speed) and ElevenLabs (voice_settings.speed). Default: 1.0 */
+  ttsSpeed?: number;
   // Tab 4 — Engine
   wordsForInterruption?: number;
   incrementalDelay?: number;

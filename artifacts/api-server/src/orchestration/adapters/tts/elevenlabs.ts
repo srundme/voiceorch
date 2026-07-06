@@ -14,13 +14,18 @@ export class ElevenLabsTTS implements TTSAdapter {
   private key: string;
   private voiceId: string;
   private modelId: string;
+  private speed: number | null;
 
-  constructor(apiKey: string, voice: string | null) {
+  constructor(apiKey: string, voice: string | null, speed?: number | null) {
     this.key = apiKey;
     // voice can be "VoiceName:voice_id" or just a voice_id
     const parts = (voice ?? "Rachel:21m00Tcm4TlvDq8ikWAM").split(":");
     this.voiceId = parts[1] ?? parts[0] ?? "21m00Tcm4TlvDq8ikWAM";
     this.modelId = "eleven_turbo_v2_5";
+    // ElevenLabs voice_settings.speed only accepts 0.7-1.2; clamp and skip at default.
+    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
+      ? Math.min(1.2, Math.max(0.7, speed))
+      : null;
   }
 
   /** Build the full URL with output_format as a query parameter (required by ElevenLabs API). */
@@ -34,7 +39,11 @@ export class ElevenLabsTTS implements TTSAdapter {
     return JSON.stringify({
       text,
       model_id: this.modelId,
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        ...(this.speed != null ? { speed: this.speed } : {}),
+      },
     });
   }
 

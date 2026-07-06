@@ -39,10 +39,17 @@ export class CartesiaTTS implements TTSAdapter {
   private voiceId: string;
   private modelId: string;
   private language: string | null;
+  private speed: number | null;
 
-  constructor(apiKey: string, voice: string | null, model: string | null, language?: string | null) {
+  constructor(apiKey: string, voice: string | null, model: string | null, language?: string | null, speed?: number | null) {
     this.key = apiKey;
     this.voiceId = voice ?? "2ee87190-8f84-4925-97da-e52547f9462c"; // Arushi — warm Indian English female (matches UI default)
+    // Cartesia's __experimental_controls.speed is a numeric multiplier around 1.0.
+    // Clamp to a sane range and skip the field entirely at the default (1.0) so
+    // the request body matches pre-existing behavior when unset.
+    this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
+      ? Math.min(2, Math.max(0.5, speed))
+      : null;
     // Normalise legacy / invalid model IDs to the supported set
     const VALID = new Set([
       // Sonic 3.5 (latest, May 2026) — 42 languages, industry-leading latency
@@ -65,7 +72,9 @@ export class CartesiaTTS implements TTSAdapter {
     const body: Record<string, unknown> = {
       transcript: text,
       model_id: this.modelId,
-      voice: { mode: "id", id: this.voiceId },
+      voice: this.speed != null
+        ? { mode: "id", id: this.voiceId, __experimental_controls: { speed: this.speed } }
+        : { mode: "id", id: this.voiceId },
       output_format: {
         container: "raw",
         encoding: "pcm_s16le",
