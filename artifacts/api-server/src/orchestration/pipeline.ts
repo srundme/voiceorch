@@ -374,6 +374,31 @@ function isRetryableLlmError(err: unknown): boolean {
   );
 }
 
+/**
+ * A single sentence's TTS synthesis, decoupled from its playback. Created by
+ * startSentenceSynthesis (network fetch + byte-alignment only, safe to run
+ * ahead of time) and consumed by drainSentenceJob (recording/ambient/wire
+ * encoding/pacing, which must run in strict playback order). See
+ * startSentenceSynthesis's doc comment for why this split exists.
+ */
+type TtsSentenceJob = {
+  text: string;
+  turnNumber: number;
+  /** True if this.tts.synthesizeStream was used (vs the one-shot synthesize()). */
+  streaming: boolean;
+  /** Streaming path: 4-byte-aligned pcm16k blocks awaiting drain-time processing. */
+  pcmQueue: Buffer[];
+  /** True once the TTS request has fully settled (success, error, or abort). */
+  synthDone: boolean;
+  synthError: unknown;
+  /** Set once synthDone; total audio duration computed from received bytes. */
+  audioDurationMs: number | undefined;
+  /** Non-streaming path: the full synthesized PCM buffer, once synthDone. */
+  nonStreamAudio: Buffer | null;
+  /** Resolves once synthDone is true. */
+  ready: Promise<void>;
+};
+
 export class OrchestrationPipeline {
   private config: SessionConfig;
   private agent: AgentConfig;
@@ -2591,18 +2616,31 @@ export class OrchestrationPipeline {
    * playback (greeting, turns, stall reprompts, goodbye) funnels through here,
    * mirroring the web-call playback lifecycle.
    */
-  private async playSentence(text: string): Promise<void> {
+  private playSentence(text: string): Promise<void> {
+    return this.playJob(this.startSentenceSynthesis(text, this._activeTurnIndex));
+  }
+
+  /**
+   * Wraps a TTS synthesis job with the Playback Started/Completed telemetry
+   * and isSendingTtsAudio bookkeeping (previously inlined in playSentence).
+   * Used both by playSentence (single-shot callers: greeting, IVR, hold/
+   * transfer messages, clarifications — behaviorally unchanged) and directly
+   * by the turn sentence-queues (processTurn/continueWithToolResult), which
+   * pass in a job that may already be synthesizing in the background — see
+   * startSentenceSynthesis for why that prefetch is safe.
+   */
+  private async playJob(job: TtsSentenceJob): Promise<void> {
     if (this.bargeInRequested) return;
     // Track what the agent is about to speak so the streaming-STT path can reject
     // this same audio when the carrier echoes it back (content-based self-echo).
-    this.recordAgentSpeech(text);
+    this.recordAgentSpeech(job.text);
     const _pbStart = Date.now();
-    const _pbTurn = this._activeTurnIndex;
+    const _pbTurn = job.turnNumber;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
     let _audioDurationMs: number | undefined;
     this.isSendingTtsAudio = true;
     try {
-      _audioDurationMs = await this._playSentenceImpl(text);
+      _audioDurationMs = await this.drainSentenceJob(job);
     } finally {
       this.isSendingTtsAudio = false;
       const _pbEvent: PlaybackEvent = this.closed
@@ -2620,115 +2658,67 @@ export class OrchestrationPipeline {
     }
   }
 
-  /** Returns the audio duration in milliseconds (from TTS bytes), or undefined. */
-  private async _playSentenceImpl(text: string): Promise<number | undefined> {
-    if (this.bargeInRequested) return;
-
-    // Extend echo-grace to cover estimated sentence playback duration.
-    // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
-    // (observed: 56-char Tamil sentence ≈ 3600 ms = 64 ms/char). Without
-    // this, a 600 ms start-grace can expire while multi-second TTS audio is
-    // still playing; on speakerphone or poor-AEC setups the agent's own voice
-    // echoes back above the energy threshold and fires a false barge-in.
-    // Use Math.max so we never REDUCE a grace that was already set longer.
-    {
-      const estimatedMs = Math.round(text.length * 70);
-      this.bargeInHoldUntil = Math.max(
-        this.bargeInHoldUntil,
-        Date.now() + estimatedMs + this.bargeInEchoGraceMs,
-      );
-    }
-
-    // Record when this sentence starts so the streaming STT path can apply a
-    // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
-    // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
-    this.bargeInSentenceStartAt = Date.now();
-
+  /**
+   * Starts TTS synthesis for `text` immediately and returns a handle that can
+   * be drained (played) later via drainSentenceJob. This lets the turn
+   * sentence-queues start synthesizing sentence N+1 while sentence N is still
+   * playing, so N+1's network/firstByteMs latency is absorbed during N's
+   * playback instead of opening an audible gap after it.
+   *
+   * Only the network fetch + 4-byte alignment happen here — nothing with a
+   * real-world side effect (recording, ambient mixing, wire encoding, pacing)
+   * runs until drainSentenceJob actually plays the job. That split matters:
+   * synthesis for sentence N+1 can finish (or run) WHILE sentence N is still
+   * draining, and if recording/ambient mixing happened here they'd fire out
+   * of chronological order — corrupting the recording and (on the raw-PCM
+   * webcall path) mixing ambient noise against a stream position that isn't
+   * "now" yet. Deferring them to drainSentenceJob keeps both correct because
+   * drainSentenceJob only ever runs one job at a time, in play order.
+   */
+  private startSentenceSynthesis(text: string, turnNumber: number): TtsSentenceJob {
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
-    // completes.  Counting here ensures barge-in aborts and stream timeouts
-    // don't under-report usage even though the provider already billed.
+    // completes. Dispatch may now happen while a prior sentence is still
+    // playing (prefetch), but the metering semantics are unchanged: once per
+    // sentence, at the moment its TTS request goes out.
     this.ttsCharactersTotal += text.length;
-
-    // Per-sentence TTS execution log (request now, response on synthesis done).
     const _ttsReqStart = Date.now();
-    let _ttsTotalBytes = 0;
-    let _ttsFirstByteMs: number | null = null;
     this.logExec("TTS", "request", {
       provider: this.agent.ttsProvider,
       status: "info",
-      turnNumber: this._activeTurnIndex,
+      turnNumber,
       requestPayload: { text },
     });
 
+    let resolveReady!: () => void;
+    const ready = new Promise<void>((r) => { resolveReady = r; });
+    const job: TtsSentenceJob = {
+      text,
+      turnNumber,
+      streaming: !!this.tts.synthesizeStream,
+      pcmQueue: [],
+      synthDone: false,
+      synthError: null,
+      audioDurationMs: undefined,
+      nonStreamAudio: null,
+      ready,
+    };
+
     if (this.tts.synthesizeStream) {
-      // Producer-consumer pacing: the TTS stream callback pushes mulaw chunks
-      // into a queue; a concurrent drain loop sends them at exactly real-time
-      // rate (20 ms per 160-byte chunk).  This prevents flooding Vobiz / Twilio
-      // with a burst of messages that overwhelms their playback buffer and causes
-      // glitches or stuttering.
-      const queue: Buffer[] = [];
-      let ttsDone = false;
-      let _ttsAccumBytes = 0; // raw PCM bytes accumulated before downsampling
-
-      const drainLoop = async (): Promise<void> => {
-        // Drift-compensated pacing: track the "ideal" next send time and adjust
-        // each sleep so that accumulated setTimeout jitter is self-corrected.
-        // Without this, late-firing timers cause VoBiz's playout buffer to underrun
-        // (gaps/glitches) because audio delivery slows below real-time.
-        let nextTick = Date.now() + 20;
-        while (!this.closed && !this.bargeInRequested) {
-          if (queue.length > 0) {
-            const chunk = queue.shift()!;
-            this.markFirstAudioSent();
-            if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
-            // Ambient mixing only applies to mulaw output; skip when sending raw PCM
-            const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
-              ? this.ambientStream.mixIntoMulaw(chunk)
-              : chunk;
-            this.config.onAudioOut(outChunk);
-            this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
-            // NOTE: do NOT re-arm the echo-grace window per chunk here. The start
-            // grace is armed once before playback begins (covers the sidetone/echo
-            // settle for the opening words) and the tail grace is re-armed at
-            // playback end (armTailEchoGrace — covers the closing word's returning
-            // echo). Continuously pushing bargeInHoldUntil to now+echoGraceMs on
-            // every 20 ms chunk kept the suppression window permanently active for
-            // the entire sentence, which suppressed BOTH barge-in detectors and
-            // made long replies un-interruptible. Mid-sentence self-echo is instead
-            // rejected by the elevated barge-in energy threshold (4× VAD) + min
-            // frames and by the streaming-STT word-count gate.
-            // If TTS is already done and this was the last queued chunk, break
-            // immediately WITHOUT the trailing 20ms sleep.  The sleep would create
-            // a timing hole: VoBiz's playout buffer can underrun in that window
-            // (Node.js setTimeout jitter is typically 5-15ms under load) and clip
-            // the final word before drainPlaybackTail starts sending silence.
-            // drainPlaybackTail sends its first silence frame synchronously, so
-            // starting it right after the last audio chunk keeps the buffer full.
-            if (ttsDone && queue.length === 0) break;
-            const delay = Math.max(0, nextTick - Date.now());
-            nextTick += 20;
-            // Prevent large accumulated debt (e.g. after a long pause or barge-in)
-            // from causing a burst of back-to-back sends on the next turn.
-            if (nextTick < Date.now() - 40) nextTick = Date.now() + 20;
-            await new Promise<void>((r) => setTimeout(r, delay));
-          } else if (ttsDone) {
-            break; // queue drained and TTS finished — we're done
-          } else {
-            // Queue momentarily empty while TTS is still streaming —
-            // wait a short tick before checking again
-            await new Promise<void>((r) => setTimeout(r, 5));
-          }
-        }
-      };
-
+      const synthesizeStream = this.tts.synthesizeStream;
       let accum: Buffer[] = [];
       let accumSize = 0;
       // Carry bytes that weren't a multiple of 4 across flush() calls so
       // downsample16to8 never silently drops trailing PCM samples and
       // creates click artifacts at streaming chunk boundaries.
       let flushRemainder = Buffer.alloc(0);
+      let _ttsAccumBytes = 0; // raw PCM bytes accumulated before downsampling
+      let _ttsTotalBytes = 0;
+      let _ttsFirstByteMs: number | null = null;
 
+      // Aligns received bytes to a 4-byte boundary and buffers the result into
+      // job.pcmQueue for later draining. Pure buffering, no recording/ambient/
+      // encoding — safe to run ahead of actual playback.
       const flush = (): void => {
         if (accum.length === 0 || this.closed || this.bargeInRequested) {
           accum = [];
@@ -2740,8 +2730,6 @@ export class OrchestrationPipeline {
           : Buffer.concat(accum);
         accum = [];
         accumSize = 0;
-        // Align to 4-byte boundary (two 16-bit samples) required by downsample16to8.
-        // Carry any trailing bytes into the next flush rather than dropping them.
         const alignedLen = Math.floor(combined.length / 4) * 4;
         flushRemainder = alignedLen < combined.length
           ? combined.slice(alignedLen)
@@ -2749,6 +2737,136 @@ export class OrchestrationPipeline {
         if (alignedLen === 0) return;
         const pcm16k = combined.slice(0, alignedLen);
         _ttsAccumBytes += pcm16k.length;
+        job.pcmQueue.push(pcm16k);
+      };
+
+      // AbortController lets us cancel the TTS HTTP connection when:
+      //   • the pipeline is closed (call ended / WebSocket dropped), or
+      //   • barge-in was requested (including while this job was only prefetching), or
+      //   • TTS hasn't produced any data within TTS_STREAM_TIMEOUT_MS (hung API).
+      // Without this, a hung Cartesia/ElevenLabs fetch blocks synthesis
+      // indefinitely and the caller hears complete silence until Vobiz drops.
+      const ttsAbort = new AbortController();
+      const ttsTimerId = setTimeout(() => {
+        logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
+        ttsAbort.abort();
+      }, TTS_STREAM_TIMEOUT_MS);
+      const closedWatcher = setInterval(() => {
+        if (this.closed || this.bargeInRequested) ttsAbort.abort();
+      }, 50);
+
+      void (async () => {
+        try {
+          await synthesizeStream(
+            text,
+            (chunk) => {
+              if (this.closed || this.bargeInRequested) return;
+              if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
+              if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
+              _ttsTotalBytes += chunk.length;
+              clearTimeout(ttsTimerId); // connection is alive — reset the hung-API timer
+              accum.push(chunk);
+              accumSize += chunk.length;
+              if (accumSize >= STREAM_ACCUM_BYTES) flush();
+            },
+            (_characters: number) => { flush(); },
+            ttsAbort.signal
+          );
+        } catch (err) {
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          if (!isAbort) {
+            job.synthError = err; // real TTS error — surfaced to the caller in drainSentenceJob
+          } else {
+            logger.warn({ callId: this.config.callId }, "TTS stream aborted");
+          }
+        } finally {
+          clearTimeout(ttsTimerId);
+          clearInterval(closedWatcher);
+          flush(); // flush any leftover accumulator bytes after aborts
+          job.audioDurationMs = Math.round((_ttsAccumBytes / 2 / 16000) * 1000);
+          if (!job.synthError) {
+            this.logExec("TTS", "response", {
+              provider: this.agent.ttsProvider,
+              status: "success",
+              latencyMs: Date.now() - _ttsReqStart,
+              turnNumber,
+              durationMs: Date.now() - _ttsReqStart,
+              responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
+            });
+          }
+          job.synthDone = true;
+          resolveReady();
+        }
+      })();
+    } else {
+      void (async () => {
+        try {
+          const { audio } = await this.tts.synthesize(text);
+          job.nonStreamAudio = audio;
+          this.logExec("TTS", "response", {
+            provider: this.agent.ttsProvider,
+            status: "success",
+            latencyMs: Date.now() - _ttsReqStart,
+            turnNumber,
+            durationMs: Date.now() - _ttsReqStart,
+            responsePayload: { audioBytes: audio.length, textLength: text.length },
+          });
+        } catch (err) {
+          job.synthError = err;
+        } finally {
+          job.synthDone = true;
+          resolveReady();
+        }
+      })();
+    }
+
+    return job;
+  }
+
+  /**
+   * Plays back an already-started (or already-finished) synthesis job in real
+   * time. Downsampling, recording, ambient mixing, mulaw/PCM encoding, and
+   * pacing all happen here, strictly in playback order — see
+   * startSentenceSynthesis for why that ordering matters under prefetch.
+   * Returns the audio duration in milliseconds (from TTS bytes), or undefined.
+   */
+  private async drainSentenceJob(job: TtsSentenceJob): Promise<number | undefined> {
+    if (this.bargeInRequested) return;
+
+    // Extend echo-grace to cover estimated sentence playback duration.
+    // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
+    // (observed: 56-char Tamil sentence ≈ 3600 ms = 64 ms/char). Without
+    // this, a 600 ms start-grace can expire while multi-second TTS audio is
+    // still playing; on speakerphone or poor-AEC setups the agent's own voice
+    // echoes back above the energy threshold and fires a false barge-in.
+    // Use Math.max so we never REDUCE a grace that was already set longer.
+    {
+      const estimatedMs = Math.round(job.text.length * 70);
+      this.bargeInHoldUntil = Math.max(
+        this.bargeInHoldUntil,
+        Date.now() + estimatedMs + this.bargeInEchoGraceMs,
+      );
+    }
+
+    // Record when this sentence starts so the streaming STT path can apply a
+    // per-sentence 600 ms echo grace (bargeInSentenceStartAt + bargeInEchoGraceMs)
+    // instead of the extended `bargeInHoldUntil` that protects the batch STT path.
+    this.bargeInSentenceStartAt = Date.now();
+
+    if (job.streaming) {
+      // Producer-consumer pacing: pcm16k blocks buffered by startSentenceSynthesis
+      // are converted to wire-ready chunks here, on demand, then sent at exactly
+      // real-time rate (20 ms per 160-byte chunk). This prevents flooding Vobiz /
+      // Twilio with a burst of messages that overwhelms their playback buffer.
+      const wireQueue: Buffer[] = [];
+      let pcmIdx = 0;
+
+      // Converts the next buffered pcm16k block into wire-ready chunks. This is
+      // where recording + ambient mixing happen — at real "now", right before
+      // the audio is due to be sent, never earlier (see startSentenceSynthesis).
+      const processNextBlock = (): boolean => {
+        if (pcmIdx >= job.pcmQueue.length) return false;
+        const pcm16k = job.pcmQueue[pcmIdx++];
         const pcm8k = downsample16to8(pcm16k);
         // Record agent audio (downsampled to match recording sample rate).
         // Recording stays clean — ambient is mixed only into the outbound copy.
@@ -2762,94 +2880,63 @@ export class OrchestrationPipeline {
             : pcm8k;
           const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
           for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
-            queue.push(out8k.slice(i, i + PCM_CHUNK));
+            wireQueue.push(out8k.slice(i, i + PCM_CHUNK));
           }
         } else {
           const mulaw = encodeMulaw(pcm8k);
           for (let i = 0; i < mulaw.length; i += CHUNK_SIZE_MULAW) {
-            queue.push(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
+            wireQueue.push(mulaw.slice(i, i + CHUNK_SIZE_MULAW));
           }
         }
+        return true;
       };
 
-      // AbortController lets us cancel the TTS HTTP connection when:
-      //   • the pipeline is closed (call ended / WebSocket dropped), or
-      //   • TTS hasn't produced any data within TTS_STREAM_TIMEOUT_MS (hung API).
-      // Without this, a hung Cartesia/ElevenLabs fetch blocks playSentence
-      // indefinitely and the caller hears complete silence until Vobiz drops.
-      const ttsAbort  = new AbortController();
-      const ttsTimerId = setTimeout(() => {
-        logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
-        ttsAbort.abort();
-      }, TTS_STREAM_TIMEOUT_MS);
-
-      // Also abort immediately when the call closes mid-sentence.
-      const closedWatcher = setInterval(() => {
-        if (this.closed || this.bargeInRequested) ttsAbort.abort();
-      }, 50);
-
-      // Start drain loop concurrently with TTS streaming so playback begins
-      // as soon as the first chunk arrives (preserves low-latency streaming).
-      const drainPromise = drainLoop();
-
-      // ttsOnDone: called by the adapter when synthesis is complete.
-      // Characters were already counted at dispatch time above; this just flushes remaining audio.
-      const ttsOnDone = (_characters: number): void => {
-        flush();
-      };
-
-      try {
-        await this.tts.synthesizeStream(
-          text,
-          (chunk) => {
-            if (this.closed || this.bargeInRequested) return;
-            if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
-            if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
-            _ttsTotalBytes += chunk.length;
-            // Reset the timeout every time a chunk arrives — the connection is alive.
-            clearTimeout(ttsTimerId);
-            accum.push(chunk);
-            accumSize += chunk.length;
-            if (accumSize >= STREAM_ACCUM_BYTES) flush();
-          },
-          ttsOnDone,
-          ttsAbort.signal
-        );
-      } catch (err) {
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        if (!isAbort) throw err; // real TTS error — propagate up
-        logger.warn({ callId: this.config.callId }, "TTS stream aborted");
-      } finally {
-        clearTimeout(ttsTimerId);
-        clearInterval(closedWatcher);
+      // Drift-compensated pacing: track the "ideal" next send time and adjust
+      // each sleep so that accumulated setTimeout jitter is self-corrected.
+      // Without this, late-firing timers cause VoBiz's playout buffer to underrun
+      // (gaps/glitches) because audio delivery slows below real-time.
+      let nextTick = Date.now() + 20;
+      while (!this.closed && !this.bargeInRequested) {
+        if (wireQueue.length === 0) processNextBlock();
+        if (wireQueue.length > 0) {
+          const chunk = wireQueue.shift()!;
+          this.markFirstAudioSent();
+          if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
+          // Ambient mixing only applies to mulaw output; skip when sending raw PCM
+          // (raw PCM is already ambient-mixed above, at real "now", per block).
+          const outChunk = (!this.config.rawPcmOutput && this.ambientStream)
+            ? this.ambientStream.mixIntoMulaw(chunk)
+            : chunk;
+          this.config.onAudioOut(outChunk);
+          this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
+          // NOTE: do NOT re-arm the echo-grace window per chunk here (see armTailEchoGrace).
+          // If TTS is already done and this was the last queued chunk, break
+          // immediately WITHOUT the trailing 20ms sleep — see drainPlaybackTail.
+          if (job.synthDone && pcmIdx >= job.pcmQueue.length && wireQueue.length === 0) break;
+          const delay = Math.max(0, nextTick - Date.now());
+          nextTick += 20;
+          // Prevent large accumulated debt (e.g. after a long pause or barge-in)
+          // from causing a burst of back-to-back sends on the next turn.
+          if (nextTick < Date.now() - 40) nextTick = Date.now() + 20;
+          await new Promise<void>((r) => setTimeout(r, delay));
+        } else if (job.synthDone) {
+          break; // no more buffered blocks and TTS finished — we're done
+        } else {
+          // Momentarily nothing buffered while TTS is still streaming —
+          // wait a short tick before checking again
+          await new Promise<void>((r) => setTimeout(r, 5));
+        }
       }
-
-      flush(); // flush any leftover accumulator bytes after aborts (ttsOnDone already called on success)
-
-      ttsDone = true;
-      await drainPromise;
-      const _audioDurationMs = Math.round((_ttsAccumBytes / 2 / 16000) * 1000);
-      this.logExec("TTS", "response", {
-        provider: this.agent.ttsProvider,
-        status: "success",
-        latencyMs: Date.now() - _ttsReqStart,
-        turnNumber: this._activeTurnIndex,
-        durationMs: Date.now() - _ttsReqStart,
-        responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length, firstByteMs: _ttsFirstByteMs },
-      });
-      return _audioDurationMs;
+      // Ensure synthesis has fully settled (so a real error surfaces) even if
+      // playback exited early via barge-in/close.
+      await job.ready;
+      if (job.synthError) throw job.synthError;
+      return job.audioDurationMs;
     } else {
-      const { audio: ttsPcm16k } = await this.tts.synthesize(text);
-      _ttsTotalBytes = ttsPcm16k.length;
-      this.logExec("TTS", "response", {
-        provider: this.agent.ttsProvider,
-        status: "success",
-        latencyMs: Date.now() - _ttsReqStart,
-        turnNumber: this._activeTurnIndex,
-        durationMs: Date.now() - _ttsReqStart,
-        responsePayload: { audioBytes: _ttsTotalBytes, textLength: text.length },
-      });
+      await job.ready;
+      if (job.synthError) throw job.synthError;
       if (this.bargeInRequested) return;
+      const ttsPcm16k = job.nonStreamAudio!;
       const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
       const _audioDurationMs = Math.round((ttsPcm16k.length / 2 / 16000) * 1000);
@@ -3678,14 +3765,20 @@ export class OrchestrationPipeline {
     // from TTS (ordinary bracketed text streams normally).
     const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
-    const sentenceQueue: string[] = [];
+    // Sentences are queued as TtsSentenceJobs whose synthesis is started at
+    // enqueue time (below), not when playTask reaches them — this lets
+    // sentence N+1's TTS network fetch run WHILE sentence N is still being
+    // drained/played by playTask, closing the audible gap that otherwise
+    // opens up between sentences in a multi-sentence reply. See
+    // startSentenceSynthesis/drainSentenceJob for the correctness split.
+    const sentenceQueue: TtsSentenceJob[] = [];
     let wakePlayer: (() => void) | null = null;
 
     const enqueue = (text: string): void => {
       if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
         this._tTurnLlmFirstClause = performance.now();
       }
-      sentenceQueue.push(text);
+      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex));
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -3702,14 +3795,14 @@ export class OrchestrationPipeline {
       let idx = 0;
       while (true) {
         if (idx < sentenceQueue.length) {
-          const text = sentenceQueue[idx++];
+          const job = sentenceQueue[idx++]!;
           this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
           try {
-            await this.playSentence(text);
+            await this.playJob(job);
           } catch (err) {
             const reason = toReadableError(err, "TTS error");
-            logger.error({ callId: this.config.callId, err, text: text.slice(0, 40) }, reason);
+            logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, reason);
             this.config.onFatalError?.(reason);
           }
           if (this.bargeInRequested) break;
@@ -4946,11 +5039,13 @@ export class OrchestrationPipeline {
     // leaked serialized tool envelope from TTS on chained tool turns too.
     const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
-    const sentenceQueue: string[] = [];
+    // See processTurn's sentenceQueue for why synthesis starts at enqueue
+    // time (sentence-prefetch pipelining), not when playTask reaches the job.
+    const sentenceQueue: TtsSentenceJob[] = [];
     let wakePlayer: (() => void) | null = null;
 
     const enqueue = (text: string): void => {
-      sentenceQueue.push(text);
+      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex));
       if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
     };
 
@@ -4958,11 +5053,11 @@ export class OrchestrationPipeline {
       let idx = 0;
       while (true) {
         if (idx < sentenceQueue.length) {
-          const text = sentenceQueue[idx++]!;
+          const job = sentenceQueue[idx++]!;
           this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
           this.isPlaying = true;
-          try { await this.playSentence(text); } catch (err) {
-            logger.error({ callId: this.config.callId, err, text: text.slice(0, 40) }, "continueWithToolResult TTS error");
+          try { await this.playJob(job); } catch (err) {
+            logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, "continueWithToolResult TTS error");
           }
           if (this.bargeInRequested) break;
           // Max-duration graceful stop (see main playTask): finish the current
