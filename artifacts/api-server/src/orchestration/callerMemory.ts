@@ -1355,6 +1355,44 @@ function isPlausibleLocation(candidate: string): boolean {
   return true;
 }
 
+// Words that structurally match the occupation regexes ("I work as a ___" /
+// "I am a ___ by profession") but are conversational filler, hedges, or
+// topic words a caller might say instead of an actual job title — the same
+// class of bug that produced "tomorrow by" as a name (see NAME_STOPWORDS).
+const OCCUPATION_BLOCKLIST = new Set([
+  "just", "kind", "sort", "really", "actually", "also", "here", "sorry",
+  "fine", "sure", "okay", "calling", "speaking", "interested", "looking",
+  "trying", "fan", "believer", "customer", "caller", "client", "user",
+  "friend", "regarding", "about", "for", "with", "the", "your", "our",
+  "little", "bit", "lot", "way", "long", "time", "while",
+  "managed", "byop", "plan", "provider", "agent", "service", "reseller",
+]);
+
+function isPlausibleOccupation(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 40) return false;
+  if (/\d/.test(trimmed)) return false;
+  const words = trimmed.split(/\s+/);
+  if (words.length > 4) return false;
+  for (const w of words) {
+    const lw = w.toLowerCase().replace(/[^a-z]/g, "");
+    if (!lw) return false;
+    if (OCCUPATION_BLOCKLIST.has(lw)) return false;
+  }
+  return true;
+}
+
+// Sanity bound for a stated budget: reject 0 (nothing stated) and anything
+// with more digits than a realistic budget figure would have — long digit
+// runs at this position are far more likely to be a misheard phone number,
+// order ID, or OTP that happened to follow the anchor phrase.
+function isPlausibleBudget(candidate: string): boolean {
+  const n = Number(candidate);
+  if (!Number.isFinite(n) || n <= 0) return false;
+  if (candidate.replace(/\D/g, "").length > 9) return false;
+  return true;
+}
+
 const FACT_PATTERNS: FactPattern[] = [
   {
     key: "age",
@@ -1403,6 +1441,7 @@ const FACT_PATTERNS: FactPattern[] = [
     ],
     extract: m => m[1]!.trim(),
     confidence: 0.8,
+    isPlausible: isPlausibleOccupation,
   },
   {
     key: "budget_range",
@@ -1417,6 +1456,7 @@ const FACT_PATTERNS: FactPattern[] = [
     ],
     extract: m => m[1]!.replace(/,/g, ""),
     confidence: 0.85,
+    isPlausible: isPlausibleBudget,
   },
 ];
 
