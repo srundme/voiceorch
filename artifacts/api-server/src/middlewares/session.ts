@@ -20,6 +20,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { extractRequestToken, verifySessionToken, type SessionPayload } from "../lib/session.js";
 import { isImpersonationSessionActive } from "./detectImpersonation.js";
+import { getUserStatus } from "./userStatusCache.js";
 
 export async function attachSession(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const token = extractRequestToken(req);
@@ -28,6 +29,16 @@ export async function attachSession(req: Request, _res: Response, next: NextFunc
     if (payload.imp) {
       const active = await isImpersonationSessionActive(payload.imp);
       if (!active) {
+        next();
+        return;
+      }
+    } else {
+      // Non-impersonation tokens are long-lived (30-day TTL) and self-contained,
+      // so a status change (admin soft-delete/suspend) would otherwise have no
+      // effect on an already-issued bearer token until it expires. Deny identity
+      // (fail closed) for any account that is not "active".
+      const status = await getUserStatus(payload.sub);
+      if (status !== null && status !== "active") {
         next();
         return;
       }

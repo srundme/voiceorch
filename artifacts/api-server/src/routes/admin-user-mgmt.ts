@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { eq, desc, and, sql, gt, isNull } from "drizzle-orm";
 import { invalidateImpersonationCache, invalidateImpersonationSessionTokenCache } from "../middlewares/detectImpersonation.js";
+import { invalidateUserStatusCache } from "../middlewares/userStatusCache.js";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { createSessionToken } from "../lib/session.js";
 import { logger } from "../lib/logger.js";
@@ -139,6 +140,11 @@ router.patch("/admin/users/:clerkId/status", async (req, res): Promise<void> => 
       beforeValue: before,
       afterValue: { status, reason },
     });
+
+    // Evict the cached status immediately so an already-issued session token
+    // (30-day TTL, self-contained JWT) stops being honored on the very next
+    // request instead of waiting out attachSession's cache TTL.
+    invalidateUserStatusCache(clerkId!);
 
     res.json({ status: updated?.status });
   } catch (err) {

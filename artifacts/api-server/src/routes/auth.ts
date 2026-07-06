@@ -190,6 +190,17 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
+    if (user.status !== "active") {
+      logger.warn({ sub, status: user.status }, "Login blocked: account is not active");
+      res.status(403).json({
+        error:
+          user.status === "deleted"
+            ? "This account has been deleted."
+            : "This account has been suspended. Please contact support.",
+      });
+      return;
+    }
+
     const token = createSessionToken({ sub, email: user.email, name: user.name });
     logger.info({ sub, email: normalizedEmail }, "User signed in");
     res.json({ token });
@@ -655,6 +666,12 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         ).catch(err => logger.warn({ err, email: normalizedEmail }, "Google signup welcome email failed"));
       }
     } else {
+      if (user.status !== "active") {
+        logger.warn({ sub: googleSub, status: user.status }, "Google Sign-In blocked: account is not active");
+        const reasonParam = user.status === "deleted" ? "account_deleted" : "account_suspended";
+        res.redirect(`${base}/?google_error=true&reason=${reasonParam}`);
+        return;
+      }
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: existing user signed in");
     }
 
