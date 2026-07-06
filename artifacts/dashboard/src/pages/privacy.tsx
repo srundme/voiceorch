@@ -167,7 +167,7 @@ export default function PrivacyPage() {
                   <li><strong>Google Calendar API:</strong> For reading availability and creating calendar events.</li>
                   <li><strong>Google Meet API:</strong> For generating video conference links.</li>
                   <li><strong>Telephony Providers (Twilio, Plivo, Vobiz):</strong> For making and receiving voice calls. You bring your own provider keys.</li>
-                  <li><strong>AI Providers (OpenAI, Anthropic, Google, DeepSeek, etc.):</strong> For speech-to-text, language model, and text-to-speech processing. You bring your own provider keys.</li>
+                  <li><strong>AI Providers (OpenAI, Anthropic, Google, etc.):</strong> For speech-to-text, language model, and text-to-speech processing. You bring your own provider keys.</li>
                   <li><strong>Payment Processor:</strong> For handling wallet top-ups and billing.</li>
                 </ul>
                 <p className="mt-2">

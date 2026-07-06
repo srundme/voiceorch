@@ -60,7 +60,7 @@ export default function TermsPage() {
                 <ul className="list-disc pl-5 space-y-1.5">
                   <li>Creation and management of AI-powered voice agents for automated phone conversations.</li>
                   <li>Integration with telephony providers (Twilio, Plivo, Vobiz) for outbound and inbound calling.</li>
-                  <li>Integration with AI providers (OpenAI, Anthropic, Google, DeepSeek, etc.) for speech-to-text, language understanding, and text-to-speech.</li>
+                  <li>Integration with AI providers (OpenAI, Anthropic, Google, etc.) for speech-to-text, language understanding, and text-to-speech.</li>
                   <li>Google Calendar integration for automated meeting scheduling and Google Meet link generation.</li>
                   <li>Campaign management for outbound calling at scale.</li>
                   <li>Call analytics, transcription, and recording (when enabled).</li>
