@@ -600,6 +600,15 @@ export class OrchestrationPipeline {
   private conversationHistory: ConversationTurn[] = [];
   private closed = false;
 
+  /**
+   * Set when the configured max-call-duration timer fires while the agent is
+   * mid-playback. The active playTask loop finishes the CURRENT sentence, then
+   * breaks BEFORE starting a new one (instead of the old hard `close()` that
+   * clipped the agent mid-word). Bounded by a grace cap in the caller, so the
+   * call can never run drastically past its configured limit.
+   */
+  private endAfterCurrentSentence = false;
+
   // Reschedule context — set when list_bookings returns exactly one booking,
   // cleared when reschedule_confirmed or cancel_confirmed is received.
   private activeRescheduleBooking: { bookingId: number; isoDate: string; timeLabel: string; eventName: string } | null = null;
@@ -2509,6 +2518,33 @@ export class OrchestrationPipeline {
     }, this.agent.silenceTimeoutSeconds * 1000);
   }
 
+  /**
+   * Graceful max-duration end. Called by the session's max-duration timer instead
+   * of closing the pipeline outright. If the agent is idle, resolves immediately
+   * so the caller can tear the session down as before. If the agent is mid-
+   * playback, it signals the active playTask to stop after the current sentence
+   * and waits (bounded by `graceMs`) for playback + tail-drain to settle, so the
+   * caller never hears speech cut off mid-word. The wait is hard-capped so a call
+   * can never run drastically past its configured max duration.
+   */
+  async finishSpeakingForMaxDuration(graceMs: number): Promise<void> {
+    if (this.closed) return;
+    // Idle (not actively speaking and not mid-turn): nothing to drain — end now.
+    if (!this.isPlaying && !this.isSendingTtsAudio) return;
+    logger.info(
+      { callId: this.config.callId, graceMs },
+      "Max duration reached mid-playback — finishing current sentence before teardown",
+    );
+    this.endAfterCurrentSentence = true;
+    const deadline = Date.now() + Math.max(0, graceMs);
+    // playTask sets isPlaying=false only after it breaks AND its own
+    // drainPlaybackTail completes, so waiting on isPlaying covers the full
+    // finish-sentence + drain window. Bounded by the grace cap.
+    while ((this.isPlaying || this.isSendingTtsAudio) && !this.closed && Date.now() < deadline) {
+      await new Promise<void>((r) => setTimeout(r, 50));
+    }
+  }
+
   /** Speak the inactivity farewell message (if configured) before triggering call end. */
   private async playInactivityMessageAndEnd(): Promise<void> {
     if (this.agent.inactivityMessage && !this.closed) {
@@ -3677,6 +3713,10 @@ export class OrchestrationPipeline {
             this.config.onFatalError?.(reason);
           }
           if (this.bargeInRequested) break;
+          // Max-duration graceful stop: the current sentence has finished playing,
+          // so break BEFORE pulling the next one. The drain below still runs so the
+          // final word is not clipped, then the caller tears the session down.
+          if (this.endAfterCurrentSentence) break;
         } else if (allEnqueued) {
           break;
         } else {
@@ -4925,6 +4965,9 @@ export class OrchestrationPipeline {
             logger.error({ callId: this.config.callId, err, text: text.slice(0, 40) }, "continueWithToolResult TTS error");
           }
           if (this.bargeInRequested) break;
+          // Max-duration graceful stop (see main playTask): finish the current
+          // sentence, then break before the next one; the drain below preserves it.
+          if (this.endAfterCurrentSentence) break;
         } else if (allEnqueued) {
           break;
         } else {

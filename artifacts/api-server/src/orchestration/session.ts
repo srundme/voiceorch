@@ -1386,11 +1386,28 @@ export async function createSession(params: {
   }, redisTtl);
 
   setTimeout(() => {
-    logger.info(
-      { sessionId, callId: callRecord.id, maxDurationSeconds: agentConfig.maxDuration, endReason: "max_duration" },
-      "Session reached configured max duration — ending call",
-    );
-    void endSession(sessionId, "max_duration");
+    void (async () => {
+      logger.info(
+        { sessionId, callId: callRecord.id, maxDurationSeconds: agentConfig.maxDuration, endReason: "max_duration" },
+        "Session reached configured max duration — ending call",
+      );
+      // Graceful teardown: if the agent is speaking, let the current sentence
+      // finish (bounded by MAX_DURATION_GRACE_MS) before closing the pipeline, so
+      // the caller never hears speech cut off mid-word. Idle calls end at once.
+      const graceMs = Math.min(
+        15_000,
+        Math.max(0, Number(process.env["MAX_DURATION_GRACE_MS"]) || 5000),
+      );
+      const s = sessions.get(sessionId);
+      if (s) {
+        try {
+          await s.pipeline.finishSpeakingForMaxDuration(graceMs);
+        } catch (err) {
+          logger.warn({ sessionId, callId: callRecord.id, err }, "Max-duration graceful drain failed — closing anyway");
+        }
+      }
+      await endSession(sessionId, "max_duration");
+    })();
   }, agentConfig.maxDuration * 1000);
 
   logger.info({ sessionId, callId: callRecord.id, agent: agent.name }, "Session created");
