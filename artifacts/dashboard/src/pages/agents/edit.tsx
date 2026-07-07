@@ -1044,26 +1044,47 @@ export default function AgentEdit() {
                         </FormItem>
                       )} />
                     )}
-                    <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">{TTS_VOICES[ttsProvider] ? "Voice" : "Voice ID"}</FormLabel>
-                        <FormControl>
-                          {TTS_VOICES[ttsProvider] ? (
-                            <ModelSelect options={TTS_VOICES[ttsProvider]!} value={field.value} onChange={field.onChange} placeholder="Select voice" />
-                          ) : (
-                            <Input
-                              placeholder={ttsProvider === "elevenlabs" ? "e.g. 21m00Tcm4TlvDq8ikWAM" : "e.g. 694f9389-aac1-45b6-b726-9d9369183238"}
-                              {...field}
-                            />
-                          )}
-                        </FormControl>
-                        <FormDescription className="text-[10px]">
-                          {ttsProvider === "elevenlabs" && "Voice ID from your ElevenLabs account"}
-                          {ttsProvider === "cartesia"   && "Voice ID from your Cartesia account"}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField control={form.control} name="ttsVoice" render={({ field }) => {
+                      const voiceList = TTS_VOICES[ttsProvider];
+                      const curatedValues = voiceList ? voiceList.filter(v => v.value !== "__custom__").map(v => v.value) : [];
+                      const inCurated = curatedValues.includes(field.value ?? "");
+                      // When provider has a voice list but saved UUID isn't in it, treat as custom
+                      const showDropdown = !!voiceList;
+                      const showCustomInput = !voiceList || !inCurated;
+                      const dropdownVal = inCurated ? (field.value ?? "") : (field.value ? "__custom__" : "");
+                      return (
+                        <FormItem>
+                          <FormLabel className="text-xs">{voiceList ? "Voice" : "Voice ID"}</FormLabel>
+                          <FormControl>
+                            <div className="space-y-2">
+                              {showDropdown && (
+                                <ModelSelect
+                                  options={voiceList!}
+                                  value={dropdownVal}
+                                  onChange={(v) => {
+                                    if (v === "__custom__") field.onChange("");
+                                    else field.onChange(v);
+                                  }}
+                                  placeholder="Select voice"
+                                />
+                              )}
+                              {showCustomInput && (
+                                <Input
+                                  placeholder={ttsProvider === "elevenlabs" ? "e.g. 21m00Tcm4TlvDq8ikWAM" : "e.g. 694f9389-aac1-45b6-b726-9d9369183238"}
+                                  value={field.value ?? ""}
+                                  onChange={field.onChange}
+                                />
+                              )}
+                            </div>
+                          </FormControl>
+                          <FormDescription className="text-[10px]">
+                            {ttsProvider === "elevenlabs" && "Voice ID from your ElevenLabs account"}
+                            {ttsProvider === "cartesia"   && "Voice ID from your Cartesia account"}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }} />
                   </div>
 
                   {/* Step 4 — Duration */}

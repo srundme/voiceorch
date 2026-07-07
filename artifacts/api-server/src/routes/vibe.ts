@@ -533,8 +533,34 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       agentConfig.compliance = comp;
     }
 
-    // Greeting
-    const greetingMessage = `Hello! I'm ${cfg.agentName} from ${cfg.companyName}. How can I help you today?`;
+    // Greeting — colloquial, language-aware
+    function buildGreeting(name: string, company: string, lang: string, callFlowNotes: string | undefined): string {
+      // If call-flow notes contain a quoted opening line, use that verbatim
+      if (callFlowNotes) {
+        const q = callFlowNotes.match(/["'"'"]([^"'"'"]{8,120})["'"'"]/);
+        if (q) return q[1];
+        // First sentence if it looks like an actual opener (contains name or company)
+        const first = callFlowNotes.split(/[.!?।\n]/)[0]?.trim();
+        if (first && first.length > 15 && (
+          first.toLowerCase().includes(name.toLowerCase()) ||
+          first.toLowerCase().includes(company.toLowerCase())
+        )) return first;
+      }
+      switch (lang) {
+        case "ta-IN": return `வணக்கம்! நான் ${name}, ${company}-லருந்து பேசுறேன். எப்படி உதவட்டும்?`;
+        case "hi-IN": return `नमस्ते! मैं ${name} बोल रहा हूँ, ${company} से। आपकी कैसे मदद करूँ?`;
+        case "te-IN": return `నమస్కారం! నేను ${name}, ${company} నుండి మాట్లాడుతున్నాను. ఏమి సహాయం చేయమంటారు?`;
+        case "kn-IN": return `ನಮಸ್ಕಾರ! ನಾನು ${name}, ${company} ನಿಂದ ಮಾತನಾಡ್ತಿದ್ದೇನೆ. ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?`;
+        case "ml-IN": return `നമസ്കാരം! ഞാൻ ${name}, ${company}-ൽ നിന്ന് വിളിക്കുകയാണ്. എന്ത് സഹായം ചെയ്യട്ടെ?`;
+        case "mr-IN": return `नमस्कार! मी ${name}, ${company} मधून बोलतोय. कशी मदत करू?`;
+        case "bn-IN": return `হ্যালো! আমি ${name}, ${company} থেকে বলছি। কীভাবে সাহায্য করতে পারি?`;
+        case "gu-IN": return `નમસ્તે! હું ${name}, ${company} થી વાત કરું છું। કેવી રીતે મદદ કરી શકું?`;
+        case "pa-IN": return `ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ${name}, ${company} ਤੋਂ ਗੱਲ ਕਰ ਰਿਹਾ ਹਾਂ। ਕਿਵੇਂ ਮਦਦ ਕਰਾਂ?`;
+        case "en-IN": return `Hello! I'm ${name} calling from ${company}. How can I help you today?`;
+        default:      return `Hello! I'm ${name} from ${company}. How can I help you today?`;
+      }
+    }
+    const greetingMessage = buildGreeting(cfg.agentName, cfg.companyName, langCode, cfg.callFlowNotes);
 
     // DB insert — agent
     let insertedAgent: { id: number; name: string };
