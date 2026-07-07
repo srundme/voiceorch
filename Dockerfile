@@ -1,5 +1,4 @@
-# Redeploy trigger: chat-bubble transcript UI (dashboard) + language seed fix.
-# Previous build failed on transient apt-get timeout — retrying.
+# Redeploy trigger: guided agent creation wizard (dashboard).
 FROM node:24-slim AS builder
 WORKDIR /workspace
 

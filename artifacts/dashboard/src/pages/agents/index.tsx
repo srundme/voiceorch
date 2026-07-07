@@ -4,13 +4,13 @@ import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import { Search, Plus, Filter, MoreHorizontal, Settings2, PlayCircle, BarChart2, Phone, Users, Pencil, TrendingUp, PhoneCall, DollarSign } from "lucide-react";
 import { 
   useListAgents, 
-  useCreateAgent,
   useToggleAgent,
   useDeleteAgent,
   useInitiateOutboundCall,
   getListAgentsQueryKey,
   getListCallsQueryKey,
 } from "@workspace/api-client-react";
+import { GuidedAgentWizard } from "./guided-wizard";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export default function AgentsList() {
   const [search, setSearch] = useState(() => initialParams.get("q") ?? "");
   const [outboundAgent, setOutboundAgent] = useState<{ id: number; name: string } | null>(null);
   const [toNumber, setToNumber] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -69,39 +70,9 @@ export default function AgentsList() {
   const rateMap = useMinuteRatesMap();
   const userProviderNames = useUserProviderNames();
   
-  const createAgent = useCreateAgent();
   const toggleAgent = useToggleAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
-
-  const handleCreateAgent = () => {
-    createAgent.mutate(
-      {
-        data: {
-          name: "New Agent",
-          asrProvider: "azure",
-          asrModel: "en-US-standard",
-          llmProvider: "openai",
-          llmModel: "gpt-4o-mini",
-          ttsProvider: "elevenlabs",
-          ttsVoice: "",
-          ttsModel: "",
-          telephonyProvider: "vobiz",
-          systemPrompt: "You are a helpful AI voice assistant.",
-          greetingMessage: "Hello",
-          language: "en-US",
-        } as any,
-      },
-      {
-        onSuccess: (agent) => {
-          navigate(`/app/agents/${agent.id}`);
-        },
-        onError: (err: unknown) => {
-          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
-        },
-      }
-    );
-  };
 
   const outboundIrdaiBlock = getIrdaiBlock(
     outboundAgent ? (agents ?? []).find((a) => a.id === outboundAgent.id) : null,
@@ -198,8 +169,8 @@ export default function AgentsList() {
             Manage your AI voice agents and their configurations.
           </p>
         </div>
-        <Button data-testid="button-create-agent" onClick={handleCreateAgent} disabled={createAgent.isPending}>
-          <Plus className="mr-2 h-4 w-4" /> {createAgent.isPending ? "Creating..." : "Create Agent"}
+        <Button data-testid="button-create-agent" onClick={() => setWizardOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" /> Create Agent
         </Button>
       </div>
 
@@ -362,8 +333,8 @@ export default function AgentsList() {
                 : "You haven't created any voice agents yet. Get started by creating your first one."}
             </p>
             {!search && (
-              <Button onClick={handleCreateAgent} disabled={createAgent.isPending}>
-                <Plus className="mr-2 h-4 w-4" /> {createAgent.isPending ? "Creating..." : "Create Your First Agent"}
+              <Button onClick={() => setWizardOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> Create Your First Agent
               </Button>
             )}
           </div>
@@ -440,6 +411,8 @@ export default function AgentsList() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <GuidedAgentWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </div>
   );
 }

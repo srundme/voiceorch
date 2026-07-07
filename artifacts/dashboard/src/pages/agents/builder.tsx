@@ -4355,6 +4355,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const queryClient = useQueryClient();
   const rateMap = useMinuteRatesMap();
   const [, navigate] = useLocation();
+
+  // Auto-open webcall when navigated from the guided wizard (?webcall=1)
+  const _autoWebcall = useMemo(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("webcall") === "1";
+  }, []);
   const { recentNumbers, recordNumber, removeNumber } = useRecentNumbers();
 
   const { data: agent, isLoading } = useGetAgent(agentId, {
@@ -4571,7 +4577,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     );
   };
 
-  const [showWebcall, setShowWebcall] = useState(false);
+  const [showWebcall, setShowWebcall] = useState(() => _autoWebcall);
   const isDirty   = form.formState.isDirty;
   const nameValue = form.watch("name");
 
