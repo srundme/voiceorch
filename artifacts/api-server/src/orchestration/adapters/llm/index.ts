@@ -10,6 +10,7 @@ import { MistralLLM } from "./mistral.js";
 import { CohereLLM } from "./cohere.js";
 import { UltravoxLLM } from "./ultravox.js";
 import { OpenRouterLLM } from "./openrouter.js";
+import { TogetherLLM } from "./together.js";
 import { STUB_PROVIDERS_ENABLED, createStubLLM } from "../stubs.js";
 
 export function createLLMAdapter(
@@ -47,6 +48,8 @@ export function createLLMAdapter(
       return new QwenLLM(apiKey, model, genParams);
     case "openrouter":
       return new OpenRouterLLM(apiKey, model, genParams);
+    case "together":
+      return new TogetherLLM(apiKey, model, genParams);
     case "ultravox":
       // Ultravox is a multimodal speech-language model; its OpenAI-compatible
       // endpoint does not document a comparable text-generation temperature

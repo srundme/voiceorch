@@ -383,6 +383,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_sarvam_key",   "SARVAM_API_KEY");
       void seedManagedKeyFromEnv("managed_cartesia_key", "CARTESIA_API_KEY");
       void seedManagedKeyFromEnv("managed_gemini_key",   "GEMINI_API_KEY");
+      void seedManagedKeyFromEnv("managed_together_key", "TOGETHER_API_KEY");
       void migrateSaarikaToSaaras();
       startCallbackPoller();
       startSpikeChecker();
