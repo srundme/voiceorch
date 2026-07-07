@@ -1,5 +1,5 @@
-# Redeploy trigger: consolidate the 8 rapid-fire security-fix commits into one
-# clean build (the near-simultaneous pushes caused Railway build contention).
+# Redeploy trigger: chat-bubble transcript UI (dashboard) + language seed fix.
+# Previous build failed on transient apt-get timeout — retrying.
 FROM node:24-slim AS builder
 WORKDIR /workspace
 
