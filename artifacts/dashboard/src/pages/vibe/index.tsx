@@ -49,6 +49,13 @@ function getToken(): string | null {
 }
 function uid() { return Math.random().toString(36).slice(2); }
 
+/* ── language display map ───────────────────────────────────────────────────── */
+const LANG_DISPLAY: Record<string, string> = {
+  "ta-IN": "Tamil", "hi-IN": "Hindi", "te-IN": "Telugu",
+  "kn-IN": "Kannada", "ml-IN": "Malayalam", "en-IN": "English (India)",
+  "en-US": "English (US)",
+};
+
 /* ── greeting ──────────────────────────────────────────────────────────────── */
 const GREETING: ChatMsg = {
   id: "g", role: "ai", done: true,
@@ -105,6 +112,8 @@ export default function VibePage() {
   const [createdId,      setCreatedId]      = useState<number | null>(null);
   const [createdName,    setCreatedName]    = useState("");
   const [playingVoice,   setPlayingVoice]   = useState<string | null>(null);
+  const [schedulingSetup, setSchedulingSetup] = useState<{ timezone: string } | null>(null);
+  const [refineLoading,  setRefineLoading]  = useState(false);
 
   const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
@@ -120,6 +129,106 @@ export default function VibePage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // ── Refine mode: load existing agent on mount ────────────────────────────
+  useEffect(() => {
+    if (!refineId) return;
+    setRefineLoading(true);
+    const token = getToken();
+    fetch(`/api/agents/${refineId}`, {
+      headers: { Authorization: `Bearer ${token ?? ""}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((agent: Record<string, unknown> | null) => {
+        if (!agent) return;
+        const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
+        const lang = LANG_DISPLAY[agent.language as string ?? ""] ?? (agent.language as string) ?? "English";
+
+        // Pre-populate right panel fields
+        const panelFields: AgentField[] = [
+          { key: "name",      label: "Agent Name",     value: (agent.name as string) || "—",              icon: "bot"      },
+          { key: "language",  label: "Language",       value: lang,                                        icon: "globe"    },
+          { key: "direction", label: "Call Direction",
+            value: cfg.direction === "outbound" ? "Outbound" : "Inbound",                                  icon: "phone"    },
+          { key: "voice",     label: "Voice",          value: (agent.ttsVoice as string) || "—",           icon: "mic"      },
+          { key: "llm",       label: "AI Brain",       value: (agent.llmModel as string) || "Managed",     icon: "cpu"      },
+          { key: "stt",       label: "Speech-to-Text", value: "Sarvam Saaras v3",                          icon: "ear"      },
+          { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                        icon: "speaker"  },
+        ];
+        setFields(panelFields);
+
+        // Pre-populate features
+        const schedulingOn = !!(cfg.schedulingEnabled);
+        const panelFeatures: FeatureCard[] = [
+          {
+            key: "gender_detection", label: "Caller Gender Detection", icon: "user-check",
+            enabled: !!(cfg.genderDetectionEnabled),
+            detail: cfg.genderDetectionEnabled
+              ? `${(cfg.maleSalutation as string) || "Sir"} / ${(cfg.femaleSalutation as string) || "Ma'am"}`
+              : "Disabled",
+          },
+          {
+            key: "call_transfer", label: "Call Transfer to Human", icon: "phone-forwarded",
+            enabled: !!(cfg.callTransferEnabled),
+            detail: cfg.callTransferEnabled
+              ? `→ ${(cfg.transferName as string) || "Human Agent"} · ${(cfg.transferPhoneNumber as string) || ""}`
+              : "Disabled",
+          },
+          {
+            key: "voicemail", label: "Voicemail", icon: "voicemail",
+            enabled: !!(cfg.voicemailEnabled),
+            detail: cfg.voicemailEnabled ? "Enabled" : "Disabled",
+          },
+          {
+            key: "scheduling", label: "Booking & Scheduling", icon: "calendar",
+            enabled: schedulingOn,
+            detail: schedulingOn ? "Enabled" : "Disabled",
+          },
+          {
+            key: "compliance", label: "Compliance", icon: "shield-check",
+            enabled: !!((cfg.compliance as Record<string, boolean>)?.dpdp
+                     || (cfg.compliance as Record<string, boolean>)?.trai
+                     || (cfg.compliance as Record<string, boolean>)?.irdai),
+            detail: [
+              (cfg.compliance as Record<string, boolean>)?.dpdp  && "DPDP",
+              (cfg.compliance as Record<string, boolean>)?.trai  && "TRAI",
+              (cfg.compliance as Record<string, boolean>)?.irdai && "IRDAI",
+            ].filter(Boolean).join(" · ") || "None",
+          },
+        ];
+        setFeatures(panelFeatures);
+
+        if (agent.ttsVoice) setSelectedVoice(agent.ttsVoice as string);
+        setPhase("building");
+
+        // Inject existing config as context so Gemini knows what it's refining
+        const contextSummary = [
+          `[EXISTING AGENT CONFIG — user wants to refine this agent]`,
+          `Name: ${agent.name as string}`,
+          `Language: ${lang}`,
+          `Direction: ${cfg.direction ?? "inbound"}`,
+          `Voice: ${agent.ttsVoice as string || "not set"}`,
+          `Gender detection: ${cfg.genderDetectionEnabled ? "on" : "off"}`,
+          `Call transfer: ${cfg.callTransferEnabled ? `on → ${cfg.transferPhoneNumber}` : "off"}`,
+          `Voicemail: ${cfg.voicemailEnabled ? "on" : "off"}`,
+          `Scheduling: ${cfg.schedulingEnabled ? "on" : "off"}`,
+          `Timezone: ${(cfg.timezone as string) || "Asia/Kolkata"}`,
+          `[When the user describes changes, update only the relevant fields and keep everything else the same.]`,
+        ].join("\n");
+        historyRef.current = [{ role: "assistant", content: contextSummary }];
+
+        // Set refine greeting
+        setMessages([{
+          id: "refine-g",
+          role: "ai",
+          done: true,
+          content: `I've loaded **${agent.name as string}** — you can see the current setup on the right. What would you like to change?`,
+        }]);
+      })
+      .catch(() => {})
+      .finally(() => setRefineLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refineId]);
 
   const appendAiDelta = useCallback((delta: string) => {
     setMessages(prev => {
@@ -262,6 +371,10 @@ export default function VibePage() {
               });
               break;
 
+            case "scheduling_setup":
+              setSchedulingSetup({ timezone: String(evt.timezone ?? "Asia/Kolkata") });
+              break;
+
             case "prompt_stream":
               setPromptPreview(prev => prev + (evt.delta as string));
               break;
@@ -351,10 +464,18 @@ export default function VibePage() {
             </div>
             <div>
               <p className="font-semibold text-sm leading-none tracking-tight">Vibe Build</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">AI agent builder</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {refineId ? "Refining existing agent" : "AI agent builder"}
+              </p>
             </div>
           </div>
-          {phase !== "idle" && phase !== "done" && (
+          {refineLoading && (
+            <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading agent…
+            </div>
+          )}
+          {!refineLoading && phase !== "idle" && phase !== "done" && (
             <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {phase === "thinking"  ? "Thinking…" :
@@ -539,6 +660,49 @@ export default function VibePage() {
                 <Section title="Features">
                   <div className="grid grid-cols-2 gap-2">
                     {features.map(f => <FeatureChip key={f.key} feature={f} />)}
+                  </div>
+                </Section>
+              )}
+
+              {/* Scheduling Setup Guidance */}
+              {schedulingSetup && (
+                <Section title="Scheduling Setup">
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-amber-500 shrink-0" />
+                      <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        2 steps to activate booking
+                      </p>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Timezone: <span className="font-medium text-foreground">{schedulingSetup.timezone}</span>
+                    </p>
+                    <div className="space-y-2">
+                      <a
+                        href="/app/connections"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold shrink-0">1</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium">Connect Google Calendar</p>
+                          <p className="text-[10px] text-muted-foreground truncate">app/connections →</p>
+                        </div>
+                      </a>
+                      <a
+                        href="/app/scheduling"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold shrink-0">2</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium">Create an event type</p>
+                          <p className="text-[10px] text-muted-foreground truncate">app/scheduling →</p>
+                        </div>
+                      </a>
+                    </div>
                   </div>
                 </Section>
               )}

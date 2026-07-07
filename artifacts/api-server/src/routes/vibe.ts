@@ -77,6 +77,7 @@ interface VibeConfig {
   voicemailEnabled: boolean;
   voicemailMessage: string;
   schedulingEnabled: boolean;
+  timezone: string;
   compliance: { dpdp: boolean; trai: boolean; irdai: boolean };
   dispositions: VibeDisposition[];
 }
@@ -142,7 +143,9 @@ PHASE "features_voicemail"
 
 PHASE "features_scheduling"
 - Ask: "Does [name] need to book appointments or manage scheduling?"
-- If yes: schedulingEnabled=true; mention a calendar gets set up automatically
+- If yes: schedulingEnabled=true; then ask: "What timezone should [name] use for scheduling? (e.g. Asia/Kolkata, Asia/Dubai, America/New_York)". Default to "Asia/Kolkata" if they don't specify.
+- Set timezone to the IANA timezone string (e.g. "Asia/Kolkata", "Asia/Dubai", "America/New_York", "Europe/London")
+- Note: Google Calendar connection and event types are configured separately after agent creation
 → Transition: set phase="features_compliance"
 
 PHASE "features_compliance"
@@ -194,6 +197,7 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
     "voicemailEnabled": false,
     "voicemailMessage": "",
     "schedulingEnabled": false,
+    "timezone": "Asia/Kolkata",
     "compliance": {"dpdp": false, "trai": false, "irdai": false},
     "dispositions": []
   }
@@ -659,6 +663,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       });
     }
     // Scheduling tools: added when scheduling was enabled
+    const agentTimezone = cfg.timezone || "Asia/Kolkata";
     if (cfg.schedulingEnabled) {
       ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].forEach(type => {
         const nameMap: Record<string, string> = {
@@ -668,7 +673,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           native_reschedule:           "reschedule_booking",
           native_cancel:               "cancel_booking",
         };
-        tools.push({ type, name: nameMap[type], description: "", timezone: "Asia/Kolkata" });
+        tools.push({ type, name: nameMap[type], description: "", timezone: agentTimezone });
       });
     }
 
@@ -742,11 +747,18 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           agentId:  insertedAgent.id,
           userId:   clerkId,
           name:     `${cfg.agentName} Calendar`,
-          timezone: "Asia/Kolkata",
+          timezone: agentTimezone,
           isActive: true,
         })
         .onConflictDoNothing()
         .catch(() => {});
+      // Emit scheduling setup guidance for the frontend
+      emit({
+        type: "scheduling_setup",
+        timezone: agentTimezone,
+        connectCalendarUrl: "/app/connections",
+        eventTypesUrl:      "/app/scheduling",
+      });
     }
 
     await logActivity({
