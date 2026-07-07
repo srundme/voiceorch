@@ -640,6 +640,34 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
     const greetingMessage = buildGreeting(cfg.agentName, cfg.companyName, langCode, cfg.callFlowNotes);
 
+    // Build tools array — matches the JSON shape the builder reads from agent.tools
+    const tools: Record<string, unknown>[] = [];
+    // End-call tool: always enabled so agent can gracefully end calls
+    tools.push({ type: "end_call", name: "end_call", description: "End the call when the conversation is complete." });
+    // Call-transfer tool: added when transfer was configured
+    if (cfg.callTransferEnabled && cfg.transferPhoneNumber) {
+      tools.push({
+        type: "call_transfer",
+        name: "transfer_to_human",
+        description: `Transfer the call to ${cfg.transferName || "a human agent"} when the caller requests it or you cannot resolve their issue.`,
+        transferTo: cfg.transferPhoneNumber,
+        transferMode: "cold",
+      });
+    }
+    // Scheduling tools: added when scheduling was enabled
+    if (cfg.schedulingEnabled) {
+      ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].forEach(type => {
+        const nameMap: Record<string, string> = {
+          native_booking:              "book_appointment",
+          native_check_availability:   "check_availability",
+          native_list_bookings:        "list_bookings",
+          native_reschedule:           "reschedule_booking",
+          native_cancel:               "cancel_booking",
+        };
+        tools.push({ type, name: nameMap[type], description: "", timezone: "Asia/Kolkata" });
+      });
+    }
+
     // DB insert — agent
     let insertedAgent: { id: number; name: string };
     try {
@@ -659,6 +687,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         systemPrompt,
         greetingMessage,
         agentConfig:       agentConfig as any,
+        tools:             tools as any,
       } as any).returning();
       insertedAgent = row;
     } catch (dbErr) {
