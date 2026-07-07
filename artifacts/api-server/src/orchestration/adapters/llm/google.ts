@@ -249,24 +249,38 @@ export class GoogleLLM implements LLMAdapter {
     lastMessage: string | Part[];
     lastIsTool: boolean;
   } {
-    // Build chat history (all turns except the last) — map tool turns to
-    // Gemini's functionCall/functionResponse format so chained tool calls work.
+    // Build chat history (all turns except the last).
+    //
+    // IMPORTANT — native functionCall/functionResponse format is NOT used:
+    // Current versions of the Gemini API reject `functionResponse` parts inside
+    // `role: "user"` messages (error: "Content with role 'user' can't contain
+    // 'functionResponse' part"), causing every post-tool LLM call to fail.
+    // Sending the paired `functionCall` without its `functionResponse` would
+    // also leave history in an invalid state.
+    //
+    // Instead, tool-call turns are flattened to plain text so Gemini's
+    // user→model alternation constraint is always satisfied:
+    //   • assistant+toolCalls  → model text (spoken content, or a bracketed
+    //     placeholder if the model emitted no text while calling the tool)
+    //   • tool (result)        → user text "[Tool "name" result: <content>]"
+    //
+    // The tool-result message content already contains the full instruction
+    // ("Now speak naturally to the caller…"), so the model responds correctly.
     const rawHistory = messages.slice(0, -1).map((m) => {
       if (m.role === "tool") {
         return {
           role: "user" as const,
-          parts: [{ functionResponse: { name: m.toolName ?? "tool", response: { result: m.content } } }] as Part[],
+          parts: [{ text: `[Tool "${m.toolName ?? "tool"}" result: ${m.content}]` }] as Part[],
         };
       }
       if (m.role === "assistant" && m.toolCalls?.length) {
+        // Use spoken text (usually the filler "ஒரு நிமிடம்…" etc.) so the
+        // model turn is non-empty. Fall back to a bracketed label so we never
+        // emit an empty model turn, which some SDK versions also reject.
+        const spokenText = m.content?.trim() || `[called ${m.toolCalls.map((tc) => tc.name).join(", ")}]`;
         return {
           role: "model" as const,
-          parts: m.toolCalls.map((tc) => ({
-            functionCall: {
-              name: tc.name,
-              args: (() => { try { return JSON.parse(tc.args || "{}") as Record<string, unknown>; } catch { return {}; } })(),
-            },
-          })) as Part[],
+          parts: [{ text: spokenText }] as Part[],
         };
       }
       return {
@@ -281,11 +295,12 @@ export class GoogleLLM implements LLMAdapter {
     const firstUser = rawHistory.findIndex((h) => h.role === "user");
     const history = firstUser === -1 ? [] : rawHistory.slice(firstUser);
 
-    // Build the "current" message — if it's a tool result, send as a FunctionResponse part.
+    // Build the "current" message — tool results become plain text (same
+    // reasoning as above: functionResponse in user role is now rejected).
     const lastTurn = messages[messages.length - 1];
     const lastIsTool = lastTurn?.role === "tool";
     const lastMessage: string | Part[] = lastIsTool
-      ? [{ functionResponse: { name: lastTurn.toolName ?? "tool", response: { result: lastTurn.content } } }]
+      ? `[Tool "${lastTurn.toolName ?? "tool"}" result: ${lastTurn.content}]`
       : (lastTurn?.content ?? "");
 
     return { history, lastMessage, lastIsTool };
