@@ -209,13 +209,19 @@ export class AmbientNoiseStream {
   private readonly speechVol: number;
   private pos = 0;
 
-  constructor(track: string) {
+  /**
+   * @param track       Built-in track key or uploaded sound ID.
+   * @param volumeScale User-configurable multiplier (0–1, default 1.0).
+   *                    Scales both silence and speech mix levels uniformly.
+   */
+  constructor(track: string, volumeScale = 1.0) {
+    const scale = Math.max(0, Math.min(1, volumeScale));
     const key = Object.keys(TRACK_PARAMS).find(k => k === track) ?? "office-ambience";
     // Loops are RMS-normalised in generateLoop, so a single shared volume pair
     // yields a consistent, audible background across every built-in track.
     this.loop       = generateLoop(key);
-    this.silenceVol = SILENCE_VOL;
-    this.speechVol  = SPEECH_VOL;
+    this.silenceVol = SILENCE_VOL * scale;
+    this.speechVol  = SPEECH_VOL  * scale;
   }
 
   /**
@@ -301,8 +307,15 @@ export class FileAmbientNoiseStream {
   private readonly loop: Int16Array;
   private pos = 0;
   private readonly loopSamples: number;
+  private readonly silenceVol: number;
+  private readonly speechVol: number;
 
-  constructor(pcmBuffer: Buffer) {
+  /**
+   * @param pcmBuffer   Raw s16le 8 kHz mono PCM from Postgres.
+   * @param volumeScale User-configurable multiplier (0–1, default 1.0).
+   */
+  constructor(pcmBuffer: Buffer, volumeScale = 1.0) {
+    const scale = Math.max(0, Math.min(1, volumeScale));
     // The PCM buffer is raw s16le 8 kHz mono — convert to Int16Array
     const samples = pcmBuffer.length / 2;
     this.loopSamples = samples;
@@ -312,21 +325,23 @@ export class FileAmbientNoiseStream {
     }
     // Equalise uploaded-file level to match built-in tracks.
     normalizeLoopRms(this.loop, TARGET_LOOP_RMS);
+    this.silenceVol = SILENCE_VOL * scale;
+    this.speechVol  = SPEECH_VOL  * scale;
   }
 
   nextMulawChunk(): Buffer {
-    const pcm = this.readPcm(CHUNK_SAMPLES, SILENCE_VOL);
+    const pcm = this.readPcm(CHUNK_SAMPLES, this.silenceVol);
     return pcmToMulaw(pcm);
   }
 
   /** See AmbientNoiseStream.nextPcmChunk — raw 8 kHz PCM silence-fill for web calls. */
   nextPcmChunk(): Buffer {
-    return this.readPcm(CHUNK_SAMPLES, SILENCE_VOL);
+    return this.readPcm(CHUNK_SAMPLES, this.silenceVol);
   }
 
   mixIntoMulaw(ttsMulaw: Buffer): Buffer {
     const ttsLen     = ttsMulaw.length;
-    const ambientPcm = this.readPcm(ttsLen, SPEECH_VOL);
+    const ambientPcm = this.readPcm(ttsLen, this.speechVol);
 
     const mixed = Buffer.allocUnsafe(ttsLen * 2);
     for (let i = 0; i < ttsLen; i++) {
@@ -340,7 +355,7 @@ export class FileAmbientNoiseStream {
 
   /** See AmbientNoiseStream.mixIntoPcm16k. */
   mixIntoPcm16k(speechPcm16k: Buffer): Buffer {
-    return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, SPEECH_VOL));
+    return mixAmbientIntoPcm16k(speechPcm16k, (n) => this.readPcm(n, this.speechVol));
   }
 
   private readPcm(numSamples: number, vol: number): Buffer {

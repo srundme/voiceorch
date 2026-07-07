@@ -30,6 +30,7 @@ export type AgentConfig = {
   backchannelingStartDelay?: number;
   ambientNoiseEnabled?: boolean;
   ambientNoiseTrack?: string;
+  ambientNoiseVolume?: number;
   // Tab 5 — Call
   hangupAfterLlmCall?: boolean;
   callCancellationPrompt?: string;

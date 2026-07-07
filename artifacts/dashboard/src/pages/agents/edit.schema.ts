@@ -39,6 +39,7 @@ export const agentFormSchema = z.object({
   noiseCancellationEnabled: z.boolean().optional(),
   ambientNoiseEnabled:      z.boolean().optional(),
   ambientNoiseTrack:        z.string().optional(),
+  ambientNoiseVolume:       z.number().min(0).max(1).optional(),
   promptVariables: z.array(z.object({
     key:          z.string().min(1, "Key required"),
     defaultValue: z.string(),

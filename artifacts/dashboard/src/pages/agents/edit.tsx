@@ -68,7 +68,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     snapserveAgentId,
     contextWindowTurns, summarizationEnabled,
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
-    ambientNoiseEnabled, ambientNoiseTrack,
+    ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume,
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
     autoRedialEnabled, autoRedialMaxAttempts,
@@ -101,6 +101,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
   if (ambientNoiseTrack) agentConfig["ambientNoiseTrack"] = ambientNoiseTrack;
+  if (ambientNoiseVolume != null) agentConfig["ambientNoiseVolume"] = ambientNoiseVolume;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
   if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
@@ -323,7 +324,7 @@ export default function AgentEdit() {
       firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
-      ambientNoiseEnabled: false, ambientNoiseTrack: "",
+      ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
       promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
       timezone: "",
       autoSwitchToEnglish: false,
@@ -530,6 +531,7 @@ export default function AgentEdit() {
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      ((agent as any).agentConfig?.ambientNoiseEnabled as boolean | undefined) ?? false,
       ambientNoiseTrack:        ((agent as any).agentConfig?.ambientNoiseTrack as string | undefined) ?? "",
+      ambientNoiseVolume:       ((agent as any).agentConfig?.ambientNoiseVolume as number | undefined) ?? 1.0,
       promptVariables:          (((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"]),
       vadSilenceMs:             ((agent as any).agentConfig?.vadSilenceMs as number | undefined) ?? 350,
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,

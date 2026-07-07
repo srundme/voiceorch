@@ -911,16 +911,19 @@ export class OrchestrationPipeline {
         },
         "Ambient noise enabled",
       );
+      const ambientVolumeScale = typeof (this.agent as any).ambientNoiseVolume === "number"
+        ? Math.max(0, Math.min(1, (this.agent as any).ambientNoiseVolume as number))
+        : 1.0;
       if (ambientType === "builtin") {
         // Built-in procedural track — synchronous
-        this.ambientStream = new AmbientNoiseStream(track);
+        this.ambientStream = new AmbientNoiseStream(track, ambientVolumeScale);
       } else {
         // Uploaded sound ID — load PCM from Postgres asynchronously.
         // ambientStream starts as null; the interval skips while loading.
         loadPcmLoop(track)
           .then((pcmBuffer) => {
             if (!this.closed) {
-              this.ambientStream = new FileAmbientNoiseStream(pcmBuffer);
+              this.ambientStream = new FileAmbientNoiseStream(pcmBuffer, ambientVolumeScale);
               logger.info({ callId: config.callId, soundId: track, bytes: pcmBuffer.length }, "Ambient noise: uploaded PCM loop ready");
             }
           })

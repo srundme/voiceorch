@@ -976,6 +976,7 @@ function VoiceTab({ form }: { form: any }) {
   const { data: ambientSounds, isLoading: ambientSoundsLoading } = useListAmbientSounds();
   const ambientNoiseEnabled = form.watch("ambientNoiseEnabled") ?? false;
   const ambientNoiseTrack   = form.watch("ambientNoiseTrack") ?? "";
+  const ambientNoiseVolume  = (form.watch("ambientNoiseVolume") as number | undefined) ?? 1.0;
   const [ambientPreviewPlaying, setAmbientPreviewPlaying] = useState<string | null>(null);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const ambientPreviewUrlRef = useRef<string | null>(null);
@@ -1245,41 +1246,63 @@ function VoiceTab({ form }: { form: any }) {
             </FormItem>
           )} />
           {ambientNoiseEnabled && (
-            <FormField control={form.control} name="ambientNoiseTrack" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs">Track</FormLabel>
-                {ambientSoundsLoading ? (
-                  <div className="h-8 flex items-center text-xs text-muted-foreground">Loading tracks…</div>
-                ) : !ambientSounds || ambientSounds.length === 0 ? (
-                  <div className="h-8 flex items-center text-xs text-muted-foreground italic">
-                    No ambient sounds uploaded yet — ask your admin to add some.
+            <>
+              <FormField control={form.control} name="ambientNoiseTrack" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Track</FormLabel>
+                  {ambientSoundsLoading ? (
+                    <div className="h-8 flex items-center text-xs text-muted-foreground">Loading tracks…</div>
+                  ) : !ambientSounds || ambientSounds.length === 0 ? (
+                    <div className="h-8 flex items-center text-xs text-muted-foreground italic">
+                      No ambient sounds uploaded yet — ask your admin to add some.
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Select value={field.value || undefined} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select a track" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent position="popper" className="max-h-[280px]">
+                          {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        disabled={!field.value}
+                        onClick={() => { if (field.value) void previewAmbient(field.value); }}
+                        aria-label={ambientPreviewPlaying && ambientPreviewPlaying === field.value ? "Stop preview" : "Play preview"}
+                        title={field.value ? "Preview track" : "Select a track to preview"}
+                        className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {ambientPreviewPlaying && ambientPreviewPlaying === field.value
+                          ? <Pause className="h-3.5 w-3.5" />
+                          : <Play className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  )}
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="ambientNoiseVolume" render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-xs">Volume</FormLabel>
+                    <span className="text-xs text-muted-foreground tabular-nums">{Math.round((field.value ?? 1.0) * 100)}%</span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Select value={field.value || undefined} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select a track" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent position="popper" className="max-h-[280px]">
-                        {ambientSounds.map(s => <SelectItem key={s.id} value={s.id} className="text-xs">{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      disabled={!field.value}
-                      onClick={() => { if (field.value) void previewAmbient(field.value); }}
-                      aria-label={ambientPreviewPlaying && ambientPreviewPlaying === field.value ? "Stop preview" : "Play preview"}
-                      title={field.value ? "Preview track" : "Select a track to preview"}
-                      className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {ambientPreviewPlaying && ambientPreviewPlaying === field.value
-                        ? <Pause className="h-3.5 w-3.5" />
-                        : <Play className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                )}
-              </FormItem>
-            )} />
+                  <FormControl>
+                    <input
+                      type="range"
+                      min={0} max={1} step={0.05}
+                      value={field.value ?? 1.0}
+                      onChange={e => field.onChange(parseFloat(e.target.value))}
+                      className="w-full h-1.5 rounded-full accent-primary cursor-pointer"
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[10px]">
+                    Reduce if the background noise is too loud relative to the agent's voice
+                  </FormDescription>
+                </FormItem>
+              )} />
+            </>
           )}
         </div>
       </div>
@@ -4352,7 +4375,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       language: "en-US", asrLanguage: "", backchannelingEnabled: true,
       backchannelingFrequency: 0.5, webhookUrl: "",
       webhookSecret: "", noiseCancellationEnabled: true,
-      ambientNoiseEnabled: false, ambientNoiseTrack: "", promptVariables: [],
+      ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200,
       bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
@@ -4412,6 +4435,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       noiseCancellationEnabled: agent.noiseCancellationEnabled ?? true,
       ambientNoiseEnabled:      (agent as any).agentConfig?.ambientNoiseEnabled ?? false,
       ambientNoiseTrack:        (agent as any).agentConfig?.ambientNoiseTrack ?? "",
+      ambientNoiseVolume:       (agent as any).agentConfig?.ambientNoiseVolume ?? 1.0,
       promptVariables:          ((agent as any).agentConfig?.promptVariables ?? []) as AgentFormValues["promptVariables"],
       vadSilenceMs:             (agent as any).agentConfig?.vadSilenceMs ?? 350,
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
