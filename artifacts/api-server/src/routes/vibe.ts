@@ -520,13 +520,15 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         useCase:             cfg.description,
         agentDirection:      cfg.direction === "outbound" ? "Outbound" : cfg.direction === "inbound" ? "Inbound" : "Inbound",
         language:            langDisplay,
-        selectedLanguages:   (cfg.languages ?? []).filter((l: string) => l !== langDisplay),
+        selectedLanguages:   (cfg.multilingualLanguages ?? []).filter((l: string) => l !== langDisplay),
         callFlowDescription: cfg.callFlowNotes ?? cfg.description,
         keyKnowledge:        cfg.knowledgeBaseNotes ?? "",
         transferInfo:        transferNote,
         complianceFlags:     complianceNote,
-        genderDetection:     cfg.genderEnabled ? "Use {caller_salutation} (Sir/Ma'am) once the caller's gender is detected." : "",
-        dispositions:        (cfg.dispositions ?? []).map((d: { label: string }) => d.label).join(", "),
+        genderDetection:     cfg.genderDetectionEnabled ? "Use {caller_salutation} (Sir/Ma'am) once the caller's gender is detected." : "",
+        dispositions:        (cfg.dispositions ?? [])
+          .map((d) => `${d.category}: ${(d.outcomes ?? []).join("/")}`)
+          .join(", "),
       };
 
       if (foundationLayer) {

@@ -4,6 +4,7 @@ import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
+import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
@@ -1147,7 +1148,24 @@ export class OrchestrationPipeline {
               this.requestedLangLatch = requested;
             }
             // A latched explicit request overrides per-turn script detection.
-            if (this.requestedLangLatch) detected = this.requestedLangLatch;
+            // Otherwise, a short Latin-only filler/backchannel ("okay", "thank
+            // you", "haan ok") must NOT flip an established non-English
+            // conversation to English — only a real English utterance (3+ words
+            // with at least one non-filler word) switches passively. First-turn
+            // English (no non-English currentLang yet) passes through unchanged.
+            const resolved = resolveAutoDetectLanguage({
+              detected,
+              latchedLang: this.requestedLangLatch,
+              currentLang: this.currentLang,
+              text,
+            });
+            if (resolved.heldFiller) {
+              logger.info(
+                { callId: this.config.callId, heldLang: this.currentLang, text: text.slice(0, 60) },
+                "Auto-detect: English filler/backchannel — holding current language",
+              );
+            }
+            detected = resolved.lang;
             if (detected) {
               if (detected !== this.currentLang) {
                 logger.info(
@@ -2022,6 +2040,9 @@ export class OrchestrationPipeline {
             `Respond in ${langName}. If the caller switches to a different language (Tamil, Hindi, English, etc.), ` +
             `immediately switch your response to match their new language. ` +
             `If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. ` +
+            `IMPORTANT — borrowed English words and fillers from the caller ("okay", "ok", "thank you", "yes", "no", "right", "fine") ` +
+            `are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. ` +
+            `Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. ` +
             `REGISTER — speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; ` +
             `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
             `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
