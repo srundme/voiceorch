@@ -857,7 +857,7 @@ function AppRoutes() {
     <Layout>
       <VoiceAssistant />
       <Switch>
-        <Route path="/app" component={() => <Redirect to="/app/command-center" />} />
+        <Route path="/app" component={() => <Redirect to="/app/agents" />} />
         <Route path="/app/command-center" component={CommandCenterPage} />
         <Route path="/app/analytics" component={AnalyticsPage} />
         <Route path="/app/agents" component={AgentBuilder} />
