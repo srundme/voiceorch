@@ -10,6 +10,7 @@ import {
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
 
 /* ── types ─────────────────────────────────────────────────────────────────── */
@@ -27,6 +28,8 @@ interface ChatMsg {
   done?: boolean;
   voices?: VoiceOption[];      // inline voice picker
   voicePicked?: boolean;       // collapses picker after selection
+  timezonePicker?: boolean;    // inline timezone picker
+  timezonePicked?: boolean;    // collapses timezone picker after selection
 }
 
 type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
@@ -255,6 +258,22 @@ export default function VibePage() {
     setMessages(prev => prev.map(m => m.voices ? { ...m, voicePicked: true } : m));
   }, []);
 
+  // Attach timezone picker to last AI message
+  const attachTimezonePickerToLastMsg = useCallback(() => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === "ai") {
+        return [...prev.slice(0, -1), { ...last, timezonePicker: true, timezonePicked: false }];
+      }
+      return prev;
+    });
+  }, []);
+
+  // Collapse all timezone pickers after selection
+  const collapseTimezonePickers = useCallback(() => {
+    setMessages(prev => prev.map(m => m.timezonePicker ? { ...m, timezonePicked: true } : m));
+  }, []);
+
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
@@ -373,6 +392,10 @@ export default function VibePage() {
 
             case "scheduling_setup":
               setSchedulingSetup({ timezone: String(evt.timezone ?? "Asia/Kolkata") });
+              break;
+
+            case "timezone_picker":
+              attachTimezonePickerToLastMsg();
               break;
 
             case "prompt_stream":
@@ -496,6 +519,10 @@ export default function VibePage() {
                 playingVoice={playingVoice}
                 onPreview={vid => previewVoice(vid, setPlayingVoice)}
                 onSelect={v => send(`I'll go with ${v.voiceName}`)}
+                onSelectTimezone={tz => {
+                  collapseTimezonePickers();
+                  send(`Use ${tz.label} (${tz.value})`);
+                }}
               />
             ))}
             {phase === "thinking" && <ThinkingDots />}
@@ -746,12 +773,13 @@ export default function VibePage() {
 /*  Chat components                                                            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect }: {
+function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, onSelectTimezone }: {
   msg: ChatMsg;
   selectedVoice: string;
   playingVoice: string | null;
   onPreview: (id: string) => void;
   onSelect: (v: VoiceOption) => void;
+  onSelectTimezone: (tz: { value: string; label: string }) => void;
 }) {
   const isAi = msg.role === "ai";
 
@@ -780,6 +808,51 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect }
             <span className="inline-block w-0.5 h-4 bg-foreground/40 ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
         </p>
+
+        {/* Voice picker — collapsed once picked */}
+        {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Available voices
+            </p>
+            {msg.voices.map(v => (
+              <VoicePill
+                key={v.voiceId}
+                voice={v}
+                isSelected={selectedVoice.includes(v.voiceName)}
+                isPlaying={playingVoice === v.voiceId}
+                onPreview={() => onPreview(v.voiceId)}
+                onSelect={() => onSelect(v)}
+              />
+            ))}
+          </div>
+        )}
+        {/* Timezone picker — shown when scheduling is enabled */}
+        {msg.timezonePicker && !msg.timezonePicked && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Select timezone
+            </p>
+            <div className="rounded-xl border border-border/60 bg-muted/30 overflow-hidden max-h-52 overflow-y-auto">
+              {AGENT_TIMEZONES.map(tz => (
+                <button
+                  key={tz.value}
+                  onClick={() => onSelectTimezone(tz)}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors border-b border-border/30 last:border-0"
+                >
+                  {tz.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Collapsed timezone state */}
+        {msg.timezonePicker && msg.timezonePicked && (
+          <div className="flex items-center gap-2 text-[11px] text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="font-medium">Timezone selected</span>
+          </div>
+        )}
 
         {/* Voice picker — collapsed once picked */}
         {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (

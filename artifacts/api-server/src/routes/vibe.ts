@@ -480,6 +480,12 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
     }
 
+    // Timezone picker — show UI selector when scheduling is enabled and timezone not yet set
+    if (cfg.schedulingEnabled && (!cfg.timezone || cfg.timezone === "Asia/Kolkata") && phase === "features_scheduling") {
+      await sleep(150);
+      emit({ type: "timezone_picker" });
+    }
+
     // Disposition cards
     if (cfg.dispositions?.length) {
       await sleep(200);
