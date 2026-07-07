@@ -602,8 +602,10 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     if (cfg.languageMode === "multi" && cfg.multilingualLanguages?.length) {
       agentConfig.multilingualLanguages = cfg.multilingualLanguages;
     }
+    // Always persist the toggle explicitly (true OR false) so the backend's
+    // missing-field default never has to guess for vibe-created agents.
+    agentConfig.genderDetectionEnabled = !!cfg.genderDetectionEnabled;
     if (cfg.genderDetectionEnabled) {
-      agentConfig.genderDetectionEnabled          = true;
       agentConfig.genderDetectionMaleSalutation   = cfg.maleSalutation   || "Sir";
       agentConfig.genderDetectionFemaleSalutation = cfg.femaleSalutation || "Ma'am";
     }

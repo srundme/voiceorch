@@ -430,6 +430,7 @@ const STALE_DAYS = 90;  // facts older than this get a stale marker
 export function injectEnhancedMemory(
   systemPrompt: string,
   ctx: CallerContext,
+  opts?: { suppressGenderFact?: boolean },
 ): string {
   const { profile, facts, recentCalls } = ctx;
   // Persona whiplash guard: when the agent was repurposed since this caller's
@@ -487,6 +488,11 @@ export function injectEnhancedMemory(
     // Always suppress language_pref — agents have a fixed configured language;
     // stored preferences must not override it.
     if (f.key === "language_pref") return false;
+    // Suppress a stored gender fact when the agent's gender-detection toggle is
+    // OFF — otherwise the LLM keeps addressing the caller as Sir/Ma'am from
+    // memory captured during earlier detection-ON calls. The fact stays in the
+    // DB and becomes visible again if the toggle is turned back ON.
+    if (opts?.suppressGenderFact && f.key === "gender") return false;
     return true;
   });
   if (displayFacts.length > 0) {

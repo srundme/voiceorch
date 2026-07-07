@@ -429,7 +429,9 @@ export async function createSession(params: {
     // Call recording
     recordingEnabled:              (agentCfg["recordingEnabled"]              as boolean | undefined) ?? false,
     // P1-F: Caller gender detection
-    genderDetectionEnabled:        (agentCfg["genderDetectionEnabled"]        as boolean | undefined) ?? true,
+    // Default OFF when the field is absent — matches the dashboard/admin UI
+    // display default (?? false). Older agents without the field behave as OFF.
+    genderDetectionEnabled:        (agentCfg["genderDetectionEnabled"]        as boolean | undefined) ?? false,
     genderDetectionMaleSalutation: (agentCfg["genderDetectionMaleSalutation"] as string  | undefined) ?? "Sir",
     genderDetectionFemaleSalutation: (agentCfg["genderDetectionFemaleSalutation"] as string | undefined) ?? "Ma'am",
     genderDetectionNeutralSalutation: (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "",
@@ -567,7 +569,9 @@ export async function createSession(params: {
     }
 
     if (callerProfileSnapshot || callerCtxResult.facts.length > 0 || callerCtxResult.recentCalls.length > 0) {
-      agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult);
+      agentConfig.systemPrompt = injectEnhancedMemory(agentConfig.systemPrompt, callerCtxResult, {
+        suppressGenderFact: !agentConfig.genderDetectionEnabled,
+      });
       {
         const _LNAMES: Record<string, string> = {
           "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu", "kn-IN": "Kannada",
