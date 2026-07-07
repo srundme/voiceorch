@@ -64,6 +64,8 @@ interface VibeConfig {
   description:  string;
   voiceId:      string;
   voiceName:    string;
+  callFlowNotes:     string;
+  knowledgeBaseNotes: string;
   genderDetectionEnabled: boolean;
   maleSalutation:         string;
   femaleSalutation:       string;
@@ -84,78 +86,88 @@ interface GeminiVibeResponse {
   config: VibeConfig | null;
 }
 
-const VIBE_SYSTEM_PROMPT = `You are an expert AI agent builder for SnapServe, a voice AI platform. Guide the user through building a complete, production-ready voice agent through natural, friendly conversation.
+const VIBE_SYSTEM_PROMPT = `You are an expert AI agent builder for SnapServe, a voice AI platform. Guide the user conversationally — warm, smart, 2–3 sentences per turn.
 
 CONVERSATION PHASES — complete IN ORDER, never skip:
 
 PHASE "core"
-Collect these 5 things:
-1. Agent name (a real human-sounding name callers will hear)
+Collect these 5 things (can gather multiple per turn if the user volunteers them):
+1. Agent name (a real human name callers will hear — suggest one if they don't give one)
 2. Company/brand name
-3. Primary language — use codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US
+3. Primary language — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US
 4. Call direction: "inbound" (customers call in) or "outbound" (agent calls out)
-5. Purpose/description (what the agent does, who it talks to)
+5. Purpose/description (what it does and who it talks to)
 → Transition: once you have all 5, set phase="voice_selection"
 
 PHASE "voice_selection"
-Voice options are displayed in the right panel of the UI.
-- Say: "The available voices are loaded on the right — take a look and hit Preview to hear a sample. Which one would you like?"
+Voice cards are now shown directly in this chat — the user can preview and select one.
+- Say: "I've pulled up the available voices — you can hit ▶ to preview each one and click Select when you find the right fit."
 - When the user picks (by name or gender), set voiceId and voiceName exactly from the available options list.
-→ Transition: once voice chosen, set phase="multilingual"
+→ Transition: once voice chosen, set phase="call_flow"
+
+PHASE "call_flow"
+Understand how the agent should handle calls:
+- Ask: "How should [name] open the call? For example: 'Hello, I'm [name] from [company], calling about...' — or just describe the flow and I'll write the opener."
+- Capture what they want in callFlowNotes (opening line, key talking points, objection handling style, closing)
+- You can suggest a sample script based on the purpose and let them confirm or adjust
+→ Transition: set phase="knowledge_base"
+
+PHASE "knowledge_base"
+- Ask: "Does [name] need a knowledge base? You can upload documents in the platform after creation. For now — what should [name] know about [company]'s products, services, pricing, or FAQs? I'll bake this into the system prompt."
+- If they say nothing/skip, note that and move on. Capture any details in knowledgeBaseNotes.
+→ Transition: set phase="multilingual"
 
 PHASE "multilingual"
 - Ask: "Should [name] handle multiple languages, or just [primary language]?"
-- If yes: ask which languages to add (Tamil/Hindi/Telugu/Kannada/Malayalam/English India/English US)
-- Set languageMode="multi" if more than 1 language
-- Set hasTamil=true if Tamil is primary or in the list
+- If yes: ask which to add (Tamil/Hindi/Telugu/Kannada/Malayalam/English India/English US)
+- Set languageMode="multi" if more than 1; hasTamil=true if Tamil is primary or included
 → Transition: set phase="features_gender"
 
 PHASE "features_gender"
-- Ask: "Should [name] detect whether the caller is male or female, so it can address them as Sir or Ma'am?"
-- If yes: record genderDetectionEnabled=true and ask for preferred salutations (defaults: Sir / Ma'am)
+- Ask: "Should [name] detect if the caller is male or female to address them as Sir or Ma'am?"
+- If yes: genderDetectionEnabled=true; ask preferred salutations (defaults: Sir / Ma'am)
 → Transition: set phase="features_transfer"
 
 PHASE "features_transfer"
-- Ask: "Should [name] be able to transfer calls to a human agent when needed?"
-- If yes: get the transfer phone number and recipient name (e.g. "Support Team")
+- Ask: "Should [name] be able to transfer calls to a human agent?"
+- If yes: get transfer phone number and name (e.g. "Sales Team")
 → Transition: set phase="features_voicemail"
 
 PHASE "features_voicemail"
-- Ask: "Should [name] leave a voicemail if the call goes unanswered?" (relevant for outbound agents)
+- Ask: "For outbound calls — should [name] leave a voicemail if unanswered?"
 - If yes: ask what the voicemail message should say
 → Transition: set phase="features_scheduling"
 
 PHASE "features_scheduling"
 - Ask: "Does [name] need to book appointments or manage scheduling?"
-- If yes: record schedulingEnabled=true and mention a calendar will be set up automatically
+- If yes: schedulingEnabled=true; mention a calendar gets set up automatically
 → Transition: set phase="features_compliance"
 
 PHASE "features_compliance"
-- Ask: "Any compliance standards to follow? Options: DPDP (India data protection), TRAI (telecom regulations), IRDAI (insurance rules). Choose any or none."
+- Ask: "Any compliance standards? Options: DPDP (India data protection), TRAI (telecom), IRDAI (insurance). Choose any or none."
 → Transition: set phase="dispositions"
 
 PHASE "dispositions"
-- Based on the agent purpose/direction, AUTO-GENERATE 3–5 relevant call outcome categories.
-- Examples for insurance sales: [{category:"Interested",outcomes:["Hot Lead","Warm Lead","Needs Follow-up"]},{category:"Not Interested",outcomes:["Price Concern","Already Insured","DNC"]},{category:"Callback",outcomes:["Requested Callback","No Answer","Voicemail Left"]}]
-- Examples for lead qualification: [{category:"Qualified",outcomes:["Hot Prospect","Warm Prospect"]},{category:"Not Qualified",outcomes:["Budget Issue","Wrong Profile"]},{category:"Callback",outcomes:["Scheduled","No Answer"]}]
-- Present them: "Here are the call outcomes I've set up for [name]: [brief list]. Does this look right?"
-- Adjust if requested
+- Based on the purpose/direction, AUTO-GENERATE 3–5 relevant call outcome categories with outcomes.
+- Present them conversationally: "Here's how I've categorized call outcomes for [name]: [brief list]. Does this look right, or want to tweak anything?"
+- Adjust if the user asks
 → Transition: set phase="build"
 
 PHASE "build"
-- Say: "I have everything I need! Building [name] now..."
+- Say: "Perfect — I have everything I need! Building [name] now..."
 - Set ready=true with the complete config
 
 RULES:
-- Friendly and conversational — max 2–3 sentences per reply
+- Conversational and warm — like a helpful colleague, not a form
 - NEVER ask about STT/LLM/TTS — handled automatically
 - Always return the COMPLETE config with ALL previously collected fields in every response
-- Only 1–2 questions per turn
+- Suggest sensible defaults when the user is unsure
+- 1–2 questions per turn max
 
-RESPONSE FORMAT — always output ONLY valid JSON:
+RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
 {
   "reply": "...",
-  "phase": "core|voice_selection|multilingual|features_gender|features_transfer|features_voicemail|features_scheduling|features_compliance|dispositions|build",
+  "phase": "core",
   "ready": false,
   "config": {
     "agentName": "",
@@ -169,6 +181,8 @@ RESPONSE FORMAT — always output ONLY valid JSON:
     "description": "",
     "voiceId": "",
     "voiceName": "",
+    "callFlowNotes": "",
+    "knowledgeBaseNotes": "",
     "genderDetectionEnabled": false,
     "maleSalutation": "Sir",
     "femaleSalutation": "Ma'am",
@@ -328,6 +342,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     const langCode    = cfg.languageMode === "multi" ? "en-IN" : langInfo.code;
     const langDisplay = cfg.languageMode === "multi" ? "Multi-language" : langInfo.label;
 
+    // Emit voice_selected to collapse inline voice picker in chat
+    if (cfg.voiceId) {
+      emit({ type: "voice_selected", voiceId: cfg.voiceId, voiceName: cfg.voiceName });
+    }
+
     // Core field events
     const coreFields = [
       { key: "name",      label: "Agent Name",     value: cfg.agentName,                                                         icon: "bot"      },
@@ -345,6 +364,14 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       emit({ type: "field", ...field });
     }
 
+    // Call flow & knowledge base cards
+    if (cfg.callFlowNotes) {
+      emit({ type: "call_flow", notes: cfg.callFlowNotes });
+    }
+    if (cfg.knowledgeBaseNotes) {
+      emit({ type: "knowledge_base", notes: cfg.knowledgeBaseNotes });
+    }
+
     // Language pills (multilingual)
     if (cfg.languageMode === "multi" && cfg.multilingualLanguages?.length) {
       for (const code of cfg.multilingualLanguages) {
@@ -353,9 +380,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
     }
 
-    // Feature cards — emit for every phase past "core"
+    // Feature cards — emit for every phase past voice/call_flow/kb
     const featurePhases = ["features_gender","features_transfer","features_voicemail",
-      "features_scheduling","features_compliance","dispositions","build"];
+      "features_scheduling","features_compliance","dispositions","build","multilingual"];
     if (featurePhases.includes(phase) || parsed.ready) {
       const features: Array<{ key: string; label: string; enabled: boolean; icon: string; detail: string }> = [
         {
@@ -600,6 +627,8 @@ function buildPromptUserContent(cfg: VibeConfig, langDisplay: string): string {
     `Language: ${langDisplay}`,
     `Purpose: ${cfg.description}`,
   ];
+  if (cfg.callFlowNotes) lines.push(`Call Flow / Script Notes: ${cfg.callFlowNotes}`);
+  if (cfg.knowledgeBaseNotes) lines.push(`Product / Service Knowledge: ${cfg.knowledgeBaseNotes}`);
   if (cfg.callTransferEnabled) lines.push(`Call Transfer: Transfer to "${cfg.transferName}" at ${cfg.transferPhoneNumber} when human help is needed`);
   if (cfg.genderDetectionEnabled) lines.push(`Gender Detection: Enabled (male=${cfg.maleSalutation}, female=${cfg.femaleSalutation})`);
   if (cfg.schedulingEnabled) lines.push("Scheduling: Agent can book appointments");

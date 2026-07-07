@@ -4,9 +4,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Bot, Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
-  Building2, CheckCircle2, Loader2, ChevronLeft, Zap, UserCheck, PhoneForwarded,
-  Voicemail, Calendar, ShieldCheck, ArrowRight, Play, Volume2,
+  Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
+  Building2, CheckCircle2, Loader2, ChevronLeft, Zap, UserCheck,
+  PhoneForwarded, Voicemail, Calendar, ShieldCheck, ArrowRight,
+  Play, Volume2, FileText, BookOpen, ArrowUpRight,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
@@ -24,7 +25,8 @@ interface ChatMsg {
   role: "user" | "ai";
   content: string;
   done?: boolean;
-  voices?: VoiceOption[];   // embedded voice picker inside AI bubble
+  voices?: VoiceOption[];      // inline voice picker
+  voicePicked?: boolean;       // collapses picker after selection
 }
 
 type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
@@ -32,7 +34,8 @@ type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
 /* ── icon maps ─────────────────────────────────────────────────────────────── */
 
 const FIELD_ICONS: Record<string, React.ElementType> = {
-  bot: Bot, building: Building2, globe: Globe, mic: Mic,
+  bot: () => <img src="/logo.svg" className="h-3.5 w-3.5" alt="" />,
+  building: Building2, globe: Globe, mic: Mic,
   phone: Phone, cpu: Cpu, ear: Ear, speaker: Speaker,
 };
 const FEATURE_ICONS: Record<string, React.ElementType> = {
@@ -40,20 +43,19 @@ const FEATURE_ICONS: Record<string, React.ElementType> = {
   "voicemail": Voicemail, "calendar": Calendar, "shield-check": ShieldCheck,
 };
 
-/* ── helpers ────────────────────────────────────────────────────────────────── */
-
+/* ── auth ──────────────────────────────────────────────────────────────────── */
 function getToken(): string | null {
   try { return localStorage.getItem("voiceorch:session"); } catch { return null; }
 }
 function uid() { return Math.random().toString(36).slice(2); }
 
+/* ── greeting ──────────────────────────────────────────────────────────────── */
 const GREETING: ChatMsg = {
   id: "g", role: "ai", done: true,
-  content: "Hey! I'm your AI agent builder 👋\n\nDescribe the voice agent you want to build — what it does, who it talks to, and what language it speaks. I'll guide you through everything step by step.",
+  content: "Hey! I'll help you build your voice agent in a few minutes.\n\nTell me — what do you want this agent to do, and who will it be talking to?",
 };
 
 /* ── voice preview ──────────────────────────────────────────────────────────── */
-
 async function previewVoice(voiceId: string, setPlaying: (id: string | null) => void) {
   setPlaying(voiceId);
   try {
@@ -74,29 +76,31 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
   }
 }
 
-/* ── main component ─────────────────────────────────────────────────────────── */
-
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Main component                                                             */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function VibePage() {
-  const [, navigate] = useLocation();
-  const queryClient  = useQueryClient();
+  const [, navigate]     = useLocation();
+  const queryClient      = useQueryClient();
 
-  const [messages,      setMessages]      = useState<ChatMsg[]>([GREETING]);
-  const [input,         setInput]         = useState("");
-  const [phase,         _setPhase]        = useState<Phase>("idle");
-  const [fields,        setFields]        = useState<AgentField[]>([]);
-  const [voiceOptions,  setVoiceOptions]  = useState<VoiceOption[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>("");
-  const [langPills,     setLangPills]     = useState<LangPill[]>([]);
-  const [features,      setFeatures]      = useState<FeatureCard[]>([]);
-  const [dispositions,  setDispositions]  = useState<DispositionCard[]>([]);
-  const [promptPreview, setPromptPreview] = useState("");
-  const [statusMsg,     setStatusMsg]     = useState("");
-  const [createdId,     setCreatedId]     = useState<number | null>(null);
-  const [createdName,   setCreatedName]   = useState("");
-  const [playingVoice,  setPlayingVoice]  = useState<string | null>(null);
+  const [messages,       setMessages]       = useState<ChatMsg[]>([GREETING]);
+  const [input,          setInput]          = useState("");
+  const [phase,          _setPhase]         = useState<Phase>("idle");
+  const [fields,         setFields]         = useState<AgentField[]>([]);
+  const [voiceOptions,   setVoiceOptions]   = useState<VoiceOption[]>([]);
+  const [selectedVoice,  setSelectedVoice]  = useState<string>("");
+  const [langPills,      setLangPills]      = useState<LangPill[]>([]);
+  const [features,       setFeatures]       = useState<FeatureCard[]>([]);
+  const [dispositions,   setDispositions]   = useState<DispositionCard[]>([]);
+  const [callFlowNotes,  setCallFlowNotes]  = useState("");
+  const [kbNotes,        setKbNotes]        = useState("");
+  const [promptPreview,  setPromptPreview]  = useState("");
+  const [statusMsg,      setStatusMsg]      = useState("");
+  const [createdId,      setCreatedId]      = useState<number | null>(null);
+  const [createdName,    setCreatedName]    = useState("");
+  const [playingVoice,   setPlayingVoice]   = useState<string | null>(null);
 
-  // Use a ref so send() always reads the latest phase without stale closure
-  const phaseRef    = useRef<Phase>("idle");
+  const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const historyRef  = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
   const voicesRef   = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
@@ -120,20 +124,23 @@ export default function VibePage() {
     });
   }, []);
 
-  // Attach voice cards to the most recent AI bubble
   const attachVoicesToLastMsg = useCallback((voices: VoiceOption[]) => {
     setMessages(prev => {
       const last = prev[prev.length - 1];
       if (last?.role === "ai") {
-        return [...prev.slice(0, -1), { ...last, voices, done: last.done }];
+        return [...prev.slice(0, -1), { ...last, voices, voicePicked: false }];
       }
       return prev;
     });
   }, []);
 
+  // Collapse all voice pickers when a voice is selected
+  const collapseVoicePickers = useCallback(() => {
+    setMessages(prev => prev.map(m => m.voices ? { ...m, voicePicked: true } : m));
+  }, []);
+
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
-    // Guard uses ref — never stale
     if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
         || phaseRef.current === "streaming" || phaseRef.current === "done") return;
 
@@ -150,10 +157,7 @@ export default function VibePage() {
     try {
       const resp = await fetch("/api/agents/vibe-chat", {
         method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${token ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
         body: JSON.stringify({
           messages:        history,
           voicesShown:     voicesRef.current.shown,
@@ -173,7 +177,6 @@ export default function VibePage() {
         const { done, value } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
-
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
 
@@ -193,25 +196,37 @@ export default function VibePage() {
               if (voices.length > 0) {
                 setVoiceOptions(voices);
                 voicesRef.current = { shown: true, list: voices };
-                // ← embed cards directly inside the AI chat bubble
                 attachVoicesToLastMsg(voices);
               }
               break;
             }
+
+            case "voice_selected":
+              collapseVoicePickers();
+              setSelectedVoice(String(evt.voiceName ?? ""));
+              break;
 
             case "field":
               setPhase("building");
               setFields(prev => {
                 const next = [...prev];
                 const idx  = next.findIndex(f => f.key === evt.key);
-                const f: AgentField = {
-                  key: evt.key as string, label: evt.label as string,
-                  value: evt.value as string, icon: evt.icon as string,
-                };
+                const f: AgentField = { key: evt.key as string, label: evt.label as string, value: evt.value as string, icon: evt.icon as string };
                 if (idx >= 0) next[idx] = f; else next.push(f);
                 return next;
               });
-              if (evt.key === "voice") setSelectedVoice(String(evt.value ?? ""));
+              if (evt.key === "voice") {
+                setSelectedVoice(String(evt.value ?? "").split(" — ")[0] ?? "");
+                collapseVoicePickers();
+              }
+              break;
+
+            case "call_flow":
+              setCallFlowNotes(String(evt.notes ?? ""));
+              break;
+
+            case "knowledge_base":
+              setKbNotes(String(evt.notes ?? ""));
               break;
 
             case "lang_pill":
@@ -226,10 +241,7 @@ export default function VibePage() {
               setFeatures(prev => {
                 const next = [...prev];
                 const idx  = next.findIndex(f => f.key === evt.key);
-                const f: FeatureCard = {
-                  key: evt.key as string, label: evt.label as string,
-                  enabled: !!evt.enabled, icon: evt.icon as string, detail: evt.detail as string,
-                };
+                const f: FeatureCard = { key: evt.key as string, label: evt.label as string, enabled: !!evt.enabled, icon: evt.icon as string, detail: evt.detail as string };
                 if (idx >= 0) next[idx] = f; else next.push(f);
                 return next;
               });
@@ -260,7 +272,7 @@ export default function VibePage() {
 
             case "error":
               setMessages(prev => prev.map(m =>
-                !m.done && m.role === "ai" ? { ...m, content: `❌ ${evt.message as string}`, done: true } : m
+                !m.done && m.role === "ai" ? { ...m, content: `Sorry, something went wrong — ${evt.message as string}`, done: true } : m
               ));
               setPhase("idle");
               break;
@@ -270,7 +282,6 @@ export default function VibePage() {
 
       setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
       historyRef.current = [...history, { role: "assistant", content: aiReply }];
-      // Use ref — never stale
       if (phaseRef.current !== "done") setPhase("idle");
 
     } catch (err: unknown) {
@@ -280,7 +291,7 @@ export default function VibePage() {
       ));
       setPhase("idle");
     }
-  }, [input, setPhase, appendAiDelta, attachVoicesToLastMsg, queryClient]);
+  }, [input, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers, queryClient]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -290,90 +301,121 @@ export default function VibePage() {
     && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done";
 
   const hasRightContent = fields.length > 0 || voiceOptions.length > 0 || features.length > 0
-    || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null;
+    || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
+    || callFlowNotes.length > 0 || kbNotes.length > 0;
 
+  /* ─ render ──────────────────────────────────────────────────────────────── */
   return (
     <div className="fixed inset-0 flex bg-background overflow-hidden">
 
-      {/* ── Left: Chat ──────────────────────────────────────────────────── */}
-      <div className="flex flex-col w-[420px] min-w-[360px] border-r border-border bg-card">
+      {/* ══ Left: Chat panel ══════════════════════════════════════════════════ */}
+      <div className="flex flex-col w-[440px] min-w-[380px] border-r border-border/60 bg-background">
 
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border shrink-0">
-          <button onClick={() => navigate("/app/agents")} className="text-muted-foreground hover:text-foreground transition-colors">
+        <div className="flex items-center gap-3 px-5 h-14 border-b border-border/60 shrink-0">
+          <button
+            onClick={() => navigate("/app/agents")}
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+          >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <div className="h-8 w-8 rounded-lg bg-primary/15 flex items-center justify-center">
-            <Zap className="h-4 w-4 text-primary" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-lg overflow-hidden shrink-0">
+              <img src="/logo.svg" alt="SnapServe" className="h-full w-full object-contain" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm leading-none tracking-tight">Vibe Build</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">AI agent builder</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-sm leading-none">Vibe Build</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Describe your agent, I'll build it</p>
-          </div>
+          {phase !== "idle" && phase !== "done" && (
+            <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {phase === "thinking"  ? "Thinking…" :
+               phase === "streaming" ? "Responding…" :
+               statusMsg || "Configuring…"}
+            </div>
+          )}
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map(msg => (
-            <MessageBubble
-              key={msg.id}
-              msg={msg}
-              selectedVoice={selectedVoice}
-              playingVoice={playingVoice}
-              onPreview={vid => previewVoice(vid, setPlayingVoice)}
-              onSelect={v => send(`I'll go with ${v.voiceName}`)}
-            />
-          ))}
-          {phase === "thinking" && <ThinkingIndicator />}
-          <div ref={chatEndRef} />
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-5 py-6 space-y-6">
+            {messages.map(msg => (
+              <MessageBubble
+                key={msg.id}
+                msg={msg}
+                selectedVoice={selectedVoice}
+                playingVoice={playingVoice}
+                onPreview={vid => previewVoice(vid, setPlayingVoice)}
+                onSelect={v => send(`I'll go with ${v.voiceName}`)}
+              />
+            ))}
+            {phase === "thinking" && <ThinkingDots />}
+            <div ref={chatEndRef} />
+          </div>
         </div>
 
         {/* Input */}
-        <div className="p-4 border-t border-border shrink-0">
-          <div className="flex gap-2 items-end">
+        <div className="border-t border-border/60 px-4 py-4 shrink-0">
+          <div className="relative">
             <Textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={phase === "done" ? "Agent created! 🎉" : "Describe your voice agent…"}
+              placeholder={
+                phase === "done"
+                  ? "Your agent is ready! ✓"
+                  : "Message…"
+              }
               disabled={phase === "done" || phase === "building"}
-              rows={2}
-              className="resize-none text-sm flex-1"
+              rows={3}
+              className="resize-none text-sm pr-12 bg-muted/30 border-border/60 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50 placeholder:text-muted-foreground/50"
             />
-            <Button size="icon" onClick={() => send()} disabled={!canSend} className="h-10 w-10 shrink-0">
+            <Button
+              size="icon"
+              onClick={() => send()}
+              disabled={!canSend}
+              className={cn(
+                "absolute right-2.5 bottom-2.5 h-8 w-8 rounded-lg transition-all",
+                canSend ? "bg-primary hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground",
+              )}
+            >
               {(phase === "thinking" || phase === "streaming")
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <Send className="h-4 w-4" />}
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Send className="h-3.5 w-3.5" />}
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+          <p className="text-[10px] text-muted-foreground/50 mt-2 text-center tracking-wide">
             Enter to send · Shift+Enter for newline
           </p>
         </div>
       </div>
 
-      {/* ── Right: Preview ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-background">
+      {/* ══ Right: Live preview ════════════════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col min-w-0 bg-muted/20">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-8 py-4 border-b border-border shrink-0">
-          <div>
-            <p className="font-semibold text-sm">Agent Preview</p>
-            <p className="text-xs text-muted-foreground">
-              {phase === "idle"      && (hasRightContent ? "Building up…" : "Waiting for your description…")}
-              {phase === "thinking"  && "AI is thinking…"}
-              {phase === "streaming" && "Chatting with you…"}
-              {phase === "building"  && (statusMsg || "Configuring your agent…")}
-              {phase === "done"      && "Agent created successfully! 🎉"}
-            </p>
+        <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-background">
+          <div className="flex items-center gap-3">
+            <Zap className="h-4 w-4 text-primary" />
+            <div>
+              <p className="font-semibold text-sm leading-none">Agent Preview</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {!hasRightContent              ? "Waiting for your description…" :
+                 phase === "building"          ? (statusMsg || "Configuring…") :
+                 phase === "done"              ? "Ready to deploy" :
+                                                "Building up as we chat"}
+              </p>
+            </div>
           </div>
           {phase === "done" && createdId && (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7"
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg"
                 onClick={() => navigate(`/app/agents/${createdId}`)}>
                 <Settings2 className="h-3 w-3" /> Edit
               </Button>
-              <Button size="sm" className="gap-1.5 text-xs h-7"
+              <Button size="sm" className="h-7 gap-1.5 text-xs rounded-lg"
                 onClick={() => navigate(`/app/agents/${createdId}?webcall=1`)}>
                 <Phone className="h-3 w-3" /> Try Call
               </Button>
@@ -381,35 +423,53 @@ export default function VibePage() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-y-auto px-8 py-8">
           {!hasRightContent ? (
-            <EmptyPreview />
+            <EmptyState />
           ) : (
-            <div className="space-y-8 max-w-2xl">
+            <div className="max-w-2xl space-y-8">
 
-              {/* Agent Configuration */}
+              {/* Agent Config */}
               {fields.length > 0 && (
-                <Section title="Agent Configuration">
+                <Section title="Configuration">
                   <div className="grid grid-cols-2 gap-2">
                     {fields.map(f => <FieldCard key={f.key} field={f} />)}
                   </div>
                 </Section>
               )}
 
-              {/* Voice Selection — also in right panel as secondary reference */}
+              {/* Voice — right panel reference (no select button; selection is in chat) */}
               {voiceOptions.length > 0 && (
-                <Section title="Voice Selection" badge={selectedVoice ? "Selected" : "Choose in chat ↑"}>
-                  <div className="grid grid-cols-2 gap-3">
+                <Section
+                  title="Voice"
+                  badge={selectedVoice ? `✓ ${selectedVoice}` : "Select in chat ↑"}
+                  badgeVariant={selectedVoice ? "success" : "neutral"}
+                >
+                  <div className="grid grid-cols-2 gap-2">
                     {voiceOptions.map(v => (
-                      <RightPanelVoiceCard
+                      <RightVoiceChip
                         key={v.voiceId}
                         voice={v}
-                        isSelected={selectedVoice.startsWith(v.voiceName)}
+                        isSelected={selectedVoice.includes(v.voiceName)}
                         isPlaying={playingVoice === v.voiceId}
                         onPreview={() => previewVoice(v.voiceId, setPlayingVoice)}
                       />
                     ))}
                   </div>
+                </Section>
+              )}
+
+              {/* Call Flow */}
+              {callFlowNotes && (
+                <Section title="Call Flow">
+                  <NoteCard icon={<FileText className="h-3.5 w-3.5" />} text={callFlowNotes} />
+                </Section>
+              )}
+
+              {/* Knowledge Base */}
+              {kbNotes && (
+                <Section title="Knowledge Base">
+                  <NoteCard icon={<BookOpen className="h-3.5 w-3.5" />} text={kbNotes} />
                 </Section>
               )}
 
@@ -430,7 +490,7 @@ export default function VibePage() {
               {features.length > 0 && (
                 <Section title="Features">
                   <div className="grid grid-cols-2 gap-2">
-                    {features.map(f => <FeatureCardView key={f.key} feature={f} />)}
+                    {features.map(f => <FeatureChip key={f.key} feature={f} />)}
                   </div>
                 </Section>
               )}
@@ -438,22 +498,20 @@ export default function VibePage() {
               {/* Call Outcomes */}
               {dispositions.length > 0 && (
                 <Section title="Call Outcomes">
-                  <div className="space-y-3">
-                    {dispositions.map((d, i) => (
-                      <DispositionCardView key={d.category} disposition={d} colorIndex={i} />
-                    ))}
+                  <div className="space-y-2">
+                    {dispositions.map((d, i) => <DispositionRow key={d.category} d={d} i={i} />)}
                   </div>
                 </Section>
               )}
 
               {/* System Prompt */}
               {promptPreview && (
-                <Section title="System Prompt Preview">
-                  <div className="rounded-xl border border-border bg-card/60 p-4">
-                    <p className="text-xs text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">
+                <Section title="System Prompt">
+                  <div className="rounded-xl border border-border/60 bg-background p-4">
+                    <p className="text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">
                       {promptPreview}
                       {phase === "building" && (
-                        <span className="inline-block w-0.5 h-3 bg-primary ml-0.5 animate-pulse" />
+                        <span className="inline-block w-0.5 h-3.5 bg-primary/70 ml-0.5 align-middle animate-pulse" />
                       )}
                     </p>
                   </div>
@@ -462,9 +520,8 @@ export default function VibePage() {
 
               {/* Done */}
               {phase === "done" && createdId && (
-                <DoneCard agentName={createdName} agentId={createdId} navigate={navigate} />
+                <DoneCard name={createdName} id={createdId} navigate={navigate} />
               )}
-
             </div>
           )}
         </div>
@@ -473,55 +530,68 @@ export default function VibePage() {
   );
 }
 
-/* ── MessageBubble ── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Chat components                                                            */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
-function MessageBubble({
-  msg, selectedVoice, playingVoice, onPreview, onSelect,
-}: {
+function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect }: {
   msg: ChatMsg;
   selectedVoice: string;
   playingVoice: string | null;
-  onPreview: (voiceId: string) => void;
-  onSelect: (voice: VoiceOption) => void;
+  onPreview: (id: string) => void;
+  onSelect: (v: VoiceOption) => void;
 }) {
   const isAi = msg.role === "ai";
-  return (
-    <div className={cn("flex gap-2.5", isAi ? "items-start" : "items-end flex-row-reverse")}>
-      {isAi && (
-        <div className="h-7 w-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-          <Bot className="h-3.5 w-3.5 text-primary" />
+
+  if (!isAi) {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-primary/10 border border-primary/15 px-4 py-2.5">
+          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.content}</p>
         </div>
-      )}
-      <div className={cn(
-        "rounded-2xl px-3.5 py-2.5 text-sm max-w-[85%]",
-        isAi ? "bg-elevated border border-border rounded-tl-sm w-full" : "bg-primary text-primary-foreground rounded-tr-sm",
-      )}>
-        {/* Message text */}
-        <p className="whitespace-pre-wrap leading-relaxed">
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-3 items-start">
+      {/* Logo avatar */}
+      <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden p-1">
+        <img src="/logo.svg" alt="SnapServe" className="h-full w-full object-contain" />
+      </div>
+
+      <div className="flex-1 min-w-0 space-y-3">
+        {/* Text */}
+        <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
           {msg.content}
-          {!msg.done && isAi && msg.content && (
-            <span className="inline-block w-0.5 h-3.5 bg-foreground/60 ml-0.5 align-middle animate-pulse" />
+          {!msg.done && msg.content.length > 0 && (
+            <span className="inline-block w-0.5 h-4 bg-foreground/40 ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
         </p>
 
-        {/* Inline voice picker — appears inside the AI bubble */}
-        {isAi && msg.voices && msg.voices.length > 0 && (
-          <div className="mt-3 space-y-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">
+        {/* Voice picker — collapsed once picked */}
+        {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
               Available voices
             </p>
-            <div className="grid grid-cols-1 gap-2">
-              {msg.voices.map(v => (
-                <InlineVoiceCard
-                  key={v.voiceId}
-                  voice={v}
-                  isSelected={selectedVoice.startsWith(v.voiceName)}
-                  isPlaying={playingVoice === v.voiceId}
-                  onPreview={() => onPreview(v.voiceId)}
-                  onSelect={() => onSelect(v)}
-                />
-              ))}
-            </div>
+            {msg.voices.map(v => (
+              <VoicePill
+                key={v.voiceId}
+                voice={v}
+                isSelected={selectedVoice.includes(v.voiceName)}
+                isPlaying={playingVoice === v.voiceId}
+                onPreview={() => onPreview(v.voiceId)}
+                onSelect={() => onSelect(v)}
+              />
+            ))}
+          </div>
+        )}
+        {/* Collapsed state */}
+        {msg.voices && msg.voices.length > 0 && msg.voicePicked && selectedVoice && (
+          <div className="flex items-center gap-2 text-[11px] text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="font-medium">{selectedVoice} selected</span>
           </div>
         )}
       </div>
@@ -529,11 +599,7 @@ function MessageBubble({
   );
 }
 
-/* ── InlineVoiceCard — inside chat bubble ── */
-
-function InlineVoiceCard({
-  voice, isSelected, isPlaying, onPreview, onSelect,
-}: {
+function VoicePill({ voice, isSelected, isPlaying, onPreview, onSelect }: {
   voice: VoiceOption;
   isSelected: boolean;
   isPlaying: boolean;
@@ -542,81 +608,103 @@ function InlineVoiceCard({
 }) {
   return (
     <div className={cn(
-      "flex items-center gap-3 rounded-xl border p-3 transition-all",
+      "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all",
       isSelected
         ? "border-primary/40 bg-primary/8 ring-1 ring-primary/20"
-        : "border-border/70 bg-background/60",
+        : "border-border/70 bg-muted/20 hover:border-border",
     )}>
-      {/* Gender icon */}
+      {/* Gender indicator */}
       <div className={cn(
-        "h-8 w-8 rounded-lg flex items-center justify-center text-sm shrink-0",
-        voice.gender === "female" ? "bg-pink-500/15 text-pink-400" : "bg-blue-500/15 text-blue-400",
+        "h-7 w-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
+        voice.gender === "female"
+          ? "bg-rose-500/10 text-rose-400 border border-rose-500/15"
+          : "bg-sky-500/10 text-sky-400 border border-sky-500/15",
       )}>
-        {voice.gender === "female" ? "♀" : "♂"}
+        {voice.gender === "female" ? "F" : "M"}
       </div>
 
-      {/* Info */}
+      {/* Name + desc */}
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold">{voice.voiceName}</p>
         {voice.description && (
-          <p className="text-[10px] text-muted-foreground truncate">{voice.description}</p>
+          <p className="text-[10px] text-muted-foreground truncate mt-0.5">{voice.description}</p>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex gap-1.5 shrink-0">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 w-6 p-0"
+      <div className="flex items-center gap-2 shrink-0">
+        <button
           onClick={onPreview}
           disabled={isPlaying}
-          title="Preview voice"
+          className={cn(
+            "h-6 w-6 rounded-md flex items-center justify-center transition-all",
+            isPlaying
+              ? "bg-primary/10 text-primary"
+              : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted",
+          )}
+          title="Preview"
         >
           {isPlaying
-            ? <Volume2 className="h-3 w-3 text-primary animate-pulse" />
+            ? <Volume2 className="h-3 w-3 animate-pulse" />
             : <Play className="h-3 w-3" />}
-        </Button>
+        </button>
         {isSelected ? (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-primary px-2">
-            <CheckCircle2 className="h-3 w-3" /> Chosen
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-primary">
+            <CheckCircle2 className="h-3 w-3" /> Picked
           </span>
         ) : (
-          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSelect}>
+          <button
+            onClick={onSelect}
+            className="rounded-lg bg-primary text-primary-foreground text-[10px] font-semibold px-2.5 py-1 hover:bg-primary/90 transition-colors"
+          >
             Select
-          </Button>
+          </button>
         )}
       </div>
     </div>
   );
 }
 
-/* ── ThinkingIndicator ── */
-
-function ThinkingIndicator() {
+function ThinkingDots() {
   return (
-    <div className="flex gap-2.5 items-start">
-      <div className="h-7 w-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-        <Bot className="h-3.5 w-3.5 text-primary" />
+    <div className="flex gap-3 items-center">
+      <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
+        <img src="/logo.svg" alt="" className="h-full w-full object-contain opacity-50" />
       </div>
-      <div className="bg-elevated border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1 items-center">
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+      <div className="flex gap-1.5 items-center py-2">
+        {[0, 150, 300].map(d => (
+          <span
+            key={d}
+            className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
+            style={{ animationDelay: `${d}ms` }}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-/* ── Section ── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Right panel components                                                     */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
-function Section({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
+function Section({ title, badge, badgeVariant = "neutral", children }: {
+  title: string;
+  badge?: string;
+  badgeVariant?: "neutral" | "success";
+  children: React.ReactNode;
+}) {
   return (
-    <div className="animate-in fade-in duration-300">
-      <div className="flex items-center gap-2 mb-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-400">
+      <div className="flex items-center gap-2">
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{title}</p>
         {badge && (
-          <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
+          <span className={cn(
+            "rounded-full px-2 py-0.5 text-[10px] font-semibold border",
+            badgeVariant === "success"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              : "bg-muted border-border/60 text-muted-foreground",
+          )}>
             {badge}
           </span>
         )}
@@ -626,29 +714,23 @@ function Section({ title, badge, children }: { title: string; badge?: string; ch
   );
 }
 
-/* ── FieldCard ── */
-
 function FieldCard({ field }: { field: AgentField }) {
-  const Icon = FIELD_ICONS[field.icon] ?? Bot;
+  const IconComp = FIELD_ICONS[field.icon] ?? Sparkles;
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 animate-in fade-in slide-in-from-left-2 duration-300">
-      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-        <Icon className="h-3 w-3 text-primary" />
+    <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-background px-3 py-2.5 animate-in fade-in duration-300">
+      <div className="h-6 w-6 rounded-md bg-muted/80 flex items-center justify-center shrink-0">
+        <IconComp className="h-3 w-3 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{field.label}</p>
-        <p className="text-xs font-medium truncate">{field.value}</p>
+        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{field.label}</p>
+        <p className="text-xs font-medium truncate mt-0.5">{field.value}</p>
       </div>
-      <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
     </div>
   );
 }
 
-/* ── RightPanelVoiceCard — in the right panel (no select button — selection is in chat) ── */
-
-function RightPanelVoiceCard({
-  voice, isSelected, isPlaying, onPreview,
-}: {
+function RightVoiceChip({ voice, isSelected, isPlaying, onPreview }: {
   voice: VoiceOption;
   isSelected: boolean;
   isPlaying: boolean;
@@ -656,144 +738,146 @@ function RightPanelVoiceCard({
 }) {
   return (
     <div className={cn(
-      "rounded-xl border p-4 flex flex-col gap-2.5 transition-all duration-200",
+      "rounded-xl border p-3 flex flex-col gap-2 transition-all",
       isSelected
-        ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
-        : "border-border bg-card",
+        ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+        : "border-border/60 bg-background",
     )}>
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-sm">{voice.voiceName}</p>
-          <p className="text-xs text-muted-foreground mt-0.5 capitalize">{voice.gender}</p>
+          <p className="text-xs font-semibold">{voice.voiceName}</p>
+          <p className="text-[10px] text-muted-foreground capitalize mt-0.5">{voice.gender}</p>
         </div>
-        {isSelected && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
       </div>
-      {voice.description && <p className="text-[11px] text-muted-foreground leading-snug">{voice.description}</p>}
-      <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs w-full"
-        onClick={onPreview} disabled={isPlaying}>
-        {isPlaying ? <Volume2 className="h-3 w-3 animate-pulse text-primary" /> : <Play className="h-3 w-3" />}
+      <button
+        onClick={onPreview}
+        disabled={isPlaying}
+        className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {isPlaying ? <Volume2 className="h-3 w-3 text-primary animate-pulse" /> : <Play className="h-3 w-3" />}
         {isPlaying ? "Playing…" : "Preview"}
-      </Button>
+      </button>
     </div>
   );
 }
 
-/* ── FeatureCardView ── */
+function NoteCard({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-background p-4 flex gap-3">
+      <div className="text-muted-foreground mt-0.5 shrink-0">{icon}</div>
+      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{text}</p>
+    </div>
+  );
+}
 
-function FeatureCardView({ feature }: { feature: FeatureCard }) {
+function FeatureChip({ feature }: { feature: FeatureCard }) {
   const Icon = FEATURE_ICONS[feature.icon] ?? Sparkles;
   return (
     <div className={cn(
-      "flex items-start gap-3 rounded-lg border px-3 py-3 animate-in fade-in duration-300",
-      feature.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-card/60 opacity-60",
+      "rounded-xl border px-3 py-2.5 flex items-start gap-2.5 transition-all",
+      feature.enabled ? "border-border/60 bg-background" : "border-border/40 bg-background/50 opacity-50",
     )}>
-      <div className={cn(
-        "h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-0.5",
-        feature.enabled ? "bg-primary/15" : "bg-muted/30",
-      )}>
-        <Icon className={cn("h-3 w-3", feature.enabled ? "text-primary" : "text-muted-foreground")} />
+      <div className="h-6 w-6 rounded-md bg-muted/80 flex items-center justify-center shrink-0 mt-0.5">
+        <Icon className="h-3 w-3 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-xs font-medium">{feature.label}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-[11px] font-medium truncate">{feature.label}</p>
           <span className={cn(
-            "rounded-full px-1.5 py-px text-[9px] font-semibold",
-            feature.enabled ? "bg-green-500/15 text-green-500" : "bg-muted text-muted-foreground",
+            "rounded-full px-1.5 py-px text-[9px] font-bold uppercase shrink-0",
+            feature.enabled ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground",
           )}>
-            {feature.enabled ? "ON" : "OFF"}
+            {feature.enabled ? "On" : "Off"}
           </span>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{feature.detail}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{feature.detail}</p>
       </div>
     </div>
   );
 }
 
-/* ── DispositionCardView ── */
+const OUTCOME_COLORS = [
+  { bg: "bg-sky-500/8 border-sky-500/20",    tag: "bg-sky-500/10 text-sky-400 border-sky-500/20" },
+  { bg: "bg-rose-500/8 border-rose-500/20",  tag: "bg-rose-500/10 text-rose-400 border-rose-500/20" },
+  { bg: "bg-amber-500/8 border-amber-500/20",tag: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+  { bg: "bg-violet-500/8 border-violet-500/20",tag: "bg-violet-500/10 text-violet-400 border-violet-500/20" },
+  { bg: "bg-emerald-500/8 border-emerald-500/20",tag: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+];
 
-function DispositionCardView({ disposition, colorIndex }: { disposition: DispositionCard; colorIndex: number }) {
-  const colors = [
-    { header: "bg-blue-500/10 border-blue-500/20 text-blue-400",       badge: "bg-blue-500/15 border-blue-500/25 text-blue-300" },
-    { header: "bg-rose-500/10 border-rose-500/20 text-rose-400",       badge: "bg-rose-500/15 border-rose-500/25 text-rose-300" },
-    { header: "bg-amber-500/10 border-amber-500/20 text-amber-400",    badge: "bg-amber-500/15 border-amber-500/25 text-amber-300" },
-    { header: "bg-violet-500/10 border-violet-500/20 text-violet-400", badge: "bg-violet-500/15 border-violet-500/25 text-violet-300" },
-    { header: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400", badge: "bg-emerald-500/15 border-emerald-500/25 text-emerald-300" },
-  ];
-  const c = colors[colorIndex % colors.length]!;
+function DispositionRow({ d, i }: { d: DispositionCard; i: number }) {
+  const c = OUTCOME_COLORS[i % OUTCOME_COLORS.length]!;
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className={cn("flex items-center gap-2 px-4 py-2.5 border-b border-border", c.header)}>
-        <div className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-        <p className="text-xs font-semibold">{disposition.category}</p>
-        <span className="ml-auto text-[10px] opacity-60">{disposition.outcomes.length} outcomes</span>
+    <div className={cn("rounded-xl border overflow-hidden animate-in fade-in duration-300", c.bg)}>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
+        <p className="text-[11px] font-semibold">{d.category}</p>
+        <span className="text-[10px] text-muted-foreground">{d.outcomes.length}</span>
       </div>
-      <div className="px-4 py-3 flex flex-wrap gap-1.5">
-        {disposition.outcomes.map(o => (
-          <span key={o} className={cn("inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium", c.badge)}>
-            {o}
-          </span>
+      <div className="px-4 py-2.5 flex flex-wrap gap-1.5">
+        {d.outcomes.map(o => (
+          <span key={o} className={cn("rounded-md border px-2 py-0.5 text-[10px] font-medium", c.tag)}>{o}</span>
         ))}
       </div>
     </div>
   );
 }
 
-/* ── EmptyPreview ── */
-
-function EmptyPreview() {
+function EmptyState() {
+  const items = [
+    "Voice selection with live audio preview",
+    "Call flow & script generation",
+    "Knowledge base integration",
+    "Gender detection · transfer · voicemail",
+    "Scheduling & compliance setup",
+    "Call outcome dispositions",
+    "System prompt auto-generated",
+  ];
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-24">
+    <div className="flex flex-col items-center justify-center min-h-full py-24 text-center gap-6">
       <div className="relative">
-        <div className="h-20 w-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-          <Sparkles className="h-10 w-10 text-primary/60" />
+        <div className="h-16 w-16 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center overflow-hidden p-2.5">
+          <img src="/logo.svg" alt="SnapServe" className="h-full w-full object-contain opacity-60" />
         </div>
-        <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary animate-ping opacity-40" />
-        <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary" />
+        <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary/80 ring-2 ring-background" />
       </div>
-      <div className="max-w-xs">
-        <p className="font-semibold text-base">Your agent will appear here</p>
+      <div className="max-w-sm">
+        <p className="font-semibold text-base">Your agent preview</p>
         <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-          Start chatting on the left and watch every detail build up in real time.
+          Start the conversation and watch everything take shape here in real time.
         </p>
       </div>
-      <div className="flex flex-col gap-2 text-xs text-muted-foreground mt-2 text-left">
-        {[
-          "Voice selection with live audio preview",
-          "Gender detection · call transfer · voicemail",
-          "Booking & scheduling setup",
-          "Compliance — DPDP / TRAI / IRDAI",
-          "Call outcome dispositions",
-          "System prompt auto-generated",
-        ].map(t => (
-          <p key={t} className="flex items-center gap-2">
-            <Sparkles className="h-3 w-3 text-primary shrink-0" /> {t}
-          </p>
+      <div className="flex flex-col gap-2 text-[11px] text-muted-foreground text-left max-w-xs">
+        {items.map(t => (
+          <div key={t} className="flex items-start gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-primary/50 mt-1.5 shrink-0" />
+            <span>{t}</span>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-/* ── DoneCard ── */
-
-function DoneCard({ agentName, agentId, navigate }: { agentName: string; agentId: number; navigate: (to: string) => void }) {
+function DoneCard({ name, id, navigate }: { name: string; id: number; navigate: (to: string) => void }) {
   return (
-    <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-500">
+    <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-500">
       <div className="flex justify-center">
-        <div className="h-14 w-14 rounded-2xl bg-green-500/15 border border-green-500/20 flex items-center justify-center">
-          <CheckCircle2 className="h-7 w-7 text-green-500" />
+        <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <CheckCircle2 className="h-6 w-6 text-emerald-500" />
         </div>
       </div>
       <div>
-        <p className="font-semibold text-base"><span className="text-green-400">{agentName}</span> is ready!</p>
-        <p className="text-xs text-muted-foreground mt-1">All providers configured · System prompt generated · Ready to call</p>
+        <p className="font-semibold"><span className="text-emerald-400">{name}</span> is live</p>
+        <p className="text-xs text-muted-foreground mt-1">Providers configured · System prompt ready · Dispositions set</p>
       </div>
       <div className="flex gap-2 justify-center">
-        <Button size="sm" className="gap-1.5" onClick={() => navigate(`/app/agents/${agentId}?webcall=1`)}>
-          <Phone className="h-3.5 w-3.5" /> Make a Demo Call
+        <Button size="sm" className="gap-1.5 rounded-xl"
+          onClick={() => navigate(`/app/agents/${id}?webcall=1`)}>
+          <Phone className="h-3.5 w-3.5" /> Make a call
         </Button>
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => navigate(`/app/agents/${agentId}`)}>
-          <Settings2 className="h-3.5 w-3.5" /> Edit Agent <ArrowRight className="h-3 w-3" />
+        <Button size="sm" variant="outline" className="gap-1.5 rounded-xl"
+          onClick={() => navigate(`/app/agents/${id}`)}>
+          <Settings2 className="h-3.5 w-3.5" /> Edit agent <ArrowUpRight className="h-3 w-3" />
         </Button>
       </div>
     </div>
