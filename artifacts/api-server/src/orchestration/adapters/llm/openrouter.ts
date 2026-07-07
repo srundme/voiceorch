@@ -74,21 +74,23 @@ export class OpenRouterLLM implements LLMAdapter {
     ) ?? false;
     const toolChoice = orTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
 
-    const stream = await this.client.chat.completions.create({
+    // Disable reasoning/thinking tokens — they add latency before first spoken word
+    // and are never useful for a real-time voice call. Cast to any because the
+    // OpenAI SDK types don't expose the OpenRouter-specific `reasoning` field.
+    const reqBody: any = {
       model:          this.model,
       stream:         true,
       stream_options: { include_usage: true },
-      ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-      // Disable reasoning/thinking tokens — they add latency before first spoken word
-      // and are never useful for a real-time voice call.
-      reasoning: { effort: "none" },
+      reasoning:      { effort: "none" },
       messages: [
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
-      ] as any,
+      ],
+      ...(this.maxTokens   ? { max_tokens: this.maxTokens }     : {}),
+      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       ...(orTools ? { tools: orTools, tool_choice: toolChoice } : {}),
-    } as any);
+    };
+    const stream = await this.client.chat.completions.create(reqBody) as unknown as AsyncIterable<any>;
 
     let full = "";
     let toolCallName = "";

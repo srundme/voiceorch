@@ -1150,15 +1150,14 @@ export class OrchestrationPipeline {
             // are respected. A caller who explicitly says "speak English" must always
             // be heard, regardless of agent config.
             const requested = detectExplicitLanguageRequest(text);
-            if (requested === "en-IN") {
-              if (this.requestedLangLatch !== "en-IN") {
-                logger.info(
-                  { callId: this.config.callId, text: text.slice(0, 60) },
-                  "Strict mode: caller requested English — latching (overrides ABSOLUTE RULE this call)",
-                );
-              }
-              this.requestedLangLatch = "en-IN";
-              this.currentLang = "en-IN";
+            if (requested && requested !== this.requestedLangLatch) {
+              const requestedName = LANG_DISPLAY_NAMES[requested] ?? requested;
+              logger.info(
+                { callId: this.config.callId, requested, text: text.slice(0, 60) },
+                `Strict mode: caller requested ${requestedName} — latching (overrides ABSOLUTE RULE this call)`,
+              );
+              this.requestedLangLatch = requested;
+              this.currentLang = requested;
             }
           }
           // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
@@ -1994,6 +1993,17 @@ export class OrchestrationPipeline {
           `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
           `Tamil, Hindi, Hinglish, or any other language — the caller has asked for English. ` +
           `Do not mix other languages into your reply. ` +
+          `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+          `EXACTLY as written in your instructions; never translate or transliterate them.`;
+      } else if (this.requestedLangLatch && this.requestedLangLatch !== "en-IN") {
+        // Strict mode, but caller explicitly requested a different Indic language (e.g. Tamil → Telugu).
+        const requestedName = LANG_DISPLAY_NAMES[this.requestedLangLatch] ?? this.requestedLangLatch;
+        langGuard =
+          `[LANGUAGE RULE — OVERRIDE] The caller has explicitly requested ${requestedName}. ` +
+          `Respond in ${requestedName} ONLY for this entire response. ` +
+          `IMPORTANT: Ignore any STRICT/ABSOLUTE LANGUAGE RULE in your system prompt that tells you to speak ` +
+          `a different language — the caller has asked for ${requestedName}. ` +
+          `REGISTER — speak in natural, everyday colloquial spoken ${requestedName}. ` +
           `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
           `EXACTLY as written in your instructions; never translate or transliterate them.`;
       } else {
@@ -5593,51 +5603,85 @@ function stripToolArtifacts(text: string): string {
 
 /**
  * Detect an explicit caller request to switch the agent's SPOKEN language.
- * Returns "en-IN" / "hi-IN" or null. Deliberately conservative — only English
- * and Hindi are matched (the agent's working language pair) AND a real request/
- * switch cue must be present, so a bare mention ("English teacher", "do you
- * support Hindi?", "I don't know English") never latches. Simple negation
- * ("don't speak English", "English mat bolo") is stripped; on a true two-language
- * tie Hindi wins as the agent's safer base-language fallback.
+ * Returns a BCP-47 locale ("en-IN" / "hi-IN" / "ta-IN" / "te-IN") or null.
+ * Deliberately conservative — a real request/switch cue must be present so a
+ * bare mention ("English teacher", "do you support Tamil?") never latches.
+ * Simple negation ("don't speak English", "Tamil venda") is stripped.
+ * On a true multi-language tie, the Indic language wins over English.
  */
 function detectExplicitLanguageRequest(text: string): string | null {
   const t = text.toLowerCase();
 
-  // Language mentions (romanised + Devanagari).
+  // ── Language mentions ──────────────────────────────────────────────────────
+  // English: romanised + Devanagari + Tamil script forms
   const mentionsEn = /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கிலம்|இங்கிலிஷ்/i.test(text);
+  // Hindi: romanised + Devanagari
   const mentionsHi = /\bhindi\b|हिन्दी|हिंदी/i.test(text);
-  if (!mentionsEn && !mentionsHi) return null;
+  // Tamil: romanised + Tamil script
+  const mentionsTa = /\btamil\b|தமிழ்|தமிழில்/i.test(text);
+  // Telugu: romanised + Telugu script
+  const mentionsTe = /\btelugu\b|తెలుగు|తెలుగులో/i.test(text);
 
-  // Require an actual request/switch cue so a BARE mention never latches:
-  // "English teacher", "do you support Hindi?", "I don't know English" must be
-  // ignored. Cues: a request/switch verb, "in/to <lang>", or "<lang> me/mein".
+  if (!mentionsEn && !mentionsHi && !mentionsTa && !mentionsTe) return null;
+
+  // ── Request cue ────────────────────────────────────────────────────────────
+  // Require an actual request/switch verb or "in <lang>" so a BARE mention
+  // ("English teacher", "I don't know Tamil") never latches.
   const hasRequestVerb =
     /\b(speak|speaking|talk|talking|say|reply|respond|answer|continue|switch|change|use|prefer|please)\b/.test(t) ||
     /\bcan\s+you\b/.test(t) ||
-    /\b(pesu|pesunga|pesanum|pannunga|pannalam)\b/.test(t) ||
+    // Tamil romanised verbs
+    /\b(pesu|pesunga|pesanum|pannunga|pannalam|sollunga|pesren)\b/.test(t) ||
+    // Tamil script verbs (பேசு / பேசுங்க / சொல்லுங்க / மாத்துங்க)
+    /பேசு|பேசுங்க|பேசணும்|சொல்லுங்க|பதிலுங்க|மாத்துங்க/.test(text) ||
+    // Telugu script verbs (మాట్లాడు / చెప్పు)
+    /మాట్లాడు|మాట్లాడండి|చెప్పు|చెప్పండి/.test(text) ||
+    // Hindi romanised verbs
     /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t);
+
   const hasInLang =
-    /\b(in|into|to)\s+(english|hindi)\b/.test(t) ||
-    /(english|hindi|अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी)\s*(me|mein|mai|main|में|मे)\b/.test(t);
+    // "in/to <lang>" — English, Hindi, Tamil, Telugu
+    /\b(in|into|to)\s+(english|hindi|tamil|telugu)\b/.test(t) ||
+    // "<lang> me/mein" — Hindi style
+    /(english|hindi|tamil|telugu|अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|தமிழ்|తెలుగు)\s*(me|mein|mai|main|में|मे)\b/.test(t) ||
+    // "<lang> la" — Tamil colloquial "in <lang>"
+    /\b(english|tamil|telugu|hindi)\s+la\b/.test(t) ||
+    // "<lang> lo" — Telugu colloquial "in <lang>"
+    /\b(english|tamil|telugu|hindi)\s+lo\b/.test(t);
+
   if (!hasRequestVerb && !hasInLang) return null;
 
-  // Light negation guard: "don't speak English" / "English mat bolo" must not
-  // latch that language.
+  // ── Negation guards ────────────────────────────────────────────────────────
   const negEn =
     /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\benglish\b/.test(t) ||
-    /\benglish\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na)\b/.test(t);
+    /\benglish\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na|venda|வேண்டாம்)\b/.test(t);
   const negHi =
     /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\bhindi\b/.test(t) ||
     /\bhindi\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na)\b/.test(t);
+  const negTa =
+    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\btamil\b/.test(t) ||
+    /\btamil\b[^.!?]{0,15}\b(venda|வேண்டாம்|nahi|nahin|mat|naa|na)\b/.test(t);
+  const negTe =
+    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\btelugu\b/.test(t) ||
+    /\btelugu\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na|venda)\b/.test(t);
 
   const wantsEn = mentionsEn && !negEn;
   const wantsHi = mentionsHi && !negHi;
+  const wantsTa = mentionsTa && !negTa;
+  const wantsTe = mentionsTe && !negTe;
 
-  // Exactly one positively requested → latch it. Hindi wins a true tie (it's the
-  // agent's base language, the safer fallback); a negated other was cleared above.
-  if (wantsHi && !wantsEn) return "hi-IN";
-  if (wantsEn && !wantsHi) return "en-IN";
-  if (wantsHi && wantsEn) return "hi-IN";
+  // ── Resolution ─────────────────────────────────────────────────────────────
+  // Single unambiguous match → return it.
+  // Multi-language tie → prefer the more specific Indic language over English.
+  if (wantsTa && !wantsHi && !wantsTe && !wantsEn) return "ta-IN";
+  if (wantsTe && !wantsHi && !wantsTa && !wantsEn) return "te-IN";
+  if (wantsHi && !wantsTa && !wantsTe && !wantsEn) return "hi-IN";
+  if (wantsEn && !wantsHi && !wantsTa && !wantsTe) return "en-IN";
+  // Tie-break: Tamil > Telugu > Hindi > English
+  if (wantsTa) return "ta-IN";
+  if (wantsTe) return "te-IN";
+  if (wantsHi) return "hi-IN";
+  if (wantsEn) return "en-IN";
   return null;
 }
 
