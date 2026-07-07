@@ -871,14 +871,23 @@ export class OrchestrationPipeline {
     // AgentConfig.language already holds asrLanguage || agent.language
     // (merged in session.ts). Use it directly for TTS language.
     const agentLanguage = this.agent.language ?? null;
-    // Seed currentLang so per-turn LLM language injection fires from turn 1.
-    // When languageAutoDetect is ON and a caller preferred language is set,
-    // start in THAT language (the one they ended their last call in) so they
-    // never have to switch again. Otherwise fall back to the agent's primary language.
-    const seedLang =
-      (this.agent.languageAutoDetect && this.agent.initialLanguage)
-        ? this.agent.initialLanguage
-        : agentLanguage;
+    // Seed currentLang for per-turn LLM language injection.
+    //
+    // Strict mode (Auto-detect OFF): seed from agentLanguage so the ABSOLUTE RULE
+    // fires from turn 1 and enforces a single language throughout the call.
+    //
+    // Auto-detect mode (Auto-detect ON): ONLY seed from a returning caller's
+    // remembered language preference (initialLanguage). Do NOT seed from
+    // agentLanguage here — doing so injects e.g. "[LANGUAGE RULE] Respond in English"
+    // on turn 1 when the agent language field is "en-IN", which directly fights a
+    // Tamil/Hindi system prompt and causes the greeting to come out in English instead.
+    // With no seed, currentLang stays "" and buildLangGuard() injects nothing — the
+    // system prompt defines the starting language. currentLang fills in after the
+    // first transcript arrives via script detection, and subsequent turns get the
+    // correct per-caller language rule.
+    const seedLang = this.agent.languageAutoDetect
+      ? (this.agent.initialLanguage ?? null)   // returning-caller preference only
+      : agentLanguage;                          // strict mode: always lock from config
     if (seedLang) this.currentLang = seedLang;
     const ttsExtraConfig = this.agent.ttsProvider === "sarvam"
       ? JSON.stringify({ language: agentLanguage ?? "en-IN" })
