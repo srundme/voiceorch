@@ -4611,6 +4611,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <span className="text-xs text-muted-foreground">{(agent as any).totalCalls ?? 0} calls</span>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
+            <Sparkles className="h-3.5 w-3.5" /> Refine with AI
+          </Button>
           <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={updateAgent.isPending} title={!isDirty ? "No unsaved changes" : undefined}>
             <Save className="h-3.5 w-3.5" />
             {updateAgent.isPending ? "Saving…" : "Save"}
