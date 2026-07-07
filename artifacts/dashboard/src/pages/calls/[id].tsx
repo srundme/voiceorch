@@ -73,22 +73,52 @@ function PlainTranscriptLine({ line, index }: { line: string; index: number }) {
 
   if (isToolCall || isToolResult) {
     return (
-      <div
-        key={index}
-        className="flex items-start gap-2 px-3 py-2 rounded-md bg-amber-500/5 border border-amber-500/10 my-1"
-      >
+      <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-amber-500/5 border border-amber-500/10 my-1">
         <Zap className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
-        <span className="font-mono text-xs text-muted-foreground leading-relaxed break-all">
-          {line}
-        </span>
+        <span className="font-mono text-xs text-muted-foreground leading-relaxed break-all">{line}</span>
       </div>
     );
   }
 
+  const agentMatch = line.match(/^Agent:\s*([\s\S]*)/);
+  const callerMatch = line.match(/^Caller:\s*([\s\S]*)/);
+
+  if (agentMatch) {
+    return (
+      <div className="flex gap-2.5 items-start">
+        <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+          <Bot className="h-3 w-3 text-primary" />
+        </div>
+        <div className="flex-1 max-w-[78%]">
+          <span className="text-[10px] font-semibold text-primary/70 uppercase tracking-wide mb-1 block">Agent</span>
+          <div className="bg-primary/8 border border-primary/15 rounded-xl rounded-tl-sm px-3 py-2">
+            <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap">{agentMatch[1]}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (callerMatch) {
+    return (
+      <div className="flex gap-2.5 items-start flex-row-reverse">
+        <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+          <User className="h-3 w-3 text-secondary-foreground" />
+        </div>
+        <div className="flex-1 max-w-[78%] flex flex-col items-end">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">Caller</span>
+          <div className="bg-secondary border border-border rounded-xl rounded-tr-sm px-3 py-2">
+            <p className="text-xs leading-relaxed text-secondary-foreground whitespace-pre-wrap">{callerMatch[1]}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback for lines without a role prefix
+  if (line.trim() === "") return null;
   return (
-    <div key={index} className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-foreground/80">
-      {line}
-    </div>
+    <div className="font-mono text-xs text-muted-foreground/50 leading-relaxed whitespace-pre-wrap px-1">{line}</div>
   );
 }
 
@@ -1305,7 +1335,7 @@ export function CallDetailContent({
                           ))}
                         </div>
                       ) : (
-                        <div className="p-3 bg-card rounded-lg border border-border space-y-0.5">
+                        <div className="p-4 space-y-4">
                           {plainLines.map((line, i) => (
                             <PlainTranscriptLine key={i} line={line} index={i} />
                           ))}
