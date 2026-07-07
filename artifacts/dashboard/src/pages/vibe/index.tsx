@@ -34,7 +34,7 @@ type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
 /* ── icon maps ─────────────────────────────────────────────────────────────── */
 
 const FIELD_ICONS: Record<string, React.ElementType> = {
-  bot: () => <img src="/logo.svg" className="h-3.5 w-3.5" alt="" />,
+  bot: () => <img src="/snapserve-icon.png" className="h-3.5 w-3.5" alt="" />,
   building: Building2, globe: Globe, mic: Mic,
   phone: Phone, cpu: Cpu, ear: Ear, speaker: Speaker,
 };
@@ -321,7 +321,7 @@ export default function VibePage() {
           </button>
           <div className="flex items-center gap-2.5">
             <div className="h-7 w-7 rounded-lg overflow-hidden shrink-0">
-              <img src="/logo.svg" alt="SnapServe" className="h-full w-full object-contain" />
+              <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain" />
             </div>
             <div>
               <p className="font-semibold text-sm leading-none tracking-tight">Vibe Build</p>
@@ -557,7 +557,7 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect }
     <div className="flex gap-3 items-start">
       {/* Logo avatar */}
       <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden p-1">
-        <img src="/logo.svg" alt="SnapServe" className="h-full w-full object-contain" />
+        <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain" />
       </div>
 
       <div className="flex-1 min-w-0 space-y-3">
@@ -669,7 +669,7 @@ function ThinkingDots() {
   return (
     <div className="flex gap-3 items-center">
       <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
-        <img src="/logo.svg" alt="" className="h-full w-full object-contain opacity-50" />
+        <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain opacity-50" />
       </div>
       <div className="flex gap-1.5 items-center py-2">
         {[0, 150, 300].map(d => (
@@ -836,7 +836,7 @@ function EmptyState() {
     <div className="flex flex-col items-center justify-center min-h-full py-24 text-center gap-6">
       <div className="relative">
         <div className="h-16 w-16 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center overflow-hidden p-2.5">
-          <img src="/logo.svg" alt="SnapServe" className="h-full w-full object-contain opacity-60" />
+          <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain opacity-60" />
         </div>
         <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary/80 ring-2 ring-background" />
       </div>
