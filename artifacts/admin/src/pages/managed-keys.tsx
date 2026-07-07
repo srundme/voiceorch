@@ -113,6 +113,18 @@ const CATEGORIES: Category[] = [
         description: "DeepSeek Chat, DeepSeek Reasoner.",
         placeholder: "sk-...",
       },
+      {
+        key: "managed_together_key",
+        label: "Together AI API Key",
+        description: "Qwen3.6 35B-A3B (fast), Qwen3.5 397B-A17B (quality). Get from api.together.xyz.",
+        placeholder: "...",
+      },
+      {
+        key: "managed_openrouter_key",
+        label: "OpenRouter API Key",
+        description: "Qwen3.6 35B-A3B, Qwen3.5 397B-A17B via OpenRouter. Get from openrouter.ai.",
+        placeholder: "sk-or-...",
+      },
     ],
   },
   {
