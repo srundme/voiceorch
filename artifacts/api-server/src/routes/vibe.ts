@@ -95,8 +95,7 @@ async function callGeminiJson(key: string, messages: VibeChatMessage[]): Promise
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.7,
-          maxOutputTokens: 512,
-          thinkingConfig: { thinkingBudget: 0 },
+          maxOutputTokens: 2048,
         },
       }),
     },
