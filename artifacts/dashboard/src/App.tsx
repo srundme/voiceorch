@@ -3,7 +3,7 @@ import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wo
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { PhoneCall, Sparkles, AudioLines, ShieldCheck } from "lucide-react";
 import { AuthProvider, useAuth, SignedIn, SignedOut, consumeSignOutReason } from "@/lib/auth";
-import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setDefaultTimeoutMs, setUnauthorizedHandler, useGetOnboardingStatus, useListAgents } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -58,6 +58,7 @@ import ConnectionsPage from "@/pages/connections/index";
 import TransfersPage from "@/pages/transfers";
 import VoicesPage from "@/pages/voices";
 import TestSimulatorPage from "@/pages/test-simulator";
+import VibePage from "@/pages/vibe";
 import CommandCenterPage from "@/pages/command-center/index";
 import MemoryPage from "@/pages/memory/index";
 import DocsPage from "@/pages/docs/index";
@@ -836,6 +837,14 @@ function HomeRedirect() {
   return <SignInPage />;
 }
 
+function AppRoot() {
+  const { data: agents, isLoading } = useListAgents({});
+  if (isLoading) return <SnapServeLoader />;
+  const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
+  if (!list.length) return <Redirect to="/app/vibe" />;
+  return <Redirect to="/app/agents" />;
+}
+
 function AppRoutes() {
   const [location] = useLocation();
   const { data: onboardingStatus, isLoading: onboardingLoading } = useGetOnboardingStatus();
@@ -857,7 +866,7 @@ function AppRoutes() {
     <Layout>
       <VoiceAssistant />
       <Switch>
-        <Route path="/app" component={() => <Redirect to="/app/agents" />} />
+        <Route path="/app" component={AppRoot} />
         <Route path="/app/command-center" component={CommandCenterPage} />
         <Route path="/app/analytics" component={AnalyticsPage} />
         <Route path="/app/agents" component={AgentBuilder} />
@@ -909,8 +918,9 @@ function ProtectedApp() {
       <ImpersonationBanner />
       <SignedIn>
         <Switch>
-          {/* Onboarding is full-screen — no sidebar layout */}
+          {/* Full-screen pages — no sidebar layout */}
           <Route path="/app/onboarding" component={OnboardingPage} />
+          <Route path="/app/vibe" component={VibePage} />
           {/* All other /app/* routes go through the onboarding gate + Layout */}
           <Route path="/app/*?" component={AppRoutes} />
         </Switch>

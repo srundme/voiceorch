@@ -10,7 +10,6 @@ import {
   getListAgentsQueryKey,
   getListCallsQueryKey,
 } from "@workspace/api-client-react";
-import { GuidedAgentWizard } from "./guided-wizard";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -43,7 +42,6 @@ export default function AgentsList() {
   const [search, setSearch] = useState(() => initialParams.get("q") ?? "");
   const [outboundAgent, setOutboundAgent] = useState<{ id: number; name: string } | null>(null);
   const [toNumber, setToNumber] = useState("");
-  const [wizardOpen, setWizardOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -169,7 +167,7 @@ export default function AgentsList() {
             Manage your AI voice agents and their configurations.
           </p>
         </div>
-        <Button data-testid="button-create-agent" onClick={() => setWizardOpen(true)}>
+        <Button data-testid="button-create-agent" onClick={() => navigate("/app/vibe")}>
           <Plus className="mr-2 h-4 w-4" /> Create Agent
         </Button>
       </div>
@@ -333,7 +331,7 @@ export default function AgentsList() {
                 : "You haven't created any voice agents yet. Get started by creating your first one."}
             </p>
             {!search && (
-              <Button onClick={() => setWizardOpen(true)}>
+              <Button onClick={() => navigate("/app/vibe")}>
                 <Plus className="mr-2 h-4 w-4" /> Create Your First Agent
               </Button>
             )}
@@ -412,7 +410,6 @@ export default function AgentsList() {
         </DialogContent>
       </Dialog>
 
-      <GuidedAgentWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </div>
   );
 }
