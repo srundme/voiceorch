@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   Bot, Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
   Building2, CheckCircle2, Loader2, ChevronLeft, Zap, UserCheck, PhoneForwarded,
@@ -14,12 +13,19 @@ import { getListAgentsQueryKey } from "@workspace/api-client-react";
 
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
-interface ChatMsg { id: string; role: "user" | "ai"; content: string; done?: boolean; }
-interface AgentField { key: string; label: string; value: string; icon: string; }
-interface VoiceOption { voiceId: string; voiceName: string; gender: string; language: string; description: string; }
-interface FeatureCard { key: string; label: string; enabled: boolean; icon: string; detail: string; }
+interface VoiceOption  { voiceId: string; voiceName: string; gender: string; language: string; description: string; }
+interface AgentField   { key: string; label: string; value: string; icon: string; }
+interface FeatureCard  { key: string; label: string; enabled: boolean; icon: string; detail: string; }
 interface DispositionCard { category: string; outcomes: string[]; }
-interface LangPill { code: string; label: string; }
+interface LangPill     { code: string; label: string; }
+
+interface ChatMsg {
+  id: string;
+  role: "user" | "ai";
+  content: string;
+  done?: boolean;
+  voices?: VoiceOption[];   // embedded voice picker inside AI bubble
+}
 
 type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
 
@@ -29,19 +35,10 @@ const FIELD_ICONS: Record<string, React.ElementType> = {
   bot: Bot, building: Building2, globe: Globe, mic: Mic,
   phone: Phone, cpu: Cpu, ear: Ear, speaker: Speaker,
 };
-
 const FEATURE_ICONS: Record<string, React.ElementType> = {
   "user-check": UserCheck, "phone-forwarded": PhoneForwarded,
   "voicemail": Voicemail, "calendar": Calendar, "shield-check": ShieldCheck,
 };
-
-const OUTCOME_COLORS = [
-  "bg-blue-500/15 text-blue-400 border-blue-500/20",
-  "bg-violet-500/15 text-violet-400 border-violet-500/20",
-  "bg-amber-500/15 text-amber-400 border-amber-500/20",
-  "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
-  "bg-rose-500/15 text-rose-400 border-rose-500/20",
-];
 
 /* ── helpers ────────────────────────────────────────────────────────────────── */
 
@@ -52,7 +49,7 @@ function uid() { return Math.random().toString(36).slice(2); }
 
 const GREETING: ChatMsg = {
   id: "g", role: "ai", done: true,
-  content: "Hey! I'm your AI agent builder 👋\n\nTell me what kind of voice agent you want — what it does, who it talks to, and what language it speaks. I'll guide you through the full setup step by step.",
+  content: "Hey! I'm your AI agent builder 👋\n\nDescribe the voice agent you want to build — what it does, who it talks to, and what language it speaks. I'll guide you through everything step by step.",
 };
 
 /* ── voice preview ──────────────────────────────────────────────────────────── */
@@ -66,8 +63,8 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
       body: JSON.stringify({ voice: voiceId, model: "sonic-3.5" }),
     });
     if (!resp.ok) throw new Error("preview failed");
-    const blob = await resp.blob();
-    const url  = URL.createObjectURL(blob);
+    const blob  = await resp.blob();
+    const url   = URL.createObjectURL(blob);
     const audio = new Audio(url);
     audio.onended = () => setPlaying(null);
     audio.onerror = () => setPlaying(null);
@@ -80,12 +77,12 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 /* ── main component ─────────────────────────────────────────────────────────── */
 
 export default function VibePage() {
-  const [, navigate]   = useLocation();
-  const queryClient    = useQueryClient();
+  const [, navigate] = useLocation();
+  const queryClient  = useQueryClient();
 
   const [messages,      setMessages]      = useState<ChatMsg[]>([GREETING]);
   const [input,         setInput]         = useState("");
-  const [phase,         setPhase]         = useState<Phase>("idle");
+  const [phase,         _setPhase]        = useState<Phase>("idle");
   const [fields,        setFields]        = useState<AgentField[]>([]);
   const [voiceOptions,  setVoiceOptions]  = useState<VoiceOption[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<string>("");
@@ -98,13 +95,20 @@ export default function VibePage() {
   const [createdName,   setCreatedName]   = useState("");
   const [playingVoice,  setPlayingVoice]  = useState<string | null>(null);
 
-  const chatEndRef    = useRef<HTMLDivElement>(null);
-  const historyRef    = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
-  const voicesRef     = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
+  // Use a ref so send() always reads the latest phase without stale closure
+  const phaseRef    = useRef<Phase>("idle");
+  const chatEndRef  = useRef<HTMLDivElement>(null);
+  const historyRef  = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+  const voicesRef   = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
+
+  const setPhase = useCallback((p: Phase) => {
+    phaseRef.current = p;
+    _setPhase(p);
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, phase]);
+  }, [messages]);
 
   const appendAiDelta = useCallback((delta: string) => {
     setMessages(prev => {
@@ -116,9 +120,22 @@ export default function VibePage() {
     });
   }, []);
 
+  // Attach voice cards to the most recent AI bubble
+  const attachVoicesToLastMsg = useCallback((voices: VoiceOption[]) => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === "ai") {
+        return [...prev.slice(0, -1), { ...last, voices, done: last.done }];
+      }
+      return prev;
+    });
+  }, []);
+
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
-    if (!text || phase === "building" || phase === "thinking" || phase === "streaming") return;
+    // Guard uses ref — never stale
+    if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
+        || phaseRef.current === "streaming" || phaseRef.current === "done") return;
 
     if (!overrideText) setInput("");
 
@@ -172,9 +189,13 @@ export default function VibePage() {
               break;
 
             case "voice_options": {
-              const voices = evt.voices as VoiceOption[];
-              setVoiceOptions(voices);
-              voicesRef.current = { shown: true, list: voices };
+              const voices = (evt.voices as VoiceOption[]) ?? [];
+              if (voices.length > 0) {
+                setVoiceOptions(voices);
+                voicesRef.current = { shown: true, list: voices };
+                // ← embed cards directly inside the AI chat bubble
+                attachVoicesToLastMsg(voices);
+              }
               break;
             }
 
@@ -183,7 +204,10 @@ export default function VibePage() {
               setFields(prev => {
                 const next = [...prev];
                 const idx  = next.findIndex(f => f.key === evt.key);
-                const f: AgentField = { key: evt.key as string, label: evt.label as string, value: evt.value as string, icon: evt.icon as string };
+                const f: AgentField = {
+                  key: evt.key as string, label: evt.label as string,
+                  value: evt.value as string, icon: evt.icon as string,
+                };
                 if (idx >= 0) next[idx] = f; else next.push(f);
                 return next;
               });
@@ -202,7 +226,10 @@ export default function VibePage() {
               setFeatures(prev => {
                 const next = [...prev];
                 const idx  = next.findIndex(f => f.key === evt.key);
-                const f: FeatureCard = { key: evt.key as string, label: evt.label as string, enabled: !!evt.enabled, icon: evt.icon as string, detail: evt.detail as string };
+                const f: FeatureCard = {
+                  key: evt.key as string, label: evt.label as string,
+                  enabled: !!evt.enabled, icon: evt.icon as string, detail: evt.detail as string,
+                };
                 if (idx >= 0) next[idx] = f; else next.push(f);
                 return next;
               });
@@ -227,13 +254,13 @@ export default function VibePage() {
               setCreatedId(evt.agentId as number);
               setCreatedName(evt.agentName as string);
               setPhase("done");
-              setMessages(prev => prev.map(m => (!m.done && m.role === "ai") ? { ...m, done: true } : m));
+              setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
               queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
               break;
 
             case "error":
               setMessages(prev => prev.map(m =>
-                (!m.done && m.role === "ai") ? { ...m, content: `❌ ${evt.message as string}`, done: true } : m
+                !m.done && m.role === "ai" ? { ...m, content: `❌ ${evt.message as string}`, done: true } : m
               ));
               setPhase("idle");
               break;
@@ -241,18 +268,19 @@ export default function VibePage() {
         }
       }
 
-      setMessages(prev => prev.map(m => (!m.done && m.role === "ai") ? { ...m, done: true } : m));
+      setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
       historyRef.current = [...history, { role: "assistant", content: aiReply }];
-      if (phase !== "done") setPhase("idle");
+      // Use ref — never stale
+      if (phaseRef.current !== "done") setPhase("idle");
 
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
       setMessages(prev => prev.map(m =>
-        (!m.done && m.role === "ai") ? { ...m, content: "Something went wrong. Please try again.", done: true } : m
+        !m.done && m.role === "ai" ? { ...m, content: "Something went wrong. Please try again.", done: true } : m
       ));
       setPhase("idle");
     }
-  }, [input, phase, appendAiDelta, queryClient]);
+  }, [input, setPhase, appendAiDelta, attachVoicesToLastMsg, queryClient]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -262,13 +290,13 @@ export default function VibePage() {
     && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done";
 
   const hasRightContent = fields.length > 0 || voiceOptions.length > 0 || features.length > 0
-    || dispositions.length > 0 || promptPreview || createdId;
+    || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null;
 
   return (
     <div className="fixed inset-0 flex bg-background overflow-hidden">
 
-      {/* ── Left: Chat ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col w-[400px] min-w-[340px] border-r border-border bg-card">
+      {/* ── Left: Chat ──────────────────────────────────────────────────── */}
+      <div className="flex flex-col w-[420px] min-w-[360px] border-r border-border bg-card">
 
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border shrink-0">
@@ -286,7 +314,16 @@ export default function VibePage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+          {messages.map(msg => (
+            <MessageBubble
+              key={msg.id}
+              msg={msg}
+              selectedVoice={selectedVoice}
+              playingVoice={playingVoice}
+              onPreview={vid => previewVoice(vid, setPlayingVoice)}
+              onSelect={v => send(`I'll go with ${v.voiceName}`)}
+            />
+          ))}
           {phase === "thinking" && <ThinkingIndicator />}
           <div ref={chatEndRef} />
         </div>
@@ -304,18 +341,18 @@ export default function VibePage() {
               className="resize-none text-sm flex-1"
             />
             <Button size="icon" onClick={() => send()} disabled={!canSend} className="h-10 w-10 shrink-0">
-              {phase === "thinking" || phase === "streaming"
+              {(phase === "thinking" || phase === "streaming")
                 ? <Loader2 className="h-4 w-4 animate-spin" />
                 : <Send className="h-4 w-4" />}
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
-            Press Enter to send · Shift+Enter for newline
+            Enter to send · Shift+Enter for newline
           </p>
         </div>
       </div>
 
-      {/* ── Right: Preview ─────────────────────────────────────────────── */}
+      {/* ── Right: Preview ──────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background">
 
         {/* Header */}
@@ -323,7 +360,7 @@ export default function VibePage() {
           <div>
             <p className="font-semibold text-sm">Agent Preview</p>
             <p className="text-xs text-muted-foreground">
-              {phase === "idle"      && "Waiting for your description…"}
+              {phase === "idle"      && (hasRightContent ? "Building up…" : "Waiting for your description…")}
               {phase === "thinking"  && "AI is thinking…"}
               {phase === "streaming" && "Chatting with you…"}
               {phase === "building"  && (statusMsg || "Configuring your agent…")}
@@ -334,11 +371,11 @@ export default function VibePage() {
             <div className="flex gap-2">
               <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7"
                 onClick={() => navigate(`/app/agents/${createdId}`)}>
-                <Settings2 className="h-3 w-3" /> Edit Agent
+                <Settings2 className="h-3 w-3" /> Edit
               </Button>
               <Button size="sm" className="gap-1.5 text-xs h-7"
                 onClick={() => navigate(`/app/agents/${createdId}?webcall=1`)}>
-                <Phone className="h-3 w-3" /> Try Web Call
+                <Phone className="h-3 w-3" /> Try Call
               </Button>
             </div>
           )}
@@ -350,39 +387,33 @@ export default function VibePage() {
           ) : (
             <div className="space-y-8 max-w-2xl">
 
-              {/* ── Agent Configuration ── */}
+              {/* Agent Configuration */}
               {fields.length > 0 && (
                 <Section title="Agent Configuration">
                   <div className="grid grid-cols-2 gap-2">
-                    {fields.map((f, i) => <FieldCard key={f.key} field={f} delay={i * 60} />)}
+                    {fields.map(f => <FieldCard key={f.key} field={f} />)}
                   </div>
                 </Section>
               )}
 
-              {/* ── Voice Selection ── */}
+              {/* Voice Selection — also in right panel as secondary reference */}
               {voiceOptions.length > 0 && (
-                <Section title="Voice Selection" badge={selectedVoice ? "Selected" : "Choose a voice"}>
+                <Section title="Voice Selection" badge={selectedVoice ? "Selected" : "Choose in chat ↑"}>
                   <div className="grid grid-cols-2 gap-3">
                     {voiceOptions.map(v => (
-                      <VoiceCard
+                      <RightPanelVoiceCard
                         key={v.voiceId}
                         voice={v}
                         isSelected={selectedVoice.startsWith(v.voiceName)}
                         isPlaying={playingVoice === v.voiceId}
                         onPreview={() => previewVoice(v.voiceId, setPlayingVoice)}
-                        onSelect={() => send(`I'll go with ${v.voiceName}`)}
                       />
                     ))}
                   </div>
-                  {!selectedVoice && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Click Preview to hear a sample, then tell me which one you'd like in the chat.
-                    </p>
-                  )}
                 </Section>
               )}
 
-              {/* ── Languages ── */}
+              {/* Languages */}
               {langPills.length > 0 && (
                 <Section title="Languages">
                   <div className="flex flex-wrap gap-2">
@@ -395,16 +426,16 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* ── Features ── */}
+              {/* Features */}
               {features.length > 0 && (
                 <Section title="Features">
                   <div className="grid grid-cols-2 gap-2">
-                    {features.map(f => <FeatureCard key={f.key} feature={f} />)}
+                    {features.map(f => <FeatureCardView key={f.key} feature={f} />)}
                   </div>
                 </Section>
               )}
 
-              {/* ── Call Outcomes (Dispositions) ── */}
+              {/* Call Outcomes */}
               {dispositions.length > 0 && (
                 <Section title="Call Outcomes">
                   <div className="space-y-3">
@@ -415,7 +446,7 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* ── System Prompt ── */}
+              {/* System Prompt */}
               {promptPreview && (
                 <Section title="System Prompt Preview">
                   <div className="rounded-xl border border-border bg-card/60 p-4">
@@ -429,7 +460,7 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* ── Done ── */}
+              {/* Done */}
               {phase === "done" && createdId && (
                 <DoneCard agentName={createdName} agentId={createdId} navigate={navigate} />
               )}
@@ -442,7 +473,142 @@ export default function VibePage() {
   );
 }
 
-/* ── sub-components ─────────────────────────────────────────────────────────── */
+/* ── MessageBubble ── */
+
+function MessageBubble({
+  msg, selectedVoice, playingVoice, onPreview, onSelect,
+}: {
+  msg: ChatMsg;
+  selectedVoice: string;
+  playingVoice: string | null;
+  onPreview: (voiceId: string) => void;
+  onSelect: (voice: VoiceOption) => void;
+}) {
+  const isAi = msg.role === "ai";
+  return (
+    <div className={cn("flex gap-2.5", isAi ? "items-start" : "items-end flex-row-reverse")}>
+      {isAi && (
+        <div className="h-7 w-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+          <Bot className="h-3.5 w-3.5 text-primary" />
+        </div>
+      )}
+      <div className={cn(
+        "rounded-2xl px-3.5 py-2.5 text-sm max-w-[85%]",
+        isAi ? "bg-elevated border border-border rounded-tl-sm w-full" : "bg-primary text-primary-foreground rounded-tr-sm",
+      )}>
+        {/* Message text */}
+        <p className="whitespace-pre-wrap leading-relaxed">
+          {msg.content}
+          {!msg.done && isAi && msg.content && (
+            <span className="inline-block w-0.5 h-3.5 bg-foreground/60 ml-0.5 align-middle animate-pulse" />
+          )}
+        </p>
+
+        {/* Inline voice picker — appears inside the AI bubble */}
+        {isAi && msg.voices && msg.voices.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">
+              Available voices
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {msg.voices.map(v => (
+                <InlineVoiceCard
+                  key={v.voiceId}
+                  voice={v}
+                  isSelected={selectedVoice.startsWith(v.voiceName)}
+                  isPlaying={playingVoice === v.voiceId}
+                  onPreview={() => onPreview(v.voiceId)}
+                  onSelect={() => onSelect(v)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── InlineVoiceCard — inside chat bubble ── */
+
+function InlineVoiceCard({
+  voice, isSelected, isPlaying, onPreview, onSelect,
+}: {
+  voice: VoiceOption;
+  isSelected: boolean;
+  isPlaying: boolean;
+  onPreview: () => void;
+  onSelect: () => void;
+}) {
+  return (
+    <div className={cn(
+      "flex items-center gap-3 rounded-xl border p-3 transition-all",
+      isSelected
+        ? "border-primary/40 bg-primary/8 ring-1 ring-primary/20"
+        : "border-border/70 bg-background/60",
+    )}>
+      {/* Gender icon */}
+      <div className={cn(
+        "h-8 w-8 rounded-lg flex items-center justify-center text-sm shrink-0",
+        voice.gender === "female" ? "bg-pink-500/15 text-pink-400" : "bg-blue-500/15 text-blue-400",
+      )}>
+        {voice.gender === "female" ? "♀" : "♂"}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold">{voice.voiceName}</p>
+        {voice.description && (
+          <p className="text-[10px] text-muted-foreground truncate">{voice.description}</p>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-1.5 shrink-0">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 w-6 p-0"
+          onClick={onPreview}
+          disabled={isPlaying}
+          title="Preview voice"
+        >
+          {isPlaying
+            ? <Volume2 className="h-3 w-3 text-primary animate-pulse" />
+            : <Play className="h-3 w-3" />}
+        </Button>
+        {isSelected ? (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-primary px-2">
+            <CheckCircle2 className="h-3 w-3" /> Chosen
+          </span>
+        ) : (
+          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSelect}>
+            Select
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── ThinkingIndicator ── */
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex gap-2.5 items-start">
+      <div className="h-7 w-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+        <Bot className="h-3.5 w-3.5 text-primary" />
+      </div>
+      <div className="bg-elevated border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1 items-center">
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+      </div>
+    </div>
+  );
+}
+
+/* ── Section ── */
 
 function Section({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
   return (
@@ -460,49 +626,10 @@ function Section({ title, badge, children }: { title: string; badge?: string; ch
   );
 }
 
-function MessageBubble({ msg }: { msg: ChatMsg }) {
-  const isAi = msg.role === "ai";
-  return (
-    <div className={cn("flex gap-2.5", isAi ? "items-start" : "items-end flex-row-reverse")}>
-      {isAi && (
-        <div className="h-7 w-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-          <Bot className="h-3.5 w-3.5 text-primary" />
-        </div>
-      )}
-      <div className={cn(
-        "rounded-2xl px-3.5 py-2.5 text-sm max-w-[85%] whitespace-pre-wrap leading-relaxed",
-        isAi ? "bg-elevated border border-border rounded-tl-sm" : "bg-primary text-primary-foreground rounded-tr-sm",
-        !msg.done && isAi && "relative",
-      )}>
-        {msg.content}
-        {!msg.done && isAi && msg.content && (
-          <span className="inline-block w-0.5 h-3.5 bg-foreground/60 ml-0.5 align-middle animate-pulse" />
-        )}
-      </div>
-    </div>
-  );
-}
+/* ── FieldCard ── */
 
-function ThinkingIndicator() {
-  return (
-    <div className="flex gap-2.5 items-start">
-      <div className="h-7 w-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-        <Bot className="h-3.5 w-3.5 text-primary" />
-      </div>
-      <div className="bg-elevated border border-border rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1 items-center">
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
-      </div>
-    </div>
-  );
-}
-
-function FieldCard({ field, delay }: { field: AgentField; delay: number }) {
-  const [visible, setVisible] = useState(false);
+function FieldCard({ field }: { field: AgentField }) {
   const Icon = FIELD_ICONS[field.icon] ?? Bot;
-  useEffect(() => { const t = setTimeout(() => setVisible(true), delay); return () => clearTimeout(t); }, [delay]);
-  if (!visible) return null;
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 animate-in fade-in slide-in-from-left-2 duration-300">
       <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
@@ -517,21 +644,22 @@ function FieldCard({ field, delay }: { field: AgentField; delay: number }) {
   );
 }
 
-function VoiceCard({
-  voice, isSelected, isPlaying, onPreview, onSelect,
+/* ── RightPanelVoiceCard — in the right panel (no select button — selection is in chat) ── */
+
+function RightPanelVoiceCard({
+  voice, isSelected, isPlaying, onPreview,
 }: {
   voice: VoiceOption;
   isSelected: boolean;
   isPlaying: boolean;
   onPreview: () => void;
-  onSelect: () => void;
 }) {
   return (
     <div className={cn(
-      "rounded-xl border p-4 flex flex-col gap-3 transition-all duration-200",
+      "rounded-xl border p-4 flex flex-col gap-2.5 transition-all duration-200",
       isSelected
         ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
-        : "border-border bg-card hover:border-border/80",
+        : "border-border bg-card",
     )}>
       <div className="flex items-start justify-between">
         <div>
@@ -540,43 +668,24 @@ function VoiceCard({
         </div>
         {isSelected && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
       </div>
-      {voice.description && (
-        <p className="text-[11px] text-muted-foreground leading-snug">{voice.description}</p>
-      )}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1 gap-1.5 h-7 text-xs"
-          onClick={onPreview}
-          disabled={isPlaying}
-        >
-          {isPlaying ? <Volume2 className="h-3 w-3 animate-pulse text-primary" /> : <Play className="h-3 w-3" />}
-          {isPlaying ? "Playing…" : "Preview"}
-        </Button>
-        {!isSelected && (
-          <Button size="sm" className="flex-1 gap-1 h-7 text-xs" onClick={onSelect}>
-            Select
-          </Button>
-        )}
-        {isSelected && (
-          <span className="flex-1 flex items-center justify-center text-xs font-medium text-primary gap-1">
-            <CheckCircle2 className="h-3 w-3" /> Chosen
-          </span>
-        )}
-      </div>
+      {voice.description && <p className="text-[11px] text-muted-foreground leading-snug">{voice.description}</p>}
+      <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs w-full"
+        onClick={onPreview} disabled={isPlaying}>
+        {isPlaying ? <Volume2 className="h-3 w-3 animate-pulse text-primary" /> : <Play className="h-3 w-3" />}
+        {isPlaying ? "Playing…" : "Preview"}
+      </Button>
     </div>
   );
 }
 
-function FeatureCard({ feature }: { feature: FeatureCard }) {
+/* ── FeatureCardView ── */
+
+function FeatureCardView({ feature }: { feature: FeatureCard }) {
   const Icon = FEATURE_ICONS[feature.icon] ?? Sparkles;
   return (
     <div className={cn(
       "flex items-start gap-3 rounded-lg border px-3 py-3 animate-in fade-in duration-300",
-      feature.enabled
-        ? "border-primary/30 bg-primary/5"
-        : "border-border bg-card/60 opacity-60",
+      feature.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-card/60 opacity-60",
     )}>
       <div className={cn(
         "h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-0.5",
@@ -600,11 +709,13 @@ function FeatureCard({ feature }: { feature: FeatureCard }) {
   );
 }
 
+/* ── DispositionCardView ── */
+
 function DispositionCardView({ disposition, colorIndex }: { disposition: DispositionCard; colorIndex: number }) {
   const colors = [
-    { header: "bg-blue-500/10 border-blue-500/20 text-blue-400",    badge: "bg-blue-500/15 border-blue-500/25 text-blue-300" },
-    { header: "bg-rose-500/10 border-rose-500/20 text-rose-400",    badge: "bg-rose-500/15 border-rose-500/25 text-rose-300" },
-    { header: "bg-amber-500/10 border-amber-500/20 text-amber-400", badge: "bg-amber-500/15 border-amber-500/25 text-amber-300" },
+    { header: "bg-blue-500/10 border-blue-500/20 text-blue-400",       badge: "bg-blue-500/15 border-blue-500/25 text-blue-300" },
+    { header: "bg-rose-500/10 border-rose-500/20 text-rose-400",       badge: "bg-rose-500/15 border-rose-500/25 text-rose-300" },
+    { header: "bg-amber-500/10 border-amber-500/20 text-amber-400",    badge: "bg-amber-500/15 border-amber-500/25 text-amber-300" },
     { header: "bg-violet-500/10 border-violet-500/20 text-violet-400", badge: "bg-violet-500/15 border-violet-500/25 text-violet-300" },
     { header: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400", badge: "bg-emerald-500/15 border-emerald-500/25 text-emerald-300" },
   ];
@@ -627,6 +738,8 @@ function DispositionCardView({ disposition, colorIndex }: { disposition: Disposi
   );
 }
 
+/* ── EmptyPreview ── */
+
 function EmptyPreview() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-24">
@@ -640,15 +753,15 @@ function EmptyPreview() {
       <div className="max-w-xs">
         <p className="font-semibold text-base">Your agent will appear here</p>
         <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-          Describe what you want in the chat and watch every detail build up in real time.
+          Start chatting on the left and watch every detail build up in real time.
         </p>
       </div>
       <div className="flex flex-col gap-2 text-xs text-muted-foreground mt-2 text-left">
         {[
-          "Voice selection with live preview",
-          "Gender detection, call transfer, voicemail",
+          "Voice selection with live audio preview",
+          "Gender detection · call transfer · voicemail",
           "Booking & scheduling setup",
-          "Compliance (DPDP / TRAI / IRDAI)",
+          "Compliance — DPDP / TRAI / IRDAI",
           "Call outcome dispositions",
           "System prompt auto-generated",
         ].map(t => (
@@ -660,6 +773,8 @@ function EmptyPreview() {
     </div>
   );
 }
+
+/* ── DoneCard ── */
 
 function DoneCard({ agentName, agentId, navigate }: { agentName: string; agentId: number; navigate: (to: string) => void }) {
   return (

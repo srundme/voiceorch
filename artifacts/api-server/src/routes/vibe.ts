@@ -285,7 +285,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
 
     const cfg   = parsed.config;
-    const phase = parsed.phase ?? "core";
+    const phase = (parsed.phase ?? "core").trim();
 
     // Emit voice options when entering voice_selection phase for the first time
     if (phase === "voice_selection" && !voicesShown) {
@@ -342,7 +342,6 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       coreFields.splice(3, 0, { key: "voice", label: "Voice", value: `${cfg.voiceName} — ${cfg.gender === "female" ? "Female" : "Male"}`, icon: "mic" });
     }
     for (const field of coreFields) {
-      await sleep(180);
       emit({ type: "field", ...field });
     }
 
