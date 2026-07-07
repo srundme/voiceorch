@@ -7,6 +7,8 @@ import {
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
+import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
+import { getActiveLayer } from "../services/system-prompt-template.js";
 
 const router = Router();
 
@@ -497,26 +499,68 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} Always introduce yourself at the start of each call.`;
     let systemPrompt = fallback;
     try {
-      const sysInstr = buildPromptInstruction(cfg, langDisplay);
-      const sysUser  = buildPromptUserContent(cfg, langDisplay);
-      const pr = await Promise.race([
-        fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              system_instruction: { parts: [{ text: sysInstr }] },
-              contents: [{ role: "user", parts: [{ text: sysUser }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
-            }),
-          },
-        ),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("prompt_gen_timeout")), 25000)),
+      // Use the platform's layered prompt generator — same engine as the
+      // dashboard "Generate System Prompt" button: Foundation + Domain + inputs.
+      const [foundationLayer, clientDetailsLayer] = await Promise.all([
+        getActiveLayer({ type: "foundation" }).catch(() => null),
+        getActiveLayer({ type: "client_details" }).catch(() => null),
       ]);
-      const pj = await (pr as Response).json() as any;
-      const gen = pj?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (gen) systemPrompt = gen;
+
+      const transferNote = cfg.callTransferEnabled
+        ? `Call transfer enabled — transfer to "${cfg.transferName || "human agent"}" at ${cfg.transferPhoneNumber} when needed.`
+        : "";
+      const complianceNote = Object.entries(cfg.compliance ?? {})
+        .filter(([, v]) => v).map(([k]) => k.toUpperCase()).join(", ");
+
+      const formInputs: Record<string, unknown> = {
+        agentName:           cfg.agentName,
+        companyName:         cfg.companyName,
+        useCase:             cfg.description,
+        agentDirection:      cfg.direction === "outbound" ? "Outbound" : cfg.direction === "inbound" ? "Inbound" : "Inbound",
+        language:            langDisplay,
+        selectedLanguages:   (cfg.languages ?? []).filter((l: string) => l !== langDisplay),
+        callFlowDescription: cfg.callFlowNotes ?? cfg.description,
+        keyKnowledge:        cfg.knowledgeBaseNotes ?? "",
+        transferInfo:        transferNote,
+        complianceFlags:     complianceNote,
+        genderDetection:     cfg.genderEnabled ? "Use {caller_salutation} (Sir/Ma'am) once the caller's gender is detected." : "",
+        dispositions:        (cfg.dispositions ?? []).map((d: { label: string }) => d.label).join(", "),
+      };
+
+      if (foundationLayer) {
+        // Full layered generation (Foundation locked + optional client details)
+        systemPrompt = await generateLayeredAgentPrompt({
+          foundationText:    foundationLayer.extractedText,
+          domainText:        "",          // vibe doesn't pick a domain — use custom/other path
+          domainName:        "Custom / Other",
+          clientDetailsText: clientDetailsLayer?.extractedText ?? "",
+          formInputs,
+        });
+      } else {
+        // No Foundation template — fall back to a standalone Gemini generation
+        // using the user's inputs directly (better than the old sysInstr/sysUser approach)
+        const sysInstr = buildPromptInstruction(cfg, langDisplay);
+        const sysUser  = buildPromptUserContent(cfg, langDisplay);
+        const pr = await Promise.race([
+          fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                system_instruction: { parts: [{ text: sysInstr }] },
+                contents: [{ role: "user", parts: [{ text: sysUser }] }],
+                generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+              }),
+            },
+          ),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error("prompt_gen_timeout")), 25000)),
+        ]);
+        const pj = await (pr as Response).json() as any;
+        const parts = pj?.candidates?.[0]?.content?.parts ?? [];
+        const gen = (parts.find((p: any) => !p.thought && p.text) ?? parts[parts.length - 1])?.text?.trim();
+        if (gen) systemPrompt = gen;
+      }
     } catch (err) {
       logger.warn({ err }, "vibe-chat: prompt gen failed, using fallback");
     }
