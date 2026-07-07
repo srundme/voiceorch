@@ -2514,17 +2514,12 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   rateMap: Map<string, number>;
 }) {
   const [search, setSearch] = useState("");
+  const [, navigate] = useLocation();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
-  const createAgent = useCreateAgent();
   const { toast } = useToast();
   const userProviderNames = useUserProviderNames();
 
-  const handleCreate = () => {
-    createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "cartesia", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
-      { onSuccess: (agent) => onSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
-    );
-  };
+  const handleCreate = () => navigate("/app/vibe");
 
   const filtered = (agents ?? []).filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
@@ -2535,7 +2530,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
       <div className="p-3 border-b border-border/60 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agents</span>
-          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCreate} disabled={createAgent.isPending}>
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCreate}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -2552,7 +2547,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
         {!isLoading && filtered.length === 0 && (
           <div className="px-3 py-6 text-center">
             <p className="text-xs text-muted-foreground">No agents yet</p>
-            <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={handleCreate} disabled={createAgent.isPending}>
+            <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={handleCreate}>
               <Plus className="h-3 w-3 mr-1" /> Create
             </Button>
           </div>
@@ -4742,7 +4737,6 @@ const LAST_AGENT_ID_KEY = "voiceorch:lastAgentId";
 export default function AgentBuilder() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
-  const createAgent = useCreateAgent();
   const { toast } = useToast();
   const rateMap = useMinuteRatesMap();
   const { data: agents, isLoading: agentsLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
@@ -4774,12 +4768,7 @@ export default function AgentBuilder() {
     navigate(`/app/agents/${target}`, { replace: true });
   }, [selectedId, agentsLoading, agents, navigate]);
 
-  const handleCreate = () => {
-    createAgent.mutate(
-      { data: { name: "New Agent", asrProvider: "azure", asrModel: "en-US-standard", llmProvider: "openai", llmModel: "gpt-4o-mini", ttsProvider: "cartesia", ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz", systemPrompt: "You are a helpful AI voice assistant.", greetingMessage: "Hello", language: "en-US" } as any },
-      { onSuccess: (agent) => handleSelect(agent.id), onError: (err: unknown) => toast({ title: "Error", description: formatApiError(err), variant: "destructive" }) }
-    );
-  };
+  const handleCreate = () => navigate("/app/vibe");
 
   return (
     <div className="flex h-full overflow-hidden">
