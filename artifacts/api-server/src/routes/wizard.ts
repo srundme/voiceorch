@@ -713,6 +713,7 @@ const MANAGED_KEY_NAMES = [
   "managed_cohere_key",
   "managed_deepseek_key",
   "managed_together_key",
+  "managed_openrouter_key",
   // STT
   "managed_deepgram_key",
   "managed_sarvam_key",
