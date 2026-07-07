@@ -2375,6 +2375,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   // Only meaningful when languageAutoDetect is ON; ignored otherwise
                   // because the pipeline always ends in the agent's fixed language.
                   finalLanguage:     session.pipeline.getPreferredCallerLang() || null,
+                  // Explicit mid-call language request ("Speak in Tamil") — ground
+                  // truth for the language_pref fact so the NEXT call greets the
+                  // caller in the requested language. Null for strict-mode agents.
+                  explicitLanguageRequest: session.pipeline.getExplicitLangRequestForMemory(),
                 });
                 createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
                   status: "success",

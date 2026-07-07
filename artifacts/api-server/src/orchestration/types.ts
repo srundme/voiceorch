@@ -423,6 +423,15 @@ export interface StreamSTT {
   sendAudio(chunk: Buffer): void;
   /** Provider-specific: force the STT engine to flush its audio buffer and emit a transcript now. */
   flush?(): void;
+  /**
+   * Provider-specific (optional): live-switch the stream's language hint
+   * mid-call (BCP-47, e.g. "ta-IN"). Used when the caller explicitly requests
+   * a different spoken language so subsequent speech is transcribed in the
+   * right script. Implementations should no-op when already on the requested
+   * language and reconnect their underlying session as needed. Adapters that
+   * don't support live switching simply omit this method.
+   */
+  setLanguage?(lang: string): void;
   close(): void;
   /**
    * Set by the caller immediately after creation.

@@ -681,6 +681,9 @@ export class OrchestrationPipeline {
    *  utterance can't silently drag the agent back to its default language; only
    *  another explicit request changes it. null = follow script auto-detection. */
   private requestedLangLatch: string | null = null;
+  /** Language the live streaming-STT session was last switched to via an
+   *  explicit caller request (loop guard for switchStreamSTTLanguage). */
+  private streamSTTLang: string | null = null;
 
   // Repetition guard (call 548): the last spoken assistant line + how many times
   // in a row the model has repeated itself. Used by the per-turn anti-repeat nudge
@@ -1134,6 +1137,12 @@ export class OrchestrationPipeline {
                   { callId: this.config.callId, requested, text: text.slice(0, 60) },
                   "Auto-detect: explicit language request latched",
                 );
+                // Make the latch drive speech recognition too — otherwise the
+                // streaming STT stays on its call-start language for the rest of
+                // the call and mistranscribes the caller's requested language
+                // into the old script (call 1881: Tamil speech → Devanagari →
+                // script detection reads Hindi → agent locked in Hindi).
+                this.switchStreamSTTLanguage(requested);
               }
               this.requestedLangLatch = requested;
             }
@@ -1200,6 +1209,13 @@ export class OrchestrationPipeline {
         }
       );
       logger.info({ callId: this.config.callId, provider: this.agent.asrProvider }, "Streaming STT initialized");
+      // Re-apply a latched explicit language request after a full stream
+      // re-init (reconnect path) — the fresh adapter stream starts on the
+      // call-start language, not the requested one.
+      if (this.agent.languageAutoDetect && this.requestedLangLatch) {
+        this.streamSTTLang = null;
+        this.switchStreamSTTLanguage(this.requestedLangLatch);
+      }
     } catch (err) {
       logger.error(
         { callId: this.config.callId, agentId: this.agent.id, provider: this.agent.asrProvider, err },
@@ -1967,16 +1983,37 @@ export class OrchestrationPipeline {
     if (this.currentLang) {
       const langName = LANG_DISPLAY_NAMES[this.currentLang] ?? this.currentLang;
       if (this.agent.languageAutoDetect) {
-        if (this.currentLang === "en-IN") {
+        if (this.requestedLangLatch === "en-IN") {
           // English gets a stronger OVERRIDE guard because many system prompts instruct
           // the agent to speak Hinglish/Hindi by default. When the caller explicitly
           // switches to English we must tell the LLM to supersede that instruction.
+          // Only an EXPLICIT latched request gets this override — a transcript that
+          // merely happens to be in Latin script (script-detected English, no latch)
+          // must NOT claim "the caller has requested English"; it falls through to
+          // the softer follow-the-caller rule below (call 1881: "Speak in Tamil."
+          // in Latin script falsely triggered this and flipped the agent to English).
           langGuard =
             `[LANGUAGE RULE — OVERRIDE] The caller is now speaking English and has requested English. ` +
             `Respond in clear, plain English ONLY for this entire response. ` +
             `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hinglish, Hindi, ` +
             `or any other language — the caller has explicitly asked for English. ` +
             `Do not mix Hindi or regional words into your reply. ` +
+            `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
+            `EXACTLY as written in your instructions; never translate or transliterate them.`;
+        } else if (this.requestedLangLatch) {
+          // A latched explicit NON-English request (e.g. "Speak in Tamil") gets the
+          // same strength of override so it supersedes system prompts that instruct
+          // Hindi/Hinglish — mirroring the English override above.
+          const reqName = LANG_DISPLAY_NAMES[this.requestedLangLatch] ?? this.requestedLangLatch;
+          langGuard =
+            `[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak ${reqName}. ` +
+            `Respond ONLY in ${reqName} for this entire response, and keep responding in ${reqName} ` +
+            `unless the caller explicitly asks for another language. ` +
+            `IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, ` +
+            `English, or any other language — the caller has explicitly asked for ${reqName}. ` +
+            `REGISTER — speak in natural, everyday colloquial spoken ${reqName}, the way real people talk in casual conversation; ` +
+            `NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) ` +
+            `into ${reqName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
             `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
             `EXACTLY as written in your instructions; never translate or transliterate them.`;
         } else {
@@ -4905,6 +4942,43 @@ export class OrchestrationPipeline {
     return this.lastNonEnglishLang || this.currentLang;
   }
 
+  /** BCP-47 code of the language the caller EXPLICITLY requested mid-call
+   *  ("Speak in Tamil"), for persisting back to caller memory at call end so
+   *  the next call greets them in the newly requested language. Only exposed
+   *  for multilingual (languageAutoDetect) agents — the strict-mode English
+   *  escape latch is a this-call-only override and must NOT leak into memory
+   *  (it would flip the next call's STT language for a fixed-language agent). */
+  getExplicitLangRequestForMemory(): string | null {
+    return this.agent.languageAutoDetect ? this.requestedLangLatch : null;
+  }
+
+  /**
+   * Live-switch the streaming STT session's language hint after an explicit
+   * caller language request latches. Without this the stream stays on its
+   * call-start language and mistranscribes the caller's new language into the
+   * old script, dragging the agent back (call 1881). No-ops when the adapter
+   * doesn't support live switching (Deepgram/Azure keep current behavior) or
+   * when already on the requested language (reconnect-loop guard).
+   */
+  private switchStreamSTTLanguage(lang: string): void {
+    const stream = this.streamSTT;
+    if (!stream?.setLanguage) return;
+    if (this.streamSTTLang === lang) return;
+    try {
+      stream.setLanguage(lang);
+      this.streamSTTLang = lang;
+      logger.info(
+        { callId: this.config.callId, lang },
+        "Streaming STT language switched to match explicit caller request",
+      );
+    } catch (err) {
+      logger.warn(
+        { callId: this.config.callId, lang, err },
+        "Streaming STT language switch failed — keeping current stream",
+      );
+    }
+  }
+
   /**
    * Returns exact usage totals accumulated during this session.
    * - ttsCharacters: always exact (counted per text.length before each synthesis call)
@@ -5611,86 +5685,115 @@ function stripToolArtifacts(text: string): string {
 }
 
 /**
- * Detect an explicit caller request to switch the agent's SPOKEN language.
- * Returns a BCP-47 locale ("en-IN" / "hi-IN" / "ta-IN" / "te-IN") or null.
- * Deliberately conservative — a real request/switch cue must be present so a
- * bare mention ("English teacher", "do you support Tamil?") never latches.
- * Simple negation ("don't speak English", "Tamil venda") is stripped.
- * On a true multi-language tie, the Indic language wins over English.
+ * Per-language spec for explicit language-request detection. `mention` matches
+ * the language's NAME (romanised + native scripts). `roman` lists the romanised
+ * names used to build the "in <lang>" / "<lang> me|la" and negation windows.
  */
-function detectExplicitLanguageRequest(text: string): string | null {
+interface LangRequestSpec {
+  code: string;
+  mention: RegExp;
+  roman: string[];
+  /** Precompiled: "in/into/to <lang>" or "<lang> me|mein|la|il|alli…" (romanised). */
+  inLang: RegExp;
+  /** Precompiled: romanised/English negation windows around the language name. */
+  negation: RegExp[];
+}
+
+function buildLangRequestSpec(code: string, mention: RegExp, roman: string[]): LangRequestSpec {
+  const alt = roman.join("|");
+  return {
+    code,
+    mention,
+    roman,
+    inLang: new RegExp(
+      `\\b(in|into|to)\\s+(${alt})\\b|\\b(${alt})\\s*(me|mein|mai|main|men|la|le|lo|il|alli|nalli)\\b`,
+    ),
+    negation: [
+      new RegExp(`\\b(no|not|don'?t|do not|dont|never|stop)\\b[^.!?]{0,20}\\b(${alt})\\b`),
+      new RegExp(`\\b(${alt})\\b[^.!?]{0,15}\\b(nahi|nahin|mat|naa|na|venda|vendam|veno|beda|nako|illa|illai)\\b`),
+    ],
+  };
+}
+
+/** All languages the multilingual toggle supports for explicit switch requests. */
+const LANG_REQUEST_SPECS: LangRequestSpec[] = [
+  buildLangRequestSpec("en-IN", /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கில|இங்கிலிஷ|ఇంగ్లీష|ইংরেজি|انگریزی/iu, ["english", "inglish", "angrezi", "angreji"]),
+  buildLangRequestSpec("hi-IN", /\bhindi\b|हिन्दी|हिंदी|ஹிந்தி|இந்தி|ہندی/iu, ["hindi"]),
+  buildLangRequestSpec("ta-IN", /\b(tamil|thamizh|tamizh)\b|தமிழ|तमिल|తమిళ/iu, ["tamil", "thamizh", "tamizh"]),
+  buildLangRequestSpec("te-IN", /\btelugu\b|తెలుగు|तेलुगु|தெலுங்கு/iu, ["telugu"]),
+  buildLangRequestSpec("kn-IN", /\bkannada\b|ಕನ್ನಡ|कन्नड़|कन्नड|கன்னட/iu, ["kannada"]),
+  buildLangRequestSpec("ml-IN", /\bmalayalam\b|മലയാള|मलयालम|மலையாள/iu, ["malayalam"]),
+  buildLangRequestSpec("mr-IN", /\bmarathi\b|मराठी|மராத்தி/iu, ["marathi"]),
+  buildLangRequestSpec("bn-IN", /\b(bengali|bangla)\b|বাংলা|बांग्ला|बंगाली/iu, ["bengali", "bangla"]),
+  buildLangRequestSpec("gu-IN", /\b(gujarati|gujrati)\b|ગુજરાતી|गुजराती/iu, ["gujarati", "gujrati"]),
+  buildLangRequestSpec("pa-IN", /\b(punjabi|panjabi)\b|ਪੰਜਾਬੀ|पंजाबी|پنجابی/iu, ["punjabi", "panjabi"]),
+  buildLangRequestSpec("or-IN", /\b(odia|oriya)\b|ଓଡ଼ିଆ|ଓଡିଆ|ओड़िया|उड़िया/iu, ["odia", "oriya"]),
+  buildLangRequestSpec("ur-IN", /\burdu\b|اردو|उर्दू|உருது/iu, ["urdu"]),
+];
+
+/** Native-script negators checked in the ~18 chars right after a native-script
+ *  language mention ("தமிழ் வேண்டாம்", "हिंदी नहीं"). */
+const NATIVE_NEGATORS = /வேண்டாம்|வேணாம்|மாட்|नहीं|मत|না|নয়|ਨਹੀਂ|نہیں|ಬೇಡ|వద్దు|വേണ്ട|નહીં/u;
+
+/**
+ * Detect an explicit caller request to switch the agent's SPOKEN language.
+ * Returns a BCP-47 code ("ta-IN", "en-IN", …) or null. Covers the full
+ * multilingual set (en/hi/ta/te/kn/ml/mr/bn/gu/pa/or/ur) in romanised and
+ * native scripts. Deliberately conservative — a real request/switch cue must
+ * be present, so a bare mention ("English teacher", "do you support Hindi?",
+ * "I don't know English") never latches. Simple negation ("don't speak
+ * English", "English mat bolo", "தமிழ் வேண்டாம்") is stripped; on a true
+ * Hindi/English two-language tie Hindi wins as the safer base-language
+ * fallback (existing semantics); any other multi-language mention is
+ * ambiguous and never latches.
+ */
+function detectExplicitLanguageRequest(rawText: string): string | null {
+  // "Tamil Nadu" is a place, not a language request ("I live in Tamil Nadu"
+  // must never latch Tamil). Scrub the state name before any matching.
+  const text = rawText.replace(/tamil\s*nadu/gi, "TN").replace(/தமிழ்\s*நாடு|தமிழ்நாட்|तमिलनाडु/gu, "TN");
   const t = text.toLowerCase();
 
-  // ── Language mentions ──────────────────────────────────────────────────────
-  // English: romanised + Devanagari + Tamil script forms
-  const mentionsEn = /\b(english|inglish)\b|\bangre[jz]i\b|अंग्रेज़ी|अंग्रेजी|ஆங்கிலம்|இங்கிலிஷ்/i.test(text);
-  // Hindi: romanised + Devanagari
-  const mentionsHi = /\bhindi\b|हिन्दी|हिंदी/i.test(text);
-  // Tamil: romanised + Tamil script
-  const mentionsTa = /\btamil\b|தமிழ்|தமிழில்/i.test(text);
-  // Telugu: romanised + Telugu script
-  const mentionsTe = /\btelugu\b|తెలుగు|తెలుగులో/i.test(text);
+  const mentioned = LANG_REQUEST_SPECS.filter((s) => s.mention.test(text));
+  if (mentioned.length === 0) return null;
 
-  if (!mentionsEn && !mentionsHi && !mentionsTa && !mentionsTe) return null;
-
-  // ── Request cue ────────────────────────────────────────────────────────────
-  // Require an actual request/switch verb or "in <lang>" so a BARE mention
-  // ("English teacher", "I don't know Tamil") never latches.
+  // Require an actual request/switch cue so a BARE mention never latches.
+  // Cues: a request/switch verb (English, romanised Hindi/Tamil/Telugu/Kannada/
+  // Malayalam, or native-script), "in/to <lang>", or "<lang> me/mein/la/il…".
   const hasRequestVerb =
     /\b(speak|speaking|talk|talking|say|reply|respond|answer|continue|switch|change|use|prefer|please)\b/.test(t) ||
     /\bcan\s+you\b/.test(t) ||
-    // Tamil romanised verbs
-    /\b(pesu|pesunga|pesanum|pannunga|pannalam|sollunga|pesren)\b/.test(t) ||
-    // Tamil script verbs (பேசு / பேசுங்க / சொல்லுங்க / மாத்துங்க)
-    /பேசு|பேசுங்க|பேசணும்|சொல்லுங்க|பதிலுங்க|மாத்துங்க/.test(text) ||
-    // Telugu script verbs (మాట్లాడు / చెప్పు)
-    /మాట్లాడు|మాట్లాడండి|చెప్పు|చెప్పండి/.test(text) ||
-    // Hindi romanised verbs
-    /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t);
-
+    /\b(pesu|pesunga|pesanum|pannunga|pannalam|matladu|maatladu|matladandi|helu|heli|parayu|samsarikku|bolna|bola)\b/.test(t) ||
+    /\b(bol|bolo|boliye|baat|baatein|kar|karo|karein|kijiye|kije|chahiye|chaiye)\b/.test(t) ||
+    /பேச|பேசு|சொல்லு|बोल|बात|कीजिए|करो|करें|चाहिए|మాట్లాడ|ಮಾತನಾಡ|പറയ|സംസാരിക്ക|বল|বলুন|કહો|બોલ|ਬੋਲ|بولیں|بات/u.test(text);
   const hasInLang =
-    // "in/to <lang>" — English, Hindi, Tamil, Telugu
-    /\b(in|into|to)\s+(english|hindi|tamil|telugu)\b/.test(t) ||
-    // "<lang> me/mein" — Hindi style
-    /(english|hindi|tamil|telugu|अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|தமிழ்|తెలుగు)\s*(me|mein|mai|main|में|मे)\b/.test(t) ||
-    // "<lang> la" — Tamil colloquial "in <lang>"
-    /\b(english|tamil|telugu|hindi)\s+la\b/.test(t) ||
-    // "<lang> lo" — Telugu colloquial "in <lang>"
-    /\b(english|tamil|telugu|hindi)\s+lo\b/.test(t);
-
+    mentioned.some((s) => s.inLang.test(t)) ||
+    // Native-script locatives: "<lang>में" (Devanagari), "தமிழில்/தமிழ்ல", "…த்தில்/யில்" etc.
+    /(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम|मराठी|बांग्ला|बंगाली|गुजराती|पंजाबी|उड़िया|ओड़िया|उर्दू)\s*(में|मे)/u.test(text) ||
+    /தமிழ(ில்|்ல|ுல)|ஆங்கிலத்தில்|ஹிந்தியில்|இந்தியில்|தெலுங்கில்|கன்னடத்தில்|மலையாளத்தில்|উর্দু|ਵਿੱਚ/u.test(text);
   if (!hasRequestVerb && !hasInLang) return null;
 
-  // ── Negation guards ────────────────────────────────────────────────────────
-  const negEn =
-    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\benglish\b/.test(t) ||
-    /\benglish\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na|venda|வேண்டாம்)\b/.test(t);
-  const negHi =
-    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\bhindi\b/.test(t) ||
-    /\bhindi\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na)\b/.test(t);
-  const negTa =
-    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\btamil\b/.test(t) ||
-    /\btamil\b[^.!?]{0,15}\b(venda|வேண்டாம்|nahi|nahin|mat|naa|na)\b/.test(t);
-  const negTe =
-    /\b(no|not|don'?t|do not|dont|never)\b[^.!?]{0,20}\btelugu\b/.test(t) ||
-    /\btelugu\b[^.!?]{0,15}\b(nahi|nahin|mat|naa|na|venda)\b/.test(t);
+  // Negation guard per language: "don't speak English" / "English mat bolo" /
+  // "தமிழ் வேண்டாம்" must not latch that language (but leaves any OTHER
+  // positively-requested language free to latch: "Hindi nahi, Tamil me bolo").
+  const wanted = mentioned.filter((s) => {
+    if (s.negation.some((re) => re.test(t))) return false;
+    // Native-script negator shortly after the (native or romanised) mention.
+    const m = s.mention.exec(text);
+    if (m) {
+      const tail = text.slice(m.index + m[0].length, m.index + m[0].length + 18);
+      if (NATIVE_NEGATORS.test(tail)) return false;
+    }
+    return true;
+  });
 
-  const wantsEn = mentionsEn && !negEn;
-  const wantsHi = mentionsHi && !negHi;
-  const wantsTa = mentionsTa && !negTa;
-  const wantsTe = mentionsTe && !negTe;
-
-  // ── Resolution ─────────────────────────────────────────────────────────────
-  // Single unambiguous match → return it.
-  // Multi-language tie → prefer the more specific Indic language over English.
-  if (wantsTa && !wantsHi && !wantsTe && !wantsEn) return "ta-IN";
-  if (wantsTe && !wantsHi && !wantsTa && !wantsEn) return "te-IN";
-  if (wantsHi && !wantsTa && !wantsTe && !wantsEn) return "hi-IN";
-  if (wantsEn && !wantsHi && !wantsTa && !wantsTe) return "en-IN";
-  // Tie-break: Tamil > Telugu > Hindi > English
-  if (wantsTa) return "ta-IN";
-  if (wantsTe) return "te-IN";
-  if (wantsHi) return "hi-IN";
-  if (wantsEn) return "en-IN";
+  // Exactly one positively requested → latch it.
+  if (wanted.length === 1) return wanted[0].code;
+  // Hindi wins a true Hindi/English tie (it's the safer base-language fallback);
+  // any other multi-language combination is ambiguous — never latch.
+  if (wanted.length === 2) {
+    const codes = new Set(wanted.map((w) => w.code));
+    if (codes.has("hi-IN") && codes.has("en-IN")) return "hi-IN";
+  }
   return null;
 }
 

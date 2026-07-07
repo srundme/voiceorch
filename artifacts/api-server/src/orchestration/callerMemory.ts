@@ -112,6 +112,24 @@ export interface CallerContext {
 // not reused. Never shown to the LLM — filtered out of the facts list on load.
 export const PERSONA_HASH_FACT_KEY = "__agent_persona_hash";
 
+// BCP-47 → plain-name value stored in the language_pref fact. Reverse of the
+// LANG_PREF_TO_BCP47 map session.ts uses at call start to seed the STT/agent
+// language from this fact — keys/values MUST stay in sync with that map.
+const BCP47_TO_LANG_PREF: Record<string, string> = {
+  "en-IN": "english",
+  "hi-IN": "hindi",
+  "ta-IN": "tamil",
+  "te-IN": "telugu",
+  "kn-IN": "kannada",
+  "ml-IN": "malayalam",
+  "mr-IN": "marathi",
+  "bn-IN": "bengali",
+  "gu-IN": "gujarati",
+  "pa-IN": "punjabi",
+  "or-IN": "odia",
+  "ur-IN": "urdu",
+};
+
 /**
  * Stable fingerprint of an agent's persona. Derived from the system prompt only
  * (the persona definition that changes when an agent is repurposed) — NOT from
@@ -922,8 +940,17 @@ export async function updateCallerProfile(opts: {
    * Ignored when null/empty (don't overwrite an existing preference with nothing).
    */
   finalLanguage?: string | null;
+  /**
+   * BCP-47 code of a language the caller EXPLICITLY requested mid-call
+   * ("Speak in Tamil" → "ta-IN"). Ground truth: supersedes the stored
+   * language_pref fact directly (before/regardless of LLM extraction, which is
+   * also blocked from overwriting it this call) so the NEXT call greets the
+   * caller in the language they literally asked for. Only passed for
+   * multilingual (languageAutoDetect) agents; null/undefined = no-op.
+   */
+  explicitLanguageRequest?: string | null;
 }): Promise<void> {
-  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash, finalLanguage } = opts;
+  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash, finalLanguage, explicitLanguageRequest } = opts;
   // Defense-in-depth: write under the SAME canonical key the read path uses.
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
@@ -962,6 +989,35 @@ export async function updateCallerProfile(opts: {
     });
 
   logger.info({ agentId, phoneNumber, callId, callCount: newCount, wasDropped }, "Caller profile counter updated");
+
+  // ── Explicit mid-call language request → ground-truth language_pref fact ──
+  // The caller literally asked for this language, so it wins over both the
+  // stored fact AND whatever the LLM extraction below might infer from a
+  // possibly mis-transcribed transcript. Runs before extraction (so it
+  // persists even if the LLM fails) and language_pref is skipped in the
+  // extracted-facts loop below when this is set.
+  const explicitLangPref = explicitLanguageRequest
+    ? BCP47_TO_LANG_PREF[explicitLanguageRequest] ?? null
+    : null;
+  if (explicitLangPref) {
+    try {
+      const langFactId = await supersedeFact({
+        agentId, phoneNumber,
+        key:          "language_pref",
+        value:        explicitLangPref,
+        confidence:   0.98,
+        sourceCallId: callId,
+      });
+      if (langFactId !== null) {
+        logger.info(
+          { agentId, phoneNumber, callId, languagePref: explicitLangPref },
+          "Caller memory: language_pref superseded from explicit mid-call language request",
+        );
+      }
+    } catch (langErr) {
+      logger.warn({ agentId, phoneNumber, callId, langErr }, "Caller memory: explicit language_pref write failed");
+    }
+  }
 
   if (history.length < 2) return;
 
@@ -1118,6 +1174,9 @@ export async function updateCallerProfile(opts: {
   const newFactIds: number[] = [];
   for (const f of validFacts) {
     const normKey = f.key.toLowerCase().replace(/\s+/g, "_").slice(0, 64);
+    // The explicitly-requested language (written above) is ground truth this
+    // call — don't let LLM inference from the transcript overwrite it.
+    if (explicitLangPref && normKey === "language_pref") continue;
     const factId = await supersedeFact({
       agentId,
       phoneNumber,

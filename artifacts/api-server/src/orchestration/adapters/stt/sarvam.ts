@@ -166,31 +166,36 @@ export class SarvamSTT implements STTAdapter {
   ): StreamSTT {
     // Capture class fields as locals so closures (plain object methods, nested
     // functions) can reference them without relying on `this` binding.
-    const langCode   = this.langCode;
+    // langCode is MUTABLE: setLanguage() live-switches it mid-call (explicit
+    // caller language request) and reconnects the socket with the new hint.
+    let   langCode   = this.langCode;
     const model      = this.model;
     const mode       = this.mode;
     const key        = this.key;
     const sampleRate = this.sampleRate;
 
-    const params = new URLSearchParams({
-      model:              model,
-      language_code:      langCode,
-      sample_rate:        String(this.sampleRate),
-      input_audio_codec:  "pcm_s16le",
-      high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappy for voice agents
-      vad_signals:        "true",    // emit speech_start / speech_end events
-      flush_signal:       "true",    // allow manual buffer flush via flush() call
-    });
-
-    if (MODE_CAPABLE.has(model)) {
-      params.set("mode", mode);
-    }
-
-    const wsUrl = `${WS_BASE}?${params.toString()}`;
+    // Built per-connection (inside openSocket) so a reconnect after a live
+    // language switch picks up the current langCode.
+    const buildWsUrl = (): string => {
+      const params = new URLSearchParams({
+        model:              model,
+        language_code:      langCode,
+        sample_rate:        String(sampleRate),
+        input_audio_codec:  "pcm_s16le",
+        high_vad_sensitivity: "true",  // 0.5 s silence boundary — snappy for voice agents
+        vad_signals:        "true",    // emit speech_start / speech_end events
+        flush_signal:       "true",    // allow manual buffer flush via flush() call
+      });
+      if (MODE_CAPABLE.has(model)) {
+        params.set("mode", mode);
+      }
+      return `${WS_BASE}?${params.toString()}`;
+    };
 
     let ws: WebSocket;
     let wsReady = false;
     let intentionallyClosed = false;
+    let switchingLanguage = false; // set by setLanguage(); close handler reopens immediately, no backoff
     let reconnectAttempts = 0;
     const MAX_RECONNECT = 10;
 
@@ -377,7 +382,7 @@ export class SarvamSTT implements STTAdapter {
     const openSocket = () => {
       wsReady = false;
 
-      ws = new WebSocket(wsUrl, {
+      ws = new WebSocket(buildWsUrl(), {
         headers: { "api-subscription-key": key },
       });
 
@@ -512,6 +517,16 @@ export class SarvamSTT implements STTAdapter {
           return;
         }
 
+        // Live language switch: we closed the socket ourselves — reopen
+        // immediately with the new langCode. Not an error; no backoff and no
+        // reconnectAttempts++ (audio buffered in audioQueue meanwhile).
+        if (switchingLanguage) {
+          switchingLanguage = false;
+          logger.info({ langCode, model }, "Sarvam STT: reopening WebSocket after language switch");
+          openSocket();
+          return;
+        }
+
         // Auth / quota errors: do not retry.
         if (code >= 4000 && code < 5000) {
           logger.error(
@@ -572,6 +587,29 @@ export class SarvamSTT implements STTAdapter {
           }),
         );
         logger.debug({ langCode }, "Sarvam STT: flush signal sent");
+      },
+      setLanguage(lang: string): void {
+        const next = normaliseLang(lang);
+        if (next === langCode) return;           // already on it — no-op (loop guard)
+        if (intentionallyClosed) return;         // stream already torn down
+        const prev = langCode;
+        langCode = next;
+        logger.info(
+          { from: prev, to: next, model },
+          "Sarvam STT: live language switch — reconnecting stream with new language hint",
+        );
+        // Drain any transcript held in the OLD language before switching.
+        if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          switchingLanguage = true;              // close handler reopens immediately with new langCode
+          try { ws.close(1000); } catch {
+            switchingLanguage = false;
+            try { ws.terminate(); } catch { /* noop */ }
+            openSocket();
+          }
+        }
+        // else: socket is between reconnects — the pending reconnect timer's
+        // openSocket() will pick up the new langCode via buildWsUrl().
       },
       close(): void {
         // Drain the coalesce buffer before closing so no transcript is lost.
