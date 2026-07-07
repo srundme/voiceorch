@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import {
   db, agentsTable, platformSettingsTable, schedulingCalendarsTable,
+  availabilitySchedulesTable, eventTypesTable,
   platformListedVoicesTable, agentDispositionsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -78,6 +79,13 @@ interface VibeConfig {
   voicemailMessage: string;
   schedulingEnabled: boolean;
   timezone: string;
+  timezoneSet: boolean;
+  hostEmail: string;
+  hostEmailSet: boolean;
+  availabilityDays: number[];
+  availabilityStart: string;
+  availabilityEnd: string;
+  availabilitySet: boolean;
   compliance: { dpdp: boolean; trai: boolean; irdai: boolean };
   dispositions: VibeDisposition[];
 }
@@ -143,10 +151,26 @@ PHASE "features_voicemail"
 
 PHASE "features_scheduling"
 - Ask: "Does [name] need to book appointments or manage scheduling?"
-- If yes: schedulingEnabled=true; then ask: "What timezone should [name] use for scheduling? (e.g. Asia/Kolkata, Asia/Dubai, America/New_York)". Default to "Asia/Kolkata" if they don't specify.
-- Set timezone to the IANA timezone string (e.g. "Asia/Kolkata", "Asia/Dubai", "America/New_York", "Europe/London")
-- Note: Google Calendar connection and event types are configured separately after agent creation
-→ Transition: set phase="features_compliance"
+- If NO: schedulingEnabled=false → transition to "features_compliance"
+- If YES: schedulingEnabled=true. Then complete ALL of these sub-steps IN ORDER before transitioning:
+
+  Sub-step A — Timezone (timezoneSet):
+    A timezone picker UI will appear automatically in the chat for the user to select.
+    Once they pick one, set timezone=<IANA string they picked> and timezoneSet=true.
+    Do NOT ask for timezone in text — the UI picker handles it.
+
+  Sub-step B — Host email (hostEmailSet):
+    After timezoneSet=true, ask: "What email address should receive booking notifications and appear as the organizer on calendar invites?"
+    Once they provide it, set hostEmail=<email> and hostEmailSet=true.
+
+  Sub-step C — Availability (availabilitySet):
+    After hostEmailSet=true, an availability picker UI will appear automatically.
+    Once they pick, set availabilityDays (array of day_of_week numbers: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat), availabilityStart (HH:MM), availabilityEnd (HH:MM), and availabilitySet=true.
+    Common presets: Mon–Fri=[1,2,3,4,5], Mon–Sat=[1,2,3,4,5,6], All days=[0,1,2,3,4,5,6]
+
+  After all three sub-steps complete: say "Great! I've configured scheduling for [name] — a calendar, availability schedule, and a default 30-min booking event type will be created automatically. You can connect Google Calendar and add more event types from the Scheduling section after creation."
+
+→ Transition to "features_compliance" ONLY after: timezoneSet=true AND hostEmailSet=true AND availabilitySet=true (or schedulingEnabled=false)
 
 PHASE "features_compliance"
 - Ask: "Any compliance standards? Options: DPDP (India data protection), TRAI (telecom), IRDAI (insurance). Choose any or none."
@@ -198,6 +222,13 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
     "voicemailMessage": "",
     "schedulingEnabled": false,
     "timezone": "Asia/Kolkata",
+    "timezoneSet": false,
+    "hostEmail": "",
+    "hostEmailSet": false,
+    "availabilityDays": [1,2,3,4,5],
+    "availabilityStart": "09:00",
+    "availabilityEnd": "17:00",
+    "availabilitySet": false,
     "compliance": {"dpdp": false, "trai": false, "irdai": false},
     "dispositions": []
   }
@@ -480,10 +511,16 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
     }
 
-    // Timezone picker — show UI selector when scheduling is enabled and timezone not yet set
-    if (cfg.schedulingEnabled && (!cfg.timezone || cfg.timezone === "Asia/Kolkata") && phase === "features_scheduling") {
+    // Timezone picker — show when scheduling enabled and not yet confirmed by user
+    if (cfg.schedulingEnabled && !cfg.timezoneSet && phase === "features_scheduling") {
       await sleep(150);
       emit({ type: "timezone_picker" });
+    }
+
+    // Availability picker — show after timezone + host email collected, before availability confirmed
+    if (cfg.schedulingEnabled && cfg.timezoneSet && cfg.hostEmailSet && !cfg.availabilitySet && phase === "features_scheduling") {
+      await sleep(150);
+      emit({ type: "availability_picker" });
     }
 
     // Disposition cards
@@ -748,24 +785,71 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         .catch(err => logger.warn({ err }, "vibe-chat: disposition insert failed"));
     }
 
-    // DB insert — scheduling calendar
+    // DB insert — scheduling calendar + availability + default event type
     if (cfg.schedulingEnabled) {
-      db.insert(schedulingCalendarsTable)
-        .values({
-          agentId:  insertedAgent.id,
-          userId:   clerkId,
-          name:     `${cfg.agentName} Calendar`,
-          timezone: agentTimezone,
-          isActive: true,
-        })
-        .onConflictDoNothing()
-        .catch(() => {});
-      // Emit scheduling setup guidance for the frontend
+      try {
+        const [cal] = await db.insert(schedulingCalendarsTable)
+          .values({
+            agentId:   insertedAgent.id,
+            userId:    clerkId,
+            name:      `${cfg.agentName} Calendar`,
+            timezone:  agentTimezone,
+            hostEmail: cfg.hostEmail || null,
+            isActive:  true,
+          })
+          .onConflictDoUpdate({
+            target: [schedulingCalendarsTable.agentId],
+            set: {
+              timezone:  agentTimezone,
+              hostEmail: cfg.hostEmail || null,
+            },
+          })
+          .returning();
+
+        if (cal) {
+          // Availability schedule — Mon-Fri 9-5 default or user selection
+          const days: number[]  = cfg.availabilityDays?.length ? cfg.availabilityDays : [1,2,3,4,5];
+          const startTime       = cfg.availabilityStart || "09:00";
+          const endTime         = cfg.availabilityEnd   || "17:00";
+          await db.insert(availabilitySchedulesTable)
+            .values(days.map((day: number) => ({
+              calendarId: cal.id,
+              dayOfWeek:  day,
+              startTime,
+              endTime,
+              isActive:   true,
+            })))
+            .onConflictDoNothing()
+            .catch(() => {});
+
+          // Auto-create a default "Quick Chat" 30-min event type
+          const slugBase = cfg.agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          await db.insert(eventTypesTable)
+            .values({
+              calendarId:       cal.id,
+              userId:           clerkId,
+              name:             "Quick Chat",
+              slug:             `${slugBase}-${Date.now()}`,
+              description:      `Book a quick call with ${cfg.agentName}`,
+              durationMinutes:  30,
+              confirmationMode: "instant",
+              isActive:         true,
+            })
+            .onConflictDoNothing()
+            .catch(() => {});
+        }
+      } catch (err) {
+        logger.warn({ err }, "vibe-chat: scheduling setup failed (non-fatal)");
+      }
+
+      // Emit scheduling setup card for the frontend
       emit({
-        type: "scheduling_setup",
-        timezone: agentTimezone,
-        connectCalendarUrl: "/app/connections",
-        eventTypesUrl:      "/app/scheduling",
+        type:              "scheduling_setup",
+        timezone:          agentTimezone,
+        hostEmail:         cfg.hostEmail || "",
+        availabilityDays:  cfg.availabilityDays || [1,2,3,4,5],
+        connectCalendarUrl: "/app/scheduling",
+        eventTypesUrl:     "/app/scheduling",
       });
     }
 

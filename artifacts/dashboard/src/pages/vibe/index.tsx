@@ -13,6 +13,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
 
+const AVAILABILITY_PRESETS = [
+  { id: "mf9to5",  label: "Mon – Fri,  9 AM – 5 PM", days: [1,2,3,4,5],     start: "09:00", end: "17:00" },
+  { id: "ms9to6",  label: "Mon – Sat,  9 AM – 6 PM", days: [1,2,3,4,5,6],   start: "09:00", end: "18:00" },
+  { id: "ms10to7", label: "Mon – Sat, 10 AM – 7 PM", days: [1,2,3,4,5,6],   start: "10:00", end: "19:00" },
+  { id: "all247",  label: "All days,   24 × 7",       days: [0,1,2,3,4,5,6], start: "00:00", end: "23:59" },
+  { id: "manual",  label: "I'll configure it myself", days: [1,2,3,4,5],     start: "09:00", end: "17:00" },
+] as const;
+
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
 interface VoiceOption  { voiceId: string; voiceName: string; gender: string; language: string; description: string; }
@@ -26,10 +34,12 @@ interface ChatMsg {
   role: "user" | "ai";
   content: string;
   done?: boolean;
-  voices?: VoiceOption[];      // inline voice picker
-  voicePicked?: boolean;       // collapses picker after selection
-  timezonePicker?: boolean;    // inline timezone picker
-  timezonePicked?: boolean;    // collapses timezone picker after selection
+  voices?: VoiceOption[];        // inline voice picker
+  voicePicked?: boolean;         // collapses picker after selection
+  timezonePicker?: boolean;      // inline timezone picker
+  timezonePicked?: boolean;      // collapses timezone picker after selection
+  availabilityPicker?: boolean;  // inline availability preset picker
+  availabilityPicked?: boolean;  // collapses availability picker after selection
 }
 
 type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
@@ -284,6 +294,22 @@ export default function VibePage() {
     setMessages(prev => prev.map(m => m.timezonePicker ? { ...m, timezonePicked: true } : m));
   }, []);
 
+  // Attach availability picker to last AI message
+  const attachAvailabilityPickerToLastMsg = useCallback(() => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === "ai") {
+        return [...prev.slice(0, -1), { ...last, availabilityPicker: true, availabilityPicked: false }];
+      }
+      return prev;
+    });
+  }, []);
+
+  // Collapse all availability pickers after selection
+  const collapseAvailabilityPickers = useCallback(() => {
+    setMessages(prev => prev.map(m => m.availabilityPicker ? { ...m, availabilityPicked: true } : m));
+  }, []);
+
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
@@ -408,6 +434,10 @@ export default function VibePage() {
               attachTimezonePickerToLastMsg();
               break;
 
+            case "availability_picker":
+              attachAvailabilityPickerToLastMsg();
+              break;
+
             case "prompt_stream":
               setPromptPreview(prev => prev + (evt.delta as string));
               break;
@@ -445,7 +475,8 @@ export default function VibePage() {
       ));
       setPhase("idle");
     }
-  }, [input, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers, queryClient]);
+  }, [input, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
+      attachAvailabilityPickerToLastMsg, queryClient]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -532,6 +563,10 @@ export default function VibePage() {
                 onSelectTimezone={tz => {
                   collapseTimezonePickers();
                   send(`Use ${tz.label} (${tz.value})`);
+                }}
+                onSelectAvailability={preset => {
+                  collapseAvailabilityPickers();
+                  send(`Set availability: ${preset.label} — days: [${preset.days.join(",")}], hours: ${preset.start}–${preset.end}`);
                 }}
               />
             ))}
@@ -784,13 +819,14 @@ export default function VibePage() {
 /*  Chat components                                                            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, onSelectTimezone }: {
+function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, onSelectTimezone, onSelectAvailability }: {
   msg: ChatMsg;
   selectedVoice: string;
   playingVoice: string | null;
   onPreview: (id: string) => void;
   onSelect: (v: VoiceOption) => void;
   onSelectTimezone: (tz: { value: string; label: string }) => void;
+  onSelectAvailability: (preset: typeof AVAILABILITY_PRESETS[number]) => void;
 }) {
   const isAi = msg.role === "ai";
 
@@ -862,6 +898,36 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
           <div className="flex items-center gap-2 text-[11px] text-primary">
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span className="font-medium">Timezone selected</span>
+          </div>
+        )}
+
+        {/* Availability picker — shown when scheduling is being set up */}
+        {msg.availabilityPicker && !msg.availabilityPicked && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Select availability
+            </p>
+            <div className="rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+              {AVAILABILITY_PRESETS.map(preset => (
+                <button
+                  key={preset.id}
+                  onClick={() => onSelectAvailability(preset)}
+                  className="w-full text-left px-3 py-2.5 text-xs hover:bg-primary/10 hover:text-primary transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
+                >
+                  <span className="font-medium">{preset.label}</span>
+                  {preset.id === "mf9to5" && (
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">recommended</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Collapsed availability state */}
+        {msg.availabilityPicker && msg.availabilityPicked && (
+          <div className="flex items-center gap-2 text-[11px] text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="font-medium">Availability set</span>
           </div>
         )}
 
