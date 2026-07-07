@@ -80,12 +80,15 @@ export class OpenRouterLLM implements LLMAdapter {
       stream_options: { include_usage: true },
       ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      // Disable reasoning/thinking tokens — they add latency before first spoken word
+      // and are never useful for a real-time voice call.
+      reasoning: { effort: "none" },
       messages: [
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
       ] as any,
       ...(orTools ? { tools: orTools, tool_choice: toolChoice } : {}),
-    });
+    } as any);
 
     let full = "";
     let toolCallName = "";
