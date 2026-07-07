@@ -6,8 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
   Building2, CheckCircle2, Loader2, ChevronLeft, Zap, UserCheck,
-  PhoneForwarded, Voicemail, Calendar, ShieldCheck, ArrowRight,
-  Play, Volume2, FileText, BookOpen, ArrowUpRight,
+  PhoneForwarded, Voicemail, Calendar, ShieldCheck,
+  Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
@@ -104,6 +104,7 @@ export default function VibePage() {
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const historyRef  = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
   const voicesRef   = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -297,6 +298,24 @@ export default function VibePage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const allowed = ["text/plain","text/csv","text/markdown","application/json","text/html"];
+    if (!allowed.includes(file.type) && !file.name.match(/\.(txt|md|csv|json|html)$/i)) {
+      alert("Please upload a .txt, .md, .csv, or .json file. PDF support coming soon.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = (ev.target?.result as string ?? "").slice(0, 12000);
+      const msg = `[Knowledge Base Upload — "${file.name}"]\n\n${content}`;
+      send(msg);
+    };
+    reader.readAsText(file);
+  }, [send]);
+
   const canSend = input.trim().length > 0
     && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done";
 
@@ -366,12 +385,28 @@ export default function VibePage() {
               placeholder={
                 phase === "done"
                   ? "Your agent is ready! ✓"
-                  : "Message…"
+                  : "Message or drop a file for knowledge base…"
               }
               disabled={phase === "done" || phase === "building"}
               rows={3}
-              className="resize-none text-sm pr-12 bg-muted/30 border-border/60 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50 placeholder:text-muted-foreground/50"
+              className="resize-none text-sm pr-20 bg-muted/30 border-border/60 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50 placeholder:text-muted-foreground/50"
             />
+            {/* File upload */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.md,.csv,.json,.html"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={phase === "done" || phase === "building" || phase === "thinking" || phase === "streaming"}
+              title="Upload document for knowledge base (.txt, .md, .csv, .json)"
+              className="absolute right-11 bottom-2.5 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all disabled:opacity-30"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
             <Button
               size="icon"
               onClick={() => send()}
@@ -387,7 +422,7 @@ export default function VibePage() {
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground/50 mt-2 text-center tracking-wide">
-            Enter to send · Shift+Enter for newline
+            Enter to send · Shift+Enter for newline · 📎 to upload KB docs
           </p>
         </div>
       </div>
@@ -438,24 +473,30 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* Voice — right panel reference (no select button; selection is in chat) */}
+              {/* Voice — collapses to chip once picked */}
               {voiceOptions.length > 0 && (
-                <Section
-                  title="Voice"
-                  badge={selectedVoice ? `✓ ${selectedVoice}` : "Select in chat ↑"}
-                  badgeVariant={selectedVoice ? "success" : "neutral"}
-                >
-                  <div className="grid grid-cols-2 gap-2">
-                    {voiceOptions.map(v => (
-                      <RightVoiceChip
-                        key={v.voiceId}
-                        voice={v}
-                        isSelected={selectedVoice.includes(v.voiceName)}
-                        isPlaying={playingVoice === v.voiceId}
-                        onPreview={() => previewVoice(v.voiceId, setPlayingVoice)}
-                      />
-                    ))}
-                  </div>
+                <Section title="Voice">
+                  {selectedVoice ? (
+                    <div className="flex items-center gap-2.5 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-primary">{selectedVoice}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Voice selected · Cartesia Sonic 3.5</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {voiceOptions.map(v => (
+                        <RightVoiceChip
+                          key={v.voiceId}
+                          voice={v}
+                          isSelected={false}
+                          isPlaying={playingVoice === v.voiceId}
+                          onPreview={() => previewVoice(v.voiceId, setPlayingVoice)}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </Section>
               )}
 

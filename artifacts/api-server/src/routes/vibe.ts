@@ -95,7 +95,7 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
 1. Agent name (a real human name callers will hear — suggest one if they don't give one)
 2. Company/brand name
 3. Primary language — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US
-4. Call direction: "inbound" (customers call in) or "outbound" (agent calls out)
+4. Call direction: "inbound" (customers call in) or "outbound" (agent calls out). If the user says "both", "either", or it handles both scenarios — set direction="inbound" and note in description that it handles both inbound and outbound contexts.
 5. Purpose/description (what it does and who it talks to)
 → Transition: once you have all 5, set phase="voice_selection"
 
@@ -615,8 +615,10 @@ function buildPromptInstruction(cfg: VibeConfig, langDisplay: string): string {
 
 Requirements:
 - Define the agent's name, company, goal, and personality
-- Use short, natural spoken-language sentences (voice, not text/chat)
-- Handle common objections and edge cases naturally
+- CRITICAL: Write in COLLOQUIAL, CONVERSATIONAL spoken language — the way real people actually talk on the phone. NOT formal, NOT literary, NOT textbook language. Short sentences, everyday words, natural rhythm.
+- For Indian languages (Tamil, Hindi, Telugu, Kannada, Malayalam): use the everyday spoken/colloquial dialect, NOT the classical or formal written register. E.g. for Tamil: "நான் Priya, Galaxy Insurance-லருந்து பேசுறேன்" not "நான் Priya, Galaxy Insurance நிறுவனத்திலிருந்து பேசுகிறேன்".
+- Voice-first: no bullet points, no lists, no markdown — only spoken sentences
+- Handle common objections and edge cases naturally with conversational responses
 - Aim for 500–700 words
 - Language: ${langDisplay}
 ${cfg.callTransferEnabled ? `- Include clear instructions for when to transfer to ${cfg.transferName || "a human agent"} at ${cfg.transferPhoneNumber}` : ""}
