@@ -153,7 +153,10 @@ export default function VibePage() {
           { key: "language",  label: "Language",       value: lang,                                        icon: "globe"    },
           { key: "direction", label: "Call Direction",
             value: cfg.direction === "outbound" ? "Outbound" : "Inbound",                                  icon: "phone"    },
-          { key: "voice",     label: "Voice",          value: (agent.ttsVoice as string) || "—",           icon: "mic"      },
+          { key: "voice",     label: "Voice",
+            value: (agent.ttsVoice as string)
+              ? ((agent.ttsVoiceName as string) || `…${(agent.ttsVoice as string).slice(-8)}`)
+              : "—",                                                                                         icon: "mic"      },
           { key: "llm",       label: "AI Brain",       value: (agent.llmModel as string) || "Managed",     icon: "cpu"      },
           { key: "stt",       label: "Speech-to-Text", value: "Sarvam Saaras v3",                          icon: "ear"      },
           { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                        icon: "speaker"  },
@@ -202,7 +205,14 @@ export default function VibePage() {
         setFeatures(panelFeatures);
 
         if (agent.ttsVoice) setSelectedVoice(agent.ttsVoice as string);
-        setPhase("building");
+
+        // Show system prompt from existing agent
+        if (agent.systemPrompt) {
+          setPromptPreview(agent.systemPrompt as string);
+        }
+
+        // setPhase("idle") not "building" — "building" disables the chatbox
+        setPhase("idle");
 
         // Inject existing config as context so Gemini knows what it's refining
         const contextSummary = [
@@ -595,6 +605,7 @@ export default function VibePage() {
                 {!hasRightContent              ? "Waiting for your description…" :
                  phase === "building"          ? (statusMsg || "Configuring…") :
                  phase === "done"              ? "Ready to deploy" :
+                 (refineId && phase === "idle") ? "Agent loaded — tell me what to change" :
                                                 "Building up as we chat"}
               </p>
             </div>
