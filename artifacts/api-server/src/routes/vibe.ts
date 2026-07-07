@@ -203,42 +203,76 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
     parts: [{ text: m.content }],
   }));
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
-        contents,
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.7,
-          maxOutputTokens: 2048,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
+  const body = JSON.stringify({
+    system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
+    contents,
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.7,
+      maxOutputTokens: 2048,
+      thinkingConfig: { thinkingBudget: 0 },
     },
-  );
+  });
 
-  if (!resp.ok) {
-    const txt = await resp.text();
-    throw new Error(`Gemini ${resp.status}: ${txt.slice(0, 300)}`);
+  const MAX_ATTEMPTS = 3;
+  let lastErr: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const resp = await Promise.race([
+        fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body },
+        ),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 15000)),
+      ]);
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        const err = new Error(`Gemini ${resp.status}: ${txt.slice(0, 300)}`);
+        // Retry on rate-limit or server error; fail fast on 400/401/403
+        if (resp.status === 429 || resp.status >= 500) {
+          lastErr = err;
+          if (attempt < MAX_ATTEMPTS) {
+            await sleep(attempt * 1500); // 1.5s, 3s
+            continue;
+          }
+        }
+        throw err;
+      }
+
+      const data = await resp.json() as {
+        candidates: Array<{ content: { parts: Array<{ text: string; thought?: boolean }> } }>
+      };
+      // Gemini 2.5 Flash (thinking model) may return a thought part before the real output part
+      const parts = data.candidates?.[0]?.content?.parts ?? [];
+      const textPart = parts.find(p => !p.thought && p.text) ?? parts[parts.length - 1];
+      const text = textPart?.text ?? "{}";
+      let jsonText = text.trim();
+      // Strip markdown code fences if present
+      if (jsonText.startsWith("```")) {
+        jsonText = jsonText.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
+      }
+      try {
+        return JSON.parse(jsonText) as GeminiVibeResponse;
+      } catch {
+        // If JSON parse fails, retry
+        lastErr = new Error(`JSON parse failed: ${jsonText.slice(0, 200)}`);
+        if (attempt < MAX_ATTEMPTS) { await sleep(attempt * 1000); continue; }
+        throw lastErr;
+      }
+    } catch (err) {
+      lastErr = err as Error;
+      const isTransient = (err as Error).message === "gemini_timeout" || (err as Error).message?.includes("fetch failed");
+      if (isTransient && attempt < MAX_ATTEMPTS) {
+        await sleep(attempt * 1500);
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const data = await resp.json() as {
-    candidates: Array<{ content: { parts: Array<{ text: string; thought?: boolean }> } }>
-  };
-  // Gemini 2.5 Flash (thinking model) may return a thought part before the real output part
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const textPart = parts.find(p => !p.thought && p.text) ?? parts[parts.length - 1];
-  const text = textPart?.text ?? "{}";
-  let jsonText = text.trim();
-  // Strip markdown code fences if present
-  if (jsonText.startsWith("```")) {
-    jsonText = jsonText.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
-  }
-  return JSON.parse(jsonText) as GeminiVibeResponse;
+  throw lastErr ?? new Error("Gemini call failed after retries");
 }
 
 /* ── POST /agents/vibe-chat ──────────────────────────────────────────────── */
