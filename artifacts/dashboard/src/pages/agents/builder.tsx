@@ -2519,7 +2519,8 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   const { toast } = useToast();
   const userProviderNames = useUserProviderNames();
 
-  const handleCreate = () => navigate("/app/vibe");
+  const [showCreate, setShowCreate] = useState(false);
+  const handleCreate = () => setShowCreate(true);
 
   const filtered = (agents ?? []).filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
@@ -2527,6 +2528,7 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
 
   return (
     <div className="w-[240px] shrink-0 border-r border-border/60 flex flex-col h-full bg-background/40">
+      <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <div className="p-3 border-b border-border/60 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agents</span>
@@ -4713,6 +4715,115 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
 /* ── Empty state ────────────────────────────────────────────────────────────── */
 
+function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [, navigate]  = useLocation();
+  const queryClient   = useQueryClient();
+  const [step,        setStep]        = useState<"pick" | "scratch">("pick");
+  const [agentName,   setAgentName]   = useState("");
+  const [creating,    setCreating]    = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const handleClose = () => { onClose(); setTimeout(() => { setStep("pick"); setAgentName(""); setCreateError(null); }, 200); };
+
+  const handleVibe = () => { handleClose(); navigate("/app/vibe"); };
+
+  const handleScratch = async () => {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const name = agentName.trim() || "New Agent";
+      const result = await customFetch<{ id: number }>(`${DASH_API}/agents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          asrProvider: "sarvam",
+          asrModel: "saaras:v3",
+          asrLanguage: "en-IN",
+          language: "en-IN",
+          llmProvider: "groq",
+          llmModel: "meta-llama/llama-4-scout-17b-16e-instruct",
+          ttsProvider: "cartesia",
+          ttsModel: "sonic-3.5",
+          ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
+          telephonyProvider: "vobiz",
+          systemPrompt: "You are a helpful AI voice assistant.",
+          greetingMessage: "Hello! How can I help you today?",
+          tools: [{ type: "end_call", name: "end_call", description: "End the call when the conversation is complete." }],
+        }),
+      });
+      await queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+      handleClose();
+      navigate(`/app/agents/${result.id}`);
+    } catch (err: any) {
+      setCreateError(err?.message ?? "Failed to create agent. Please try again.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create a new agent</DialogTitle>
+          <DialogDescription>Choose how you want to build your voice agent.</DialogDescription>
+        </DialogHeader>
+
+        {step === "pick" ? (
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <button
+              onClick={handleVibe}
+              className="group flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card p-5 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors"
+            >
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Build with AI</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Guided conversational setup</p>
+              </div>
+            </button>
+            <button
+              onClick={() => setStep("scratch")}
+              className="group flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card p-5 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors"
+            >
+              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center group-hover:bg-muted/80 transition-colors">
+                <Settings className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Build from scratch</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Full manual configuration</p>
+              </div>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="scratch-name">Agent name</Label>
+              <Input
+                id="scratch-name"
+                placeholder="e.g. Sales Agent, Support Bot"
+                value={agentName}
+                onChange={e => setAgentName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !creating && handleScratch()}
+                autoFocus
+              />
+            </div>
+            {createError && <p className="text-xs text-destructive">{createError}</p>}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStep("pick")} disabled={creating}>Back</Button>
+              <Button onClick={handleScratch} disabled={creating}>
+                {creating ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Creating…</> : "Create agent"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="flex-1 flex items-center justify-center">
@@ -4768,10 +4879,12 @@ export default function AgentBuilder() {
     navigate(`/app/agents/${target}`, { replace: true });
   }, [selectedId, agentsLoading, agents, navigate]);
 
-  const handleCreate = () => navigate("/app/vibe");
+  const [showCreate, setShowCreate] = useState(false);
+  const handleCreate = () => setShowCreate(true);
 
   return (
     <div className="flex h-full overflow-hidden">
+      <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <AgentListPanel selectedId={selectedId} onSelect={handleSelect} rateMap={rateMap} />
       {selectedId
         ? <AgentEditorPanel agentId={selectedId} />

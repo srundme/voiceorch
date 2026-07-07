@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,12 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 export default function VibePage() {
   const [, navigate]     = useLocation();
   const queryClient      = useQueryClient();
+  const refineId = useMemo(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get("refine");
+      return v ? parseInt(v, 10) : null;
+    } catch { return null; }
+  }, []);
 
   const [messages,       setMessages]       = useState<ChatMsg[]>([GREETING]);
   const [input,          setInput]          = useState("");
@@ -163,6 +169,7 @@ export default function VibePage() {
           messages:        history,
           voicesShown:     voicesRef.current.shown,
           availableVoices: voicesRef.current.list,
+          ...(refineId != null ? { refineAgentId: refineId } : {}),
         }),
       });
 
@@ -561,7 +568,7 @@ export default function VibePage() {
 
               {/* Done */}
               {phase === "done" && createdId && (
-                <DoneCard name={createdName} id={createdId} navigate={navigate} />
+                <DoneCard name={createdName} id={createdId} navigate={navigate} isUpdate={refineId != null} />
               )}
             </div>
           )}
@@ -899,7 +906,7 @@ function EmptyState() {
   );
 }
 
-function DoneCard({ name, id, navigate }: { name: string; id: number; navigate: (to: string) => void }) {
+function DoneCard({ name, id, navigate, isUpdate }: { name: string; id: number; navigate: (to: string) => void; isUpdate?: boolean }) {
   return (
     <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-500">
       <div className="flex justify-center">
@@ -908,10 +915,10 @@ function DoneCard({ name, id, navigate }: { name: string; id: number; navigate: 
         </div>
       </div>
       <div>
-        <p className="font-semibold"><span className="text-emerald-400">{name}</span> is live</p>
+        <p className="font-semibold"><span className="text-emerald-400">{name}</span> {isUpdate ? "updated" : "is live"}</p>
         <p className="text-xs text-muted-foreground mt-1">Providers configured · System prompt ready · Dispositions set</p>
       </div>
-      <div className="flex gap-2 justify-center">
+      <div className="flex flex-wrap gap-2 justify-center">
         <Button size="sm" className="gap-1.5 rounded-xl"
           onClick={() => navigate(`/app/agents/${id}?webcall=1`)}>
           <Phone className="h-3.5 w-3.5" /> Make a call
@@ -919,6 +926,10 @@ function DoneCard({ name, id, navigate }: { name: string; id: number; navigate: 
         <Button size="sm" variant="outline" className="gap-1.5 rounded-xl"
           onClick={() => navigate(`/app/agents/${id}`)}>
           <Settings2 className="h-3.5 w-3.5" /> Edit agent <ArrowUpRight className="h-3 w-3" />
+        </Button>
+        <Button size="sm" variant="ghost" className="gap-1.5 rounded-xl"
+          onClick={() => navigate(`/app/vibe?refine=${id}`)}>
+          <Sparkles className="h-3.5 w-3.5" /> Refine with AI
         </Button>
       </div>
     </div>

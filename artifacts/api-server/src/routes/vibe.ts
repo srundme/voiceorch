@@ -4,7 +4,7 @@ import {
   db, agentsTable, platformSettingsTable, schedulingCalendarsTable,
   platformListedVoicesTable, agentDispositionsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
@@ -285,10 +285,12 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     messages,
     voicesShown   = false,
     availableVoices = [] as VibeVoice[],
+    refineAgentId,
   } = req.body as {
     messages:        VibeChatMessage[];
     voicesShown?:    boolean;
     availableVoices?: VibeVoice[];
+    refineAgentId?:  number;
   };
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -668,30 +670,52 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       });
     }
 
-    // DB insert — agent
+    // DB insert or update — agent
     let insertedAgent: { id: number; name: string };
+    const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
     try {
-      const [row] = await db.insert(agentsTable).values({
-        userId:            clerkId,
-        name:              cfg.agentName,
-        asrProvider:       "sarvam",
-        asrModel:          "saaras:v3",
-        asrLanguage:       langCode,
-        language:          langCode,
-        llmProvider,
-        llmModel,
-        ttsProvider:       "cartesia",
-        ttsModel:          "sonic-3.5",
-        ttsVoice:          resolvedVoiceId,
-        telephonyProvider: "vobiz",
-        systemPrompt,
-        greetingMessage,
-        agentConfig:       agentConfig as any,
-        tools:             tools as any,
-      } as any).returning();
-      insertedAgent = row;
+      if (isRefine) {
+        // Refine mode: update the existing agent (scoped to this user for security)
+        const [row] = await (db.update(agentsTable) as any)
+          .set({
+            name:         cfg.agentName,
+            asrLanguage:  langCode,
+            language:     langCode,
+            llmProvider,
+            llmModel,
+            ttsVoice:     resolvedVoiceId,
+            systemPrompt,
+            greetingMessage,
+            agentConfig:  agentConfig as any,
+            tools:        tools as any,
+          })
+          .where(and(eq(agentsTable.id, refineAgentId), eq(agentsTable.userId, clerkId)))
+          .returning();
+        if (!row) throw new Error(`Agent ${refineAgentId} not found or not owned by user`);
+        insertedAgent = row;
+      } else {
+        const [row] = await db.insert(agentsTable).values({
+          userId:            clerkId,
+          name:              cfg.agentName,
+          asrProvider:       "sarvam",
+          asrModel:          "saaras:v3",
+          asrLanguage:       langCode,
+          language:          langCode,
+          llmProvider,
+          llmModel,
+          ttsProvider:       "cartesia",
+          ttsModel:          "sonic-3.5",
+          ttsVoice:          resolvedVoiceId,
+          telephonyProvider: "vobiz",
+          systemPrompt,
+          greetingMessage,
+          agentConfig:       agentConfig as any,
+          tools:             tools as any,
+        } as any).returning();
+        insertedAgent = row;
+      }
     } catch (dbErr) {
-      logger.error({ dbErr }, "vibe-chat: agent DB insert failed");
+      logger.error({ dbErr }, "vibe-chat: agent DB save failed");
       emit({ type: "error", message: "Failed to save agent. Please try again." });
       res.end();
       return;
@@ -725,10 +749,12 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 
     await logActivity({
       userId:       clerkId,
-      eventType:    "agent.created",
+      eventType:    isRefine ? "agent.updated" : "agent.created",
       resourceType: "agent",
       resourceId:   String(insertedAgent.id),
-      description:  `Agent "${insertedAgent.name}" created via Vibe Builder`,
+      description:  isRefine
+        ? `Agent "${insertedAgent.name}" refined via Vibe Builder`
+        : `Agent "${insertedAgent.name}" created via Vibe Builder`,
     });
 
     emit({ type: "created", agentId: insertedAgent.id, agentName: cfg.agentName });
