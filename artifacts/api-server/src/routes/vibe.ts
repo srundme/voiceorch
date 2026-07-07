@@ -215,6 +215,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
           responseMimeType: "application/json",
           temperature: 0.7,
           maxOutputTokens: 2048,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     },
@@ -225,9 +226,19 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
     throw new Error(`Gemini ${resp.status}: ${txt.slice(0, 300)}`);
   }
 
-  const data = await resp.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-  return JSON.parse(text) as GeminiVibeResponse;
+  const data = await resp.json() as {
+    candidates: Array<{ content: { parts: Array<{ text: string; thought?: boolean }> } }>
+  };
+  // Gemini 2.5 Flash (thinking model) may return a thought part before the real output part
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const textPart = parts.find(p => !p.thought && p.text) ?? parts[parts.length - 1];
+  const text = textPart?.text ?? "{}";
+  let jsonText = text.trim();
+  // Strip markdown code fences if present
+  if (jsonText.startsWith("```")) {
+    jsonText = jsonText.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
+  }
+  return JSON.parse(jsonText) as GeminiVibeResponse;
 }
 
 /* ── POST /agents/vibe-chat ──────────────────────────────────────────────── */
