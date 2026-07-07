@@ -4,7 +4,7 @@ import { db, agentsTable, platformSettingsTable, schedulingCalendarsTable } from
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
-import { generatePromptText } from "../services/prompt-template.js";
+
 
 const router = Router();
 
@@ -201,33 +201,46 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     await sleep(500);
     emit({ type: "status", message: "Generating system prompt…" });
 
-    // Generate system prompt
-    let systemPrompt = "";
+    // Generate system prompt via Gemini (same key — fast, reliable)
+    const fallbackPrompt = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional. Always introduce yourself at the start of every call.`;
+    let systemPrompt = fallbackPrompt;
     try {
-      const sysInstruction = `You are a senior voice AI prompt engineer. Write a complete, production-ready system prompt for a voice agent. Requirements:
+      const promptInstruction = `You are a senior voice AI prompt engineer. Write a complete, production-ready system prompt for a voice agent.
+Requirements:
 - Define the agent's name, company, goal, and personality clearly
 - Use short, natural sentences suitable for voice (not text)
-- Handle common objections and edge cases naturally
+- Handle common objections and edge cases
 - Aim for 400-600 words
 - Language: ${langDisplay}
 - Output ONLY the system prompt text — no commentary, no markdown fences`;
 
-      const userContent = `Agent Name: ${cfg.agentName}
+      const promptUser = `Agent Name: ${cfg.agentName}
 Company: ${cfg.companyName}
 Direction: ${cfg.direction}
 Language: ${langDisplay}
-Purpose: ${cfg.description}
-${cfg.knowledge ? `Reference Material:\n${cfg.knowledge}` : ""}`;
+Purpose: ${cfg.description}`;
 
-      systemPrompt = await generatePromptText({
-        systemInstruction: sysInstruction,
-        userContent,
-        languages: [langInfo.label],
-        opts: { temperature: 0.7, maxTokens: 2048 },
-      });
+      const promptResp = await Promise.race([
+        fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: promptInstruction }] },
+              contents: [{ role: "user", parts: [{ text: promptUser }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+            }),
+          },
+        ),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("prompt_timeout")), 25000)),
+      ]);
+
+      const promptJson = await (promptResp as Response).json() as any;
+      const generated = promptJson?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (generated) systemPrompt = generated;
     } catch (err) {
       logger.warn({ err }, "vibe-chat: system prompt generation failed, using fallback");
-      systemPrompt = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to assist callers with: ${cfg.description}. Be concise, friendly, and professional. Always introduce yourself at the start of every call.`;
     }
 
     // Stream system prompt preview (first 280 chars)
@@ -242,31 +255,40 @@ ${cfg.knowledge ? `Reference Material:\n${cfg.knowledge}` : ""}`;
     emit({ type: "status", message: "Creating your agent…" });
 
     // Create the agent in DB
-    const [agent] = await db.insert(agentsTable).values({
-      userId:            clerkId,
-      name:              cfg.agentName,
-      asrProvider:       "sarvam",
-      asrModel:          "saaras:v3",
-      asrLanguage:       langCode,
-      language:          langCode,
-      llmProvider,
-      llmModel,
-      ttsProvider:       "cartesia",
-      ttsModel:          "sonic-3.5",
-      ttsVoice:          voiceId,
-      telephonyProvider: "vobiz",
-      systemPrompt,
-      greetingMessage:   `Hello, I'm ${cfg.agentName} from ${cfg.companyName}. How can I help you today?`,
-      agentConfig: {
-        languageAutoDetect: cfg.languageMode === "multi",
-        recordingEnabled: true,
-        autoRedial: { enabled: true, maxAttempts: 3 },
-      } as any,
-    } as any).returning();
+    let insertedAgent: { id: number; name: string };
+    try {
+      const [row] = await db.insert(agentsTable).values({
+        userId:            clerkId,
+        name:              cfg.agentName,
+        asrProvider:       "sarvam",
+        asrModel:          "saaras:v3",
+        asrLanguage:       langCode,
+        language:          langCode,
+        llmProvider,
+        llmModel,
+        ttsProvider:       "cartesia",
+        ttsModel:          "sonic-3.5",
+        ttsVoice:          voiceId,
+        telephonyProvider: "vobiz",
+        systemPrompt,
+        greetingMessage:   `Hello, I'm ${cfg.agentName} from ${cfg.companyName}. How can I help you today?`,
+        agentConfig: {
+          languageAutoDetect: cfg.languageMode === "multi",
+          recordingEnabled: true,
+          autoRedial: { enabled: true, maxAttempts: 3 },
+        } as any,
+      } as any).returning();
+      insertedAgent = row;
+    } catch (dbErr) {
+      logger.error({ dbErr }, "vibe-chat: DB insert failed");
+      emit({ type: "error", message: "Failed to save agent. Please try again." });
+      res.end();
+      return;
+    }
 
     // Create default scheduling calendar (fire-and-forget)
     db.insert(schedulingCalendarsTable).values({
-      agentId:  agent.id,
+      agentId:  insertedAgent.id,
       userId:   clerkId,
       name:     `${cfg.agentName} Calendar`,
       timezone: "UTC",
@@ -277,11 +299,11 @@ ${cfg.knowledge ? `Reference Material:\n${cfg.knowledge}` : ""}`;
       userId:       clerkId,
       eventType:    "agent.created",
       resourceType: "agent",
-      resourceId:   String(agent.id),
-      description:  `Agent "${agent.name}" created via Vibe Builder`,
+      resourceId:   String(insertedAgent.id),
+      description:  `Agent "${insertedAgent.name}" created via Vibe Builder`,
     });
 
-    emit({ type: "created", agentId: agent.id, agentName: cfg.agentName });
+    emit({ type: "created", agentId: insertedAgent.id, agentName: cfg.agentName });
     res.end();
   } catch (err) {
     logger.error({ err }, "vibe-chat: unhandled error");
