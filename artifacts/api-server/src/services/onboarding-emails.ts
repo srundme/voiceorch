@@ -9,13 +9,18 @@
  */
 
 import { db, usersTable, platformSettingsTable, callsTable, agentsTable } from "@workspace/db";
-import { eq, and, lt, gte, sql, isNotNull, ne } from "drizzle-orm";
+import { eq, and, lt, gte, sql, isNotNull, isNull, ne } from "drizzle-orm";
 import { sendBrevoEmail } from "./brevo.js";
 import {
   onboardingDay1Email,
   onboardingDay3Email,
   monthlySummaryEmail,
   type MonthlySummaryStats,
+  noAgentDay2Email,
+  noAgentDay4Email,
+  noAgentDay7Email,
+  noAgentDay14Email,
+  noAgentDay21Email,
 } from "./email-templates.js";
 import { logger } from "../lib/logger.js";
 
@@ -102,6 +107,102 @@ async function runOnboardingDrip(): Promise<void> {
           logger.warn({ err, userId: user.id }, "Onboarding Day 3 email failed");
         }
       }
+    }
+  }
+}
+
+// ── Zero-agent re-engagement drip ─────────────────────────────────────────────
+//
+// Fires for users who completed onboarding but never created an agent.
+// Steps: Day 2 (credit hook) | Day 4 (prior-platform hook) | Day 7 (use-case)
+//        | Day 14 (personal check-in) | Day 21 (final urgency)
+// Each step sends once per user, tracked with email:noagent:<step>:<userId>.
+
+interface OnboardingData {
+  role?: string;
+  referralSource?: string;
+  priorPlatforms?: string[];
+  usedVoiceAgents?: boolean;
+}
+
+async function runZeroAgentDrip(): Promise<void> {
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+
+  // Users who signed up between 2 and 22 days ago with zero agents
+  const cutoffLo = new Date(now - 22 * DAY);
+  const cutoffHi = new Date(now - 2 * DAY);
+
+  const users = await db
+    .select({
+      id:             usersTable.id,
+      email:          usersTable.email,
+      name:           usersTable.name,
+      createdAt:      usersTable.createdAt,
+      onboardingData: usersTable.onboardingData,
+    })
+    .from(usersTable)
+    .leftJoin(agentsTable, eq(agentsTable.userId, usersTable.clerkId))
+    .where(
+      and(
+        isNull(agentsTable.id),
+        isNotNull(usersTable.email),
+        ne(usersTable.email, ""),
+        gte(usersTable.createdAt, cutoffLo),
+        lt(usersTable.createdAt, cutoffHi),
+      ),
+    );
+
+  for (const user of users) {
+    if (!user.email || !user.createdAt) continue;
+
+    const ageMs = now - new Date(user.createdAt).getTime();
+    const name  = user.name ?? "there";
+    const od    = (user.onboardingData ?? {}) as OnboardingData;
+    const priorPlatform = od.priorPlatforms?.[0];
+    const usedBefore    = od.usedVoiceAgents ?? (od.priorPlatforms?.length ?? 0) > 0;
+
+    const trySend = async (step: string, subject: string, html: string) => {
+      const key = `email:noagent:${step}:${user.id}`;
+      if (await hasSent(key)) return;
+      try {
+        await sendBrevoEmail(user.email!, subject, html);
+        await markSent(key);
+        logger.info({ userId: user.id, step }, "Zero-agent drip email sent");
+      } catch (err) {
+        logger.warn({ err, userId: user.id, step }, "Zero-agent drip email failed");
+      }
+    };
+
+    if (ageMs >= 2 * DAY && ageMs < 3 * DAY) {
+      await trySend(
+        "d2",
+        "You still have $5 waiting in your SnapServe wallet",
+        noAgentDay2Email(name),
+      );
+    } else if (ageMs >= 4 * DAY && ageMs < 5 * DAY) {
+      const subject = usedBefore
+        ? "You know voice agents \u2014 here is what SnapServe does differently"
+        : "Build your first voice agent \u2014 here is how";
+      await trySend("d4", subject, noAgentDay4Email(name, priorPlatform));
+    } else if (ageMs >= 7 * DAY && ageMs < 8 * DAY) {
+      await trySend(
+        "d7",
+        "A real voice agent in under 10 minutes \u2014 here is the setup",
+        noAgentDay7Email(name),
+      );
+    } else if (ageMs >= 14 * DAY && ageMs < 15 * DAY) {
+      await trySend(
+        "d14",
+        "Is something getting in the way?",
+        noAgentDay14Email(name),
+      );
+    } else if (ageMs >= 21 * DAY && ageMs < 22 * DAY) {
+      await trySend(
+        "d21",
+        "Your $5 credit \u2014 last chance",
+        noAgentDay21Email(name),
+      );
     }
   }
 }
@@ -202,10 +303,12 @@ async function runMonthlySummary(): Promise<void> {
 export function startEmailScheduler(): void {
   // Run immediately on startup (catches missed windows after a restart)
   void runOnboardingDrip().catch(err => logger.warn({ err }, "Onboarding drip startup run failed"));
+  void runZeroAgentDrip().catch(err => logger.warn({ err }, "Zero-agent drip startup run failed"));
   void runMonthlySummary().catch(err => logger.warn({ err }, "Monthly summary startup run failed"));
 
   setInterval(() => {
     void runOnboardingDrip().catch(err => logger.warn({ err }, "Onboarding drip tick failed"));
+    void runZeroAgentDrip().catch(err => logger.warn({ err }, "Zero-agent drip tick failed"));
     void runMonthlySummary().catch(err => logger.warn({ err }, "Monthly summary tick failed"));
   }, TICK_MS);
 
