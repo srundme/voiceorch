@@ -261,39 +261,63 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
   }
 }`;
 
+/** Classified vibe-chat Gemini failure so the SSE error emit can tell users whether retrying helps. */
+class VibeGeminiError extends Error {
+  kind: "malformed" | "unavailable";
+  constructor(message: string, kind: "malformed" | "unavailable") {
+    super(message);
+    this.name = "VibeGeminiError";
+    this.kind = kind;
+  }
+}
+
+const VIBE_RECOVERY_NOTE =
+  "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
+
 async function callGemini(key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
-  const contents = messages.map(m => ({
+  const baseContents = messages.map(m => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
 
-  const body = JSON.stringify({
-    system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
-    contents,
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.7,
-      maxOutputTokens: 2048,
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-  });
-
   const MAX_ATTEMPTS = 3;
   let lastErr: Error | undefined;
+  // Flipped after a truncated/unparseable response so the retry is a targeted
+  // recovery request instead of an identical (and identically doomed) repeat.
+  let needsRecovery = false;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const contents = needsRecovery
+      ? [...baseContents, { role: "user", parts: [{ text: VIBE_RECOVERY_NOTE }] }]
+      : baseContents;
+
+    const body = JSON.stringify({
+      system_instruction: { parts: [{ text: VIBE_SYSTEM_PROMPT }] },
+      contents,
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.7,
+        maxOutputTokens: 16384,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+
     try {
       const resp = await Promise.race([
         fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body },
         ),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 15000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 30000)),
       ]);
 
       if (!resp.ok) {
         const txt = await resp.text();
-        const err = new Error(`Gemini ${resp.status}: ${txt.slice(0, 300)}`);
+        logger.warn(
+          { evt: "vibe_gemini_attempt_failed", attempt, httpStatus: resp.status, snippet: txt.slice(0, 500) },
+          "vibe-chat: Gemini HTTP error",
+        );
+        const err = new VibeGeminiError(`Gemini ${resp.status}: ${txt.slice(0, 300)}`, "unavailable");
         // Retry on rate-limit or server error; fail fast on 400/401/403
         if (resp.status === 429 || resp.status >= 500) {
           lastErr = err;
@@ -306,10 +330,12 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
       }
 
       const data = await resp.json() as {
-        candidates: Array<{ content: { parts: Array<{ text: string; thought?: boolean }> } }>
+        candidates: Array<{ finishReason?: string; content: { parts: Array<{ text: string; thought?: boolean }> } }>
       };
+      const candidate = data.candidates?.[0];
+      const finishReason = candidate?.finishReason;
       // Gemini 2.5 Flash (thinking model) may return a thought part before the real output part
-      const parts = data.candidates?.[0]?.content?.parts ?? [];
+      const parts = candidate?.content?.parts ?? [];
       const textPart = parts.find(p => !p.thought && p.text) ?? parts[parts.length - 1];
       const text = textPart?.text ?? "{}";
       let jsonText = text.trim();
@@ -318,25 +344,54 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
         jsonText = jsonText.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
       }
       try {
-        return JSON.parse(jsonText) as GeminiVibeResponse;
+        const parsed = JSON.parse(jsonText) as GeminiVibeResponse;
+        // A MAX_TOKENS response that still happens to parse is accepted as-is.
+        return parsed;
       } catch {
-        // If JSON parse fails, retry
-        lastErr = new Error(`JSON parse failed: ${jsonText.slice(0, 200)}`);
+        const truncated = finishReason === "MAX_TOKENS";
+        logger.warn(
+          {
+            evt: "vibe_gemini_attempt_failed",
+            attempt,
+            httpStatus: 200,
+            finishReason: finishReason ?? "unknown",
+            truncated,
+            snippet: jsonText.slice(0, 500),
+          },
+          truncated
+            ? "vibe-chat: Gemini response truncated at token cap (MAX_TOKENS), JSON unparseable"
+            : "vibe-chat: Gemini JSON parse failed",
+        );
+        lastErr = new VibeGeminiError(
+          `JSON parse failed (finishReason=${finishReason ?? "unknown"}): ${jsonText.slice(0, 200)}`,
+          "malformed",
+        );
+        needsRecovery = true;
         if (attempt < MAX_ATTEMPTS) { await sleep(attempt * 1000); continue; }
         throw lastErr;
       }
     } catch (err) {
-      lastErr = err as Error;
+      if (err instanceof VibeGeminiError) throw err;
       const isTransient = (err as Error).message === "gemini_timeout" || (err as Error).message?.includes("fetch failed");
+      logger.warn(
+        {
+          evt: "vibe_gemini_attempt_failed",
+          attempt,
+          transient: isTransient,
+          snippet: String((err as Error).message ?? err).slice(0, 500),
+        },
+        "vibe-chat: Gemini request error",
+      );
+      lastErr = new VibeGeminiError((err as Error).message ?? String(err), "unavailable");
       if (isTransient && attempt < MAX_ATTEMPTS) {
         await sleep(attempt * 1500);
         continue;
       }
-      throw err;
+      throw lastErr;
     }
   }
 
-  throw lastErr ?? new Error("Gemini call failed after retries");
+  throw lastErr ?? new VibeGeminiError("Gemini call failed after retries", "unavailable")
 }
 
 /* ── POST /agents/vibe-chat ──────────────────────────────────────────────── */
@@ -399,8 +454,14 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     try {
       parsed = await callGemini(geminiKey, contextualMessages);
     } catch (err) {
-      logger.warn({ err }, "vibe-chat: Gemini call failed");
-      emit({ type: "error", message: "AI is temporarily unavailable. Please try again." });
+      const kind = err instanceof VibeGeminiError ? err.kind : "unavailable";
+      logger.warn({ err, kind }, "vibe-chat: Gemini call failed");
+      emit({
+        type: "error",
+        message: kind === "malformed"
+          ? "the AI returned a malformed response. This is usually a one-off — please try again."
+          : "the AI provider timed out or is unavailable. Please try again in a moment.",
+      });
       res.end();
       return;
     }

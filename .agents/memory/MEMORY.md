@@ -101,3 +101,4 @@
 - [Sarvam telephony native sample rate](sarvam-telephony-native-samplerate.md) — telephony now sends native 8kHz to Sarvam STT (was lossy-upsampled to 16k); noise-gate hard-zeroing is next suspect only if noiseCancellationEnabled is on
 - [Pre-dial skip vs duplicate detection](predial-skip-vs-duplicate.md) — a lead skipped for a transient reason (no agent/DNC/TRAI) before any dial attempt must not permanently block re-import as a "duplicate"
 - [Silence-hangup watchdog](silence-hangup-watchdog.md) — silence timer must be fed by raw speech ENERGY on both STT paths + speak a check-in before ending (reason=silence_timeout); anti-repeat nudge must be intent-gated (hold/question ≠ advance)
+- [Gemini JSON-mode MAX_TOKENS truncation](gemini-json-mode-max-tokens.md) — structured-output calls truncated at the token cap are unparseable; check finishReason + adaptive recovery retry, never identical retries
