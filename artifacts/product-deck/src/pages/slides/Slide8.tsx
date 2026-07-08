@@ -1,13 +1,12 @@
 export default function Slide8() {
-  const cardStyle: React.CSSProperties = {
+  const statCard: React.CSSProperties = {
     flex: 1,
     background: "#FFFFFF",
     border: "0.06vh solid #E7DFF6",
     borderRadius: "1.4vw",
-    padding: "3vh 2.2vw",
+    padding: "3vh 2vw",
     boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
-    display: "flex",
-    flexDirection: "column",
+    textAlign: "center",
   };
 
   return (
@@ -33,52 +32,57 @@ export default function Slide8() {
           <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          08 / 11
+          08 / 12
         </span>
       </div>
 
       <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-        Go-to-Market
+        Market Opportunity
       </div>
-      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4.5vh 0", lineHeight: 1.15 }}>
-        Three ways in
+      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4vh 0", lineHeight: 1.15 }}>
+        A large, underserved market
       </h1>
 
-      <div style={{ display: "flex", gap: "2vw", flex: 1 }}>
-        <div style={cardStyle}>
-          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-            Direct
-          </div>
-          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
-            Insurance &amp; BFSI
-          </div>
-          <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Outbound campaigns for insurers and lenders, compliance-first pitch.
+      <div style={{ display: "flex", gap: "2vw", marginBottom: "4vh" }}>
+        <div style={statCard}>
+          <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 700, color: "#4B2ED6" }}>$40B+</div>
+          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1.4vh" }}>
+            India BPM / contact-center industry — voice still the largest channel
           </div>
         </div>
-
-        <div style={cardStyle}>
-          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-            Channel
-          </div>
-          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
-            SAP system integrators
-          </div>
-          <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            SIs take SnapServe into SAP enterprise accounts, with collections/FSCM as the wedge.
+        <div style={statCard}>
+          <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 700, color: "#4B2ED6" }}>Millions</div>
+          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1.4vh" }}>
+            of outbound calls daily across insurance, lending, collections, support
           </div>
         </div>
+        <div style={statCard}>
+          <div style={{ fontFamily: "var(--font-display-family)", fontSize: "3.2vw", fontWeight: 700, color: "#4B2ED6" }}>10x</div>
+          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.5, marginTop: "1.4vh" }}>
+            cost advantage of AI calls vs human agents at scale
+          </div>
+        </div>
+      </div>
 
-        <div style={cardStyle}>
-          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-            Product-led
-          </div>
-          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
-            The memory proxy
-          </div>
-          <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Platforms on Vapi, Bolna or Retell plug in SnapServe&apos;s memory with zero switching cost — we grow inside competitors&apos; ecosystems.
-          </div>
+      <div
+        style={{
+          background: "linear-gradient(135deg, #4B2ED6 0%, #2A1670 100%)",
+          borderRadius: "1.4vw",
+          padding: "3vh 2.6vw",
+          color: "#FFFFFF",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1.4vh",
+          boxShadow: "0 1.4vh 3.4vh rgba(42,22,112,0.22)",
+        }}
+      >
+        <div style={{ fontSize: "1.15vw", lineHeight: 1.55 }}>
+          <span style={{ color: "#F59E0B", fontWeight: 700 }}>Beachhead: </span>
+          insurance &amp; BFSI outbound in India (renewals, collections, verification) — high volume, compliance-heavy, badly served.
+        </div>
+        <div style={{ fontSize: "1.15vw", lineHeight: 1.55, color: "#DCD3F2" }}>
+          <span style={{ color: "#F59E0B", fontWeight: 700 }}>Expansion: </span>
+          UAE and Philippines on the same India cost base.
         </div>
       </div>
     </div>

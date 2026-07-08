@@ -43,7 +43,7 @@ export default function Slide3() {
           <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          03 / 11
+          03 / 12
         </span>
       </div>
 
@@ -104,6 +104,26 @@ export default function Slide3() {
           <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Compliance built in</div>
           <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
             IRDAI, TRAI and DPDP designed in from day one.
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={iconWrap("#EEE8FB")}>
+            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 4V2" />
+              <path d="M15 16v-2" />
+              <path d="M8 9h2" />
+              <path d="M20 9h2" />
+              <path d="M17.8 11.8 19 13" />
+              <path d="M15 9h.01" />
+              <path d="M17.8 6.2 19 5" />
+              <path d="m3 21 9-9" />
+              <path d="M12.2 6.2 11 5" />
+            </svg>
+          </div>
+          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Vibe Builder — live in minutes</div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
+            Describe your agent in plain language. SnapServe configures telephony, AI, and compliance automatically — no developers needed.
           </div>
         </div>
       </div>

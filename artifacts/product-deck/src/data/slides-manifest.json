@@ -4,7 +4,7 @@
     "position": 1,
     "filepath": "src/pages/slides/Slide1.tsx",
     "title": "Title",
-    "description": "SnapServe — AI voice agents that remember every caller",
+    "description": "SnapServe — build and deploy voice AI agents without writing a line of code. Antler Hub Application 2026.",
     "speakerNotes": ""
   },
   {
@@ -20,71 +20,79 @@
     "position": 3,
     "filepath": "src/pages/slides/Slide3.tsx",
     "title": "The Solution",
-    "description": "SnapServe: persistent memory, auto-redial/resume, Indian languages, compliance",
+    "description": "SnapServe: persistent memory, auto-redial/resume, Indian languages, compliance, and Vibe Builder zero-setup",
+    "speakerNotes": ""
+  },
+  {
+    "id": "e9c7b1a2-4f8d-4a3e-bc12-5d6e7f8a9b04",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide4.tsx",
+    "title": "Vibe Builder",
+    "description": "From idea to live agent in minutes — 3-step no-code flow: Describe, Auto-configure, Go Live",
     "speakerNotes": ""
   },
   {
     "id": "d4a3f6e5-4e7b-4fbd-8a54-a17c3d4e5f04",
-    "position": 4,
-    "filepath": "src/pages/slides/Slide4.tsx",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide5.tsx",
     "title": "How It Works",
     "description": "STT-LLM-TTS orchestration pipeline plus the memory-layer moat",
     "speakerNotes": ""
   },
   {
     "id": "e5b4a7f6-5f8c-40ce-9b65-b28d4e5f6a05",
-    "position": 5,
-    "filepath": "src/pages/slides/Slide5.tsx",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide6.tsx",
     "title": "Why Now",
     "description": "Three converging shifts: voice AI quality, India-first models, regulation",
     "speakerNotes": ""
   },
   {
     "id": "f6c5b8a7-6a9d-41df-8c76-c39e5f6a7b06",
-    "position": 6,
-    "filepath": "src/pages/slides/Slide6.tsx",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide7.tsx",
     "title": "Competitive Landscape",
-    "description": "SnapServe versus Vapi, Retell, Bolna capability comparison table",
+    "description": "SnapServe versus Vapi, Retell, Bolna — zero-code builder + memory + compliance table",
     "speakerNotes": ""
   },
   {
     "id": "a7d6c9b8-7b0e-42ea-9d87-d40f6a7b8c07",
-    "position": 7,
-    "filepath": "src/pages/slides/Slide7.tsx",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide8.tsx",
     "title": "Market Opportunity",
     "description": "$40B+ India BPM market, beachhead and expansion strategy",
     "speakerNotes": ""
   },
   {
     "id": "b8e7d0c9-8c1f-43fb-8e98-e51a7b8c9d08",
-    "position": 8,
-    "filepath": "src/pages/slides/Slide8.tsx",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide9.tsx",
     "title": "Go-to-Market",
     "description": "Direct, channel, and product-led go-to-market motions",
     "speakerNotes": ""
   },
   {
     "id": "c9f8e1d0-9d2a-44ac-9fa9-f62b8c9d0e09",
-    "position": 9,
-    "filepath": "src/pages/slides/Slide9.tsx",
+    "position": 10,
+    "filepath": "src/pages/slides/Slide10.tsx",
     "title": "Team",
     "description": "Karthikeyan and Gopi — founding team backgrounds",
     "speakerNotes": ""
   },
   {
     "id": "d0a9f2e1-0e3b-45bd-8aba-073c9d0e1f10",
-    "position": 10,
-    "filepath": "src/pages/slides/Slide10.tsx",
+    "position": 11,
+    "filepath": "src/pages/slides/Slide11.tsx",
     "title": "Timeline",
     "description": "Built, now, next — pre-revenue, product-complete, launch week",
     "speakerNotes": ""
   },
   {
     "id": "e1b0a3f2-1f4c-46ce-9bcb-184d0e1f2a11",
-    "position": 11,
-    "filepath": "src/pages/slides/Slide11.tsx",
+    "position": 12,
+    "filepath": "src/pages/slides/Slide12.tsx",
     "title": "Closing",
-    "description": "The voice AI wave is here — the winner remembers",
+    "description": "Zero-code voice agents with persistent memory — the winner remembers and anyone can build on",
     "speakerNotes": ""
   }
 ]

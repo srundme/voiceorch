@@ -63,7 +63,7 @@ export default function Slide1() {
           color: "#C7BCEA",
         }}
       >
-        Surge by Peak XV — Application 2026
+        Antler Hub — Application 2026
       </div>
 
       <div
@@ -102,7 +102,7 @@ export default function Slide1() {
             color: "#FFFFFF",
           }}
         >
-          AI voice agents that remember every caller.
+          Build and deploy voice AI agents without writing a line of code.
         </h1>
 
         <p
@@ -116,8 +116,8 @@ export default function Slide1() {
             marginBottom: 0,
           }}
         >
-          Every other AI calls like it&apos;s the first time.{" "}
-          <span style={{ color: "#F59E0B", fontWeight: 600 }}>Ours remembers.</span>
+          No developers. No agency. Just describe your agent and go live.{" "}
+          <span style={{ color: "#F59E0B", fontWeight: 600 }}>And it remembers every caller.</span>
         </p>
       </div>
 
@@ -138,7 +138,7 @@ export default function Slide1() {
       >
         <span>Karthikeyan &middot; Gopi</span>
         <span>Chennai, India</span>
-        <span>Surge Application 2026</span>
+        <span>Antler Hub Application 2026</span>
       </div>
     </div>
   );

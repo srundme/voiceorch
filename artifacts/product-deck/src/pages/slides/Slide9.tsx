@@ -4,7 +4,7 @@ export default function Slide9() {
     background: "#FFFFFF",
     border: "0.06vh solid #E7DFF6",
     borderRadius: "1.4vw",
-    padding: "3.4vh 2.6vw",
+    padding: "3vh 2.2vw",
     boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
     display: "flex",
     flexDirection: "column",
@@ -33,47 +33,51 @@ export default function Slide9() {
           <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          09 / 11
+          09 / 12
         </span>
       </div>
 
       <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-        Team
+        Go-to-Market
       </div>
       <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4.5vh 0", lineHeight: 1.15 }}>
-        Built by people who&apos;ve shipped it
+        Three ways in
       </h1>
 
-      <div style={{ display: "flex", gap: "2.4vw", flex: 1 }}>
+      <div style={{ display: "flex", gap: "2vw", flex: 1 }}>
         <div style={cardStyle}>
-          <div style={{ width: "4.2vw", height: "4.2vw", borderRadius: "50%", background: "#EEE8FB", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2.2vh" }}>
-            <svg width="2vw" height="2vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
+          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+            Direct
           </div>
-          <div style={{ fontSize: "1.5vw", fontWeight: 700, marginBottom: "0.6vh" }}>Karthikeyan</div>
-          <div style={{ fontSize: "0.95vw", fontWeight: 600, color: "#F59E0B", marginBottom: "1.8vh", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Founder · Product &amp; Business
+          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
+            Insurance &amp; BFSI
           </div>
           <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            CMA US background, strong on unit economics and compliance. Non-technical founder who learnt AI hands-on and built the first prototype solo — knows the product to every nuance.
+            Outbound campaigns for insurers and lenders, compliance-first pitch.
           </div>
         </div>
 
         <div style={cardStyle}>
-          <div style={{ width: "4.2vw", height: "4.2vw", borderRadius: "50%", background: "#FDF0DA", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2.2vh" }}>
-            <svg width="2vw" height="2vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="16 18 22 12 16 6" />
-              <polyline points="8 6 2 12 8 18" />
-            </svg>
+          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+            Channel
           </div>
-          <div style={{ fontSize: "1.5vw", fontWeight: 700, marginBottom: "0.6vh" }}>Gopi</div>
-          <div style={{ fontSize: "0.95vw", fontWeight: 600, color: "#F59E0B", marginBottom: "1.8vh", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Co-founder · Engineering
+          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
+            SAP system integrators
           </div>
           <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Software engineer from CGI. Took SnapServe from prototype to production platform running live calls — owns the TypeScript orchestration stack end to end.
+            SIs take SnapServe into SAP enterprise accounts, with collections/FSCM as the wedge.
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+            Product-led
+          </div>
+          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
+            The memory proxy
+          </div>
+          <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Platforms on Vapi, Bolna or Retell plug in SnapServe&apos;s memory with zero switching cost — we grow inside competitors&apos; ecosystems.
           </div>
         </div>
       </div>

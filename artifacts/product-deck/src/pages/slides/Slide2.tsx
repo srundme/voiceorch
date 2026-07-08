@@ -50,7 +50,7 @@ export default function Slide2() {
           <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          02 / 11
+          02 / 12
         </span>
       </div>
 

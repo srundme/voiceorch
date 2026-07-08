@@ -1,10 +1,10 @@
 export default function Slide4() {
-  const pipeCard: React.CSSProperties = {
+  const stepCard: React.CSSProperties = {
     flex: 1,
     background: "#FFFFFF",
     border: "0.06vh solid #E7DFF6",
     borderRadius: "1.4vw",
-    padding: "2.4vh 1.8vw",
+    padding: "3.2vh 2.2vw",
     boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
     display: "flex",
     flexDirection: "column",
@@ -35,81 +35,179 @@ export default function Slide4() {
           <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
         </div>
         <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          04 / 11
+          04 / 12
         </span>
       </div>
 
       <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-        How It Works
+        Vibe Builder
       </div>
-      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4vh 0", lineHeight: 1.15 }}>
-        Orchestration, not a single model
+      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 1.4vh 0", lineHeight: 1.15 }}>
+        From idea to live agent in minutes
       </h1>
+      <p style={{ fontSize: "1.15vw", color: "#5B5470", margin: "0 0 4.5vh 0", maxWidth: "62vw", lineHeight: 1.55 }}>
+        No technical knowledge required. No developers. No agency. Just describe what you need.
+      </p>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "1.4vw", marginBottom: "2vh" }}>
-        <div style={pipeCard}>
-          <div style={{ width: "3.2vw", height: "3.2vw", borderRadius: "50%", background: "#EEE8FB", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.6vh" }}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
+      <div style={{ display: "flex", alignItems: "stretch", gap: "0", flex: 1 }}>
+        <div style={stepCard}>
+          <div
+            style={{
+              width: "3.8vw",
+              height: "3.8vw",
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #EEE8FB 0%, #D8CEFB 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "2.2vh",
+              flexShrink: 0,
+            }}
+          >
+            <svg width="1.8vw" height="1.8vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
             </svg>
           </div>
-          <div style={{ fontSize: "1.25vw", fontWeight: 700 }}>Speech-to-Text</div>
+          <div
+            style={{
+              fontSize: "0.78vw",
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "#4B2ED6",
+              marginBottom: "1.2vh",
+            }}
+          >
+            Step 1 — Describe
+          </div>
+          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
+            Tell us about your agent
+          </div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Type a plain-language brief: what the agent does, what language it speaks, what it should remember. No forms, no config screens.
+          </div>
+          <div
+            style={{
+              marginTop: "2.4vh",
+              background: "#F5F3FD",
+              borderRadius: "0.8vw",
+              padding: "1.4vh 1.2vw",
+              fontSize: "0.95vw",
+              color: "#4B2ED6",
+              fontStyle: "italic",
+              lineHeight: 1.5,
+              textAlign: "left",
+            }}
+          >
+            &ldquo;An insurance renewal agent that speaks Tamil, remembers past interactions, and never asks the customer for info they&apos;ve already given.&rdquo;
+          </div>
         </div>
 
-        <div style={{ fontSize: "1.8vw", color: "#C9BEEA" }}>→</div>
+        <div style={{ display: "flex", alignItems: "center", padding: "0 1.6vw" }}>
+          <div style={{ fontSize: "2vw", color: "#C9BEEA" }}>→</div>
+        </div>
 
-        <div style={pipeCard}>
-          <div style={{ width: "3.2vw", height: "3.2vw", borderRadius: "50%", background: "#FDF0DA", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.6vh" }}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="10" rx="2" />
-              <circle cx="12" cy="5" r="2" />
-              <line x1="12" y1="7" x2="12" y2="11" />
-              <line x1="8" y1="16" x2="8" y2="16" />
-              <line x1="16" y1="16" x2="16" y2="16" />
+        <div style={stepCard}>
+          <div
+            style={{
+              width: "3.8vw",
+              height: "3.8vw",
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #FDF0DA 0%, #FDDFA8 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "2.2vh",
+              flexShrink: 0,
+            }}
+          >
+            <svg width="1.8vw" height="1.8vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </div>
-          <div style={{ fontSize: "1.25vw", fontWeight: 700 }}>Language Model</div>
+          <div
+            style={{
+              fontSize: "0.78vw",
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "#F59E0B",
+              marginBottom: "1.2vh",
+            }}
+          >
+            Step 2 — Auto-configure
+          </div>
+          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
+            SnapServe sets everything up
+          </div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Picks the right STT, LLM, and TTS for your language. Writes the system prompt. Sets compliance rules for TRAI, IRDAI, and DPDP. Zero decisions for you.
+          </div>
+          <div style={{ marginTop: "2.4vh", display: "flex", flexDirection: "column", gap: "0.8vh" }}>
+            {["Tamil STT + Sarvam LLM selected", "System prompt generated", "TRAI/DPDP rules applied"].map((item) => (
+              <div key={item} style={{ display: "flex", alignItems: "center", gap: "0.6vw", fontSize: "0.92vw", color: "#3A3350" }}>
+                <span style={{ color: "#4B2ED6", fontWeight: 700 }}>✓</span>
+                {item}
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div style={{ fontSize: "1.8vw", color: "#C9BEEA" }}>→</div>
+        <div style={{ display: "flex", alignItems: "center", padding: "0 1.6vw" }}>
+          <div style={{ fontSize: "2vw", color: "#C9BEEA" }}>→</div>
+        </div>
 
-        <div style={pipeCard}>
-          <div style={{ width: "3.2vw", height: "3.2vw", borderRadius: "50%", background: "#EEE8FB", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.6vh" }}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 5 6 9H2v6h4l5 4V5Z" />
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+        <div style={stepCard}>
+          <div
+            style={{
+              width: "3.8vw",
+              height: "3.8vw",
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #4B2ED6 0%, #2A1670 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "2.2vh",
+              flexShrink: 0,
+            }}
+          >
+            <svg width="1.8vw" height="1.8vw" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.24h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.85A16 16 0 0 0 15.15 16.09l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
             </svg>
           </div>
-          <div style={{ fontSize: "1.25vw", fontWeight: 700 }}>Text-to-Speech</div>
-        </div>
-      </div>
-
-      <div style={{ fontSize: "1.05vw", color: "#5B5470", textAlign: "center", marginBottom: "4vh" }}>
-        Provider-agnostic orchestration in TypeScript — swap the best or cheapest engine at every layer.
-      </div>
-
-      <div
-        style={{
-          background: "linear-gradient(135deg, #4B2ED6 0%, #2A1670 100%)",
-          borderRadius: "1.4vw",
-          padding: "3vh 2.6vw",
-          color: "#FFFFFF",
-          display: "flex",
-          flexDirection: "column",
-          gap: "1.2vh",
-          boxShadow: "0 1.4vh 3.4vh rgba(42,22,112,0.22)",
-        }}
-      >
-        <div style={{ fontSize: "0.9vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B" }}>
-          Memory Layer — The Moat
-        </div>
-        <div style={{ fontSize: "1.2vw", lineHeight: 1.55 }}>
-          Facts, commitments and episodes stored per caller, injected into every conversation.
-        </div>
-        <div style={{ fontSize: "1vw", color: "#DCD3F2", lineHeight: 1.55 }}>
-          Also works as an OpenAI-compatible proxy — other platforms point their <code style={{ background: "rgba(255,255,255,0.14)", padding: "0.1vh 0.4vw", borderRadius: "0.4vw" }}>api_base</code> at SnapServe and get caller memory with zero code change.
+          <div
+            style={{
+              fontSize: "0.78vw",
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "#4B2ED6",
+              marginBottom: "1.2vh",
+            }}
+          >
+            Step 3 — Go Live
+          </div>
+          <div style={{ fontSize: "1.3vw", fontWeight: 700, marginBottom: "1.6vh", lineHeight: 1.25 }}>
+            Connect a number, you&apos;re live
+          </div>
+          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Link a phone number from your telephony provider. Your agent starts taking calls immediately — with memory active from call one.
+          </div>
+          <div
+            style={{
+              marginTop: "2.4vh",
+              background: "linear-gradient(135deg, #4B2ED6 0%, #2A1670 100%)",
+              borderRadius: "0.8vw",
+              padding: "1.4vh 1.4vw",
+              color: "#FFFFFF",
+              fontSize: "1.05vw",
+              fontWeight: 600,
+              textAlign: "center",
+            }}
+          >
+            Agent live in &lt; 5 minutes
+          </div>
         </div>
       </div>
     </div>

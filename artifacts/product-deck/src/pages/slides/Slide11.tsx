@@ -1,90 +1,89 @@
 export default function Slide11() {
+  const colStyle: React.CSSProperties = {
+    flex: 1,
+    background: "#FFFFFF",
+    border: "0.06vh solid #E7DFF6",
+    borderRadius: "1.4vw",
+    padding: "2.8vh 2.2vw",
+    boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
+    display: "flex",
+    flexDirection: "column",
+  };
+
   return (
     <div
       className="w-screen h-screen overflow-hidden relative"
       style={{
-        background: "radial-gradient(120% 100% at 80% 100%, #38208A 0%, #2A1670 45%, #1F0F52 100%)",
+        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
         fontFamily: "var(--font-body-family)",
-        color: "#FFFFFF",
+        color: "#1A1033",
+        padding: "6vh 8vw 5vh 8vw",
+        boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        textAlign: "center",
-        padding: "0 8vw",
-        boxSizing: "border-box",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          bottom: "-16vh",
-          left: "-8vw",
-          width: "44vw",
-          height: "44vw",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0) 70%)",
-        }}
-      />
-
-      <div
-        style={{
-          width: "5.2vw",
-          height: "5.2vw",
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.10)",
-          border: "0.08vw solid rgba(255,255,255,0.22)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: "4vh",
-        }}
-      >
-        <svg width="2.6vw" height="2.6vw" viewBox="0 0 100 100" fill="none">
-          <rect x="6" y="14" width="88" height="20" rx="10" fill="#FFFFFF" opacity="1" />
-          <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.6" />
-          <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.36" />
-        </svg>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "3.6vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
+          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
+          </svg>
+          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+        </div>
+        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
+          11 / 12
+        </span>
       </div>
 
-      <h1
-        style={{
-          fontFamily: "var(--font-display-family)",
-          fontSize: "4.4vw",
-          fontWeight: 700,
-          lineHeight: 1.22,
-          margin: 0,
-          maxWidth: "62vw",
-        }}
-      >
-        The voice AI wave is here.
-        <br />
-        <span style={{ color: "#F59E0B" }}>The winner in India will be the one that remembers.</span>
+      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
+        Where We Are
+      </div>
+      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 3.6vh 0", lineHeight: 1.15 }}>
+        Built, now, next
       </h1>
 
-      <p
-        style={{
-          fontSize: "1.5vw",
-          fontWeight: 400,
-          lineHeight: 1.55,
-          color: "#DCD3F2",
-          maxWidth: "50vw",
-          marginTop: "4vh",
-          marginBottom: 0,
-        }}
-      >
-        SnapServe — persistent-memory voice agents, built for India, live in production.
-      </p>
+      <div style={{ display: "flex", gap: "1.8vw", flex: 1, marginBottom: "2.6vh" }}>
+        <div style={colStyle}>
+          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B2ED6", marginBottom: "1.6vh" }}>
+            Built
+          </div>
+          <div style={{ fontSize: "1.25vw", fontWeight: 700, marginBottom: "1.4vh", lineHeight: 1.3 }}>
+            Full platform live in production
+          </div>
+          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Multilingual calls with cross-call memory working in real conditions.
+          </div>
+        </div>
 
-      <div
-        style={{
-          position: "absolute",
-          bottom: "6vh",
-          fontSize: "1vw",
-          color: "#B7ABDD",
-        }}
-      >
-        Karthikeyan &middot; SnapServe (AITEL) &middot; Chennai
+        <div style={colStyle}>
+          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B2ED6", marginBottom: "1.6vh" }}>
+            Now
+          </div>
+          <div style={{ fontSize: "1.25vw", fontWeight: 700, marginBottom: "1.4vh", lineHeight: 1.3 }}>
+            Just launched
+          </div>
+          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Onboarding first pilot clients in insurance and enterprise; SI partner outreach underway.
+          </div>
+        </div>
+
+        <div style={colStyle}>
+          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B2ED6", marginBottom: "1.6vh" }}>
+            Next
+          </div>
+          <div style={{ fontSize: "1.25vw", fontWeight: 700, marginBottom: "1.4vh", lineHeight: 1.3 }}>
+            Convert pilots to paid campaigns
+          </div>
+          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
+            Ship the memory proxy publicly; expand language coverage.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: "0.98vw", fontStyle: "italic", color: "#9A90B5", textAlign: "center" }}>
+        Honest status: pre-revenue, product-complete, launch week.
       </div>
     </div>
   );
