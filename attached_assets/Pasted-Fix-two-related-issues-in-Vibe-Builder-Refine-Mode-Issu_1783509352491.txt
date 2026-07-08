@@ -1,0 +1,59 @@
+Fix two related issues in Vibe Builder Refine Mode.
+
+Issue 1 — System Prompt Preview is stale after refinement
+
+Current behavior:
+I opened an existing agent in Refine with AI and requested:
+“Rename the agent as Maya.”
+
+Vibe correctly updated the actual agent name to Maya, and the chat confirmed the update. However, the System Prompt shown in the Agent Preview still contains the old identity name “Akshara.”
+
+Expected behavior:
+After any successful refinement, all relevant views must immediately reflect the latest persisted state.
+
+For example:
+Existing agent name: Akshara
+User request: “Rename the agent as Maya.”
+
+After applying:
+- Agent configuration name = Maya
+- Persisted system prompt contains Maya where the agent identity/name is referenced
+- System Prompt preview immediately displays the latest updated prompt
+- Reopening the agent still shows Maya consistently
+
+Do not perform a global blind text replacement. Update only semantically relevant agent identity/name references and preserve unrelated prompt content.
+
+Issue 2 — Allow multiple sequential refinements in the same session
+
+Current behavior:
+After one successful refinement is applied, Vibe Builder enters a completed/ready state and the chat input becomes disabled. To make another change, the user must leave the page and reopen Refine with AI.
+
+Expected behavior:
+A successful refinement must not end or lock the Refine Mode session.
+
+Example flow:
+1. User: “Rename the agent as Maya.”
+2. Change is applied and persisted.
+3. Chat input remains active.
+4. User: “Actually, rename it to Abhinaya.”
+5. The second change is applied against the latest saved state.
+6. User can continue making further refinements without leaving the page.
+
+After every successful edit:
+- Keep the chat input enabled.
+- Update the working baseline to the latest persisted agent state.
+- Refresh Agent Preview from the latest saved state.
+- Update System Prompt preview.
+- Preserve previous valid refinements unless the user explicitly changes them.
+- Ensure each new edit is applied against the latest version, not the original version loaded when the page first opened.
+
+Important:
+These fixes must work for all existing agents in Refine Mode, regardless of whether they were originally created manually or through Vibe Builder.
+
+Do not affect the new-agent Vibe Build completion flow. New-agent creation may still enter a completed state when the build finishes. Only existing-agent Refine Mode should remain open for continued iterative editing.
+
+First inspect the current state flow and identify:
+1. Why the System Prompt preview is not refreshed after a successful refine update.
+2. Why the chat composer becomes disabled after the first successful refinement.
+
+Then implement the smallest safe fix without affecting unrelated functionality.
