@@ -1,0 +1,40 @@
+Set the following as default values for the Advanced section of Agent Setup. Only the Timing, Interruption, and Limits subsections should be updated — leave Compliance untouched.
+
+1. Timing
+
+STT End-Pointing Silence: 150 ms
+TTS Early Dispatch Threshold: 25 chars (flagging: confirm unit — you said "25 ch," assuming characters)
+Post-Transcript Buffer: 50 ms
+LLM Max Output Tokens: 150
+
+Response Timing (sub-part of Timing):
+
+Base Rate: 0
+After Punctuation: 0.10 s
+After No Punctuation: 0.1 s (flagging: same value as "After Punctuation" — confirm this is intentional)
+After Number: 0
+
+2. Interruption
+
+Allow Barge-In: Always ON
+Minimum Word Count: 1 word
+Minimum Voice Duration: 0.20 s
+Backup Silence: 1 s
+Energy Threshold: 200 (flagging: confirm unit — assuming raw threshold value, not ms)
+
+3. Limits
+
+Auto Redial: Always ON
+Maximum Attempts Per Day: 3
+Call Silence Timeout: 30 s
+Maximum Call Duration: 8 min
+
+Scope and Safety Constraints:
+
+No other settings, fields, or configurations anywhere in the platform should be touched or modified — this includes all other tabs, subsections, and fields not explicitly listed above.
+Compliance subsection must remain fully untouched.
+These changes must not interrupt, alter, or affect any existing call flows, functions, integrations, or operations currently running on the platform.
+This must not be a data migration or backfill. Do not apply these values to any existing/previously created agents — their current configurations must remain exactly as-is.
+These defaults should apply only going forward: every new agent created from this point onward should have the Advanced tab pre-populated with these values, visible and editable at the time of agent creation.
+This applies regardless of creation method — agents created manually through the standard Agent Setup flow, and agents created via the "Refine with AI" option, must both receive these Advanced tab defaults. Neither creation path should be exempt or produce different default behavior.
+Treat this strictly as a change to the default template/scaffold used at agent-creation time, not a change to any live agent record.
