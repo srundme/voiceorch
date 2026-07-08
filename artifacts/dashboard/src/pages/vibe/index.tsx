@@ -23,7 +23,7 @@ const AVAILABILITY_PRESETS = [
 
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
-interface VoiceOption  { voiceId: string; voiceName: string; gender: string; language: string; description: string; }
+interface VoiceOption  { voiceId: string; voiceName: string; gender: string; language: string; description: string; languageMatch?: boolean; }
 interface AgentField   { key: string; label: string; value: string; icon: string; }
 interface FeatureCard  { key: string; label: string; enabled: boolean; icon: string; detail: string; }
 interface DispositionCard { category: string; outcomes: string[]; }
@@ -121,7 +121,6 @@ export default function VibePage() {
   const [input,          setInput]          = useState("");
   const [phase,          _setPhase]         = useState<Phase>("idle");
   const [fields,         setFields]         = useState<AgentField[]>([]);
-  const [voiceOptions,   setVoiceOptions]   = useState<VoiceOption[]>([]);
   const [selectedVoice,  setSelectedVoice]  = useState<string>("");
   const [langPills,      setLangPills]      = useState<LangPill[]>([]);
   const [features,       setFeatures]       = useState<FeatureCard[]>([]);
@@ -140,6 +139,7 @@ export default function VibePage() {
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const historyRef  = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
   const voicesRef   = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
+  const selectedVoiceIdRef = useRef<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setPhase = useCallback((p: Phase) => {
@@ -222,7 +222,10 @@ export default function VibePage() {
         ];
         setFeatures(panelFeatures);
 
-        if (agent.ttsVoice) setSelectedVoice(agent.ttsVoice as string);
+        if (agent.ttsVoice) {
+          selectedVoiceIdRef.current = agent.ttsVoice as string;
+          setSelectedVoice((agent.ttsVoiceName as string) || `…${(agent.ttsVoice as string).slice(-8)}`);
+        }
 
         // Show system prompt from existing agent
         if (agent.systemPrompt) {
@@ -273,11 +276,13 @@ export default function VibePage() {
 
   const attachVoicesToLastMsg = useCallback((voices: VoiceOption[]) => {
     setMessages(prev => {
-      const last = prev[prev.length - 1];
+      // Strip any older, still-open pickers so re-shown voices live only on the latest message
+      const cleared = prev.map(m => m.voices && !m.voicePicked ? { ...m, voices: undefined } : m);
+      const last = cleared[cleared.length - 1];
       if (last?.role === "ai") {
-        return [...prev.slice(0, -1), { ...last, voices, voicePicked: false }];
+        return [...cleared.slice(0, -1), { ...last, voices, voicePicked: false }];
       }
-      return prev;
+      return cleared;
     });
   }, []);
 
@@ -341,6 +346,7 @@ export default function VibePage() {
           messages:        history,
           voicesShown:     voicesRef.current.shown,
           availableVoices: voicesRef.current.list,
+          selectedVoiceId: selectedVoiceIdRef.current,
           ...(refineId != null ? { refineAgentId: refineId } : {}),
         }),
       });
@@ -374,7 +380,6 @@ export default function VibePage() {
             case "voice_options": {
               const voices = (evt.voices as VoiceOption[]) ?? [];
               if (voices.length > 0) {
-                setVoiceOptions(voices);
                 voicesRef.current = { shown: true, list: voices };
                 attachVoicesToLastMsg(voices);
               }
@@ -383,6 +388,7 @@ export default function VibePage() {
 
             case "voice_selected":
               collapseVoicePickers();
+              selectedVoiceIdRef.current = String(evt.voiceId ?? "");
               setSelectedVoice(String(evt.voiceName ?? ""));
               break;
 
@@ -396,8 +402,12 @@ export default function VibePage() {
                 return next;
               });
               if (evt.key === "voice") {
-                setSelectedVoice(String(evt.value ?? "").split(" — ")[0] ?? "");
-                collapseVoicePickers();
+                // Update the selected-voice display, but do NOT collapse open pickers here —
+                // refine mode emits this field on every turn (pre-existing voiceId), which
+                // used to instantly vanish freshly shown voice cards. Collapse happens only
+                // on an explicit voice_selected event or a local Select click.
+                const nm = (String(evt.value ?? "").split(" — ")[0] ?? "").trim();
+                if (nm) setSelectedVoice(nm);
               }
               break;
 
@@ -511,7 +521,7 @@ export default function VibePage() {
   const canSend = input.trim().length > 0
     && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done";
 
-  const hasRightContent = fields.length > 0 || voiceOptions.length > 0 || features.length > 0
+  const hasRightContent = fields.length > 0 || selectedVoice.length > 0 || features.length > 0
     || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
     || callFlowNotes.length > 0 || kbNotes.length > 0;
 
@@ -701,7 +711,14 @@ export default function VibePage() {
                     selectedVoice={selectedVoice}
                     playingVoice={playingVoice}
                     onPreview={vid => previewVoice(vid, setPlayingVoice)}
-                    onSelect={v => send(`I'll go with ${v.voiceName}`)}
+                    onSelect={v => {
+                      // Optimistic collapse: reflect the pick immediately, even if the
+                      // server can't confirm (e.g. re-picking the agent's current voice)
+                      collapseVoicePickers();
+                      selectedVoiceIdRef.current = v.voiceId;
+                      setSelectedVoice(v.voiceName);
+                      send(`I'll go with ${v.voiceName}`);
+                    }}
                     onSelectTimezone={tz => { collapseTimezonePickers(); send(`Use ${tz.label} (${tz.value})`); }}
                     onSelectAvailability={preset => {
                       collapseAvailabilityPickers();
@@ -770,30 +787,16 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* Voice — collapses to chip once picked */}
-              {voiceOptions.length > 0 && (
+              {/* Voice — only the currently selected voice; the full list lives in the chat */}
+              {selectedVoice && (
                 <Section title="Voice">
-                  {selectedVoice ? (
-                    <div className="flex items-center gap-2.5 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                      <div>
-                        <p className="text-xs font-semibold text-primary">{selectedVoice}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Voice selected · Cartesia Sonic 3.5</p>
-                      </div>
+                  <div className="flex items-center gap-2.5 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+                    <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-primary">{selectedVoice}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Voice selected · Cartesia Sonic 3.5</p>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      {voiceOptions.map(v => (
-                        <RightVoiceChip
-                          key={v.voiceId}
-                          voice={v}
-                          isSelected={false}
-                          isPlaying={playingVoice === v.voiceId}
-                          onPreview={() => previewVoice(v.voiceId, setPlayingVoice)}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  </div>
                 </Section>
               )}
 
@@ -957,20 +960,19 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
 
         {/* Voice picker — collapsed once picked */}
         {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (
-          <div className="space-y-2 pt-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-              Available voices
-            </p>
-            {msg.voices.map(v => (
-              <VoicePill
-                key={v.voiceId}
-                voice={v}
-                isSelected={selectedVoice.includes(v.voiceName)}
-                isPlaying={playingVoice === v.voiceId}
-                onPreview={() => onPreview(v.voiceId)}
-                onSelect={() => onSelect(v)}
-              />
-            ))}
+          <VoicePickerList
+            voices={msg.voices}
+            selectedVoice={selectedVoice}
+            playingVoice={playingVoice}
+            onPreview={onPreview}
+            onSelect={onSelect}
+          />
+        )}
+        {/* Collapsed voice state */}
+        {msg.voices && msg.voices.length > 0 && msg.voicePicked && (
+          <div className="flex items-center gap-2 text-[11px] text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="font-medium">{selectedVoice ? `${selectedVoice} selected` : "Voice selected"}</span>
           </div>
         )}
         {/* Timezone picker — shown when scheduling is enabled */}
@@ -1030,30 +1032,52 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
           </div>
         )}
 
-        {/* Voice picker — collapsed once picked */}
-        {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (
-          <div className="space-y-2 pt-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-              Available voices
+      </div>
+    </div>
+  );
+}
+
+function VoicePickerList({ voices, selectedVoice, playingVoice, onPreview, onSelect }: {
+  voices: VoiceOption[];
+  selectedVoice: string;
+  playingVoice: string | null;
+  onPreview: (id: string) => void;
+  onSelect: (v: VoiceOption) => void;
+}) {
+  const matched = voices.filter(v => v.languageMatch);
+  const rest    = voices.filter(v => !v.languageMatch);
+  const grouped = matched.length > 0 && rest.length > 0;
+
+  const renderPill = (v: VoiceOption) => (
+    <VoicePill
+      key={v.voiceId}
+      voice={v}
+      isSelected={selectedVoice.includes(v.voiceName)}
+      isPlaying={playingVoice === v.voiceId}
+      onPreview={() => onPreview(v.voiceId)}
+      onSelect={() => onSelect(v)}
+    />
+  );
+
+  return (
+    <div className="space-y-2 pt-1">
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+        Available voices
+      </p>
+      <div className="max-h-64 overflow-y-auto pr-1 space-y-2">
+        {grouped ? (
+          <>
+            <p className="text-[9px] font-semibold text-primary/80 uppercase tracking-widest pt-0.5">
+              Matches your language
             </p>
-            {msg.voices.map(v => (
-              <VoicePill
-                key={v.voiceId}
-                voice={v}
-                isSelected={selectedVoice.includes(v.voiceName)}
-                isPlaying={playingVoice === v.voiceId}
-                onPreview={() => onPreview(v.voiceId)}
-                onSelect={() => onSelect(v)}
-              />
-            ))}
-          </div>
-        )}
-        {/* Collapsed state */}
-        {msg.voices && msg.voices.length > 0 && msg.voicePicked && selectedVoice && (
-          <div className="flex items-center gap-2 text-[11px] text-primary">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span className="font-medium">{selectedVoice} selected</span>
-          </div>
+            {matched.map(renderPill)}
+            <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest pt-1.5">
+              Other voices
+            </p>
+            {rest.map(renderPill)}
+          </>
+        ) : (
+          voices.map(renderPill)
         )}
       </div>
     </div>
@@ -1190,38 +1214,6 @@ function FieldCard({ field }: { field: AgentField }) {
         <p className="text-xs font-medium truncate mt-0.5">{field.value}</p>
       </div>
       <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-    </div>
-  );
-}
-
-function RightVoiceChip({ voice, isSelected, isPlaying, onPreview }: {
-  voice: VoiceOption;
-  isSelected: boolean;
-  isPlaying: boolean;
-  onPreview: () => void;
-}) {
-  return (
-    <div className={cn(
-      "rounded-xl border p-3 flex flex-col gap-2 transition-all",
-      isSelected
-        ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
-        : "border-border/60 bg-background",
-    )}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold">{voice.voiceName}</p>
-          <p className="text-[10px] text-muted-foreground capitalize mt-0.5">{voice.gender}</p>
-        </div>
-        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
-      </div>
-      <button
-        onClick={onPreview}
-        disabled={isPlaying}
-        className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {isPlaying ? <Volume2 className="h-3 w-3 text-primary animate-pulse" /> : <Play className="h-3 w-3" />}
-        {isPlaying ? "Playing…" : "Preview"}
-      </button>
     </div>
   );
 }

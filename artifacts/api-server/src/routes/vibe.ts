@@ -48,6 +48,26 @@ export interface VibeVoice {
   gender:      string;
   language:    string;
   description: string;
+  languageMatch?: boolean;
+}
+
+/** Does a catalog voice's language (base codes like "ta", "en") match any of the agent's languages ("ta-IN", "en-US")? */
+function voiceMatchesLanguages(voiceLang: string, agentLangs: string[]): boolean {
+  const vl = (voiceLang ?? "").trim().toLowerCase();
+  if (!vl || agentLangs.length === 0) return false;
+  return agentLangs.some(code => {
+    const c    = (code ?? "").trim().toLowerCase();
+    if (!c) return false;
+    const base = c.split("-")[0]!;
+    return vl === c || vl === base || vl.startsWith(`${base}-`);
+  });
+}
+
+/** Order voices so language matches come first (stable within groups) and tag each with languageMatch. */
+function orderVoicesByLanguage(voices: VibeVoice[], agentLangs: string[]): VibeVoice[] {
+  if (agentLangs.length === 0) return voices.map(v => ({ ...v, languageMatch: false }));
+  const tagged = voices.map(v => ({ ...v, languageMatch: voiceMatchesLanguages(v.language, agentLangs) }));
+  return [...tagged.filter(v => v.languageMatch), ...tagged.filter(v => !v.languageMatch)];
 }
 
 interface VibeDisposition {
@@ -59,6 +79,7 @@ interface VibeConfig {
   agentName:    string;
   companyName:  string;
   language:     string;
+  languageChosen: boolean;
   languageMode: "single" | "multi";
   multilingualLanguages: string[];
   hasTamil:     boolean;
@@ -105,7 +126,10 @@ PHASE "core"
 Collect these 5 things (can gather multiple per turn if the user volunteers them):
 1. Agent name (a real human name callers will hear — suggest one if they don't give one)
 2. Company/brand name
-3. Primary language — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US
+3. Language(s) the agent speaks — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US.
+   This answer is OPTIONAL: if the user is unsure or wants to skip, keep the default language and set languageChosen=false (all voices will be shown later).
+   If they DO answer, set language=<primary code> and languageChosen=true. If they name several languages, put ALL of them (including the primary) in multilingualLanguages and set languageMode="multi".
+   The user can change or add languages at ANY time, including during voice selection — just update language/multilingualLanguages/languageChosen and the voice list refreshes automatically.
 4. Call direction: "inbound" (customers call in) or "outbound" (agent calls out). If the user says "both", "either", or it handles both scenarios — set direction="inbound" and note in description that it handles both inbound and outbound contexts.
 5. Purpose/description (what it does and who it talks to)
 → Transition: once you have all 5, set phase="voice_selection"
@@ -113,7 +137,9 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
 PHASE "voice_selection"
 Voice cards are now shown directly in this chat — the user can preview and select one.
 - Say: "I've pulled up the available voices — you can hit ▶ to preview each one and click Select when you find the right fit."
+- The list is sorted so voices matching the agent's language(s) appear first; the rest are below.
 - When the user picks (by name or gender), set voiceId and voiceName exactly from the available options list.
+- If the user asks where the voices are, wants to see them again, or changes the agent's language(s): STAY in phase="voice_selection" — the voice cards are re-displayed in the chat automatically on every turn of this phase. NEVER apologize or claim the UI failed to display.
 → Transition: once voice chosen, set phase="call_flow"
 
 PHASE "call_flow"
@@ -202,6 +228,7 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
     "agentName": "",
     "companyName": "",
     "language": "en-IN",
+    "languageChosen": false,
     "languageMode": "single",
     "multilingualLanguages": [],
     "hasTamil": false,
@@ -320,11 +347,13 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     messages,
     voicesShown   = false,
     availableVoices = [] as VibeVoice[],
+    selectedVoiceId = "",
     refineAgentId,
   } = req.body as {
     messages:        VibeChatMessage[];
     voicesShown?:    boolean;
     availableVoices?: VibeVoice[];
+    selectedVoiceId?: string;
     refineAgentId?:  number;
   };
 
@@ -385,8 +414,19 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     const cfg   = parsed.config;
     const phase = (parsed.phase ?? "core").trim();
 
-    // Emit voice options when entering voice_selection phase for the first time
-    if (phase === "voice_selection" && !voicesShown) {
+    // Emit voice options on EVERY voice_selection-phase turn (not just the first)
+    // so the picker can be re-shown ("where are the voices?") and re-ordered when
+    // the user changes the agent's language(s) mid-selection.
+    let emittedVoiceOptions = false;
+    if (phase === "voice_selection") {
+      // Agent language(s) for ordering — only when the user actually chose one
+      const agentLangs: string[] = parsed.config?.languageChosen
+        ? [...new Set([parsed.config.language, ...(parsed.config.multilingualLanguages ?? [])].filter(Boolean))]
+        : [];
+      const fallbackVoices: VibeVoice[] = [
+        { voiceId: DEFAULT_FEMALE_VOICE_ID, voiceName: DEFAULT_FEMALE_VOICE_NAME, gender: "female", language: "en-IN", description: "Indian English — warm female voice" },
+        { voiceId: DEFAULT_MALE_VOICE_ID,   voiceName: DEFAULT_MALE_VOICE_NAME,   gender: "male",   language: "en-IN", description: "Indian English — clear male voice"  },
+      ];
       try {
         const rows = await db.select().from(platformListedVoicesTable)
           .where(eq(platformListedVoicesTable.isListed, true));
@@ -398,18 +438,13 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
               language:    v.language,
               description: v.description,
             }))
-          : [
-              { voiceId: DEFAULT_FEMALE_VOICE_ID, voiceName: DEFAULT_FEMALE_VOICE_NAME, gender: "female", language: "en-IN", description: "Indian English — warm female voice" },
-              { voiceId: DEFAULT_MALE_VOICE_ID,   voiceName: DEFAULT_MALE_VOICE_NAME,   gender: "male",   language: "en-IN", description: "Indian English — clear male voice"  },
-            ];
-        emit({ type: "voice_options", voices: voiceList });
+          : fallbackVoices;
+        emit({ type: "voice_options", voices: orderVoicesByLanguage(voiceList, agentLangs) });
       } catch (err) {
         logger.warn({ err }, "vibe-chat: failed to fetch voices, using defaults");
-        emit({ type: "voice_options", voices: [
-          { voiceId: DEFAULT_FEMALE_VOICE_ID, voiceName: DEFAULT_FEMALE_VOICE_NAME, gender: "female", language: "en-IN", description: "Indian English — warm female voice" },
-          { voiceId: DEFAULT_MALE_VOICE_ID,   voiceName: DEFAULT_MALE_VOICE_NAME,   gender: "male",   language: "en-IN", description: "Indian English — clear male voice"  },
-        ]});
+        emit({ type: "voice_options", voices: orderVoicesByLanguage(fallbackVoices, agentLangs) });
       }
+      emittedVoiceOptions = true;
     }
 
     if (!cfg || !cfg.agentName) {
@@ -426,8 +461,13 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     const langCode    = cfg.languageMode === "multi" ? "en-IN" : langInfo.code;
     const langDisplay = cfg.languageMode === "multi" ? "Multi-language" : langInfo.label;
 
-    // Emit voice_selected to collapse inline voice picker in chat
-    if (cfg.voiceId) {
+    // Emit voice_selected to collapse the inline voice picker — ONLY when a pick
+    // actually happened this turn (the voiceId differs from what the client already
+    // has selected), and NEVER alongside a fresh voice_options in the same response.
+    // Prevents refine-mode "cards appear then instantly vanish": the pre-existing
+    // config carries a voiceId, which must not count as a new pick.
+    const voicePickedThisTurn = !!cfg.voiceId && cfg.voiceId !== selectedVoiceId;
+    if (voicePickedThisTurn && !emittedVoiceOptions) {
       emit({ type: "voice_selected", voiceId: cfg.voiceId, voiceName: cfg.voiceName });
     }
 
