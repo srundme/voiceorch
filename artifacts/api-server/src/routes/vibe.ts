@@ -439,10 +439,10 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
               description: v.description,
             }))
           : fallbackVoices;
-        emit({ type: "voice_options", voices: orderVoicesByLanguage(voiceList, agentLangs) });
+        emit({ type: "voice_options", voices: orderVoicesByLanguage(voiceList, agentLangs), agentLanguages: agentLangs });
       } catch (err) {
         logger.warn({ err }, "vibe-chat: failed to fetch voices, using defaults");
-        emit({ type: "voice_options", voices: orderVoicesByLanguage(fallbackVoices, agentLangs) });
+        emit({ type: "voice_options", voices: orderVoicesByLanguage(fallbackVoices, agentLangs), agentLanguages: agentLangs });
       }
       emittedVoiceOptions = true;
     }

@@ -10,6 +10,7 @@ import {
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
 
@@ -35,6 +36,7 @@ interface ChatMsg {
   content: string;
   done?: boolean;
   voices?: VoiceOption[];        // inline voice picker
+  voiceAgentLangs?: string[];    // agent's chosen language(s) for the picker's default filter
   voicePicked?: boolean;         // collapses picker after selection
   timezonePicker?: boolean;      // inline timezone picker
   timezonePicked?: boolean;      // collapses timezone picker after selection
@@ -68,6 +70,28 @@ const LANG_DISPLAY: Record<string, string> = {
   "kn-IN": "Kannada", "ml-IN": "Malayalam", "en-IN": "English (India)",
   "en-US": "English (US)",
 };
+
+/** Base language code ("en-IN" → "en") used for voice-list filtering. */
+function baseLang(code: string): string {
+  return (code ?? "").trim().toLowerCase().split("-")[0] ?? "";
+}
+
+const BASE_LANG_DISPLAY: Record<string, string> = {
+  en: "English", ta: "Tamil", hi: "Hindi", te: "Telugu",
+  kn: "Kannada", ml: "Malayalam", mr: "Marathi", bn: "Bengali",
+  gu: "Gujarati", pa: "Punjabi", or: "Odia", ur: "Urdu",
+};
+
+/** Human-readable name for a base language code, falling back to Intl then the raw code. */
+function baseLangLabel(code: string): string {
+  const b = baseLang(code);
+  if (BASE_LANG_DISPLAY[b]) return BASE_LANG_DISPLAY[b];
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "language" }).of(b);
+    if (name && name !== b) return name;
+  } catch { /* fall through */ }
+  return b.toUpperCase();
+}
 
 /* ── greeting ──────────────────────────────────────────────────────────────── */
 const GREETING: ChatMsg = {
@@ -274,13 +298,13 @@ export default function VibePage() {
     });
   }, []);
 
-  const attachVoicesToLastMsg = useCallback((voices: VoiceOption[]) => {
+  const attachVoicesToLastMsg = useCallback((voices: VoiceOption[], agentLangs: string[]) => {
     setMessages(prev => {
       // Strip any older, still-open pickers so re-shown voices live only on the latest message
-      const cleared = prev.map(m => m.voices && !m.voicePicked ? { ...m, voices: undefined } : m);
+      const cleared = prev.map(m => m.voices && !m.voicePicked ? { ...m, voices: undefined, voiceAgentLangs: undefined } : m);
       const last = cleared[cleared.length - 1];
       if (last?.role === "ai") {
-        return [...cleared.slice(0, -1), { ...last, voices, voicePicked: false }];
+        return [...cleared.slice(0, -1), { ...last, voices, voiceAgentLangs: agentLangs, voicePicked: false }];
       }
       return cleared;
     });
@@ -379,9 +403,10 @@ export default function VibePage() {
 
             case "voice_options": {
               const voices = (evt.voices as VoiceOption[]) ?? [];
+              const agentLangs = Array.isArray(evt.agentLanguages) ? (evt.agentLanguages as string[]) : [];
               if (voices.length > 0) {
                 voicesRef.current = { shown: true, list: voices };
-                attachVoicesToLastMsg(voices);
+                attachVoicesToLastMsg(voices, agentLangs);
               }
               break;
             }
@@ -962,6 +987,7 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
         {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (
           <VoicePickerList
             voices={msg.voices}
+            agentLangs={msg.voiceAgentLangs ?? []}
             selectedVoice={selectedVoice}
             playingVoice={playingVoice}
             onPreview={onPreview}
@@ -1037,16 +1063,42 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
   );
 }
 
-function VoicePickerList({ voices, selectedVoice, playingVoice, onPreview, onSelect }: {
+function VoicePickerList({ voices, agentLangs, selectedVoice, playingVoice, onPreview, onSelect }: {
   voices: VoiceOption[];
+  agentLangs: string[];
   selectedVoice: string;
   playingVoice: string | null;
   onPreview: (id: string) => void;
   onSelect: (v: VoiceOption) => void;
 }) {
-  const matched = voices.filter(v => v.languageMatch);
-  const rest    = voices.filter(v => !v.languageMatch);
-  const grouped = matched.length > 0 && rest.length > 0;
+  // Distinct base languages that actually have at least one voice (catalog order preserved)
+  const availableLangs = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const v of voices) {
+      const b = baseLang(v.language);
+      if (b && !seen.has(b)) { seen.add(b); out.push(b); }
+    }
+    return out;
+  }, [voices]);
+
+  // Default: agent's primary language → any agent language with voices → English → first available
+  const defaultLang = useMemo(() => {
+    for (const code of agentLangs) {
+      const b = baseLang(code);
+      if (b && availableLangs.includes(b)) return b;
+    }
+    if (availableLangs.includes("en")) return "en";
+    return availableLangs[0] ?? "";
+  }, [agentLangs, availableLangs]);
+
+  const [selectedLang, setSelectedLang] = useState(defaultLang);
+
+  // Re-emitted picker (e.g. agent language changed mid-conversation) → follow the new default
+  useEffect(() => { setSelectedLang(defaultLang); }, [defaultLang]);
+
+  const effectiveLang = availableLangs.includes(selectedLang) ? selectedLang : defaultLang;
+  const filtered = effectiveLang ? voices.filter(v => baseLang(v.language) === effectiveLang) : voices;
 
   const renderPill = (v: VoiceOption) => (
     <VoicePill
@@ -1061,24 +1113,27 @@ function VoicePickerList({ voices, selectedVoice, playingVoice, onPreview, onSel
 
   return (
     <div className="space-y-2 pt-1">
-      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-        Available voices
-      </p>
-      <div className="max-h-64 overflow-y-auto pr-1 space-y-2">
-        {grouped ? (
-          <>
-            <p className="text-[9px] font-semibold text-primary/80 uppercase tracking-widest pt-0.5">
-              Matches your language
-            </p>
-            {matched.map(renderPill)}
-            <p className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest pt-1.5">
-              Other voices
-            </p>
-            {rest.map(renderPill)}
-          </>
-        ) : (
-          voices.map(renderPill)
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+          Available voices
+        </p>
+        {availableLangs.length > 0 && (
+          <Select value={effectiveLang} onValueChange={setSelectedLang}>
+            <SelectTrigger className="h-6 w-auto min-w-[90px] gap-1 rounded-full border-border/60 bg-background/60 px-2.5 text-[10px] font-medium [&>svg]:h-3 [&>svg]:w-3">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableLangs.map(lang => (
+                <SelectItem key={lang} value={lang} className="text-xs">
+                  {baseLangLabel(lang)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
+      </div>
+      <div className="max-h-64 overflow-y-auto pr-1 space-y-2">
+        {filtered.map(renderPill)}
       </div>
     </div>
   );
