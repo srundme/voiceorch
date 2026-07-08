@@ -570,9 +570,19 @@ export default function VibePage() {
 
       {/* ══ Landing view — before first message ════════════════════════════ */}
       {!chatStarted && (
-        <div className="flex flex-col h-full">
+        <div className="relative flex flex-col h-full overflow-hidden">
+          {/* Ambient background — glow + grid texture, so the page reads as designed, not empty */}
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_10%,transparent_75%)]" />
+            <div className={cn(
+              "absolute left-1/2 top-[30%] h-[520px] w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[110px] transition-opacity duration-700",
+              isThinking ? "bg-primary/20 opacity-100" : "bg-primary/10 opacity-80",
+            )} />
+            <div className="absolute left-1/2 top-[30%] h-[280px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[80px]" />
+          </div>
+
           {/* Back button */}
-          <div className="flex items-center px-6 h-14 shrink-0">
+          <div className="relative z-10 flex items-center px-6 h-14 shrink-0">
             <button
               onClick={() => navigate("/app/agents")}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -582,26 +592,26 @@ export default function VibePage() {
           </div>
 
           {/* Centered content */}
-          <div className="flex-1 flex flex-col items-center justify-center px-6 pb-16">
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-16">
             {/* Animated logo */}
             <div className="relative mb-8">
               <div className={cn(
-                "h-16 w-16 rounded-2xl border flex items-center justify-center overflow-hidden p-2.5 transition-all duration-500",
+                "h-[72px] w-[72px] rounded-[22px] border flex items-center justify-center overflow-hidden p-3.5 transition-all duration-500 bg-gradient-to-b from-muted/60 to-muted/10 backdrop-blur-sm",
                 isThinking
-                  ? "border-primary/50 bg-primary/10 shadow-[0_0_32px_rgba(var(--primary)/0.25)]"
-                  : "border-border/60 bg-muted/30",
+                  ? "border-primary/50 shadow-[0_0_48px_rgba(var(--primary)/0.35)]"
+                  : "border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
               )}>
-                <img src="/snapserve-icon.png" alt="SnapServe" className={cn("h-full w-full object-contain transition-opacity", isThinking ? "opacity-100" : "opacity-70")} />
+                <img src="/snapserve-icon.png" alt="SnapServe" className={cn("h-full w-full object-contain transition-opacity", isThinking ? "opacity-100" : "opacity-90")} />
               </div>
               {isThinking && (
-                <div className="absolute inset-0 rounded-2xl border-2 border-primary/40 animate-ping" />
+                <div className="absolute inset-0 rounded-[22px] border-2 border-primary/40 animate-ping" />
               )}
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl font-semibold tracking-tight mb-3 text-center">
+            <h1 className="text-4xl font-semibold tracking-tight mb-3 text-center bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
               {isThinking ? (
-                <span className="text-muted-foreground">Building your agent…</span>
+                <span className="text-muted-foreground bg-none">Building your agent…</span>
               ) : (
                 "Build your voice agent"
               )}
@@ -612,7 +622,9 @@ export default function VibePage() {
 
             {/* Input */}
             <div className="w-full max-w-2xl">
-              {inputBlock(true)}
+              <div className="rounded-2xl bg-gradient-to-b from-border/40 to-border/10 p-px shadow-2xl shadow-black/30">
+                {inputBlock(true)}
+              </div>
             </div>
 
             {/* Suggestion chips */}
@@ -622,7 +634,7 @@ export default function VibePage() {
                   <button
                     key={s}
                     onClick={() => setInput(s)}
-                    className="rounded-full border border-border/60 bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/60 transition-all"
+                    className="rounded-full border border-border/60 bg-muted/20 backdrop-blur-sm px-4 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/50 hover:shadow-[0_0_16px_rgba(var(--primary)/0.15)] transition-all"
                   >
                     {s}
                   </button>
