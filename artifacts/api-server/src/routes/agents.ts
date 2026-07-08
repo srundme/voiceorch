@@ -816,6 +816,26 @@ router.delete("/agents/:id/caller-memory/:phone", requireAuth, async (req, res):
   await db.delete(callerCallArchiveTable)
     .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber)));
 
+  // 5. Clear all memory-bearing fields on the caller_profiles row so the next
+  //    call is treated as a true first-time caller. The row itself is kept to
+  //    preserve identity (agentId, phoneNumber, createdAt); only the memory
+  //    fields are wiped. callCount → 0 prevents the RETURNING CALLER RULE
+  //    from firing and the old summary from being injected.
+  await db.update(callerProfilesTable)
+    .set({
+      summary:           null,
+      name:              null,
+      callCount:         0,
+      predictedIntent:   null,
+      sentimentTrend:    null,
+      riskScore:         null,
+      lastCallDropped:   false,
+      lastCallDroppedAt: null,
+      preferredLanguage: null,
+      updatedAt:         new Date(),
+    })
+    .where(and(eq(callerProfilesTable.agentId, agentId), eq(callerProfilesTable.phoneNumber, phoneNumber)));
+
   res.status(204).end();
 });
 
