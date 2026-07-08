@@ -412,6 +412,7 @@ export default function VibePage() {
         || phaseRef.current === "streaming" || phaseRef.current === "done") return;
 
     if (!overrideText) setInput("");
+    if (refineId != null) setPromptPreview("");
 
     const userMsg: ChatMsg = { id: uid(), role: "user", content: text, done: true };
     const aiMsg:   ChatMsg = { id: uid(), role: "ai",   content: "",   done: false };
@@ -552,12 +553,10 @@ export default function VibePage() {
             case "created":
               setCreatedId(evt.agentId as number);
               setCreatedName(evt.agentName as string);
-              setPhase("done");
               setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
               queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-              // Sync refineBaseRef so the NEXT refine turn carries the saved state,
-              // not the stale load-time snapshot.
               if (refineId != null) {
+                // Refine mode: fetch fresh state, sync preview + ref, then re-enable input.
                 fetch(`/api/agents/${evt.agentId as number}`, {
                   headers: { Authorization: `Bearer ${getToken() ?? ""}` },
                 })
@@ -584,8 +583,15 @@ export default function VibePage() {
                       systemPrompt:           String(fresh.systemPrompt ?? "").slice(0, 3000),
                       greetingMessage:        fresh.greetingMessage ?? refineBaseRef.current.greetingMessage,
                     };
+                    // Sync the System Prompt preview to the freshly saved prompt.
+                    setPromptPreview(String(fresh.systemPrompt ?? ""));
+                    // Re-enable the chat input so the user can make a second refinement.
+                    setPhase("idle");
                   })
-                  .catch(() => {});
+                  .catch(() => { setPhase("idle"); });
+              } else {
+                // New-agent creation: lock the composer as before.
+                setPhase("done");
               }
               break;
 
