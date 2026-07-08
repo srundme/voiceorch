@@ -404,13 +404,17 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     availableVoices = [] as VibeVoice[],
     selectedVoiceId = "",
     refineAgentId,
+    refineBaseConfig,
   } = req.body as {
-    messages:        VibeChatMessage[];
-    voicesShown?:    boolean;
-    availableVoices?: VibeVoice[];
-    selectedVoiceId?: string;
-    refineAgentId?:  number;
+    messages:          VibeChatMessage[];
+    voicesShown?:      boolean;
+    availableVoices?:  VibeVoice[];
+    selectedVoiceId?:  string;
+    refineAgentId?:    number;
+    refineBaseConfig?: Record<string, unknown>;
   };
+
+  const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages array required" });
@@ -437,6 +441,54 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       return;
     }
 
+    // Refine mode: fetch the existing agent row server-side (ownership-checked) at
+    // request start so the Gemini context is authoritative, not client-supplied.
+    // This row is also reused later to preserve provider/model fields on DB update.
+    let existingAgentRow: Record<string, unknown> | null = null;
+    let serverSideRefineConfig: Record<string, unknown> | null = null;
+    if (isRefine) {
+      try {
+        const [agentRow] = await db.select().from(agentsTable)
+          .where(and(eq(agentsTable.id, refineAgentId!), eq(agentsTable.userId, clerkId)));
+        if (agentRow) {
+          existingAgentRow = agentRow as unknown as Record<string, unknown>;
+          const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
+          serverSideRefineConfig = {
+            agentName:              agentRow.name,
+            companyName:            acfg.companyName ?? "",
+            language:               agentRow.language ?? "en-IN",
+            languageChosen:         true,
+            languageMode:           acfg.isMultilingual ? "multi" : "single",
+            multilingualLanguages:  acfg.multilingualLanguages ?? [],
+            hasTamil:               (String(agentRow.language ?? "")).includes("ta"),
+            gender:                 "female",
+            direction:              acfg.direction ?? "inbound",
+            description:            agentRow.description ?? "",
+            voiceId:                agentRow.ttsVoice ?? "",
+            voiceName:              "",
+            callFlowNotes:          acfg.callFlowNotes ?? agentRow.description ?? "",
+            knowledgeBaseNotes:     acfg.knowledgeBaseNotes ?? "",
+            genderDetectionEnabled: !!acfg.genderDetectionEnabled,
+            maleSalutation:         (acfg.genderDetectionMaleSalutation as string) || "Sir",
+            femaleSalutation:       (acfg.genderDetectionFemaleSalutation as string) || "Ma'am",
+            callTransferEnabled:    !!acfg.callTransferEnabled,
+            transferPhoneNumber:    acfg.transferPhoneNumber ?? "",
+            transferName:           acfg.transferName ?? "",
+            voicemailEnabled:       !!acfg.voicemailDetection,
+            voicemailMessage:       acfg.voicemailMessage ?? "",
+            schedulingEnabled:      !!acfg.schedulingEnabled,
+            timezone:               acfg.timezone ?? "Asia/Kolkata",
+            timezoneSet:            !!acfg.timezone,
+            compliance:             acfg.compliance ?? { dpdp: false, trai: false, irdai: false },
+            systemPrompt:           String(agentRow.systemPrompt ?? "").slice(0, 3000),
+            greetingMessage:        agentRow.greetingMessage ?? "",
+          };
+        }
+      } catch (err) {
+        logger.warn({ err }, "vibe-chat: failed to fetch existing agent for refine context");
+      }
+    }
+
     // Inject voice context so AI knows which voice IDs map to which names
     let contextualMessages = [...messages];
     if (voicesShown && availableVoices.length > 0) {
@@ -447,6 +499,30 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         { role: "user" as const, content: voiceContext },
         { role: "assistant" as const, content: JSON.stringify({ reply: "Got it — I can see the voice options in the UI.", phase: "voice_selection", ready: false, config: null }) },
         ...messages,
+      ];
+    }
+
+    // Refine mode: prepend a preamble with the server-fetched authoritative config.
+    // Fall back to client-supplied refineBaseConfig only if DB fetch failed.
+    const refineContextSource = serverSideRefineConfig ?? refineBaseConfig;
+    if (isRefine && refineContextSource) {
+      const existingJson = JSON.stringify(refineContextSource, null, 2).slice(0, 5000);
+      const refineBlock = [
+        `[REFINE MODE — you are editing an EXISTING agent, NOT building a new one]`,
+        `Current agent configuration (carry all unchanged fields forward exactly):`,
+        existingJson,
+        ``,
+        `Instructions for this conversation:`,
+        `- Do NOT re-ask questions already answered. The agent is already configured.`,
+        `- Keep every field that the user has not asked to change exactly as it appears above.`,
+        `- When the user describes a single change (e.g. "add Velachery to the call flow"), apply it immediately.`,
+        `- After ANY confirmed change, respond with phase="build" and ready=true, returning the COMPLETE updated config.`,
+        `- Do not run through wizard phases — fulfill the user's request in one turn.`,
+      ].join("\n");
+      contextualMessages = [
+        { role: "user" as const, content: refineBlock },
+        { role: "assistant" as const, content: JSON.stringify({ reply: "Understood — I have the existing agent config and will only update what you ask, keeping everything else unchanged.", phase: "build", ready: false, config: null }) },
+        ...contextualMessages,
       ];
     }
 
@@ -634,7 +710,10 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
     }
 
-    if (!parsed.ready) {
+    // For refine mode: if Gemini returned an updated config (has agentName) proceed
+    // to save even if ready flag is false — the refine prompt instructs ready=true on
+    // every confirmed change, but we guard here so an incomplete reply still saves.
+    if (!parsed.ready && !(isRefine && cfg?.agentName)) {
       res.end();
       return;
     }
@@ -825,22 +904,41 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 
     // DB insert or update — agent
     let insertedAgent: { id: number; name: string };
-    const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
+
+    // For refine: prefer the AI-returned voice if it differs from existing,
+    // otherwise fall back to the existing DB voice so an unmentioned voice is never
+    // overwritten with a gender-default when the AI omits voiceId in a partial config.
+    const existingTtsVoice     = existingAgentRow?.ttsVoice as string | undefined;
+    const existingTtsVoiceName = existingAgentRow?.ttsVoiceName as string | undefined;
+    const finalVoiceId   = isRefine
+      ? (cfg.voiceId   || existingTtsVoice   || resolvedVoiceId)
+      : resolvedVoiceId;
+    const finalVoiceName = isRefine
+      ? (cfg.voiceName || existingTtsVoiceName || resolvedVoiceName)
+      : resolvedVoiceName;
+
     try {
       if (isRefine) {
-        // Refine mode: update the existing agent (scoped to this user for security)
+        // Refine mode: update the existing agent (scoped to this user for security).
+        // existingAgentRow was fetched at request start — reuse it here.
         const [row] = await (db.update(agentsTable) as any)
           .set({
-            name:         cfg.agentName,
-            asrLanguage:  langCode,
-            language:     langCode,
+            name:              cfg.agentName,
+            asrLanguage:       langCode,
+            language:          langCode,
             llmProvider,
             llmModel,
-            ttsVoice:     resolvedVoiceId,
+            asrProvider:       (existingAgentRow?.asrProvider as string) ?? "sarvam",
+            asrModel:          (existingAgentRow?.asrModel as string) ?? "saaras:v3",
+            ttsProvider:       (existingAgentRow?.ttsProvider as string) ?? "cartesia",
+            ttsModel:          (existingAgentRow?.ttsModel as string) ?? "sonic-3.5",
+            telephonyProvider: (existingAgentRow?.telephonyProvider as string) ?? "vobiz",
+            ttsVoice:          finalVoiceId,
+            ttsVoiceName:      finalVoiceName,
             systemPrompt,
             greetingMessage,
-            agentConfig:  agentConfig as any,
-            tools:        tools as any,
+            agentConfig:       agentConfig as any,
+            tools:             tools as any,
           })
           .where(and(eq(agentsTable.id, refineAgentId), eq(agentsTable.userId, clerkId)))
           .returning();
@@ -874,16 +972,24 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       return;
     }
 
-    // DB insert — dispositions
+    // DB insert/upsert — dispositions
+    // For refine mode: use onConflictDoUpdate so changes are reflected immediately.
+    // For new agents: onConflictDoNothing (the row shouldn't exist yet).
+    // If refine returns empty dispositions the user didn't touch them — skip write.
     if (cfg.dispositions?.length) {
       const taxonomy: Record<string, string[]> = {};
       for (const d of cfg.dispositions) {
         taxonomy[d.category] = d.outcomes;
       }
-      db.insert(agentDispositionsTable)
-        .values({ agentId: insertedAgent.id, taxonomy, domainFields: [], rules: [] })
-        .onConflictDoNothing()
-        .catch(err => logger.warn({ err }, "vibe-chat: disposition insert failed"));
+      const dispInsert = db.insert(agentDispositionsTable)
+        .values({ agentId: insertedAgent.id, taxonomy, domainFields: [], rules: [] });
+      (isRefine
+        ? dispInsert.onConflictDoUpdate({
+            target: [agentDispositionsTable.agentId],
+            set: { taxonomy },
+          })
+        : dispInsert.onConflictDoNothing()
+      ).catch(err => logger.warn({ err }, "vibe-chat: disposition upsert failed"));
     }
 
     // DB insert — scheduling calendar + availability + default event type

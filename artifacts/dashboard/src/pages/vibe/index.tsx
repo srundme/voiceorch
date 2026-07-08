@@ -165,6 +165,7 @@ export default function VibePage() {
   const voicesRef   = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
   const selectedVoiceIdRef = useRef<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const refineBaseRef = useRef<Record<string, unknown> | null>(null);
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -180,18 +181,24 @@ export default function VibePage() {
     if (!refineId) return;
     setRefineLoading(true);
     const token = getToken();
-    fetch(`/api/agents/${refineId}`, {
-      headers: { Authorization: `Bearer ${token ?? ""}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then((agent: Record<string, unknown> | null) => {
+
+    Promise.all([
+      fetch(`/api/agents/${refineId}`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/disposition/config/${refineId}`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ])
+      .then(([agent, dispositionsData]: [Record<string, unknown> | null, unknown]) => {
         if (!agent) return;
         const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
         const lang = LANG_DISPLAY[agent.language as string ?? ""] ?? (agent.language as string) ?? "English";
 
-        // Pre-populate right panel fields
+        // Pre-populate right panel fields (including company + greeting)
         const panelFields: AgentField[] = [
           { key: "name",      label: "Agent Name",     value: (agent.name as string) || "—",              icon: "bot"      },
+          { key: "company",   label: "Company",        value: (cfg.companyName as string) || "—",          icon: "building" },
           { key: "language",  label: "Language",       value: lang,                                        icon: "globe"    },
           { key: "direction", label: "Call Direction",
             value: cfg.direction === "outbound" ? "Outbound" : "Inbound",                                  icon: "phone"    },
@@ -203,16 +210,38 @@ export default function VibePage() {
           { key: "stt",       label: "Speech-to-Text", value: "Sarvam Saaras v3",                          icon: "ear"      },
           { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                        icon: "speaker"  },
         ];
+        if (agent.greetingMessage) {
+          panelFields.splice(2, 0, {
+            key: "greeting", label: "Greeting", value: (agent.greetingMessage as string).slice(0, 80) + ((agent.greetingMessage as string).length > 80 ? "…" : ""), icon: "message-circle",
+          });
+        }
         setFields(panelFields);
+
+        // Pre-populate call flow + KB notes
+        const cfNotes = (cfg.callFlowNotes as string) || (agent.description as string) || "";
+        const kbN = (cfg.knowledgeBaseNotes as string) || "";
+        if (cfNotes) setCallFlowNotes(cfNotes);
+        if (kbN) setKbNotes(kbN);
+
+        // Pre-populate dispositions
+        const rawDisp = (dispositionsData as Record<string, unknown> | null)?.taxonomy;
+        if (rawDisp && typeof rawDisp === "object") {
+          const cards = Object.entries(rawDisp as Record<string, string[]>).map(([category, outcomes]) => ({
+            category,
+            outcomes: Array.isArray(outcomes) ? outcomes : [],
+          }));
+          if (cards.length) setDispositions(cards);
+        }
 
         // Pre-populate features
         const schedulingOn = !!(cfg.schedulingEnabled);
+        const complianceFlags = cfg.compliance as Record<string, boolean> | undefined;
         const panelFeatures: FeatureCard[] = [
           {
             key: "gender_detection", label: "Caller Gender Detection", icon: "user-check",
             enabled: !!(cfg.genderDetectionEnabled),
             detail: cfg.genderDetectionEnabled
-              ? `${(cfg.maleSalutation as string) || "Sir"} / ${(cfg.femaleSalutation as string) || "Ma'am"}`
+              ? `${(cfg.genderDetectionMaleSalutation as string) || (cfg.maleSalutation as string) || "Sir"} / ${(cfg.genderDetectionFemaleSalutation as string) || (cfg.femaleSalutation as string) || "Ma'am"}`
               : "Disabled",
           },
           {
@@ -224,8 +253,10 @@ export default function VibePage() {
           },
           {
             key: "voicemail", label: "Voicemail", icon: "voicemail",
-            enabled: !!(cfg.voicemailEnabled),
-            detail: cfg.voicemailEnabled ? "Enabled" : "Disabled",
+            enabled: !!(cfg.voicemailDetection),
+            detail: cfg.voicemailDetection
+              ? ((cfg.voicemailMessage as string) ? `"${(cfg.voicemailMessage as string).slice(0, 50)}${(cfg.voicemailMessage as string).length > 50 ? "…" : ""}"` : "Enabled")
+              : "Disabled",
           },
           {
             key: "scheduling", label: "Booking & Scheduling", icon: "calendar",
@@ -234,13 +265,11 @@ export default function VibePage() {
           },
           {
             key: "compliance", label: "Compliance", icon: "shield-check",
-            enabled: !!((cfg.compliance as Record<string, boolean>)?.dpdp
-                     || (cfg.compliance as Record<string, boolean>)?.trai
-                     || (cfg.compliance as Record<string, boolean>)?.irdai),
+            enabled: !!(complianceFlags?.dpdp || complianceFlags?.trai || complianceFlags?.irdai),
             detail: [
-              (cfg.compliance as Record<string, boolean>)?.dpdp  && "DPDP",
-              (cfg.compliance as Record<string, boolean>)?.trai  && "TRAI",
-              (cfg.compliance as Record<string, boolean>)?.irdai && "IRDAI",
+              complianceFlags?.dpdp  && "DPDP",
+              complianceFlags?.trai  && "TRAI",
+              complianceFlags?.irdai && "IRDAI",
             ].filter(Boolean).join(" · ") || "None",
           },
         ];
@@ -256,24 +285,54 @@ export default function VibePage() {
           setPromptPreview(agent.systemPrompt as string);
         }
 
+        // Build the full VibeConfig-shaped object to send as refineBaseConfig on every turn.
+        // This is what the backend embeds as context for Gemini so it knows the full current state.
+        const baseConfig: Record<string, unknown> = {
+          agentName:              agent.name,
+          companyName:            cfg.companyName ?? "",
+          language:               agent.language ?? "en-IN",
+          languageChosen:         true,
+          languageMode:           (cfg.isMultilingual ? "multi" : "single"),
+          multilingualLanguages:  cfg.multilingualLanguages ?? [],
+          hasTamil:               (agent.language as string ?? "").includes("ta"),
+          gender:                 "female",
+          direction:              cfg.direction ?? "inbound",
+          description:            agent.description ?? "",
+          voiceId:                agent.ttsVoice ?? "",
+          voiceName:              agent.ttsVoiceName ?? "",
+          callFlowNotes:          cfg.callFlowNotes ?? agent.description ?? "",
+          knowledgeBaseNotes:     cfg.knowledgeBaseNotes ?? "",
+          genderDetectionEnabled: !!cfg.genderDetectionEnabled,
+          maleSalutation:         (cfg.genderDetectionMaleSalutation as string) || "Sir",
+          femaleSalutation:       (cfg.genderDetectionFemaleSalutation as string) || "Ma'am",
+          callTransferEnabled:    !!cfg.callTransferEnabled,
+          transferPhoneNumber:    cfg.transferPhoneNumber ?? "",
+          transferName:           cfg.transferName ?? "",
+          voicemailEnabled:       !!(cfg.voicemailDetection),
+          voicemailMessage:       cfg.voicemailMessage ?? "",
+          schedulingEnabled:      !!cfg.schedulingEnabled,
+          timezone:               cfg.timezone ?? "Asia/Kolkata",
+          timezoneSet:            !!cfg.timezone,
+          hostEmail:              "",
+          hostEmailSet:           false,
+          availabilityDays:       [1,2,3,4,5],
+          availabilityStart:      "09:00",
+          availabilityEnd:        "17:00",
+          availabilitySet:        false,
+          compliance:             cfg.compliance ?? { dpdp: false, trai: false, irdai: false },
+          systemPrompt:           (agent.systemPrompt as string ?? "").slice(0, 3000),
+          greetingMessage:        agent.greetingMessage ?? "",
+          dispositions:           rawDisp
+            ? Object.entries(rawDisp as Record<string, string[]>).map(([category, outcomes]) => ({ category, outcomes }))
+            : [],
+        };
+        refineBaseRef.current = baseConfig;
+
         // setPhase("idle") not "building" — "building" disables the chatbox
         setPhase("idle");
 
-        // Inject existing config as context so Gemini knows what it's refining
-        const contextSummary = [
-          `[EXISTING AGENT CONFIG — user wants to refine this agent]`,
-          `Name: ${agent.name as string}`,
-          `Language: ${lang}`,
-          `Direction: ${cfg.direction ?? "inbound"}`,
-          `Voice: ${agent.ttsVoice as string || "not set"}`,
-          `Gender detection: ${cfg.genderDetectionEnabled ? "on" : "off"}`,
-          `Call transfer: ${cfg.callTransferEnabled ? `on → ${cfg.transferPhoneNumber}` : "off"}`,
-          `Voicemail: ${cfg.voicemailEnabled ? "on" : "off"}`,
-          `Scheduling: ${cfg.schedulingEnabled ? "on" : "off"}`,
-          `Timezone: ${(cfg.timezone as string) || "Asia/Kolkata"}`,
-          `[When the user describes changes, update only the relevant fields and keep everything else the same.]`,
-        ].join("\n");
-        historyRef.current = [{ role: "assistant", content: contextSummary }];
+        // Initialize history as empty — the backend will prepend the refine context block
+        historyRef.current = [];
 
         // Set refine greeting
         setMessages([{
@@ -372,6 +431,7 @@ export default function VibePage() {
           availableVoices: voicesRef.current.list,
           selectedVoiceId: selectedVoiceIdRef.current,
           ...(refineId != null ? { refineAgentId: refineId } : {}),
+          ...(refineId != null && refineBaseRef.current ? { refineBaseConfig: refineBaseRef.current } : {}),
         }),
       });
 
@@ -495,6 +555,38 @@ export default function VibePage() {
               setPhase("done");
               setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
               queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+              // Sync refineBaseRef so the NEXT refine turn carries the saved state,
+              // not the stale load-time snapshot.
+              if (refineId != null) {
+                fetch(`/api/agents/${evt.agentId as number}`, {
+                  headers: { Authorization: `Bearer ${getToken() ?? ""}` },
+                })
+                  .then(r => r.ok ? r.json() : null)
+                  .then((fresh: Record<string, unknown> | null) => {
+                    if (!fresh || !refineBaseRef.current) return;
+                    const fcfg = (fresh.agentConfig ?? {}) as Record<string, unknown>;
+                    refineBaseRef.current = {
+                      ...refineBaseRef.current,
+                      agentName:              fresh.name,
+                      companyName:            fcfg.companyName ?? refineBaseRef.current.companyName,
+                      language:               fresh.language ?? refineBaseRef.current.language,
+                      voiceId:                fresh.ttsVoice ?? refineBaseRef.current.voiceId,
+                      voiceName:              fresh.ttsVoiceName ?? refineBaseRef.current.voiceName,
+                      callFlowNotes:          fcfg.callFlowNotes ?? refineBaseRef.current.callFlowNotes,
+                      knowledgeBaseNotes:     fcfg.knowledgeBaseNotes ?? refineBaseRef.current.knowledgeBaseNotes,
+                      genderDetectionEnabled: fcfg.genderDetectionEnabled ?? refineBaseRef.current.genderDetectionEnabled,
+                      callTransferEnabled:    fcfg.callTransferEnabled ?? refineBaseRef.current.callTransferEnabled,
+                      transferPhoneNumber:    fcfg.transferPhoneNumber ?? refineBaseRef.current.transferPhoneNumber,
+                      transferName:           fcfg.transferName ?? refineBaseRef.current.transferName,
+                      voicemailEnabled:       !!fcfg.voicemailDetection,
+                      voicemailMessage:       fcfg.voicemailMessage ?? refineBaseRef.current.voicemailMessage,
+                      compliance:             fcfg.compliance ?? refineBaseRef.current.compliance,
+                      systemPrompt:           String(fresh.systemPrompt ?? "").slice(0, 3000),
+                      greetingMessage:        fresh.greetingMessage ?? refineBaseRef.current.greetingMessage,
+                    };
+                  })
+                  .catch(() => {});
+              }
               break;
 
             case "error":
