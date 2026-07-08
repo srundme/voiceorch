@@ -2,6 +2,10 @@
 
 AI voice agent orchestration SaaS platform — users bring their own provider API keys (ASR, LLM, TTS, telephony) and the platform handles the orchestration layer.
 
+## Self-Hosted Orchestration Layer
+
+- `deploy/self-hosted/` — a leaner distribution for customers who want to run the orchestration engine on their own infra: api-server + dashboard only (no internal admin panel, no managed/platform AI keys seeded). Customer brings their own Postgres, Google OAuth app, and provider keys (BYOP-only — no per-minute billing is possible once it's on their servers). See `deploy/self-hosted/README.md`.
+
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, served at `/api`)
