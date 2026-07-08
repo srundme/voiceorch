@@ -1,132 +1,102 @@
+const VBWatermark = () => (
+  <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
+    <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
+      Vande Bharatam
+    </span>
+  </div>
+);
+
 export default function Slide3() {
-  const cardStyle: React.CSSProperties = {
-    background: "#FFFFFF",
-    border: "0.06vh solid #E7DFF6",
-    borderRadius: "1.4vw",
-    padding: "2.6vh 2vw",
-    boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
-    display: "flex",
-    flexDirection: "column",
-    flex: 1,
+  const row: React.CSSProperties = {
+    display: "flex", alignItems: "flex-start", gap: "2vw",
+    background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1vw",
+    padding: "2.2vh 2.4vw", boxShadow: "0 0.6vh 1.8vh rgba(26,35,126,0.07)",
   };
-  const iconWrap = (bg: string): React.CSSProperties => ({
-    width: "3.2vw",
-    height: "3.2vw",
-    borderRadius: "50%",
-    background: bg,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: "1.8vh",
-  });
 
   return (
     <div
       className="w-screen h-screen overflow-hidden relative"
-      style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
-        fontFamily: "var(--font-body-family)",
-        color: "#1A1033",
-        padding: "6vh 8vw 5vh 8vw",
-        boxSizing: "border-box",
-        display: "flex",
-        flexDirection: "column",
-      }}
+      style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4vh" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
-          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
-            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
-            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
-            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
-          </svg>
-          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
+      <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>The Problem</div>
+          <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
+            India's voice industry is massive — and broken
+          </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          03 / 12
-        </span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>03 / 14</span>
       </div>
 
-      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-        The Solution
-      </div>
-      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4vh 0", lineHeight: 1.15 }}>
-        SnapServe: voice AI with a memory
-      </h1>
-
-      <div style={{ display: "flex", gap: "1.8vw", flex: 1 }}>
-        <div style={cardStyle}>
-          <div style={iconWrap("#EEE8FB")}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08A3 3 0 0 1 3 13.5a3 3 0 0 1 .34-5.62A2.5 2.5 0 0 1 6 4a2.5 2.5 0 0 1 3.5-2Z" />
-              <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08A3 3 0 0 0 21 13.5a3 3 0 0 0-.34-5.62A2.5 2.5 0 0 0 18 4a2.5 2.5 0 0 0-3.5-2Z" />
-            </svg>
+      <div style={{ flex: 1, padding: "2.6vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "1.8vh" }}>
+        <div style={{
+          background: "#1A237E", borderRadius: "1vw", padding: "2.2vh 2.4vw",
+          display: "flex", alignItems: "center", gap: "2vw",
+        }}>
+          <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FF6F00", whiteSpace: "nowrap" }}>
+            KEY STAT
           </div>
-          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Persistent cross-call memory</div>
-          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
-            Caller history, commitments and context carry across calls — conversations resume, not restart.
+          <div style={{ width: "0.06vw", height: "3.6vh", background: "rgba(255,111,0,0.4)" }} />
+          <div style={{ fontSize: "1.12vw", color: "#FFFFFF", lineHeight: 1.5 }}>
+            India's BPM industry exceeds <strong style={{ color: "#FF6F00" }}>$40B</strong> (NASSCOM), with voice as the largest channel — yet <strong>human agents forget context between calls.</strong>
           </div>
         </div>
 
-        <div style={cardStyle}>
-          <div style={iconWrap("#FDF0DA")}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
+        <div style={row}>
+          <div style={{
+            minWidth: "3vw", width: "3vw", height: "3vw", borderRadius: "50%",
+            background: "#1A237E", display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <span style={{ color: "#FF6F00", fontWeight: 800, fontSize: "1.15vw" }}>01</span>
           </div>
-          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Drop → auto-redial → resume</div>
-          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
-            Call drops mid-sentence, the agent redials and picks up exactly where it left off.
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={iconWrap("#EEE8FB")}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-          </div>
-          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Built for Indian languages</div>
-          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
-            Tamil, Hinglish and Indian accents native, with low in-country latency.
+          <div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>Who suffers</div>
+            <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
+              Insurance renewals, lending collections, and customer support teams — high-volume outbound operations where
+              agents handle thousands of calls daily across insurers, banks, and BFSI companies.
+            </div>
           </div>
         </div>
 
-        <div style={cardStyle}>
-          <div style={iconWrap("#FDF0DA")}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-            </svg>
+        <div style={row}>
+          <div style={{
+            minWidth: "3vw", width: "3vw", height: "3vw", borderRadius: "50%",
+            background: "#1A237E", display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <span style={{ color: "#FF6F00", fontWeight: 800, fontSize: "1.15vw" }}>02</span>
           </div>
-          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Compliance built in</div>
-          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
-            IRDAI, TRAI and DPDP designed in from day one.
+          <div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>How they cope today</div>
+            <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
+              Large human agent pools with constant re-briefing every call, or US-hosted AI tools that don't understand
+              Indian accents, switch languages mid-sentence, or carry TRAI/DPDP compliance — leaving a compliance-and-quality gap no tool fills.
+            </div>
           </div>
         </div>
 
-        <div style={cardStyle}>
-          <div style={iconWrap("#EEE8FB")}>
-            <svg width="1.6vw" height="1.6vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 4V2" />
-              <path d="M15 16v-2" />
-              <path d="M8 9h2" />
-              <path d="M20 9h2" />
-              <path d="M17.8 11.8 19 13" />
-              <path d="M15 9h.01" />
-              <path d="M17.8 6.2 19 5" />
-              <path d="m3 21 9-9" />
-              <path d="M12.2 6.2 11 5" />
-            </svg>
+        <div style={row}>
+          <div style={{
+            minWidth: "3vw", width: "3vw", height: "3vw", borderRadius: "50%",
+            background: "#FF6F00", display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <span style={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1.15vw" }}>03</span>
           </div>
-          <div style={{ fontSize: "1.2vw", fontWeight: 700, marginBottom: "1.2vh", lineHeight: 1.25 }}>Vibe Builder — live in minutes</div>
-          <div style={{ fontSize: "1vw", color: "#5B5470", lineHeight: 1.55 }}>
-            Describe your agent in plain language. SnapServe configures telephony, AI, and compliance automatically — no developers needed.
+          <div>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "0.8vh" }}>Why it matters</div>
+            <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.6 }}>
+              Every dropped call that isn't resumed is a lost policy renewal or collection. Every non-compliant outreach is a
+              regulatory liability. The cost of leaving it unsolved compounds daily at scale.
+            </div>
           </div>
         </div>
       </div>
+
+      <VBWatermark />
     </div>
   );
 }

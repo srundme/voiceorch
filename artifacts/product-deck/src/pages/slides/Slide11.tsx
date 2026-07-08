@@ -1,90 +1,122 @@
+const VBWatermark = () => (
+  <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
+    <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
+      Vande Bharatam
+    </span>
+  </div>
+);
+
 export default function Slide11() {
-  const colStyle: React.CSSProperties = {
-    flex: 1,
-    background: "#FFFFFF",
-    border: "0.06vh solid #E7DFF6",
-    borderRadius: "1.4vw",
-    padding: "2.8vh 2.2vw",
-    boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
-    display: "flex",
-    flexDirection: "column",
-  };
+  const years = [
+    { label: "Year 1", milestone: "10 paying clients · Prove unit economics · ₹50L ARR" },
+    { label: "Year 2", milestone: "50+ clients · Memory Proxy live · ₹3 Cr ARR" },
+    { label: "Year 3", milestone: "Market presence in UAE & Philippines · ₹10 Cr ARR" },
+  ];
 
   return (
     <div
       className="w-screen h-screen overflow-hidden relative"
-      style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
-        fontFamily: "var(--font-body-family)",
-        color: "#1A1033",
-        padding: "6vh 8vw 5vh 8vw",
-        boxSizing: "border-box",
-        display: "flex",
-        flexDirection: "column",
-      }}
+      style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "3.6vh" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
-          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
-            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
-            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
-            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
-          </svg>
-          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
+      <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Financials &amp; The Ask</div>
+          <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
+            We want to raise ₹3 Crore (Pre-Seed)
+          </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          11 / 12
-        </span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>11 / 14</span>
       </div>
 
-      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-        Where We Are
-      </div>
-      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 3.6vh 0", lineHeight: 1.15 }}>
-        Built, now, next
-      </h1>
+      <div style={{ flex: 1, padding: "2.6vh 6vw 6.5vh 6vw", display: "flex", gap: "2.4vw" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2vh" }}>
+          <div style={{
+            background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1.2vw",
+            padding: "2.6vh 2.4vw", boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)",
+          }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1.6vh" }}>
+              Use of Funds
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.2vh" }}>
+              {[
+                { pct: "45%", label: "Technology & Infrastructure", w: "45%", color: "#1A237E" },
+                { pct: "30%", label: "GTM & Sales", w: "30%", color: "#FF6F00" },
+                { pct: "15%", label: "Salaries", w: "15%", color: "#3949AB" },
+                { pct: "10%", label: "Operations & Legal", w: "10%", color: "#7986CB" },
+              ].map(({ pct, label, w, color }) => (
+                <div key={label}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4vh" }}>
+                    <span style={{ fontSize: "1.02vw", color: "#3A3A5C" }}>{label}</span>
+                    <span style={{ fontSize: "1.02vw", fontWeight: 700, color }}>{pct}</span>
+                  </div>
+                  <div style={{ height: "0.9vh", background: "#EEF0FB", borderRadius: "0.5vw", overflow: "hidden" }}>
+                    <div style={{ width: w, height: "100%", background: color, borderRadius: "0.5vw" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      <div style={{ display: "flex", gap: "1.8vw", flex: 1, marginBottom: "2.6vh" }}>
-        <div style={colStyle}>
-          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B2ED6", marginBottom: "1.6vh" }}>
-            Built
-          </div>
-          <div style={{ fontSize: "1.25vw", fontWeight: 700, marginBottom: "1.4vh", lineHeight: 1.3 }}>
-            Full platform live in production
-          </div>
-          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Multilingual calls with cross-call memory working in real conditions.
+          <div style={{
+            background: "#1A237E", borderRadius: "1.2vw", padding: "2.4vh 2.4vw",
+            display: "flex", flexDirection: "column", gap: "1.4vh",
+          }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
+              Non-Monetary Ask from Vande Bharatam
+            </div>
+            <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw", marginBottom: "0.8vh" }}>
+                <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
+                <span>Introductions to Adani Group portfolio companies for pilot deployments in BFSI and logistics.</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw" }}>
+                <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
+                <span>SMB mentorship network to accelerate enterprise sales cycles and regulatory navigation.</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div style={colStyle}>
-          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B2ED6", marginBottom: "1.6vh" }}>
-            Now
+        <div style={{ width: "32vw", display: "flex", flexDirection: "column", gap: "1.8vh" }}>
+          <div style={{
+            background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1.2vw",
+            padding: "2.6vh 2.4vw", boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)", flex: 1,
+          }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "1.6vh" }}>
+              3-Year Snapshot
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.8vh" }}>
+              {years.map(({ label, milestone }) => (
+                <div key={label} style={{ display: "flex", gap: "1.4vw", alignItems: "flex-start" }}>
+                  <div style={{
+                    minWidth: "5.5vw", background: "#EEF0FB", borderRadius: "0.6vw",
+                    padding: "0.5vh 0.8vw", textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: "0.88vw", fontWeight: 700, color: "#1A237E" }}>{label}</div>
+                  </div>
+                  <div style={{ fontSize: "1.05vw", color: "#3A3A5C", lineHeight: 1.55 }}>{milestone}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ fontSize: "1.25vw", fontWeight: 700, marginBottom: "1.4vh", lineHeight: 1.3 }}>
-            Just launched
-          </div>
-          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Onboarding first pilot clients in insurance and enterprise; SI partner outreach underway.
-          </div>
-        </div>
 
-        <div style={colStyle}>
-          <div style={{ fontSize: "0.85vw", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B2ED6", marginBottom: "1.6vh" }}>
-            Next
-          </div>
-          <div style={{ fontSize: "1.25vw", fontWeight: 700, marginBottom: "1.4vh", lineHeight: 1.3 }}>
-            Convert pilots to paid campaigns
-          </div>
-          <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Ship the memory proxy publicly; expand language coverage.
+          <div style={{
+            background: "#FFF3E0", border: "0.06vh solid #FFCC80",
+            borderRadius: "1.1vw", padding: "2.2vh 2.4vw",
+          }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BF360C", marginBottom: "0.8vh" }}>
+              Current Status
+            </div>
+            <div style={{ fontSize: "1.08vw", color: "#BF360C", lineHeight: 1.58 }}>
+              Pre-revenue · Product complete · Pilot onboarding in progress. Raising pre-seed to convert pilots to paid and ship the Memory Proxy.
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ fontSize: "0.98vw", fontStyle: "italic", color: "#9A90B5", textAlign: "center" }}>
-        Honest status: pre-revenue, product-complete, launch week.
-      </div>
+      <VBWatermark />
     </div>
   );
 }

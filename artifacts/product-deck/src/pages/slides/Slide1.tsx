@@ -1,145 +1,104 @@
+const VBWatermark = () => (
+  <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
+    <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
+      Vande Bharatam
+    </span>
+  </div>
+);
+
 export default function Slide1() {
   return (
     <div
       className="w-screen h-screen overflow-hidden relative"
-      style={{
-        background: "radial-gradient(120% 100% at 20% 0%, #38208A 0%, #2A1670 45%, #1F0F52 100%)",
-        fontFamily: "var(--font-body-family)",
-        color: "#FFFFFF",
-      }}
+      style={{ background: "#0D1B4B", fontFamily: "var(--font-body-family)", color: "#FFFFFF" }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: "-18vh",
-          right: "-10vw",
-          width: "48vw",
-          height: "48vw",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(245,158,11,0.14) 0%, rgba(245,158,11,0) 70%)",
-        }}
-      />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
 
-      <div
-        style={{
-          position: "absolute",
-          top: "6vh",
-          left: "8vw",
-          display: "flex",
-          alignItems: "center",
-          gap: "1.1vw",
-        }}
-      >
-        <div
-          style={{
-            width: "4.2vw",
-            height: "4.2vw",
-            borderRadius: "50%",
-            background: "rgba(255,255,255,0.10)",
-            border: "0.08vw solid rgba(255,255,255,0.22)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <svg width="2.1vw" height="2.1vw" viewBox="0 0 100 100" fill="none">
-            <rect x="6" y="14" width="88" height="20" rx="10" fill="#FFFFFF" opacity="1" />
-            <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.6" />
-            <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.36" />
+      <div style={{
+        position: "absolute", top: 0, right: 0, width: "38vw", height: "100vh",
+        background: "linear-gradient(135deg, #1A237E 0%, #0D1B4B 60%)",
+        clipPath: "polygon(18% 0, 100% 0, 100% 100%, 0% 100%)",
+      }} />
+
+      <div style={{
+        position: "absolute", top: 0, right: 0, width: "36vw", height: "100vh",
+        background: "rgba(255,111,0,0.06)",
+        clipPath: "polygon(20% 0, 100% 0, 100% 100%, 2% 100%)",
+      }} />
+
+      <div style={{
+        position: "absolute", top: "6vh", left: "7vw", display: "flex", alignItems: "center", gap: "1vw",
+      }}>
+        <div style={{
+          width: "3.6vw", height: "3.6vw", borderRadius: "50%",
+          background: "rgba(255,111,0,0.18)", border: "0.1vw solid rgba(255,111,0,0.4)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="1.8vw" height="1.8vw" viewBox="0 0 100 100" fill="none">
+            <rect x="6" y="14" width="88" height="20" rx="10" fill="#FFFFFF" />
+            <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.65" />
+            <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.38" />
           </svg>
         </div>
-        <span style={{ fontSize: "1.4vw", fontWeight: 700, letterSpacing: "-0.01em" }}>SnapServe</span>
+        <span style={{ fontSize: "1.3vw", fontWeight: 700, letterSpacing: "-0.01em" }}>SnapServe AI</span>
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          top: "7vh",
-          right: "8vw",
-          fontSize: "0.9vw",
-          fontWeight: 500,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
-          color: "#C7BCEA",
-        }}
-      >
-        Investor Deck — 2026
+      <div style={{
+        position: "absolute", top: "7vh", right: "4vw",
+        fontSize: "0.8vw", fontWeight: 600, letterSpacing: "0.18em",
+        textTransform: "uppercase", color: "#FF6F00", opacity: 0.9,
+      }}>
+        Vande Bharatam — 2026
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          top: "0",
-          left: "8vw",
-          right: "8vw",
-          height: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "0.95vw",
-            fontWeight: 600,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            color: "#F59E0B",
-            marginBottom: "3vh",
-          }}
-        >
-          AI Voice Agents
+      <div style={{
+        position: "absolute", top: 0, left: "7vw", right: "40vw",
+        height: "100vh", display: "flex", flexDirection: "column", justifyContent: "center",
+      }}>
+        <div style={{
+          fontSize: "0.9vw", fontWeight: 700, letterSpacing: "0.2em",
+          textTransform: "uppercase", color: "#FF6F00", marginBottom: "2.8vh",
+        }}>
+          AI Voice Agents · Made in India
         </div>
 
-        <h1
-          style={{
-            fontFamily: "var(--font-display-family)",
-            fontSize: "5.4vw",
-            fontWeight: 700,
-            lineHeight: 1.08,
-            margin: 0,
-            maxWidth: "72vw",
-            color: "#FFFFFF",
-          }}
-        >
-          Build and deploy voice AI agents without writing a line of code.
+        <h1 style={{
+          fontFamily: "var(--font-display-family)", fontSize: "5.8vw", fontWeight: 800,
+          lineHeight: 1.06, margin: 0, color: "#FFFFFF",
+        }}>
+          SnapServe AI
         </h1>
 
-        <p
-          style={{
-            fontSize: "1.85vw",
-            fontWeight: 400,
-            lineHeight: 1.5,
-            color: "#DCD3F2",
-            maxWidth: "56vw",
-            marginTop: "3.5vh",
-            marginBottom: 0,
-          }}
-        >
-          No developers. No agency. Just describe your agent and go live.{" "}
-          <span style={{ color: "#F59E0B", fontWeight: 600 }}>And it remembers every caller.</span>
+        <div style={{
+          width: "5vw", height: "0.4vh", background: "#FF6F00", borderRadius: "2px", margin: "2.4vh 0",
+        }} />
+
+        <p style={{
+          fontSize: "1.7vw", fontWeight: 400, lineHeight: 1.5, color: "#C9D5F5",
+          maxWidth: "48vw", margin: 0,
+        }}>
+          Build and deploy voice AI agents without writing a line of code.
         </p>
+
+        <div style={{ marginTop: "4.5vh", display: "flex", flexDirection: "column", gap: "1.2vh" }}>
+          <div style={{ fontSize: "1.05vw", fontWeight: 600, color: "#FFFFFF" }}>
+            Karthikeyan&ensp;<span style={{ color: "#FF6F00" }}>|</span>&ensp;Founder &amp; CEO
+          </div>
+          <div style={{ fontSize: "1.05vw", fontWeight: 600, color: "#FFFFFF" }}>
+            Gopi N.&ensp;<span style={{ color: "#FF6F00" }}>|</span>&ensp;Co-Founder &amp; COO
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          bottom: "6vh",
-          left: "8vw",
-          right: "8vw",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: "1vw",
-          color: "#B7ABDD",
-          borderTop: "0.06vh solid rgba(255,255,255,0.16)",
-          paddingTop: "2.5vh",
-        }}
-      >
-        <span>Karthikeyan &middot; Gopi</span>
-        <span>Chennai, India</span>
-        <span>Investor Deck 2026</span>
+      <div style={{
+        position: "absolute", bottom: "2.8vh", right: "4vw",
+        fontSize: "0.85vw", fontWeight: 500, color: "#4B6CB7", letterSpacing: "0.06em",
+      }}>
+        01 / 14
       </div>
+
+      <VBWatermark />
     </div>
   );
 }

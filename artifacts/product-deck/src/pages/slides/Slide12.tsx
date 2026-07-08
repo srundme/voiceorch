@@ -1,91 +1,86 @@
+const VBWatermark = () => (
+  <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
+    <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
+      Vande Bharatam
+    </span>
+  </div>
+);
+
 export default function Slide12() {
+  const bullets = [
+    {
+      title: "TypeScript orchestration framework",
+      body: "Entire voice pipeline built in TypeScript on Node.js 24 — full type-safety from ASR transcript to TTS audio byte. Rapid iteration without sacrificing production reliability.",
+    },
+    {
+      title: "Decoupled, provider-agnostic architecture",
+      body: "STT, LLM, and TTS are abstract layers. Changing provider (e.g. Deepgram → Sarvam, OpenAI → Groq) requires a single config change — no pipeline surgery. Supports 3+ providers per layer today.",
+    },
+    {
+      title: "Dynamic STT / LLM / TTS swapping",
+      body: "Provider selection happens at call-start based on agent config, caller language, and fallback chain. Latency routing and retry logic are baked in — a provider outage causes automatic failover, not a dropped call.",
+    },
+  ];
+
   return (
     <div
       className="w-screen h-screen overflow-hidden relative"
-      style={{
-        background: "radial-gradient(120% 100% at 80% 100%, #38208A 0%, #2A1670 45%, #1F0F52 100%)",
-        fontFamily: "var(--font-body-family)",
-        color: "#FFFFFF",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        textAlign: "center",
-        padding: "0 8vw",
-        boxSizing: "border-box",
-      }}
+      style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <div
-        style={{
-          position: "absolute",
-          bottom: "-16vh",
-          left: "-8vw",
-          width: "44vw",
-          height: "44vw",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0) 70%)",
-        }}
-      />
-
-      <div
-        style={{
-          width: "5.2vw",
-          height: "5.2vw",
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.10)",
-          border: "0.08vw solid rgba(255,255,255,0.22)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: "4vh",
-        }}
-      >
-        <svg width="2.6vw" height="2.6vw" viewBox="0 0 100 100" fill="none">
-          <rect x="6" y="14" width="88" height="20" rx="10" fill="#FFFFFF" opacity="1" />
-          <rect x="14" y="42" width="72" height="20" rx="10" fill="#FFFFFF" opacity="0.6" />
-          <rect x="22" y="70" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.36" />
-        </svg>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
+      <div style={{
+        background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw",
+        display: "flex", alignItems: "flex-end", justifyContent: "space-between",
+      }}>
+        <div>
+          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>
+            Any Additional Information
+          </div>
+          <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
+            Annexure 1 — The Tech Stack
+          </h1>
+        </div>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>12 / 14</span>
       </div>
 
-      <h1
-        style={{
-          fontFamily: "var(--font-display-family)",
-          fontSize: "4.4vw",
-          fontWeight: 700,
-          lineHeight: 1.22,
-          margin: 0,
-          maxWidth: "62vw",
-        }}
-      >
-        The voice AI wave is here.
-        <br />
-        <span style={{ color: "#F59E0B" }}>The winner in India will be the one that remembers — and anyone can build on.</span>
-      </h1>
+      <div style={{ flex: 1, padding: "3vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2.4vh" }}>
+        {bullets.map(({ title, body }, i) => (
+          <div
+            key={title}
+            style={{
+              flex: 1, display: "flex", gap: "2.4vw", alignItems: "stretch",
+              background: "#FFFFFF", border: "0.06vh solid #E8EAF0",
+              borderRadius: "1.1vw", overflow: "hidden",
+              boxShadow: "0 0.6vh 1.8vh rgba(26,35,126,0.08)",
+            }}
+          >
+            <div style={{
+              width: "0.55vw", background: i % 2 === 0 ? "#1A237E" : "#FF6F00", flexShrink: 0,
+            }} />
+            <div style={{ padding: "2.4vh 2.2vw", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={{ fontSize: "1.22vw", fontWeight: 700, color: "#1A237E", marginBottom: "1vh", lineHeight: 1.25 }}>
+                {title}
+              </div>
+              <div style={{ fontSize: "1.08vw", color: "#5B5470", lineHeight: 1.65 }}>{body}</div>
+            </div>
+          </div>
+        ))}
 
-      <p
-        style={{
-          fontSize: "1.5vw",
-          fontWeight: 400,
-          lineHeight: 1.55,
-          color: "#DCD3F2",
-          maxWidth: "50vw",
-          marginTop: "4vh",
-          marginBottom: 0,
-        }}
-      >
-        SnapServe — zero-code voice agents with persistent memory, built for India, live in production.
-      </p>
-
-      <div
-        style={{
-          position: "absolute",
-          bottom: "6vh",
-          fontSize: "1vw",
-          color: "#B7ABDD",
-        }}
-      >
-        Karthikeyan &middot; SnapServe (AITEL) &middot; Chennai
+        <div style={{
+          background: "#F0F3FF", border: "0.06vh solid #C5CAE9", borderRadius: "1vw",
+          padding: "1.8vh 2.4vw",
+        }}>
+          <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#1A237E", marginBottom: "0.6vh" }}>
+            Stack at a glance
+          </div>
+          <div style={{ fontSize: "1.02vw", color: "#3A3A5C", lineHeight: 1.55 }}>
+            pnpm monorepo · Node.js 24 · TypeScript 5.9 · Express 5 · PostgreSQL + Drizzle ORM · React + Vite · esbuild bundle · OpenAPI contract-first codegen (Orval)
+          </div>
+        </div>
       </div>
+
+      <VBWatermark />
     </div>
   );
 }

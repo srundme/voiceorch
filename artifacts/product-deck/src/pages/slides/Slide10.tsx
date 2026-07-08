@@ -1,82 +1,102 @@
+const VBWatermark = () => (
+  <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
+    <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
+    <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
+      Vande Bharatam
+    </span>
+  </div>
+);
+
 export default function Slide10() {
-  const cardStyle: React.CSSProperties = {
-    flex: 1,
-    background: "#FFFFFF",
-    border: "0.06vh solid #E7DFF6",
-    borderRadius: "1.4vw",
-    padding: "3.4vh 2.6vw",
-    boxShadow: "0 1.2vh 3vh rgba(42,22,112,0.08)",
-    display: "flex",
-    flexDirection: "column",
+  const th: React.CSSProperties = {
+    padding: "1.4vh 1.6vw", fontSize: "0.85vw", fontWeight: 700,
+    letterSpacing: "0.06em", textTransform: "uppercase",
+    borderBottom: "0.14vh solid #E8EAF0", color: "#1A237E",
   };
+  const td: React.CSSProperties = {
+    padding: "1.4vh 1.6vw", fontSize: "1.05vw", color: "#3A3A5C",
+    borderBottom: "0.06vh solid #F0F3FF",
+  };
+  const tdC: React.CSSProperties = { ...td, textAlign: "center" };
+
+  const Check = () => <span style={{ color: "#1A237E", fontWeight: 800, fontSize: "1.2vw" }}>✓</span>;
+  const Cross = () => <span style={{ color: "#BDBDBD", fontWeight: 700, fontSize: "1.1vw" }}>✗</span>;
+  const Part = () => <span style={{ color: "#FF6F00", fontWeight: 600, fontSize: "0.95vw" }}>Partial</span>;
+
+  const features = [
+    { feature: "Zero-code agent builder", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Persistent cross-call memory", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Dropped-call resume with context", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Tamil / Hinglish native handling", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "IRDAI / TRAI / DPDP built-in", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Provider-agnostic STT / LLM / TTS", snap: <Check />, vapi: <Part />, status: <Cross /> },
+  ];
 
   return (
     <div
       className="w-screen h-screen overflow-hidden relative"
-      style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8FE 100%)",
-        fontFamily: "var(--font-body-family)",
-        color: "#1A1033",
-        padding: "6vh 8vw 5vh 8vw",
-        boxSizing: "border-box",
-        display: "flex",
-        flexDirection: "column",
-      }}
+      style={{ background: "#FAFAFA", fontFamily: "var(--font-body-family)", display: "flex", flexDirection: "column" }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4vh" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.8vw" }}>
-          <svg width="1.6vw" height="1.6vw" viewBox="0 0 100 100" fill="none">
-            <rect x="6" y="14" width="88" height="20" rx="10" fill="#4B2ED6" opacity="1" />
-            <rect x="14" y="42" width="72" height="20" rx="10" fill="#4B2ED6" opacity="0.6" />
-            <rect x="22" y="70" width="56" height="20" rx="10" fill="#4B2ED6" opacity="0.36" />
-          </svg>
-          <span style={{ fontSize: "1vw", fontWeight: 700, color: "#2A1670" }}>SnapServe</span>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "0.55vh", background: "#FF6F00" }} />
+      <div style={{ background: "#1A237E", padding: "3.2vh 6vw 2.8vh 6vw", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.8vh" }}>Competition &amp; Your Advantage</div>
+          <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "2.6vw", fontWeight: 700, color: "#FFFFFF", margin: 0, lineHeight: 1.15 }}>
+            Where SnapServe wins
+          </h1>
         </div>
-        <span style={{ fontSize: "0.85vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9A90B5" }}>
-          10 / 12
-        </span>
+        <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>10 / 14</span>
       </div>
 
-      <div style={{ fontSize: "0.95vw", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#F59E0B", marginBottom: "1.6vh" }}>
-        Team
-      </div>
-      <h1 style={{ fontFamily: "var(--font-display-family)", fontSize: "3vw", fontWeight: 700, color: "#1A1033", margin: "0 0 4.5vh 0", lineHeight: 1.15 }}>
-        Built by people who&apos;ve shipped it
-      </h1>
-
-      <div style={{ display: "flex", gap: "2.4vw", flex: 1 }}>
-        <div style={cardStyle}>
-          <div style={{ width: "4.2vw", height: "4.2vw", borderRadius: "50%", background: "#EEE8FB", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2.2vh" }}>
-            <svg width="2vw" height="2vw" viewBox="0 0 24 24" fill="none" stroke="#4B2ED6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </div>
-          <div style={{ fontSize: "1.5vw", fontWeight: 700, marginBottom: "0.6vh" }}>Karthikeyan</div>
-          <div style={{ fontSize: "0.95vw", fontWeight: 600, color: "#F59E0B", marginBottom: "1.8vh", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Founder · Product &amp; Business
-          </div>
-          <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            CMA US background, strong on unit economics and compliance. Non-technical founder who learnt AI hands-on and built the first prototype solo — knows the product to every nuance.
-          </div>
+      <div style={{ flex: 1, padding: "2.4vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
+        <div style={{
+          background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1.1vw",
+          boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.08)", overflow: "hidden",
+        }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#F0F3FF" }}>
+                <th style={{ ...th, textAlign: "left" }}>Feature</th>
+                <th style={{ ...th, textAlign: "center", color: "#FF6F00" }}>SnapServe</th>
+                <th style={{ ...th, textAlign: "center" }}>Vapi · Retell · Bolna</th>
+                <th style={{ ...th, textAlign: "center" }}>Status Quo (Human)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {features.map(({ feature, snap, vapi, status }, i) => (
+                <tr key={feature} style={{ background: i % 2 === 0 ? "#FFFFFF" : "#FAFBFF" }}>
+                  <td style={{ ...td, fontWeight: 600, color: "#1A237E" }}>{feature}</td>
+                  <td style={tdC}>{snap}</td>
+                  <td style={tdC}>{vapi}</td>
+                  <td style={tdC}>{status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div style={cardStyle}>
-          <div style={{ width: "4.2vw", height: "4.2vw", borderRadius: "50%", background: "#FDF0DA", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2.2vh" }}>
-            <svg width="2vw" height="2vw" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="16 18 22 12 16 6" />
-              <polyline points="8 6 2 12 8 18" />
-            </svg>
+        <div style={{
+          background: "#1A237E", borderRadius: "1.1vw", padding: "2.4vh 2.6vw",
+          display: "flex", gap: "2vw", alignItems: "flex-start",
+        }}>
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.6vh" }}>
+              Your Advantage
+            </div>
+            <div style={{ fontSize: "1.32vw", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.25, maxWidth: "20vw" }}>
+              The Memory Layer Moat
+            </div>
           </div>
-          <div style={{ fontSize: "1.5vw", fontWeight: 700, marginBottom: "0.6vh" }}>Gopi</div>
-          <div style={{ fontSize: "0.95vw", fontWeight: 600, color: "#F59E0B", marginBottom: "1.8vh", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Co-founder · Engineering
-          </div>
-          <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.6 }}>
-            Software engineer from CGI. Took SnapServe from prototype to production platform running live calls — owns the TypeScript orchestration stack end to end.
+          <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
+          <div style={{ fontSize: "1.08vw", color: "#C9D5F5", lineHeight: 1.65, flex: 1 }}>
+            Every call enriches our caller knowledge graph. That data compound — competitors who copy our pipeline still start from zero caller history.
+            The Memory Proxy also lets other platforms (Vapi, Bolna, Retell) route through SnapServe for memory, creating a distribution network inside our competitors' ecosystems.
+            This is not a feature — it is a structural moat that grows with usage.
           </div>
         </div>
       </div>
+
+      <VBWatermark />
     </div>
   );
 }
