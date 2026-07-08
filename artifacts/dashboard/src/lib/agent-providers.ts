@@ -445,3 +445,24 @@ export function isTamilLanguage(language: string | undefined | null): boolean {
 export function defaultGeminiModel(): string {
   return LLM_MODELS.google?.[0]?.value ?? "gemini-2.5-flash-lite";
 }
+
+/** Canonical LLM defaults for the VoiceOrch auto-selection rule. */
+export const DEFAULT_TAMIL_LLM_PROVIDER = "google" as const;
+export const DEFAULT_TAMIL_LLM_MODEL    = "gemini-2.5-flash" as const;
+export const DEFAULT_NONTAMIL_LLM_PROVIDER = "groq" as const;
+export const DEFAULT_NONTAMIL_LLM_MODEL    = "llama-3.3-70b-versatile" as const;
+
+/**
+ * Returns the canonical llmProvider + llmModel for the given language selection.
+ * Tamil (any `ta-*` variant) → Gemini 2.5 Flash.
+ * All other languages → Groq Llama 3.3 70B.
+ */
+export function defaultLlmForLanguages(
+  languages: string | string[] | undefined | null,
+): { llmProvider: string; llmModel: string } {
+  const arr = Array.isArray(languages) ? languages : (languages ? [languages] : []);
+  const hasTamil = arr.some(l => isTamilLanguage(l));
+  return hasTamil
+    ? { llmProvider: DEFAULT_TAMIL_LLM_PROVIDER,    llmModel: DEFAULT_TAMIL_LLM_MODEL }
+    : { llmProvider: DEFAULT_NONTAMIL_LLM_PROVIDER, llmModel: DEFAULT_NONTAMIL_LLM_MODEL };
+}

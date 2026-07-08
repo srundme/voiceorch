@@ -70,7 +70,7 @@ import { formatApiError, mapApiErrors, isDestinationUnverifiedError } from "@/li
 import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
-  isTamilLanguage, defaultGeminiModel,
+  isTamilLanguage, defaultGeminiModel, defaultLlmForLanguages,
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
@@ -581,10 +581,9 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                     <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
                     <SmallSelect value={field.value} onChange={(v) => {
                       field.onChange(v);
-                      if (isTamilLanguage(v)) {
-                        form.setValue("llmProvider", "google");
-                        form.setValue("llmModel", defaultGeminiModel());
-                      }
+                      const { llmProvider, llmModel } = defaultLlmForLanguages(v);
+                      form.setValue("llmProvider", llmProvider);
+                      form.setValue("llmModel", llmModel);
                     }}
                       options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                   </FormItem>
@@ -4387,7 +4386,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: "", description: "", asrProvider: "sarvam", asrModel: "saaras:v3",
-      llmProvider: "openai", llmModel: "", ttsProvider: "cartesia",
+      llmProvider: "groq", llmModel: "llama-3.3-70b-versatile", ttsProvider: "cartesia",
       ttsVoice: "", ttsModel: "", telephonyProvider: "vobiz",
       systemPrompt: "", temperature: 0.40, maxDuration: 300,
       greetingMessage: "Hello", firstSpeaker: "assistant", endCallPhrases: "", silenceTimeoutSeconds: 30,
@@ -4761,7 +4760,7 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
           asrLanguage: "en-IN",
           language: "en-IN",
           llmProvider: "groq",
-          llmModel: "meta-llama/llama-4-scout-17b-16e-instruct",
+          llmModel: "llama-3.3-70b-versatile",
           ttsProvider: "cartesia",
           ttsModel: "sonic-3.5",
           ttsVoice: "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee",
