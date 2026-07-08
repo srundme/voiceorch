@@ -1,0 +1,38 @@
+Implement default-enabled behavior for the following agent configurations:
+
+1. Noise Cancellation
+2. End Call Tool
+3. Backchanneling
+4. Call Recording
+
+These four configurations must be ON by default for every NEW agent created through BOTH creation flows:
+
+1. Build from Scratch / Manual Agent Creation
+2. Vibe Builder / Build with AI
+
+Required behavior:
+
+BUILD FROM SCRATCH:
+- When a new agent is created manually, the backend creation payload must default all four settings to ON.
+- After the agent is created, opening its configuration page must show all four toggles as enabled.
+- The UI must reflect the actual persisted backend values.
+
+VIBE BUILDER:
+- When a new agent is created through Vibe Builder, the final backend agent creation payload must automatically set all four settings to ON.
+- The values must be persisted in the database.
+- After creation, when the user opens the agent configuration page, all four toggles must show as enabled.
+- Do not only display them as ON in the UI; verify that the actual saved backend configuration is ON.
+
+IMPORTANT IMPLEMENTATION RULES:
+- Trace both agent creation paths before changing the code.
+- Use the existing field names and existing configuration structure. Do not introduce duplicate fields.
+- Apply these defaults at the backend payload/persistence level.
+- If the architecture allows it, use a shared default configuration so both manual creation and Vibe Builder creation stay consistent.
+- Ensure API serialization, database persistence, and agent-fetch responses preserve these values correctly.
+- Apply these defaults only to NEW agent creation. Do not modify or migrate existing agents.
+- Do not affect any unrelated configuration, prompt generation, Refine with AI behavior, LLM selection, STT, TTS, voice configuration, call flow, knowledge base, or other agent features.
+
+Expected result:
+Every newly created agent, regardless of whether it is created manually or through Vibe Builder, must have Noise Cancellation, End Call Tool, Backchanneling, and Call Recording enabled by default in both the backend configuration and the agent configuration UI.
+
+Make the smallest targeted change necessary and ensure it does not affect anything else in the existing system.

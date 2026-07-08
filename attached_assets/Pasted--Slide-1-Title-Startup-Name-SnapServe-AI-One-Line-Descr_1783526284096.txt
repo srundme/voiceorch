@@ -1,0 +1,262 @@
+## Slide 1: Title
+
+* **Startup Name:** SnapServe AI
+
+
+* **One-Line Description:** Build and deploy voice AI agents without writing a line of code.
+
+
+* **Co-founders:** Karthikeyan (Founder & CEO), Gopi N. (Co-Founder & COO)
+
+
+* **Incubated at / College E-Cell:** *[Leave Blank]*
+
+---
+
+## Slide 2: The Team
+
+* **Co-Founder 1 (Karthikeyan | Founder & CEO):**
+* CMA US background, highly specialized in unit economics and corporate compliance.
+
+
+* Hands-on builder who engineered the initial product architecture and core operational logic.
+
+
+
+
+* **Co-Founder 2 (Gopi N. | Co-Founder & COO):**
+* Former Software Engineer at CGI with deep expertise in enterprise infrastructure.
+
+
+* Owns the production platform end-to-end, running live calls over a scalable TypeScript orchestration stack.
+
+
+
+
+* **Advisors & Mentors:** *[Leave blank or add current industrial advisors]*
+
+---
+
+## Slide 3: The Problem
+
+* **Core Problem:** Customer voice operations in India are broken due to high human call-center attrition/costs, while existing voice AI platforms remain stateless and struggle with regional languages.
+
+
+* **Who Suffers:** High-volume outbound operations in BFSI, lending, insurance, and collections who face dropped contexts, missed follow-ups, and severe US-hosted latency.
+
+
+* **Why It Matters:** Traditional call setups fail to maintain continuity, and global solutions ignore Indian regional accents, code-switching, and compliance mandates.
+
+
+* **Key Stat:** "India's BPM and contact-center industry exceeds $40B, where voice remains the dominant channel—yet human agents forget context between calls."
+
+
+
+---
+
+## Slide 4: The Solution
+
+* **Product Name:** SnapServe
+
+
+* **Description:** An autonomous voice AI platform featuring persistent cross-call memory and an instant, zero-code 'Vibe Builder' for non-technical enterprises.
+
+
+* **Benefit 1 (Persistent Memory):** Caller history, past commitments, and context carry seamlessly across interactions—conversations resume instead of restarting.
+
+
+* **Benefit 2 (Contextual Auto-Redial):** If a cellular network call drops mid-sentence, the AI agent automatically redials and resumes exactly where it left off.
+
+
+* **Benefit 3 (Native Localization):** Built-in native handling for Tamil, Hinglish, and Indian accents with low in-country latency and native IRDAI/TRAI/DPDP compliance rules.
+
+
+* **Current Stage:** Product Ready / Live in Production.
+
+
+
+---
+
+## Slide 5: Product/Service – How It Works
+
+* **Step 1 (Describe):** The user types a simple plain-language brief detailing what the agent does (e.g., *"An insurance renewal agent that speaks Tamil and remembers past customer commitments"*).
+
+
+* **Step 2 (Auto-Configure):** SnapServe automatically maps the best localized STT, LLM, and TTS engines, builds the system prompt, and applies TRAI/DPDP guardrails without developer intervention.
+
+
+* **Step 3 (Go Live):** The user links an existing corporate telephony line, and the agent begins handling live, memory-mapped production calls in under 5 minutes.
+
+
+
+---
+
+## Slide 6: Market Opportunity
+
+* **TAM (Global):** $35.2 Billion by 2033, scaling at a compounding 39% CAGR from a current $3.5B baseline.
+* **SAM (India):** $957 Million (~₹8,000 Crore) expected by 2030, running on a 35.7% regional CAGR as enterprises migrate from old IVR systems. Localized target caps scale up to $1.82 Billion.
+* **SOM (Beachhead):** High-volume, compliance-heavy outbound campaigns across Indian BFSI, lending, insurance renewals, and collections.
+
+
+* **Why Now?:** High-quality, low-cost domestic speech models have crossed the capability threshold, alongside tightening DPDP and TRAI regulations that demand compliant-by-design automation.
+
+
+
+---
+
+## Slide 7: Business Model
+
+* **Who Pays:** Insurance companies, NBFCs, banking institutions, and e-commerce enterprises looking to automate heavy outbound calling.
+
+
+* **How They Pay:** Usage-based per-minute/flat orchestration fees, enterprise licenses, or automated volume calling packages.
+
+
+* **Revenue Streams:**
+* *Direct Enterprise:* Outbound verification, collection, and renewal campaigns.
+
+
+* *Channel Integrations:* SAP system integrators deploying SnapServe to enterprise clients.
+
+
+* *Product-Led Proxy:* Operating as an OpenAI-compatible memory layer where external developers plug their existing setups directly into our system.
+
+
+
+
+* **Unit Economics:** Delivers a 10x operational cost advantage compared to maintaining legacy human agent frameworks at scale.
+
+
+
+---
+
+## Slide 8: Roadmap & Milestones
+
+* **Today (Month 0):** Core platform live in production with native cross-call memory operational. Onboarding initial insurance pilots and initiating system integrator outreach.
+
+
+* **+12 Months:** Convert enterprise pilots into recurring contractual revenue and publicly release the standalone API memory proxy layer.
+
+
+* **+2 Years:** Scale the system integrator network into broader banking/collection sectors and roll out comprehensive regional language coverage across India.
+
+
+* **+5 Years:** Scale infrastructure beyond India to capture secondary high-volume call corridors like the UAE and the Philippines using the same localized cost efficiencies.
+
+
+
+---
+
+## Slide 9: Key Risks & Mitigation
+
+* **Risk 1 (Platform Competition):** Larger, general-purpose orchestration platforms competing purely on baseline call features.
+
+
+* *Mitigation:* Our standalone memory proxy layer allows companies already utilizing external orchestrators to plug into SnapServe directly via an `api_base` swap, letting us capture value inside their ecosystems.
+
+
+
+
+* **Risk 2 (Regulatory Tightening):** Sudden, strict shifts in TRAI, IRDAI, or DPDP compliance guidelines impacting data privacy.
+
+
+* *Mitigation:* Enterprise compliance parameters are engineered directly into our zero-code building blocks from the ground up, making our architecture compliant-by-design.
+
+
+
+
+* **Risk 3 (Dialect Latency):** Degradation of user conversation flows when using multi-layered speech models across regional dialects.
+
+
+* *Mitigation:* Our infrastructure uses provider-agnostic TypeScript orchestration, letting us dynamically swap in the fastest or most affordable STT/TTS engine at any point.
+
+
+
+
+
+---
+
+## Slide 10: Competition & Your Advantage
+
+* **The Competitor Matrix:**
+* *Zero-code agent brief builder:* **SnapServe (Yes)** | Competitors like Vapi/Retell/Bolna (No)
+
+
+* *Persistent cross-call memory:* **SnapServe (Yes)** | Competitors like Vapi/Retell/Bolna (No)
+
+
+* *Automatic call-drop context resume:* **SnapServe (Yes)** | Competitors like Vapi/Retell/Bolna (No)
+
+
+* *Native TRAI/IRDAI/DPDP guardrails:* **SnapServe (Yes)** | Competitors like Vapi/Retell/Bolna (No)
+
+
+
+
+* **Your Advantage (The Moat):** The Memory Layer. While other platforms simply pass audio back and forth, SnapServe isolates, indexes, and injects caller specific histories, commitments, and historical episodes directly into the active prompt window, making our agents contextually irreplaceable.
+
+
+
+---
+
+## Slide 11: Financials & The Ask
+
+* **We Want to Raise:** ₹3 Crore (Pre-Seed)
+* **Use of Funds:**
+* **45%** → Tech and Engineering (Core infrastructure optimization, expanding domestic server clusters)
+* **30%** → Market and Enterprise GTM (Accelerating integrations across insurance sectors)
+* **15%** → Operations and Core Talent
+* **10%** → Legal, Data Compliance, and Security Audits
+
+
+* **3-Year Snapshot:**
+* *Year 1:* Onboard beachhead enterprise accounts and scale MRR across initial BFSI pilots.
+
+
+* *Year 2:* Secure deep institutional integrations with regional system integrators.
+
+
+* *Year 3:* Establish clear leadership in localized voice memory across Indian sectors, positioning for international entry.
+
+
+
+
+* **Non-Monetary Support Requested:** Targeted enterprise connections into major domestic insurance frameworks and advisory mentorship for managing enterprise-grade procurement lifecycles.
+
+---
+
+## Annexures
+
+### Annexure 1: The Tech Stack (Provider-Agnostic Architecture)
+
+* Engineered entirely in a lightweight, enterprise-ready TypeScript framework.
+
+
+* Decoupled architecture that acts as an intelligent orchestration middleware rather than locking customers into a single model provider.
+
+
+* Dynamically handles real-time swapping of underlying Speech-to-Text, Large Language Model, and Text-to-Speech engines depending on whichever framework provides the highest accuracy or lowest cost per localized dialect.
+
+
+
+### Annexure 2: The Memory Layer (How the Moat Works)
+
+* Operates as an independent context caching layer that intercepts conversational turns.
+
+
+* Extracts structural facts, transactional tracking variables, and operational commitments from historical user interactions.
+
+
+* Exposes an OpenAI-compatible interface, enabling external developers to gain deep consumer memory capabilities simply by changing their backend endpoint configuration to point at SnapServe.
+
+
+
+### Annexure 3: Enterprise Compliance Matrix
+
+* **TRAI Regulations:** Dynamic checking of Do-Not-Disturb (DND) registries, outbound dialer time limitations, and explicit consent tracking records.
+
+
+* **DPDP Act Integration:** Strict data localization parameters ensuring in-country storage pipelines, secure localized voice data hashing, and immediate data purging requests.
+
+
+* **IRDAI Standards:** Built-in template matching for policy verification disclosures, ensuring insurance scripts strictly follow mandatory consumer notification paths.
