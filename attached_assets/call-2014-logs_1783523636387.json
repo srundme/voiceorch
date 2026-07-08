@@ -1,0 +1,1032 @@
+[
+  {
+    "id": 135015,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 136,
+      "agentName": "vikram",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "808267ec-475b-4052-890d-c0d6d9e900c1"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2014,
+      "sessionId": "live-2014",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-08T15:12:15.513Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 135018,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 135019,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 2
+      },
+      "factCount": 3,
+      "facts": {
+        "family_size": "5",
+        "language_pref": "hindi",
+        "interested_in": "health_insurance"
+      },
+      "recentCallsCount": 2
+    },
+    "metadata": null
+  },
+  {
+    "id": 135014,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971442376",
+        "agent_name": "vikram",
+        "caller_number": "917971442376",
+        "date": "Wednesday, July 8, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 2  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller is interested in health insurance from Shield Care for their family and has confirmed that 5 people would need coverage. The caller was initially distracted but provided the family size after the agent's follow-up. The agent also asked about pre-existing medical conditions but the caller did not provide information.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• family_size: 5\n• interested_in: health_insurance\n\nLAST EXCHANGES BEFORE THE CALL DROPPED (resume from here):\nCaller: What were you saying"
+    },
+    "metadata": null
+  },
+  {
+    "id": 135020,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 135016,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 135017,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "808267ec-475b-4052-890d-c0d6d9e900c1"
+    }
+  },
+  {
+    "id": 135021,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:15.542Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "587c7a9aa840",
+      "promptLength": 9519,
+      "preview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 2  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller is interested in health insurance from Shield Care for their family and has confirmed that "
+    }
+  },
+  {
+    "id": 135022,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:17.408Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 135023,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:17.408Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्षमा करें, लगता है कि हमारी बातचीत कट गई थी, अब आपके परिवार के लिए हेल्थ इंश्योरेंस के बारे में बात करना जारी रखें?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 135024,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:18.794Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1384,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 217314,
+      "textLength": 116,
+      "firstByteMs": 188
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1384
+    }
+  },
+  {
+    "id": 135025,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:24.575Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6791,
+      "turnNumber": 0,
+      "durationMs": 7169
+    }
+  },
+  {
+    "id": 135028,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:35.375Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 0,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 135026,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:35.375Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप दोबारा कह सकते हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 135027,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:35.376Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 135029,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:36.442Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 3,
+      "threshold": 1,
+      "turnNumber": 0,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 135030,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:36.442Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "हाँ बोलो जी",
+      "endDetectToFinalMs": 92,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135031,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:36.473Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1098,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 145634,
+      "textLength": 59,
+      "firstByteMs": 269
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1098
+    }
+  },
+  {
+    "id": 135032,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:36.551Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135033,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:37.011Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 468,
+      "turnNumber": 1,
+      "durationMs": 468
+    }
+  },
+  {
+    "id": 135034,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:37.103Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135035,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:37.103Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आपके परिवार के लिए हेल्थ इंश्योरेंस के बारे में बात करना जारी रखने के लिए तैयार हैं"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135037,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:37.213Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 468,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "आपके परिवार के लिए हेल्थ इंश्योरेंस के बारे में बात करना जारी रखने के लिए तैयार हैं, क्या आपके परिवार में किसी को पहले से कोई मेडिकल कंडीशन है?"
+    },
+    "metadata": {
+      "inputTokens": 4012,
+      "outputTokens": 75,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135036,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:37.213Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपके परिवार में किसी को पहले से कोई मेडिकल कंडीशन है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135038,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:38.094Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 991,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 148194,
+      "textLength": 83,
+      "firstByteMs": 132
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 991
+    }
+  },
+  {
+    "id": 135039,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:38.184Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 973,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99554,
+      "textLength": 58,
+      "firstByteMs": 309
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 973
+    }
+  },
+  {
+    "id": 135040,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:40.244Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4551,
+      "turnNumber": 0,
+      "durationMs": 4869
+    }
+  },
+  {
+    "id": 135042,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:42.015Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4631,
+      "turnNumber": 1,
+      "durationMs": 4912
+    }
+  },
+  {
+    "id": 135041,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:42.015Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 135043,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:45.214Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3111,
+      "turnNumber": 1,
+      "durationMs": 3200
+    }
+  },
+  {
+    "id": 135044,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.094Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "अंदे condition नहीं है",
+      "endDetectToFinalMs": 104,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135045,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.198Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135046,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.542Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 346,
+      "turnNumber": 2,
+      "durationMs": 346
+    }
+  },
+  {
+    "id": 135047,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.653Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ठीक है, तो आपके परिवार में किसी को पहले से कोई मेडिकल कंडीशन नहीं है"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135048,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.653Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135049,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.766Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "अब मैं आपको हेल्थ इंश्योरेंस के विभिन्न प्लान्स के बारे में बता सकता हूँ"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135050,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.862Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 346,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ठीक है, तो आपके परिवार में किसी को पहले से कोई मेडिकल कंडीशन नहीं है, अब मैं आपको हेल्थ इंश्योरेंस के विभिन्न प्लान्स के बारे में बता सकता हूँ, क्या आप इंडिविजुअल प्लान या फैमिली फ्लोटर प्लान में रुचि रखते हैं?"
+    },
+    "metadata": {
+      "inputTokens": 4119,
+      "outputTokens": 111,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135051,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:54.862Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप इंडिविजुअल प्लान या फैमिली फ्लोटर प्लान में रुचि रखते हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135052,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:55.582Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 929,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 132834,
+      "textLength": 68,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 929
+    }
+  },
+  {
+    "id": 135053,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:55.698Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 838,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112354,
+      "textLength": 66,
+      "firstByteMs": 141
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 838
+    }
+  },
+  {
+    "id": 135054,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:55.793Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1027,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 114914,
+      "textLength": 72,
+      "firstByteMs": 275
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 1027
+    }
+  },
+  {
+    "id": 135055,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:59.004Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4151,
+      "turnNumber": 2,
+      "durationMs": 4349
+    }
+  },
+  {
+    "id": 135056,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:12:59.004Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135057,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:02.723Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3591,
+      "turnNumber": 2,
+      "durationMs": 3720
+    }
+  },
+  {
+    "id": 135058,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:02.723Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 135059,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:06.365Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3511,
+      "turnNumber": 2,
+      "durationMs": 3641
+    }
+  },
+  {
+    "id": 135060,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:13.552Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 135062,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:13.620Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2014"
+    }
+  },
+  {
+    "id": 135061,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:13.620Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2014"
+    }
+  },
+  {
+    "id": 135063,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:13.642Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 58,
+        "turns": 2,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "अंदे condition नहीं है",
+        "lastAgentResponse": "ठीक है, तो आपके परिवार में किसी को पहले से कोई मेडिकल कंडीशन नहीं है, अब मैं आपको हेल्थ इंश्योरेंस के विभिन्न प्लान्स के बारे में बता सकता हूँ, क्या आप इंडिविजुअल प्लान या फैमिली फ्लोटर प्लान में रुचि रखते हैं?",
+        "recordingStatus": "saved",
+        "warningCount": 2,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 58,
+      "turns": 2,
+      "avgSttMs": 0,
+      "avgLlmMs": 407,
+      "avgTtsMs": 253
+    }
+  },
+  {
+    "id": 135064,
+    "callId": 2014,
+    "agentId": 136,
+    "ts": "2026-07-08T15:13:14.307Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
