@@ -189,6 +189,25 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   if (insertData["noiseCancellationEnabled"] == null) insertData["noiseCancellationEnabled"] = true;
   const insertAgentConfig = (insertData["agentConfig"] as Record<string, unknown> | null | undefined) ?? {};
   if (insertAgentConfig["recordingEnabled"] == null) insertAgentConfig["recordingEnabled"] = true;
+  // Tuned voice-latency Advanced-tab defaults for NEW agents only (INSERT path,
+  // never PATCH). Persisted explicitly so the dashboard shows them without
+  // touching the edit-form hydrate fallbacks or runtime fallbacks, both of
+  // which must keep old-default behavior for legacy agents with unset fields.
+  if (insertData["maxDuration"] == null) insertData["maxDuration"] = 480;
+  if (insertAgentConfig["asrEndpointingSilenceMs"] == null) insertAgentConfig["asrEndpointingSilenceMs"] = 150;
+  if (insertAgentConfig["ttsMinSentenceChars"] == null) insertAgentConfig["ttsMinSentenceChars"] = 25;
+  if (insertAgentConfig["incrementalDelay"] == null) insertAgentConfig["incrementalDelay"] = 50;
+  if (insertAgentConfig["llmMaxTokens"] == null) insertAgentConfig["llmMaxTokens"] = 150;
+  if (insertAgentConfig["bargeInEnergyThreshold"] == null) insertAgentConfig["bargeInEnergyThreshold"] = 200;
+  if (insertAgentConfig["startSpeakingPlan"] == null) {
+    insertAgentConfig["startSpeakingPlan"] = { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 };
+  }
+  if (insertAgentConfig["stopSpeakingPlan"] == null) {
+    insertAgentConfig["stopSpeakingPlan"] = { numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 };
+  }
+  if (insertAgentConfig["autoRedial"] == null) {
+    insertAgentConfig["autoRedial"] = { enabled: true, maxAttempts: 3 };
+  }
   insertData["agentConfig"] = insertAgentConfig;
   const insertTools = Array.isArray(insertData["tools"]) ? (insertData["tools"] as Record<string, unknown>[]) : [];
   if (!insertTools.some((t) => t["type"] === "end_call")) {

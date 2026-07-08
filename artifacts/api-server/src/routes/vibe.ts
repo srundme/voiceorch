@@ -974,6 +974,19 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         if (!row) throw new Error(`Agent ${refineAgentId} not found or not owned by user`);
         insertedAgent = row;
       } else {
+        // NEW agents get the tuned voice-latency Advanced-tab defaults (same as
+        // the POST /agents insert path). Applied only on create — refine mode
+        // must never drift an existing agent's advanced settings.
+        const tunedAdvancedDefaults: Record<string, unknown> = {
+          asrEndpointingSilenceMs: 150,
+          ttsMinSentenceChars:     25,
+          incrementalDelay:        50,
+          llmMaxTokens:            150,
+          bargeInEnergyThreshold:  200,
+          startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 },
+          stopSpeakingPlan:        { numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 },
+          autoRedial:              { enabled: true, maxAttempts: 3 },
+        };
         const [row] = await db.insert(agentsTable).values({
           userId:                   clerkId,
           name:                     cfg.agentName,
@@ -989,9 +1002,10 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           telephonyProvider:        "vobiz",
           systemPrompt,
           greetingMessage,
+          maxDuration:              480,
           backchannelingEnabled:    true,
           noiseCancellationEnabled: true,
-          agentConfig:              agentConfig as any,
+          agentConfig:              { ...tunedAdvancedDefaults, ...agentConfig } as any,
           tools:                    tools as any,
         } as any).returning();
         insertedAgent = row;

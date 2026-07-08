@@ -161,6 +161,55 @@ describe("buildUpdateAgentPayload", () => {
     const payload = buildUpdateAgentPayload(data);
     expect((payload.agentConfig as any)?.promptVariables).toBeUndefined();
   });
+
+  it("new-agent tuned Advanced defaults — validate against schema and round-trip explicitly through the payload", () => {
+    // Mirrors the builder create-path defaultValues for the Timing / Response
+    // Timing / Interruption / Limits subsections (task: tuned voice-latency
+    // profile for newly created agents).
+    const data: AgentFormValues = {
+      ...BASE,
+      maxDuration: 480,
+      asrEndpointingSilenceMs: 150,
+      ttsMinSentenceChars: 25,
+      linearDelayMs: 50,
+      llmMaxTokens: 150,
+      startSpeakingWaitSecs: 0,
+      startSpeakingOnPunctuationSecs: 0.1,
+      startSpeakingOnNoPunctuationSecs: 0.1,
+      startSpeakingOnNumberSecs: 0,
+      bargeInEnabled: true,
+      stopSpeakingNumWords: 1,
+      stopSpeakingVoiceSecs: 0.2,
+      stopSpeakingBackOffSecs: 1,
+      bargeInEnergyThreshold: 200,
+      autoRedialEnabled: true,
+      autoRedialMaxAttempts: 3,
+      silenceTimeoutSeconds: 30,
+    };
+    // 200 must be accepted by the form schema (min is 100)
+    const schemaResult = agentFormSchema.safeParse(data);
+    expect(schemaResult.success, JSON.stringify(schemaResult)).toBe(true);
+
+    const payload = buildUpdateAgentPayload(data);
+    const result = UpdateAgentBody.safeParse(payload);
+    expect(result.success, JSON.stringify(result)).toBe(true);
+
+    expect((payload as any).maxDuration).toBe(480);
+    const cfg = payload.agentConfig as any;
+    expect(cfg?.asrEndpointingSilenceMs).toBe(150);
+    expect(cfg?.ttsMinSentenceChars).toBe(25);
+    expect(cfg?.incrementalDelay).toBe(50);
+    expect(cfg?.llmMaxTokens).toBe(150);
+    expect(cfg?.bargeInEnergyThreshold).toBe(200);
+    expect(cfg?.startSpeakingPlan).toEqual({
+      waitSeconds: 0,
+      onPunctuationSeconds: 0.1,
+      onNoPunctuationSeconds: 0.1,
+      onNumberSeconds: 0,
+    });
+    expect(cfg?.stopSpeakingPlan).toEqual({ numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 });
+    expect(cfg?.autoRedial).toEqual({ enabled: true, maxAttempts: 3 });
+  });
 });
 
 describe("agentFormSchema — provider/model cross-field validation", () => {
