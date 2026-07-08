@@ -2126,10 +2126,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
         // ── End-of-call execution log (structured Call Ended summary) ─────────────
         // Always the final row: explains WHY the call ended. Reason is taken from
-        // the explicit `reason` arg (e.g. max-duration timer) when provided,
-        // otherwise derived from the session's end flags.
+        // the explicit `reason` arg (e.g. max-duration timer) when provided, then
+        // the pipeline's endReasonHint (e.g. silence timeout — the pipeline fires
+        // onCallEnd without a reason arg, so without the hint a silence-timeout
+        // hangup would be mislabeled "Conversation completed"), otherwise derived
+        // from the session's end flags.
         const endRawReason = reason
           ?? (session.wasTransferred ? "transfer_completed"
+              : session.pipeline.endReasonHint ? session.pipeline.endReasonHint
               : session.naturalEndTriggered ? "completed"
               : "user_hangup");
         const { lastUser: endLastUser, lastAgent: endLastAgent } = session.pipeline.getLastTurnTexts();

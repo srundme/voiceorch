@@ -26,7 +26,8 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
 - KEEP IT SHORT: A turn is one or two short spoken sentences. If you find yourself about to say a third sentence that starts a new point or asks something new, do not — stop instead and let the caller speak.
 - WAIT FOR RESPONSE: Whenever the flow says "wait", "wait for response", "strictly wait", "pause", or anything similar — and after every question you ask — treat it as a HARD STOP. Finish your single point, then immediately yield the turn and stay silent. Do NOT continue to the next step until the caller has actually responded.
 - FOLLOW THE ORDER: Move through the flow in the exact order it is written. Never skip ahead, never jump to the closing, never end the call early. Progress naturally from the opening through each step to the closure, one turn per step.
-- RESUME AFTER OBJECTIONS: If the caller asks a question, raises an objection, or goes off-topic, answer it briefly and then RESUME from the exact point in the flow where you left off. Never restart the flow from the beginning, and never skip the steps you had not yet reached.
+- ANSWER QUESTIONS FIRST: If the caller asks a question, you MUST answer it directly and completely FIRST — use the knowledge/context provided to give a real answer. Never brush a question off, never reply with only a filler like "okay" and move on, never continue the script as if the question was not asked. Only AFTER answering, resume from the exact point in the flow where you left off. Never restart the flow from the beginning, and never skip the steps you had not yet reached.
+- RESPECT HOLD REQUESTS: If the caller asks you to wait — "wait", "one minute", "hold on", "just a second", or any equivalent in their language — acknowledge briefly (e.g. "Sure, take your time") and STOP. Stay on the current step. Do NOT advance the flow, do NOT continue the pitch, do NOT repeat your last line. Wait for them to speak again.
 - NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward.`;
 
 /**
@@ -35,7 +36,7 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
  * staged-prompt override (which replaces the system prompt but not history).
  */
 export const CONVERSATION_DISCIPLINE_TURN_REMINDER =
-  `[Flow reminder: deliver only ONE step now — one or two short sentences, at most ONE question — then STOP and wait for the caller's response. Do not combine steps, do not ask a second question, do not keep talking. Continue from where you left off in the flow — do not repeat points already covered, do not restart, do not skip ahead.]`;
+  `[Flow reminder: deliver only ONE step now — one or two short sentences, at most ONE question — then STOP and wait for the caller's response. Do not combine steps, do not ask a second question, do not keep talking. If the caller just asked a question, ANSWER it directly first (use the knowledge provided) before continuing the flow. If they asked you to wait, acknowledge briefly and wait — do not advance. Otherwise continue from where you left off — do not repeat points already covered, do not restart, do not skip ahead.]`;
 
 /**
  * Detect whether a spoken sentence ENDS on a question (the natural turn-yield
@@ -99,6 +100,135 @@ export function makeFlowStepGuard(): { push: (sentence: string) => string; trunc
     },
     truncated: () => suppressed,
   };
+}
+
+// ── Caller-utterance intent gating (call 1915) ───────────────────────────────
+// The per-turn anti-repeat nudge used to tell the model "the caller responded —
+// advance to the next point" for EVERY short utterance, which made the agent
+// steamroll hold-requests ("wait, I'm installing the app") and ignore direct
+// questions. These helpers classify the last caller utterance so the nudge can
+// be scoped to genuine bare acknowledgements only.
+
+// Hold / "give me a moment" requests — English + Tamil/Hindi (script + romanized).
+const HOLD_REQUEST_LATIN = new RegExp(
+  "\\b(" +
+    [
+      "wait", "waiting", "hold on", "hang on", "hold please", "hold the line",
+      "one minute", "a minute", "one moment", "a moment", "just a moment",
+      "one sec(?:ond)?", "a second", "just a sec(?:ond)?",
+      "give me (?:a|one|two|some)", "gimme (?:a|one)", "bear with me",
+      "ek minute", "ek min(?:ute|at)?", "do minute", "ruko", "rukiye", "rukna", "thahro", "thahariye",
+      "oru nimisham", "oru nimidam", "oru second", "konjam iru(?:nga)?", "irunga", "porunga",
+      "wait pannunga", "wait pannu", "hold karo", "hold kariye",
+    ].join("|") +
+  ")\\b",
+  "i",
+);
+const HOLD_REQUEST_INDIC = [
+  // Tamil
+  "ஒரு நிமிஷம்", "ஒரு நிமிடம்", "ஒரு செகண்ட்", "இருங்க", "பொறுங்க", "கொஞ்சம் இரு", "வெயிட்",
+  // Hindi
+  "एक मिनट", "दो मिनट", "एक सेकंड", "रुक", "ठहर", "होल्ड",
+];
+
+/** True when the utterance asks the agent to wait / hold on (any supported language). */
+export function isHoldRequest(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (HOLD_REQUEST_LATIN.test(t)) return true;
+  return HOLD_REQUEST_INDIC.some((kw) => t.includes(kw));
+}
+
+// Interrogative markers — English + Tamil/Hindi (script + romanized).
+const QUESTION_LATIN = new RegExp(
+  "\\b(" +
+    [
+      "what", "why", "how", "when", "where", "which", "who", "whom", "whose",
+      "can (?:i|you|we)", "could (?:i|you|we)", "should i", "shall i", "do i", "does it",
+      "is (?:it|there|this)", "are (?:there|you)", "tell me",
+      "kya", "kaise", "kab", "kahan", "kaha", "kyu", "kyun", "kaun", "kitna", "kitne", "kitni",
+      "enna", "eppadi", "epdi", "eppo", "eppodhu", "enga", "engey", "yaen", "yen", "yaar", "edhu", "evlo", "evvalavu",
+    ].join("|") +
+  ")\\b",
+  "i",
+);
+const QUESTION_INDIC = [
+  // Tamil
+  "என்ன", "எப்படி", "எப்போ", "எப்போது", "எங்க", "எங்கே", "ஏன்", "எது", "யார்", "எவ்வளவு",
+  // Hindi
+  "क्या", "कैसे", "कब", "कहाँ", "कहां", "क्यों", "कौन", "कितना", "कितने", "कितनी",
+];
+
+/** True when the utterance is (or contains) a direct question to be answered. */
+export function isQuestionUtterance(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/[?？]/.test(t)) return true;
+  if (QUESTION_LATIN.test(t)) return true;
+  return QUESTION_INDIC.some((kw) => t.includes(kw));
+}
+
+// Bare acknowledgement vocabulary — every word of a short utterance must match.
+const ACK_WORDS = new Set([
+  // English
+  "ok", "okay", "k", "kk", "hmm", "hm", "mm", "mhm", "mmhm", "uh", "huh", "uhhuh",
+  "yes", "yeah", "yep", "yup", "ya", "sure", "right", "fine", "alright", "correct",
+  "got", "it", "good", "great", "done", "understood", "noted", "perfect",
+  // Hindi (roman + script)
+  "haan", "han", "ha", "ji", "achha", "accha", "acha", "theek", "thik", "hai", "sahi",
+  "हाँ", "हां", "जी", "ठीक", "है", "अच्छा", "सही", "ओके",
+  // Tamil (roman + script)
+  "seri", "sari", "aama", "aamam", "amam", "okva", "sariya",
+  "சரி", "ஆமா", "ஆமாம்", "ஓகே", "ம்", "ம்ம்",
+]);
+
+/**
+ * True only for a genuine short acknowledgement ("okay", "hmm", "haan ji",
+ * "சரி") — the ONLY caller intent that should trigger the "advance to the next
+ * point" nudge. Hold-requests and questions are explicitly excluded.
+ */
+export function isBareAcknowledgement(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (isHoldRequest(t) || isQuestionUtterance(t)) return false;
+  const words = t
+    .toLowerCase()
+    .replace(/[.,!।|?？"'\u2018\u2019\u201c\u201d()\-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0 || words.length > 4) return false;
+  return words.every((w) => ACK_WORDS.has(w));
+}
+
+/**
+ * Build the per-turn anti-repeat directive appended to the last user turn,
+ * scoped to the caller's actual intent:
+ *  - hold-request → confirm you're waiting, do NOT advance;
+ *  - question     → answer it first, then resume;
+ *  - bare ack     → the original "advance to the next point" nudge;
+ *  - anything else → neutral do-not-repeat (respond to what was said).
+ * `escalated` = a verbatim repeat was already detected this call.
+ */
+export function buildAntiRepeatNudge(opts: {
+  lastUserText: string;
+  prevLine: string;
+  escalated: boolean;
+}): string {
+  const { lastUserText, prevLine, escalated } = opts;
+  if (isHoldRequest(lastUserText)) {
+    return `[CALLER ASKED TO WAIT] The caller asked you to wait. Do NOT advance the flow, do NOT continue the pitch, and do NOT repeat your previous line ("${prevLine}"). Reply with ONE short sentence confirming you are waiting (e.g. "Sure, take your time") and then stop.`;
+  }
+  if (isQuestionUtterance(lastUserText)) {
+    return `[ANSWER THE QUESTION FIRST] The caller just asked a question. Answer it directly and completely NOW, using the knowledge provided — do not skip it, do not reply with a filler and move on, do not continue the script until you have answered. Do not repeat your previous line ("${prevLine}"). After answering, resume the flow from where you left off.`;
+  }
+  if (isBareAcknowledgement(lastUserText)) {
+    return escalated
+      ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. The caller has responded — move the conversation FORWARD to the next step or question. Say something different now.`
+      : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. The caller acknowledged (e.g. "okay") — acknowledge briefly and advance to the next point — do not re-ask or restate.`;
+  }
+  return escalated
+    ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. Respond directly to what the caller just said, then continue the flow.`
+    : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. Respond directly to what the caller just said, then continue the flow.`;
 }
 
 /** Lightweight sentence splitter for the output guard (TTS-oriented, not exact). */

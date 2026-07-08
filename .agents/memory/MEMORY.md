@@ -100,3 +100,4 @@
 - [Transcript tool-plumbing leak](transcript-tool-plumbing-leak.md) — readable transcript mislabeled role:"tool" results + empty placeholder turns as "Agent:" lines; filter role!=="tool", "[Tool result for" prefix, and empty content
 - [Sarvam telephony native sample rate](sarvam-telephony-native-samplerate.md) — telephony now sends native 8kHz to Sarvam STT (was lossy-upsampled to 16k); noise-gate hard-zeroing is next suspect only if noiseCancellationEnabled is on
 - [Pre-dial skip vs duplicate detection](predial-skip-vs-duplicate.md) — a lead skipped for a transient reason (no agent/DNC/TRAI) before any dial attempt must not permanently block re-import as a "duplicate"
+- [Silence-hangup watchdog](silence-hangup-watchdog.md) — silence timer must be fed by raw speech ENERGY on both STT paths + speak a check-in before ending (reason=silence_timeout); anti-repeat nudge must be intent-gated (hold/question ≠ advance)

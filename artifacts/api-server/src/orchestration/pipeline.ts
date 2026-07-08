@@ -5,7 +5,7 @@ import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
-import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
@@ -25,7 +25,10 @@ import { performance } from "perf_hooks";
 import {
   computeEndpointMs,
   TurnSafetyNet,
+  SilenceWatchdog,
   recoveryReprompt,
+  inactivityReprompt,
+  inactivityFarewell,
   neutralGreeting,
   AFFIRMATIONS,
   type TurnCloseReason,
@@ -421,7 +424,18 @@ export class OrchestrationPipeline {
   // strict per-call order (see audioPool.ts worker routing).
   private nativePcm16kQueue: Buffer[] = [];
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
-  private silenceHangupTimer: ReturnType<typeof setTimeout> | null = null;
+  // Per-agent silence-hangup watchdog (call 1915): replaces the raw
+  // silenceHangupTimer. Fed by transcripts (reset) AND raw caller speech
+  // energy on BOTH the streaming and batch STT paths (onSpeechEnergy), so a
+  // quiet streaming STT session can no longer let the timer fire mid-speech.
+  // Speaks an in-language "are you there?" check-in before giving up.
+  private silenceWatchdog: SilenceWatchdog | null = null;
+  /**
+   * Raw reason for the session teardown, read by session.ts when onCallEnd is
+   * fired without an explicit reason (e.g. silence timeout), so the Call Ended
+   * summary shows "Silence timeout" instead of "Conversation completed".
+   */
+  public endReasonHint: string | null = null;
   private isProcessing = false;
   /**
    * Set to true the moment executeCallTransfer begins (before the provider API
@@ -1848,6 +1862,14 @@ export class OrchestrationPipeline {
       // sentence and would re-preserve the "can't interrupt Sarvam" bug, so we
       // rely only on the per-sentence echo grace + greeting hold (see helper).
       this.tryEnergyBargeIn(pcm8k, hasSpeech, "streaming_energy", /* respectHoldUntil */ false);
+      // Raw caller speech energy keeps the silence-hangup watchdog alive even
+      // when streaming STT goes quiet mid-speech (no partials/finals — call
+      // 1915 dropped the caller mid-sentence). Gated on the agent not speaking
+      // so carrier echo of our own TTS can't keep an abandoned call alive
+      // (mirrors the !isPlaying gate on the partial-transcript reset above).
+      if (hasSpeech && !this.isPlaying && !this.isSendingTtsAudio) {
+        this.silenceWatchdog?.onSpeechEnergy();
+      }
       // Send native 8kHz telephony audio directly when the adapter is configured
       // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
       // avoids manufacturing samples on already-lossy phone audio (see sttSampleRate).
@@ -1860,7 +1882,7 @@ export class OrchestrationPipeline {
     if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
-    if (hasSpeech) this.resetHangupTimer();
+    if (hasSpeech) this.silenceWatchdog?.onSpeechEnergy();
     // respectHoldUntil=true: the batch path is VAD-gated and its extended
     // bargeInHoldUntil (spanning the whole estimated sentence) is intentional here.
     this.tryEnergyBargeIn(pcm8k, hasSpeech, "energy", /* respectHoldUntil */ true);
@@ -2610,17 +2632,57 @@ export class OrchestrationPipeline {
     }, ms);
   }
 
-  /** Reset (or start) the silence-hangup countdown. Fires onCallEnd if no speech for silenceTimeoutSeconds. */
+  /**
+   * Reset (or start) the silence-hangup watchdog. On a legitimate expiry the
+   * watchdog speaks an in-language "are you there?" check-in first and only
+   * ends the call (via the inactivity path) if the caller stays silent for a
+   * further full window. Raw caller speech energy on either STT path keeps it
+   * alive even when streaming STT emits no partials (call 1915).
+   */
   private resetHangupTimer(): void {
     if (!this.agent.silenceTimeoutSeconds) return;
-    if (this.silenceHangupTimer) clearTimeout(this.silenceHangupTimer);
-    this.silenceHangupTimer = setTimeout(() => {
-      this.silenceHangupTimer = null;
-      if (!this.closed) {
-        logger.info({ callId: this.config.callId }, "Silence timeout — ending call");
-        void this.playInactivityMessageAndEnd();
-      }
-    }, this.agent.silenceTimeoutSeconds * 1000);
+    if (!this.silenceWatchdog) {
+      this.silenceWatchdog = new SilenceWatchdog({
+        timeoutMs: this.agent.silenceTimeoutSeconds * 1000,
+        isBusy: () => this.isPlaying || this.isSendingTtsAudio || this.isProcessing,
+        onReprompt: () => {
+          if (!this.closed) void this.silenceCheckIn();
+        },
+        onGiveUp: () => {
+          if (this.closed) return;
+          logger.info({ callId: this.config.callId }, "Silence timeout — ending call");
+          void this.playInactivityMessageAndEnd();
+        },
+      });
+    }
+    this.silenceWatchdog.reset();
+  }
+
+  /**
+   * Silence-hangup check-in: the watchdog expired once with no caller speech.
+   * Speak a short in-language "are you there?" so the caller gets an audible
+   * chance to respond before the call is ended. The watchdog has already
+   * re-armed a full window; deliberately does NOT call resetHangupTimer(),
+   * which would clear the watchdog's check-in count and loop forever.
+   */
+  private async silenceCheckIn(): Promise<void> {
+    if (this.closed || this.isProcessing || this.isPlaying) return; // busy — watchdog re-arms itself
+    logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Silence Check-in", ["silence_reprompt"], {
+      turnNumber: this._activeTurnIndex,
+      detail: { reason: "silence-hangup window expired — checking if caller is still there" },
+    });
+    const text = inactivityReprompt(this.currentLang ?? this.agent.language);
+    this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+    this.isPlaying = true;
+    try {
+      await this.playSentence(text);
+    } catch (err) {
+      logger.error({ callId: this.config.callId, err }, "Silence check-in playback error");
+    } finally {
+      this.isPlaying = false;
+      this.armTailEchoGrace();
+    }
+    await this.drainPlaybackTail();
   }
 
   /**
@@ -2650,11 +2712,19 @@ export class OrchestrationPipeline {
     }
   }
 
-  /** Speak the inactivity farewell message (if configured) before triggering call end. */
+  /**
+   * Speak the inactivity farewell (configured message, or a default in-language
+   * line so the call is never dropped silently) before triggering call end.
+   * Tags the teardown as a silence timeout so the Call Ended summary reads
+   * "Silence timeout" instead of "Conversation completed".
+   */
   private async playInactivityMessageAndEnd(): Promise<void> {
-    if (this.agent.inactivityMessage && !this.closed) {
+    this.endReasonHint ??= "silence_timeout";
+    const farewell = this.agent.inactivityMessage?.trim()
+      || inactivityFarewell(this.currentLang ?? this.agent.language);
+    if (!this.closed) {
       try {
-        await this.playSentence(this.agent.inactivityMessage);
+        await this.playSentence(farewell);
         await this.drainPlaybackTail();
       } catch { /* ignore */ }
     }
@@ -4240,17 +4310,21 @@ export class OrchestrationPipeline {
       }
     }
 
-    // Per-turn anti-repeat nudge (call 548): when the agent has already spoken a
-    // line, quote it onto the last user turn and forbid a verbatim repeat, telling
-    // the model to advance if the caller answered/agreed (e.g. repeated "yes").
-    // Escalates after a detected repeat so a stuck model is pushed harder to move on.
+    // Per-turn anti-repeat nudge (call 548), intent-scoped (call 1915): quote the
+    // agent's previous line onto the last user turn and forbid a verbatim repeat.
+    // The directive is scoped to the caller's actual intent — hold-requests get a
+    // "confirm you're waiting, do NOT advance" directive, questions get an
+    // "answer it first" directive, and only genuine bare acknowledgements get the
+    // original "advance to the next point" push (which used to steamroll callers
+    // who asked to wait or asked a question). Escalates after a detected repeat.
     if (this.lastAssistantSpokenRaw && historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
-        const prevLine = this.lastAssistantSpokenRaw.slice(0, 180);
-        const antiRepeat = this.consecutiveRepeats >= 1
-          ? `[DO NOT REPEAT — CRITICAL] You have already repeated yourself. You said: "${prevLine}". Do NOT say this again in any form. The caller has responded — move the conversation FORWARD to the next step or question. Say something different now.`
-          : `[DO NOT REPEAT] You just said: "${prevLine}". Do not repeat this line verbatim. If the caller answered or agreed (e.g. "yes"), acknowledge briefly and advance to the next point — do not re-ask or restate.`;
+        const antiRepeat = buildAntiRepeatNudge({
+          lastUserText: transcript,
+          prevLine: this.lastAssistantSpokenRaw.slice(0, 180),
+          escalated: this.consecutiveRepeats >= 1,
+        });
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: `${lastTurn.content}\n\n${antiRepeat}` },
@@ -5625,10 +5699,7 @@ export class OrchestrationPipeline {
       clearTimeout(this.silenceTimer);
       this.silenceTimer = null;
     }
-    if (this.silenceHangupTimer) {
-      clearTimeout(this.silenceHangupTimer);
-      this.silenceHangupTimer = null;
-    }
+    this.silenceWatchdog?.clear();
     if (this.streamSTTReconnectTimer) {
       clearTimeout(this.streamSTTReconnectTimer);
       this.streamSTTReconnectTimer = null;

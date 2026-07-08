@@ -117,6 +117,46 @@ export function recoveryReprompt(lang?: string | null): string {
   return RECOVERY_REPROMPTS[prefix] ?? RECOVERY_REPROMPTS["en"]!;
 }
 
+// Language-aware "are you there?" check-in — spoken when the per-agent
+// silence-hangup timer expires the FIRST time, so the caller gets an audible
+// chance to respond before the call is ended (call 1915: silent mid-speech drop).
+const INACTIVITY_REPROMPTS: Record<string, string> = {
+  en: "Hello, are you still there?",
+  hi: "हैलो, क्या आप वहाँ हैं?",
+  ta: "ஹலோ, நீங்க இருக்கீங்களா?",
+  te: "హలో, మీరు అక్కడ ఉన్నారా?",
+  kn: "ಹಲೋ, ನೀವು ಅಲ್ಲಿ ಇದ್ದೀರಾ?",
+  mr: "हॅलो, तुम्ही तिथे आहात का?",
+  gu: "હેલો, તમે ત્યાં છો?",
+  bn: "হ্যালো, আপনি কি আছেন?",
+  ml: "ഹലോ, നിങ്ങൾ അവിടെ ഉണ്ടോ?",
+};
+/** "Are you still there?" check-in for a BCP-47 / language code (falls back to English). */
+export function inactivityReprompt(lang?: string | null): string {
+  const prefix = (lang ?? "en").split("-")[0] ?? "en";
+  return INACTIVITY_REPROMPTS[prefix] ?? INACTIVITY_REPROMPTS["en"]!;
+}
+
+// Language-aware inactivity farewell — spoken before a silence-timeout hangup
+// when the agent has no configured inactivityMessage, so the line is never
+// dropped silently.
+const INACTIVITY_FAREWELLS: Record<string, string> = {
+  en: "Since I can't hear you, I'll end the call now. Thank you, goodbye!",
+  hi: "मुझे आपकी आवाज़ नहीं आ रही है, इसलिए मैं अब कॉल समाप्त कर रहा हूँ। धन्यवाद, नमस्ते!",
+  ta: "உங்க குரல் கேட்கலை, அதனால நான் இப்போ காலை முடிக்கிறேன். நன்றி, வணக்கம்!",
+  te: "మీ మాట వినిపించడం లేదు, కాబట్టి నేను ఇప్పుడు కాల్ ముగిస్తున్నాను. ధన్యవాదాలు!",
+  kn: "ನಿಮ್ಮ ಧ್ವನಿ ಕೇಳಿಸುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ನಾನು ಈಗ ಕರೆ ಮುಗಿಸುತ್ತೇನೆ. ಧನ್ಯವಾದಗಳು!",
+  mr: "मला तुमचा आवाज ऐकू येत नाही, म्हणून मी आता कॉल संपवत आहे. धन्यवाद!",
+  gu: "મને તમારો અવાજ સંભળાતો નથી, તેથી હું હવે કૉલ સમાપ્ત કરું છું. આભાર!",
+  bn: "আপনার কথা শুনতে পাচ্ছি না, তাই আমি এখন কলটি শেষ করছি। ধন্যবাদ!",
+  ml: "നിങ്ങളുടെ ശബ്ദം കേൾക്കാനാകുന്നില്ല, അതിനാൽ ഞാൻ ഇപ്പോൾ കോൾ അവസാനിപ്പിക്കുന്നു. നന്ദി!",
+};
+/** Inactivity farewell for a BCP-47 / language code (falls back to English). */
+export function inactivityFarewell(lang?: string | null): string {
+  const prefix = (lang ?? "en").split("-")[0] ?? "en";
+  return INACTIVITY_FAREWELLS[prefix] ?? INACTIVITY_FAREWELLS["en"]!;
+}
+
 // Language-aware minimal neutral opener — spoken when the greeting-generating
 // LLM call fails and the agent has no static greetingMessage to fall back on.
 // Keeps the call alive with a safe, generic hello instead of dropping it.
@@ -323,4 +363,104 @@ export function computeEndpointMs(opts: {
 
   // ── 4. Fallback: agent-configured baseline ─────────────────────────────────
   return { ms: baseSilenceMs, reason: "base" };
+}
+
+// ── Silence-hangup watchdog (call 1915) ──────────────────────────────────────
+//
+// Replaces the raw per-agent silence-hangup setTimeout in the pipeline. The old
+// timer was only reset by STT partials/finals (streaming path) or raw speech
+// energy (batch path) — when a streaming STT session went quiet mid-speech the
+// timer fired and dropped the call while the caller was audibly talking.
+//
+// The watchdog:
+//  - is re-armed in full by `reset()` (usable transcripts / turn boundaries);
+//  - records raw caller speech energy via `onSpeechEnergy()` WITHOUT timer
+//    churn — expiry checks the timestamp and re-arms the remainder instead of
+//    firing, so per-20ms-frame calls are cheap;
+//  - treats "agent busy" (speaking / synthesizing / thinking) as activity;
+//  - on a legitimate expiry speaks an in-language "are you there?" check-in
+//    first (`onReprompt`, up to `maxReprompts` times) and only gives up
+//    (`onGiveUp`) if the caller stays silent for a further full window.
+//
+// Lives in endpointing.ts (not pipeline.ts) so it is unit-testable and shared
+// by both the telephony and webcall paths through the common pipeline core.
+export interface SilenceWatchdogOptions {
+  /** Full silence window in ms (agent.silenceTimeoutSeconds * 1000). */
+  timeoutMs: number;
+  /** "Are you there?" check-ins before giving up (default 1). */
+  maxReprompts?: number;
+  /** Agent is speaking/synthesizing/processing — treat as activity, re-arm full. */
+  isBusy?: () => boolean;
+  /** Speak the in-language check-in. Watchdog has already re-armed a full window. */
+  onReprompt: () => void;
+  /** Caller stayed silent through all check-ins — end the call. */
+  onGiveUp: () => void;
+  /** Clock override for tests. */
+  now?: () => number;
+}
+
+export class SilenceWatchdog {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private lastSpeechAt = 0;
+  private repromptCount = 0;
+  private readonly maxReprompts: number;
+  private readonly now: () => number;
+
+  constructor(private readonly opts: SilenceWatchdogOptions) {
+    this.maxReprompts = opts.maxReprompts ?? 1;
+    this.now = opts.now ?? Date.now;
+  }
+
+  /** Full re-arm: usable transcript arrived / turn boundary. Clears check-in count. */
+  reset(): void {
+    this.repromptCount = 0;
+    this.arm(this.opts.timeoutMs);
+  }
+
+  /**
+   * Raw caller speech energy observed (VAD-gated frame). Cheap — records a
+   * timestamp and clears the check-in count; the running timer is left alone
+   * and expiry re-arms the remainder instead of firing.
+   */
+  onSpeechEnergy(): void {
+    this.lastSpeechAt = this.now();
+    this.repromptCount = 0;
+  }
+
+  clear(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+
+  private arm(ms: number): void {
+    this.clear();
+    this.timer = setTimeout(() => this.onExpired(), Math.max(250, ms));
+  }
+
+  private onExpired(): void {
+    this.timer = null;
+    const { timeoutMs } = this.opts;
+    // Agent is mid-speech / mid-turn — not caller abandonment. Re-arm in full.
+    if (this.opts.isBusy?.()) {
+      this.arm(timeoutMs);
+      return;
+    }
+    // Caller was audibly speaking within the window (streaming STT may have
+    // gone quiet without partials) — re-arm for the remaining share.
+    const sinceSpeech = this.now() - this.lastSpeechAt;
+    if (this.lastSpeechAt > 0 && sinceSpeech < timeoutMs) {
+      this.arm(timeoutMs - sinceSpeech);
+      return;
+    }
+    // Legitimate silence. Check in audibly before giving up.
+    if (this.repromptCount < this.maxReprompts) {
+      this.repromptCount++;
+      this.arm(timeoutMs);
+      this.opts.onReprompt();
+      return;
+    }
+    this.opts.onGiveUp();
+  }
 }
