@@ -836,7 +836,7 @@ export default function VibePage() {
                     </p>
                     <div className="space-y-2">
                       <a
-                        href="/app/connections"
+                        href="/app/scheduling"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2.5 hover:bg-muted/50 transition-colors"
@@ -844,11 +844,11 @@ export default function VibePage() {
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold shrink-0">1</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium">Connect Google Calendar</p>
-                          <p className="text-[10px] text-muted-foreground truncate">app/connections →</p>
+                          <p className="text-[10px] text-muted-foreground truncate">app/scheduling → Calendars tab</p>
                         </div>
                       </a>
                       <a
-                        href="/app/scheduling"
+                        href="/app/scheduling/event-types"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2.5 hover:bg-muted/50 transition-colors"
@@ -856,7 +856,7 @@ export default function VibePage() {
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold shrink-0">2</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium">Create an event type</p>
-                          <p className="text-[10px] text-muted-foreground truncate">app/scheduling →</p>
+                          <p className="text-[10px] text-muted-foreground truncate">app/scheduling/event-types →</p>
                         </div>
                       </a>
                     </div>
@@ -876,7 +876,7 @@ export default function VibePage() {
               {/* System Prompt */}
               {promptPreview && (
                 <Section title="System Prompt">
-                  <div className="rounded-xl border border-border/60 bg-background p-4">
+                  <div className="rounded-xl border border-border/60 bg-background p-4 max-h-[280px] overflow-y-auto">
                     <p className="text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">
                       {promptPreview}
                       {phase === "building" && (
