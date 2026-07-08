@@ -109,6 +109,8 @@ interface VibeConfig {
   availabilitySet: boolean;
   compliance: { dpdp: boolean; trai: boolean; irdai: boolean };
   dispositions: VibeDisposition[];
+  systemPrompt?:    string;
+  greetingMessage?: string;
 }
 
 interface GeminiVibeResponse {
@@ -480,7 +482,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             timezone:               acfg.timezone ?? "Asia/Kolkata",
             timezoneSet:            !!acfg.timezone,
             compliance:             acfg.compliance ?? { dpdp: false, trai: false, irdai: false },
-            systemPrompt:           String(agentRow.systemPrompt ?? "").slice(0, 3000),
+            systemPrompt:           String(agentRow.systemPrompt ?? "").slice(0, 15000),
             greetingMessage:        agentRow.greetingMessage ?? "",
           };
         }
@@ -506,7 +508,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // Fall back to client-supplied refineBaseConfig only if DB fetch failed.
     const refineContextSource = serverSideRefineConfig ?? refineBaseConfig;
     if (isRefine && refineContextSource) {
-      const existingJson = JSON.stringify(refineContextSource, null, 2).slice(0, 5000);
+      const existingJson = JSON.stringify(refineContextSource, null, 2).slice(0, 20000);
       const refineBlock = [
         `[REFINE MODE — you are editing an EXISTING agent, NOT building a new one]`,
         `Current agent configuration (carry all unchanged fields forward exactly):`,
@@ -518,6 +520,13 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         `- When the user describes a single change (e.g. "add Velachery to the call flow"), apply it immediately.`,
         `- After ANY confirmed change, respond with phase="build" and ready=true, returning the COMPLETE updated config.`,
         `- Do not run through wizard phases — fulfill the user's request in one turn.`,
+        ``,
+        `CRITICAL — systemPrompt editing rules:`,
+        `- The "systemPrompt" field above is the EXACT, COMPLETE current system prompt. Treat it as a literal string, not a description or summary.`,
+        `- When the user requests a text change (e.g. change "28" to "30", or update a specific phrase), find the exact substring in the system prompt and replace ONLY that. Copy the rest of the system prompt character-for-character.`,
+        `- Do NOT rewrite, paraphrase, simplify, reformat, restructure, or shorten any part of the system prompt. The output "systemPrompt" must differ from the input "systemPrompt" only at the exact requested change site(s).`,
+        `- Return the full edited system prompt in config.systemPrompt — never truncate it.`,
+        `- If the user's request does not touch the system prompt text at all (e.g. voice change, transfer number update), return config.systemPrompt unchanged, copied verbatim from above.`,
       ].join("\n");
       contextualMessages = [
         { role: "user" as const, content: refineBlock },
@@ -727,7 +736,19 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 
     const fallback = `You are ${cfg.agentName}, a voice AI agent for ${cfg.companyName}. Your role is to ${cfg.description}. Be concise, friendly, and professional.${cfg.callTransferEnabled ? ` When the caller needs human help, transfer them to ${cfg.transferName || "our support team"} at ${cfg.transferPhoneNumber}.` : ""} Always introduce yourself at the start of each call.`;
     let systemPrompt = fallback;
-    try {
+
+    // Refine-mode short-circuit: if Gemini returned an edited system prompt, use it
+    // directly and skip all regeneration. This preserves surgical edits verbatim.
+    // If isRefine but cfg.systemPrompt is empty (prompt untouched by refine), fall back
+    // to the authoritative DB copy rather than generating a fresh one.
+    if (isRefine) {
+      if (cfg.systemPrompt) {
+        systemPrompt = cfg.systemPrompt;
+      } else if (existingAgentRow?.systemPrompt) {
+        systemPrompt = String(existingAgentRow.systemPrompt);
+      }
+      // Skip the entire regeneration block below.
+    } else try {
       // Use the platform's layered prompt generator — same engine as the
       // dashboard "Generate System Prompt" button: Foundation + Domain + inputs.
       const [foundationLayer, clientDetailsLayer] = await Promise.all([
@@ -871,7 +892,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         default:      return `Hello! I'm ${name} from ${company}. How can I help you today?`;
       }
     }
-    const greetingMessage = buildGreeting(cfg.agentName, cfg.companyName, langCode, cfg.callFlowNotes);
+    // In refine mode, preserve the agent's existing greeting unless the user explicitly
+    // changed it (Gemini carries it forward in cfg.greetingMessage from the refine context).
+    const greetingMessage = (isRefine && cfg.greetingMessage)
+      ? cfg.greetingMessage
+      : buildGreeting(cfg.agentName, cfg.companyName, langCode, cfg.callFlowNotes);
 
     // Build tools array — matches the JSON shape the builder reads from agent.tools
     const tools: Record<string, unknown>[] = [];
