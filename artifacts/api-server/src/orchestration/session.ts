@@ -9,7 +9,7 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
-import { resolvePromptVariables } from "./prompt-vars.js";
+import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
@@ -667,6 +667,21 @@ export async function createSession(params: {
       ...campaignLeadResult.leadData,
     };
     logger.info({ campaignLeadId: params.campaignLeadId, phone: campaignLeadResult.phone }, "Campaign lead vars loaded into session");
+
+    // ── Inject lead context block into system prompt ──────────────────────────
+    // Must happen BEFORE resolvePromptVariables so any {{variable}} placeholders
+    // inside the block itself are also resolved.
+    const leadContextBlock = buildLeadContextBlock(campaignLeadVars);
+    if (leadContextBlock) {
+      agentConfig.systemPrompt = `${leadContextBlock}\n\n${agentConfig.systemPrompt}`;
+      const fieldCount = Object.entries(campaignLeadVars).filter(
+        ([, v]) => v && v.trim()
+      ).length;
+      logger.info(
+        { agentId: params.agentId, campaignLeadId: params.campaignLeadId, fieldCount },
+        "Campaign lead context injected into system prompt",
+      );
+    }
   }
 
   const dynVars: Record<string, string> = {
