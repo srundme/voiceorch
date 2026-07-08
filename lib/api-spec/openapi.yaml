@@ -541,6 +541,31 @@ paths:
           description: Agent not found
 
   /agents/{id}/caller-memory/{phone}:
+    delete:
+      operationId: resetCallerMemory
+      tags: [agents]
+      summary: Wipe all memory for a caller — facts, episodes, sentences, and join-table rows (keeps the caller_profiles row)
+      description: >-
+        Deletes every memory record stored for the given (agentId, phoneNumber) pair:
+        caller_fact_sentence_links, caller_episode_fact_links, caller_sentences,
+        caller_facts, and caller_call_archive. The caller_profiles row is NOT
+        deleted — identity is preserved, but the next call starts with a clean slate.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: phone
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Memory wiped
+        "404":
+          description: Agent not found
     get:
       operationId: getCallerDetail
       tags: [agents]

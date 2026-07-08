@@ -1039,6 +1039,16 @@ export const ListAgentCallersResponse = zod.array(ListAgentCallersResponseItem)
 
 
 /**
+ * Deletes every memory record stored for the given (agentId, phoneNumber) pair: caller_fact_sentence_links, caller_episode_fact_links, caller_sentences, caller_facts, and caller_call_archive. The caller_profiles row is NOT deleted — identity is preserved, but the next call starts with a clean slate.
+ * @summary Wipe all memory for a caller — facts, episodes, sentences, and join-table rows (keeps the caller_profiles row)
+ */
+export const ResetCallerMemoryParams = zod.object({
+  "id": zod.coerce.number(),
+  "phone": zod.coerce.string()
+})
+
+
+/**
  * @summary Full memory detail for one caller — current facts with history chains, episodes with sentences
  */
 export const GetCallerDetailParams = zod.object({

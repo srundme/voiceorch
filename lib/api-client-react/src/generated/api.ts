@@ -1841,6 +1841,79 @@ export function useListAgentCallers<TData = Awaited<ReturnType<typeof listAgentC
 
 
 
+export const getResetCallerMemoryUrl = (id: number,
+    phone: string,) => {
+
+
+
+
+  return `/api/agents/${id}/caller-memory/${phone}`
+}
+
+/**
+ * Deletes every memory record stored for the given (agentId, phoneNumber) pair: caller_fact_sentence_links, caller_episode_fact_links, caller_sentences, caller_facts, and caller_call_archive. The caller_profiles row is NOT deleted — identity is preserved, but the next call starts with a clean slate.
+ * @summary Wipe all memory for a caller — facts, episodes, sentences, and join-table rows (keeps the caller_profiles row)
+ */
+export const resetCallerMemory = async (id: number,
+    phone: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getResetCallerMemoryUrl(id,phone),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getResetCallerMemoryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetCallerMemory>>, TError,{id: number;phone: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetCallerMemory>>, TError,{id: number;phone: string}, TContext> => {
+
+const mutationKey = ['resetCallerMemory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetCallerMemory>>, {id: number;phone: string}> = (props) => {
+          const {id,phone} = props ?? {};
+
+          return  resetCallerMemory(id,phone,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetCallerMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof resetCallerMemory>>>
+
+    export type ResetCallerMemoryMutationError = ErrorType<void>
+
+    /**
+ * @summary Wipe all memory for a caller — facts, episodes, sentences, and join-table rows (keeps the caller_profiles row)
+ */
+export const useResetCallerMemory = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetCallerMemory>>, TError,{id: number;phone: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetCallerMemory>>,
+        TError,
+        {id: number;phone: string},
+        TContext
+      > => {
+      return useMutation(getResetCallerMemoryMutationOptions(options));
+    }
+
 export const getGetCallerDetailUrl = (id: number,
     phone: string,) => {
 

@@ -765,6 +765,60 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, asy
   res.status(204).end();
 });
 
+/* ── DELETE /agents/:id/caller-memory/:phone ─────────────────────────────────
+ * Wipe all memory for a specific caller under this agent.
+ * Deletes: caller_fact_sentence_links, caller_episode_fact_links,
+ *          caller_sentences, caller_facts, caller_call_archive.
+ * Keeps: caller_profiles (identity row preserved; next call starts clean).
+ */
+router.delete("/agents/:id/caller-memory/:phone", requireAuth, async (req, res): Promise<void> => {
+  const clerkId = (req as any).clerkUserId as string;
+  const agentId = parseInt(String(req.params["id"] ?? ""), 10);
+  const phoneNumber = decodeURIComponent(String(req.params["phone"] ?? ""));
+  if (isNaN(agentId) || !phoneNumber) { res.status(400).json({ error: "Invalid params" }); return; }
+
+  const [agent] = await db.select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), eq(agentsTable.userId, clerkId)));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+  // 1. Break the self-referential FK on caller_facts.superseded_by_id so we can
+  //    delete all fact rows in one pass without hitting a RESTRICT constraint.
+  await db.update(callerFactsTable)
+    .set({ supersededById: null })
+    .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)));
+
+  // 2. Collect IDs of episodes and facts for junction-table cleanup.
+  const [episodeRows, factRows] = await Promise.all([
+    db.select({ id: callerCallArchiveTable.id })
+      .from(callerCallArchiveTable)
+      .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber))),
+    db.select({ id: callerFactsTable.id })
+      .from(callerFactsTable)
+      .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber))),
+  ]);
+  const episodeIds = episodeRows.map(e => e.id);
+  const factIds    = factRows.map(f => f.id);
+
+  // 3. Delete junction tables before their parents to satisfy FK constraints.
+  if (factIds.length > 0) {
+    await db.delete(callerFactSentenceLinksTable).where(inArray(callerFactSentenceLinksTable.factId, factIds));
+    await db.delete(callerEpisodeFactLinksTable).where(inArray(callerEpisodeFactLinksTable.factId, factIds));
+  }
+  if (episodeIds.length > 0) {
+    await db.delete(callerEpisodeFactLinksTable).where(inArray(callerEpisodeFactLinksTable.episodeId, episodeIds));
+    await db.delete(callerSentencesTable).where(inArray(callerSentencesTable.episodeId, episodeIds));
+  }
+
+  // 4. Delete the primary memory tables.
+  await db.delete(callerFactsTable)
+    .where(and(eq(callerFactsTable.agentId, agentId), eq(callerFactsTable.phoneNumber, phoneNumber)));
+  await db.delete(callerCallArchiveTable)
+    .where(and(eq(callerCallArchiveTable.agentId, agentId), eq(callerCallArchiveTable.phoneNumber, phoneNumber)));
+
+  res.status(204).end();
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── SnapServe Executions proxy ─────────────────────────────────────────────

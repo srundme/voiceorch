@@ -6,7 +6,7 @@ import {
   Loader2, ChevronRight, Pencil,
   ArrowDownLeft, ArrowUpRight, Globe, ArrowRight, ExternalLink,
   MapPin, DollarSign, Bell, HelpCircle, User, Tag, BarChart3, Hash, MessageSquare,
-  Trash2, CalendarClock,
+  Trash2, CalendarClock, RotateCcw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +33,7 @@ import {
   useListAgents, getListAgentsQueryKey,
   useUpdateAgent,
   useDeleteCallerFact,
+  useResetCallerMemory,
   useListAgentCallers, getListAgentCallersQueryKey,
   useGetCallerDetail, getGetCallerDetailQueryKey,
 } from "@workspace/api-client-react";
@@ -740,11 +745,34 @@ function CallerDetailView({
   onBack: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [tab, setTab] = useState("overview");
+  const [resetOpen, setResetOpen] = useState(false);
   const { data, isLoading } = useGetCallerDetail(agentId, encodeURIComponent(contact.phoneNumber));
   const callerData = data as { facts: CallerDetailFact[]; episodes: CallerDetailEpisode[] } | undefined;
   const facts    = callerData?.facts    ?? [];
   const episodes = callerData?.episodes ?? [];
+
+  const resetMemory = useResetCallerMemory();
+
+  function handleResetConfirm() {
+    resetMemory.mutate(
+      { id: agentId, phone: encodeURIComponent(contact.phoneNumber) },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCallerDetailQueryKey(agentId, encodeURIComponent(contact.phoneNumber)) });
+          queryClient.invalidateQueries({ queryKey: getListAgentCallersQueryKey(agentId) });
+          queryClient.invalidateQueries({ queryKey: getListAgentMemorySummariesQueryKey() });
+          toast({ title: "Memory reset", description: "All memory for this caller has been cleared." });
+          setResetOpen(false);
+        },
+        onError: () => {
+          toast({ title: "Reset failed", description: "Could not reset memory. Please try again.", variant: "destructive" });
+          setResetOpen(false);
+        },
+      }
+    );
+  }
 
   // Reset to overview whenever a different caller is selected
   useEffect(() => { setTab("overview"); }, [contact.phoneNumber]);
@@ -844,6 +872,47 @@ function CallerDetailView({
             </div>
           ))}
         </div>
+
+        {/* Danger actions */}
+        <div className="mt-3 flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive/60 gap-1.5 text-[12px]"
+            onClick={() => setResetOpen(true)}
+            disabled={resetMemory.isPending}
+          >
+            {resetMemory.isPending
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <RotateCcw className="w-3.5 h-3.5" />}
+            Reset Memory
+          </Button>
+        </div>
+
+        <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset memory for this caller?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes all facts, episodes, sentences, and call transcripts
+                the agent has built up for <span className="text-foreground font-medium">{callerDisplayName(contact)}</span>.
+                The action cannot be undone. The caller's identity record is kept —
+                the next call simply starts with a completely clean slate.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={resetMemory.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleResetConfirm}
+                disabled={resetMemory.isPending}
+              >
+                {resetMemory.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                Reset Memory
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* per-caller tabs */}
