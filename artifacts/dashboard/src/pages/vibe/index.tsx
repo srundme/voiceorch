@@ -75,6 +75,14 @@ const GREETING: ChatMsg = {
   content: "Hey! I'll help you build your voice agent in a few minutes.\n\nTell me — what do you want this agent to do, and who will it be talking to?",
 };
 
+/* ── landing suggestions ────────────────────────────────────────────────────── */
+const SUGGESTIONS = [
+  "Sales follow-up agent in Tamil",
+  "Customer support for a SaaS product",
+  "Appointment booking for a clinic",
+  "Lead qualification for real estate",
+];
+
 /* ── voice preview ──────────────────────────────────────────────────────────── */
 async function previewVoice(voiceId: string, setPlaying: (id: string | null) => void) {
   setPlaying(voiceId);
@@ -507,162 +515,238 @@ export default function VibePage() {
     || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
     || callFlowNotes.length > 0 || kbNotes.length > 0;
 
+  // Landing = no user message yet and not refine mode
+  const chatStarted = messages.length > 1 || !!refineId || refineLoading;
+
+  const isThinking = phase === "thinking" || phase === "streaming" || phase === "building";
+
+  /* ── shared input block ───────────────────────────────────────────────────── */
+  const inputBlock = (isLanding: boolean) => (
+    <div className={cn("relative", isLanding ? "w-full" : "")}>
+      <Textarea
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKey}
+        placeholder={phase === "done" ? "Your agent is ready! ✓" : "Describe your agent or ask anything…"}
+        disabled={phase === "done" || phase === "building"}
+        rows={isLanding ? 4 : 3}
+        className={cn(
+          "resize-none pr-20 bg-muted/20 border-border/50 placeholder:text-muted-foreground/40 transition-all",
+          isLanding
+            ? "text-base rounded-2xl px-5 pt-5 pb-14 shadow-lg focus-visible:ring-1 focus-visible:ring-primary/40 border-border/60"
+            : "text-sm pr-20 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50",
+        )}
+      />
+      <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html" className="hidden" onChange={handleFileUpload} />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={phase === "done" || phase === "building" || isThinking}
+        title="Upload document for knowledge base"
+        className={cn(
+          "absolute flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30",
+          isLanding ? "right-14 bottom-4 h-9 w-9" : "right-11 bottom-2.5 h-8 w-8",
+        )}
+      >
+        <Paperclip className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      </button>
+      <Button
+        size="icon"
+        onClick={() => send()}
+        disabled={!canSend}
+        className={cn(
+          "absolute transition-all",
+          isLanding ? "right-4 bottom-4 h-9 w-9 rounded-xl" : "right-2.5 bottom-2.5 h-8 w-8 rounded-lg",
+          canSend ? "bg-primary hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />}
+      </Button>
+    </div>
+  );
+
   /* ─ render ──────────────────────────────────────────────────────────────── */
   return (
-    <div className="fixed inset-0 flex bg-background overflow-hidden">
+    <div className="fixed inset-0 bg-background overflow-hidden">
 
-      {/* ══ Left: Chat panel ══════════════════════════════════════════════════ */}
-      <div className="flex flex-col w-[440px] min-w-[380px] border-r border-border/60 bg-background">
-
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 h-14 border-b border-border/60 shrink-0">
-          <button
-            onClick={() => navigate("/app/agents")}
-            className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-lg overflow-hidden shrink-0">
-              <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm leading-none tracking-tight">Vibe Build</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {refineId ? "Refining existing agent" : "AI agent builder"}
-              </p>
-            </div>
-          </div>
-          {refineLoading && (
-            <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading agent…
-            </div>
-          )}
-          {!refineLoading && phase !== "idle" && phase !== "done" && (
-            <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {phase === "thinking"  ? "Thinking…" :
-               phase === "streaming" ? "Responding…" :
-               statusMsg || "Configuring…"}
-            </div>
-          )}
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-5 py-6 space-y-6">
-            {messages.map(msg => (
-              <MessageBubble
-                key={msg.id}
-                msg={msg}
-                selectedVoice={selectedVoice}
-                playingVoice={playingVoice}
-                onPreview={vid => previewVoice(vid, setPlayingVoice)}
-                onSelect={v => send(`I'll go with ${v.voiceName}`)}
-                onSelectTimezone={tz => {
-                  collapseTimezonePickers();
-                  send(`Use ${tz.label} (${tz.value})`);
-                }}
-                onSelectAvailability={preset => {
-                  collapseAvailabilityPickers();
-                  send(`Set availability: ${preset.label} — days: [${preset.days.join(",")}], hours: ${preset.start}–${preset.end}`);
-                }}
-              />
-            ))}
-            {phase === "thinking" && <ThinkingDots />}
-            <div ref={chatEndRef} />
-          </div>
-        </div>
-
-        {/* Input */}
-        <div className="border-t border-border/60 px-4 py-4 shrink-0">
-          <div className="relative">
-            <Textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder={
-                phase === "done"
-                  ? "Your agent is ready! ✓"
-                  : "Message or drop a file for knowledge base…"
-              }
-              disabled={phase === "done" || phase === "building"}
-              rows={3}
-              className="resize-none text-sm pr-20 bg-muted/30 border-border/60 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50 placeholder:text-muted-foreground/50"
-            />
-            {/* File upload */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".txt,.md,.csv,.json,.html"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
+      {/* ══ Landing view — before first message ════════════════════════════ */}
+      {!chatStarted && (
+        <div className="flex flex-col h-full">
+          {/* Back button */}
+          <div className="flex items-center px-6 h-14 shrink-0">
             <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={phase === "done" || phase === "building" || phase === "thinking" || phase === "streaming"}
-              title="Upload document for knowledge base (.txt, .md, .csv, .json)"
-              className="absolute right-11 bottom-2.5 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all disabled:opacity-30"
+              onClick={() => navigate("/app/agents")}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Paperclip className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-4 w-4" /> Agents
             </button>
-            <Button
-              size="icon"
-              onClick={() => send()}
-              disabled={!canSend}
-              className={cn(
-                "absolute right-2.5 bottom-2.5 h-8 w-8 rounded-lg transition-all",
-                canSend ? "bg-primary hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground",
-              )}
-            >
-              {(phase === "thinking" || phase === "streaming")
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <Send className="h-3.5 w-3.5" />}
-            </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground/50 mt-2 text-center tracking-wide">
-            Enter to send · Shift+Enter for newline · 📎 to upload KB docs
-          </p>
+
+          {/* Centered content */}
+          <div className="flex-1 flex flex-col items-center justify-center px-6 pb-16">
+            {/* Animated logo */}
+            <div className="relative mb-8">
+              <div className={cn(
+                "h-16 w-16 rounded-2xl border flex items-center justify-center overflow-hidden p-2.5 transition-all duration-500",
+                isThinking
+                  ? "border-primary/50 bg-primary/10 shadow-[0_0_32px_rgba(var(--primary)/0.25)]"
+                  : "border-border/60 bg-muted/30",
+              )}>
+                <img src="/snapserve-icon.png" alt="SnapServe" className={cn("h-full w-full object-contain transition-opacity", isThinking ? "opacity-100" : "opacity-70")} />
+              </div>
+              {isThinking && (
+                <div className="absolute inset-0 rounded-2xl border-2 border-primary/40 animate-ping" />
+              )}
+            </div>
+
+            {/* Title */}
+            <h1 className="text-3xl font-semibold tracking-tight mb-3 text-center">
+              {isThinking ? (
+                <span className="text-muted-foreground">Building your agent…</span>
+              ) : (
+                "Build your voice agent"
+              )}
+            </h1>
+            <p className="text-muted-foreground text-center mb-10 max-w-md leading-relaxed">
+              Describe what you want — I'll configure everything and have it ready in minutes.
+            </p>
+
+            {/* Input */}
+            <div className="w-full max-w-2xl">
+              {inputBlock(true)}
+            </div>
+
+            {/* Suggestion chips */}
+            {!isThinking && (
+              <div className="flex flex-wrap gap-2 justify-center mt-5 max-w-2xl">
+                {SUGGESTIONS.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setInput(s)}
+                    className="rounded-full border border-border/60 bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/60 transition-all"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ══ Right: Live preview ════════════════════════════════════════════════ */}
-      <div className="flex-1 flex flex-col min-w-0 bg-muted/20">
+      {/* ══ Chat + Preview split — after first message ══════════════════════ */}
+      {chatStarted && (
+        <div className="flex h-full animate-in fade-in duration-300">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-background">
-          <div className="flex items-center gap-3">
-            <Zap className="h-4 w-4 text-primary" />
-            <div>
-              <p className="font-semibold text-sm leading-none">Agent Preview</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {!hasRightContent              ? "Waiting for your description…" :
-                 phase === "building"          ? (statusMsg || "Configuring…") :
-                 phase === "done"              ? "Ready to deploy" :
-                 (refineId && phase === "idle") ? "Agent loaded — tell me what to change" :
-                                                "Building up as we chat"}
+          {/* ── Left: Chat panel ─────────────────────────────────────────── */}
+          <div className="flex flex-col w-[430px] min-w-[380px] border-r border-border/60 bg-background">
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 h-14 border-b border-border/60 shrink-0">
+              <button
+                onClick={() => navigate("/app/agents")}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {/* Animated logo in header */}
+              <div className="relative flex-shrink-0">
+                <div className={cn(
+                  "h-7 w-7 rounded-lg border flex items-center justify-center overflow-hidden p-1 transition-all",
+                  isThinking ? "border-primary/40 bg-primary/10" : "border-border/50 bg-muted/20",
+                )}>
+                  <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain" />
+                </div>
+                {isThinking && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
+                )}
+              </div>
+              <div>
+                <p className="font-semibold text-sm leading-none tracking-tight">Vibe Build</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {refineId ? "Refining existing agent" : "AI agent builder"}
+                </p>
+              </div>
+              {refineLoading && (
+                <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                </div>
+              )}
+              {!refineLoading && isThinking && (
+                <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                  {phase === "thinking" ? "Thinking…" : phase === "streaming" ? "Responding…" : statusMsg || "Configuring…"}
+                </div>
+              )}
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="px-4 py-6 space-y-5">
+                {messages.map(msg => (
+                  <MessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    selectedVoice={selectedVoice}
+                    playingVoice={playingVoice}
+                    onPreview={vid => previewVoice(vid, setPlayingVoice)}
+                    onSelect={v => send(`I'll go with ${v.voiceName}`)}
+                    onSelectTimezone={tz => { collapseTimezonePickers(); send(`Use ${tz.label} (${tz.value})`); }}
+                    onSelectAvailability={preset => {
+                      collapseAvailabilityPickers();
+                      send(`Set availability: ${preset.label} — days: [${preset.days.join(",")}], hours: ${preset.start}–${preset.end}`);
+                    }}
+                  />
+                ))}
+                {phase === "thinking" && <ThinkingLogo />}
+                <div ref={chatEndRef} />
+              </div>
+            </div>
+
+            {/* Input */}
+            <div className="border-t border-border/60 px-4 py-3 shrink-0">
+              {inputBlock(false)}
+              <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
+                Enter to send · Shift+Enter for newline · 📎 to upload KB docs
               </p>
             </div>
           </div>
-          {phase === "done" && createdId && (
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg"
-                onClick={() => navigate(`/app/agents/${createdId}`)}>
-                <Settings2 className="h-3 w-3" /> Edit
-              </Button>
-              <Button size="sm" className="h-7 gap-1.5 text-xs rounded-lg"
-                onClick={() => navigate(`/app/agents/${createdId}?webcall=1`)}>
-                <Phone className="h-3 w-3" /> Try Call
-              </Button>
-            </div>
-          )}
-        </div>
 
-        <div className="flex-1 overflow-y-auto px-8 py-8">
-          {!hasRightContent ? (
-            <EmptyState />
-          ) : (
+          {/* ── Right: Live preview ───────────────────────────────────────── */}
+          <div className="flex-1 flex flex-col min-w-0 bg-muted/10">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-background">
+              <div className="flex items-center gap-3">
+                <Zap className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="font-semibold text-sm leading-none">Agent Preview</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {!hasRightContent              ? "Waiting for your description…" :
+                     phase === "building"          ? (statusMsg || "Configuring…") :
+                     phase === "done"              ? "Ready to deploy" :
+                     (refineId && phase === "idle") ? "Agent loaded — tell me what to change" :
+                                                    "Building up as we chat"}
+                  </p>
+                </div>
+              </div>
+              {phase === "done" && createdId && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg"
+                    onClick={() => navigate(`/app/agents/${createdId}`)}>
+                    <Settings2 className="h-3 w-3" /> Edit
+                  </Button>
+                  <Button size="sm" className="h-7 gap-1.5 text-xs rounded-lg"
+                    onClick={() => navigate(`/app/agents/${createdId}?webcall=1`)}>
+                    <Phone className="h-3 w-3" /> Try Call
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-8 py-8">
+              {!hasRightContent ? (
+                <EmptyState />
+              ) : (
             <div className="max-w-2xl space-y-8">
 
               {/* Agent Config */}
@@ -812,6 +896,9 @@ export default function VibePage() {
         </div>
       </div>
     </div>
+  )}
+
+  </div>
   );
 }
 
@@ -1027,17 +1114,20 @@ function VoicePill({ voice, isSelected, isPlaying, onPreview, onSelect }: {
   );
 }
 
-function ThinkingDots() {
+function ThinkingLogo() {
   return (
-    <div className="flex gap-3 items-center">
-      <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden p-1">
-        <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain opacity-50" />
+    <div className="flex gap-3 items-center pl-0.5">
+      <div className="relative shrink-0">
+        <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center overflow-hidden p-1 shadow-[0_0_12px_rgba(var(--primary)/0.2)]">
+          <img src="/snapserve-icon.png" alt="Thinking" className="h-full w-full object-contain" />
+        </div>
+        <span className="absolute inset-0 rounded-lg border-2 border-primary/30 animate-ping" />
       </div>
-      <div className="flex gap-1.5 items-center py-2">
-        {[0, 150, 300].map(d => (
+      <div className="flex gap-1.5 items-center">
+        {[0, 160, 320].map(d => (
           <span
             key={d}
-            className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
+            className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce"
             style={{ animationDelay: `${d}ms` }}
           />
         ))}
