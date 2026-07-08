@@ -103,14 +103,24 @@ export default function Slide11() {
           </div>
 
           <div style={{
-            background: "#FFF3E0", border: "0.06vh solid #FFCC80",
+            background: "#E8F5E9", border: "0.06vh solid #A5D6A7",
             borderRadius: "1.1vw", padding: "2.2vh 2.4vw",
           }}>
-            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BF360C", marginBottom: "0.8vh" }}>
-              Current Status
+            <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#2E7D32", marginBottom: "0.8vh" }}>
+              Current Traction
             </div>
-            <div style={{ fontSize: "1.08vw", color: "#BF360C", lineHeight: 1.58 }}>
-              Pre-revenue · Product complete · Pilot onboarding in progress. Raising pre-seed to convert pilots to paid and ship the Memory Proxy.
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.7vh" }}>
+              {[
+                { icon: "✓", text: "Product complete — live in production" },
+                { icon: "✓", text: "Pilot calls running with early BFSI accounts" },
+                { icon: "✓", text: "12+ Indian languages validated end-to-end" },
+                { icon: "→", text: "Converting pilots to paid · Pre-seed closes this raise" },
+              ].map(({ icon, text }) => (
+                <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: "0.6vw", fontSize: "1.02vw", color: "#1B5E20", lineHeight: 1.5 }}>
+                  <span style={{ color: icon === "→" ? "#FF6F00" : "#2E7D32", fontWeight: 700, flexShrink: 0 }}>{icon}</span>
+                  <span>{text}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

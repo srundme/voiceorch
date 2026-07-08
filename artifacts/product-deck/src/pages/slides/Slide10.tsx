@@ -9,12 +9,12 @@ const VBWatermark = () => (
 
 export default function Slide10() {
   const th: React.CSSProperties = {
-    padding: "1.4vh 1.6vw", fontSize: "0.85vw", fontWeight: 700,
+    padding: "1.2vh 1.4vw", fontSize: "0.82vw", fontWeight: 700,
     letterSpacing: "0.06em", textTransform: "uppercase",
     borderBottom: "0.14vh solid #E8EAF0", color: "#1A237E",
   };
   const td: React.CSSProperties = {
-    padding: "1.4vh 1.6vw", fontSize: "1.05vw", color: "#3A3A5C",
+    padding: "1.15vh 1.4vw", fontSize: "1.02vw", color: "#3A3A5C",
     borderBottom: "0.06vh solid #F0F3FF",
   };
   const tdC: React.CSSProperties = { ...td, textAlign: "center" };
@@ -27,9 +27,11 @@ export default function Slide10() {
     { feature: "Zero-code agent builder", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Persistent cross-call memory", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Dropped-call resume with context", snap: <Check />, vapi: <Cross />, status: <Cross /> },
-    { feature: "Tamil / Hinglish native handling", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "12+ Indian languages, natively", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "Indian phone number provisioning (KYC)", snap: <Check />, vapi: <Cross />, status: <Cross /> },
+    { feature: "Inbound + outbound campaigns in one platform", snap: <Check />, vapi: <Part />, status: <Cross /> },
     { feature: "IRDAI / TRAI / DPDP built-in", snap: <Check />, vapi: <Cross />, status: <Cross /> },
-    { feature: "Provider-agnostic STT / LLM / TTS", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "Provider-agnostic STT / LLM / TTS (10+ models)", snap: <Check />, vapi: <Part />, status: <Cross /> },
   ];
 
   return (
@@ -48,7 +50,7 @@ export default function Slide10() {
         <span style={{ fontSize: "0.85vw", fontWeight: 600, color: "#4B6CB7", letterSpacing: "0.06em", paddingBottom: "0.3vh" }}>10 / 14</span>
       </div>
 
-      <div style={{ flex: 1, padding: "2.4vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "2vh" }}>
+      <div style={{ flex: 1, padding: "2vh 6vw 6.5vh 6vw", display: "flex", flexDirection: "column", gap: "1.8vh" }}>
         <div style={{
           background: "#FFFFFF", border: "0.06vh solid #E8EAF0", borderRadius: "1.1vw",
           boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.08)", overflow: "hidden",
@@ -76,20 +78,20 @@ export default function Slide10() {
         </div>
 
         <div style={{
-          background: "#1A237E", borderRadius: "1.1vw", padding: "2.4vh 2.6vw",
+          background: "#1A237E", borderRadius: "1.1vw", padding: "2.2vh 2.6vw",
           display: "flex", gap: "2vw", alignItems: "flex-start",
         }}>
           <div style={{ flexShrink: 0 }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00", marginBottom: "0.6vh" }}>
               Your Advantage
             </div>
-            <div style={{ fontSize: "1.32vw", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.25, maxWidth: "20vw" }}>
+            <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#FFFFFF", lineHeight: 1.25, maxWidth: "18vw" }}>
               The Memory Layer Moat
             </div>
           </div>
           <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
-          <div style={{ fontSize: "1.08vw", color: "#C9D5F5", lineHeight: 1.65, flex: 1 }}>
-            Every call enriches our caller knowledge graph. That data compound — competitors who copy our pipeline still start from zero caller history.
+          <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.65, flex: 1 }}>
+            Every call enriches our caller knowledge graph. That data compounds — competitors who copy our pipeline still start from zero caller history.
             The Memory Proxy also lets other platforms (Vapi, Bolna, Retell) route through SnapServe for memory, creating a distribution network inside our competitors' ecosystems.
             This is not a feature — it is a structural moat that grows with usage.
           </div>

@@ -10,7 +10,7 @@ const VBWatermark = () => (
 export default function Slide5() {
   const step: React.CSSProperties = {
     flex: 1, background: "#FFFFFF", border: "0.06vh solid #E8EAF0",
-    borderRadius: "1.2vw", padding: "2.8vh 2.2vw",
+    borderRadius: "1.2vw", padding: "2.4vh 2vw",
     boxShadow: "0 0.8vh 2.2vh rgba(26,35,126,0.09)", display: "flex", flexDirection: "column",
     alignItems: "center", textAlign: "center",
   };
@@ -88,9 +88,9 @@ export default function Slide5() {
             }}>
               <span style={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1.2vw" }}>03</span>
             </div>
-            <div style={{ fontSize: "1.22vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.2vh", lineHeight: 1.25 }}>Link telephony &amp; go live</div>
+            <div style={{ fontSize: "1.22vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.2vh", lineHeight: 1.25 }}>Get a number &amp; go live</div>
             <div style={{ fontSize: "1.02vw", color: "#5B5470", lineHeight: 1.6 }}>
-              Connect your telephony number. Your agent starts taking calls immediately — memory active from call one.
+              Provision a real Indian mobile number via built-in KYC — or connect your own. Agent starts taking calls immediately, memory active from call one.
             </div>
             <div style={{
               marginTop: "2vh", background: "#1A237E", borderRadius: "0.8vw",
@@ -102,16 +102,30 @@ export default function Slide5() {
         </div>
 
         <div style={{
-          background: "#1A237E", borderRadius: "1.1vw", padding: "2.2vh 2.4vw",
-          display: "flex", alignItems: "center", gap: "2vw",
+          background: "#1A237E", borderRadius: "1.1vw", padding: "2vh 2.4vw",
+          display: "flex", alignItems: "flex-start", gap: "2vw",
         }}>
-          <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FF6F00", whiteSpace: "nowrap" }}>
-            Flow Diagram
+          <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#FF6F00", whiteSpace: "nowrap", paddingTop: "0.2vh" }}>
+            Full Stack
           </div>
-          <div style={{ width: "0.06vw", height: "3.6vh", background: "rgba(255,111,0,0.35)" }} />
-          <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.55 }}>
-            Caller → <span style={{ color: "#FF6F00" }}>STT</span> (Deepgram / Sarvam / Azure) → <span style={{ color: "#FF6F00" }}>LLM</span> (Sarvam / Groq / OpenAI) → <span style={{ color: "#FF6F00" }}>TTS</span> (ElevenLabs / Cartesia) → Caller.&ensp;
-            Memory layer injects caller history at every turn.
+          <div style={{ width: "0.06vw", background: "rgba(255,111,0,0.35)", alignSelf: "stretch" }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "1.02vw", color: "#C9D5F5", lineHeight: 1.65, marginBottom: "0.8vh" }}>
+              Caller → <span style={{ color: "#FF6F00" }}>STT</span> (Deepgram · Sarvam · Azure · Whisper) → <span style={{ color: "#FF6F00" }}>LLM</span> (Sarvam · Gemini · Groq · OpenAI · Anthropic · DeepSeek · Mistral + more) → <span style={{ color: "#FF6F00" }}>TTS</span> (Cartesia · ElevenLabs · OpenAI · Azure · Deepgram) → Caller.
+            </div>
+            <div style={{ display: "flex", gap: "2.4vw" }}>
+              {[
+                { label: "4 STT providers", sub: "Deepgram · Sarvam · Azure · Whisper" },
+                { label: "10+ LLM models", sub: "Groq · Gemini · Sarvam · OpenAI · Anthropic + more" },
+                { label: "5 TTS providers", sub: "Cartesia · ElevenLabs · OpenAI · Azure · Deepgram" },
+                { label: "4 Telephony providers", sub: "Twilio · Plivo · Vonage · VoBiz" },
+              ].map(({ label, sub }) => (
+                <div key={label} style={{ flex: 1 }}>
+                  <div style={{ fontSize: "0.9vw", fontWeight: 700, color: "#FF6F00" }}>{label}</div>
+                  <div style={{ fontSize: "0.8vw", color: "#9FA8DA", marginTop: "0.2vh" }}>{sub}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

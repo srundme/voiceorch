@@ -47,8 +47,18 @@ export default function Slide7() {
             <div style={label}>How they pay</div>
             <div style={{ fontSize: "1.28vw", fontWeight: 700, color: "#1A237E", marginBottom: "1.4vh" }}>Per-minute + SaaS tier</div>
             <div style={{ fontSize: "1.05vw", color: "#5B5470", lineHeight: 1.62 }}>
-              <div style={{ marginBottom: "0.8vh" }}><strong style={{ color: "#1A237E" }}>Managed plan:</strong> $0.05/min — SnapServe supplies all AI keys.</div>
-              <div><strong style={{ color: "#1A237E" }}>BYOP plan:</strong> $0.035/min orchestration fee — enterprise brings their own provider keys.</div>
+              <div style={{ marginBottom: "1vh" }}>
+                <strong style={{ color: "#1A237E" }}>Managed plan:</strong>
+                <span style={{ marginLeft: "0.4vw" }}>₹4.2/min</span>
+                <span style={{ color: "#9FA8DA", fontSize: "0.9vw", marginLeft: "0.4vw" }}>($0.05/min)</span>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.2vh" }}>SnapServe supplies all AI keys.</div>
+              </div>
+              <div>
+                <strong style={{ color: "#1A237E" }}>BYOP plan:</strong>
+                <span style={{ marginLeft: "0.4vw" }}>₹2.9/min</span>
+                <span style={{ color: "#9FA8DA", fontSize: "0.9vw", marginLeft: "0.4vw" }}>($0.035/min)</span>
+                <div style={{ fontSize: "0.92vw", color: "#7986CB", marginTop: "0.2vh" }}>Enterprise brings own provider keys.</div>
+              </div>
             </div>
           </div>
           <div style={{ ...col, background: "#1A237E", borderColor: "#1A237E" }}>
