@@ -258,3 +258,9 @@ id = "qMKt69nZToetk3dTgg_l2"
 uri = "file://.local/outputs/SnapServe-Antler-Hub-Pitch-Deck.pdf"
 type = "pdf"
 title = "SnapServe — Antler Hub Pitch Deck (PDF)"
+
+[[outputs]]
+id = "A05c63V7nyv0WtReMOhoT"
+uri = "file://.local/outputs/SnapServe-Investor-Deck-2026.pdf"
+type = "pdf"
+title = "SnapServe — Investor Deck 2026 (PDF)"

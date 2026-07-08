@@ -63,7 +63,7 @@ export default function Slide1() {
           color: "#C7BCEA",
         }}
       >
-        Antler Hub — Application 2026
+        Investor Deck — 2026
       </div>
 
       <div
@@ -138,7 +138,7 @@ export default function Slide1() {
       >
         <span>Karthikeyan &middot; Gopi</span>
         <span>Chennai, India</span>
-        <span>Antler Hub Application 2026</span>
+        <span>Investor Deck 2026</span>
       </div>
     </div>
   );
