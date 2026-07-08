@@ -71,6 +71,7 @@ import {
   ASR_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS,
   LANGUAGES, ASR_MODELS, LLM_MODELS, TTS_MODELS, TTS_VOICES, AGENT_TIMEZONES,
   isTamilLanguage, defaultGeminiModel,
+  filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
@@ -339,24 +340,21 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   });
   const managedNumbers: string[] = managedNumbersRaw?.numbers ?? [];
 
+  // Shared language filter (single source of truth in agent-providers.ts):
+  // English agents see ALL whitelisted voices; non-English agents see only
+  // their language's voices. Identical to the Voice tab's list.
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
-    // For English, also include Hindi and Tamil voices — all Indian voices
-    // on this platform can speak English.
-    const INDIAN_LANGS = new Set(["hi", "ta"]);
-    const matched = all.filter(v => {
-      const vLang = v.language?.toLowerCase().split("-")[0] ?? "";
-      return vLang === baseLang || (baseLang === "en" && INDIAN_LANGS.has(vLang));
-    });
-    const opts = matched.map(v => ({ value: v.id, label: v.name }));
+    const opts = filterVoicesForLanguage(all, language).map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
   }, [whitelistedData, language]);
 
   // When the language changes (or the whitelist finishes loading), clear a
-  // selected curated voice that no longer supports the language. User-pasted
-  // custom IDs (not present in the whitelist) are left untouched.
+  // selected curated voice that no longer supports the language — using the
+  // SAME shared compatibility rule as the list filter, so a voice visible in
+  // either section is never wiped by this effect. User-pasted custom IDs
+  // (not present in the whitelist) are left untouched.
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
     const all = whitelistedData?.voices ?? [];
@@ -364,15 +362,15 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
     if (!ttsVoice || ttsVoice === "__custom__") return;
     const known = all.find(v => v.id === ttsVoice);
     if (!known) return; // user-pasted custom ID — leave it alone
-    const baseLang = (language ?? "en-US").split("-")[0]!.toLowerCase();
-    const vLang = known.language?.toLowerCase().split("-")[0] ?? "";
-    const INDIAN_LANGS = new Set(["hi", "ta"]);
-    // Don't clear an Indian voice when switching to English — they speak English too.
-    const isCompatible = vLang === baseLang || (baseLang === "en" && INDIAN_LANGS.has(vLang));
-    if (!isCompatible) {
+    if (!isVoiceCompatibleWithLanguage(known.language, language)) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [language, whitelistedData, ttsProvider, ttsVoice, form]);
+
+  // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
+  // already-saved voice ID; the value only changes when the user types into
+  // the custom input or picks a different curated voice.
+  const [voiceCustomMode, setVoiceCustomMode] = useState(false);
 
   const ttsVoiceRaw   = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
   const ttsVoiceFree  = ttsVoiceRaw === null;
@@ -388,8 +386,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
   const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
   const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
-  const showCustomVoiceInput = ttsVoiceFree || (ttsVoiceOpts.length > 0 && !inCuratedList);
-  const ttsVoiceDropdownVal  = inCuratedList ? (ttsVoice ?? "") : "__custom__";
+  const showCustomVoiceInput = ttsVoiceFree || voiceCustomMode || (ttsVoiceOpts.length > 0 && !inCuratedList);
+  const ttsVoiceDropdownVal  = inCuratedList && !voiceCustomMode ? (ttsVoice ?? "") : "__custom__";
   const ttsVoiceLabel  = (!ttsVoice || ttsVoice === "__custom__") ? "" : (curatedVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice);
   const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
@@ -666,7 +664,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
+                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); setVoiceCustomMode(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
                       options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
                   </FormItem>
                 )} />
@@ -676,7 +674,15 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
                       <SmallSelect
                         value={ttsVoiceDropdownVal}
-                        onChange={(v) => field.onChange(v === "__custom__" ? "" : v)}
+                        onChange={(v) => {
+                          if (v === "__custom__") {
+                            // Show the custom input without erasing the saved voice ID.
+                            setVoiceCustomMode(true);
+                            return;
+                          }
+                          setVoiceCustomMode(false);
+                          field.onChange(v);
+                        }}
                         options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
                         placeholder="Default"
                       />
@@ -904,23 +910,21 @@ function VoiceTab({ form }: { form: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For Cartesia: strictly show only voices whose language metadata matches the
-  // selected Transcriber language. e.g. "ta-IN" → "ta"; "te-IN" → "te"; "en-US" → "en".
-  // No fallback to the static English list — an empty/loading whitelist must
-  // never surface English voices for a non-English language.
+  // Shared language filter (single source of truth in agent-providers.ts):
+  // English agents see ALL whitelisted voices; non-English agents see only
+  // their language's voices. Identical to the Overview section's list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
-    const matched = all.filter(v => v.language?.toLowerCase() === baseLang);
-    // If no voices for this language, show only the custom paste option
-    const opts = matched.map(v => ({ value: v.id, label: v.name }));
+    const opts = filterVoicesForLanguage(all, agentLanguage).map(v => ({ value: v.id, label: v.name }));
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
   }, [whitelistedData, agentLanguage]);
 
   // When the language changes (or the whitelist finishes loading), clear a
-  // selected curated voice that no longer supports the language. User-pasted
-  // custom IDs (not present in the whitelist) are left untouched.
+  // selected curated voice that no longer supports the language — using the
+  // SAME shared compatibility rule as the Overview section, so mounting either
+  // section never wipes a compatible voice. User-pasted custom IDs (not
+  // present in the whitelist) are left untouched.
   useEffect(() => {
     if (ttsProvider !== "cartesia") return;
     const all = whitelistedData?.voices ?? [];
@@ -928,11 +932,15 @@ function VoiceTab({ form }: { form: any }) {
     if (!ttsVoice || ttsVoice === "__custom__") return;
     const known = all.find(v => v.id === ttsVoice);
     if (!known) return; // user-pasted custom ID — leave it alone
-    const baseLang = agentLanguage.split("-")[0]!.toLowerCase();
-    if (known.language?.toLowerCase() !== baseLang) {
+    if (!isVoiceCompatibleWithLanguage(known.language, agentLanguage)) {
       form.setValue("ttsVoice", "", { shouldDirty: true });
     }
   }, [agentLanguage, whitelistedData, ttsProvider, ttsVoice, form]);
+
+  // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
+  // already-saved voice ID; the value only changes when the user types into
+  // the custom input or picks a different curated voice.
+  const [voiceCustomModeV, setVoiceCustomModeV] = useState(false);
 
   // For non-Cartesia providers fall back to the hardcoded list
   const ttsVoiceRawV  = ttsProvider in TTS_VOICES ? TTS_VOICES[ttsProvider] : undefined;
@@ -944,8 +952,8 @@ function VoiceTab({ form }: { form: any }) {
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
-  const showCustomV       = ttsVoiceRawV === null || (ttsVoiceOptsV.length > 0 && !inCuratedV);
-  const dropdownValV      = inCuratedV ? (ttsVoice ?? "") : "__custom__";
+  const showCustomV       = ttsVoiceRawV === null || voiceCustomModeV || (ttsVoiceOptsV.length > 0 && !inCuratedV);
+  const dropdownValV      = inCuratedV && !voiceCustomModeV ? (ttsVoice ?? "") : "__custom__";
 
   // ── Voice preview ─────────────────────────────────────────────────────────
   const { toast } = useToast();
@@ -1114,7 +1122,7 @@ function VoiceTab({ form }: { form: any }) {
           <FormField control={form.control} name="ttsProvider" render={({ field }) => (
             <FormItem className="space-y-1">
               <FormLabel className="text-xs text-muted-foreground">Provider</FormLabel>
-              <Select value={field.value} onValueChange={(v) => { field.onChange(v); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}>
+              <Select value={field.value} onValueChange={(v) => { field.onChange(v); setVoiceCustomModeV(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Select provider" />
                 </SelectTrigger>
@@ -1133,7 +1141,15 @@ function VoiceTab({ form }: { form: any }) {
                 <FormLabel className="text-xs text-muted-foreground">Voice</FormLabel>
                 <Select
                   value={dropdownValV}
-                  onValueChange={(v) => field.onChange(v === "__custom__" ? "" : v)}
+                  onValueChange={(v) => {
+                    if (v === "__custom__") {
+                      // Show the custom input without erasing the saved voice ID.
+                      setVoiceCustomModeV(true);
+                      return;
+                    }
+                    setVoiceCustomModeV(false);
+                    field.onChange(v);
+                  }}
                 >
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="Select voice" />

@@ -403,6 +403,38 @@ export const LANGUAGES = [
   { value: "ht-HT",  label: "Haitian Creole" },
 ];
 
+/** Normalize a BCP-47-ish language tag to its lowercase base language ("ta-IN" → "ta"). */
+export function baseLanguage(language: string | null | undefined): string {
+  return (language ?? "en-US").split("-")[0]!.toLowerCase();
+}
+
+/**
+ * Single source of truth for whether a curated (admin-whitelisted) voice is
+ * compatible with an agent language:
+ *   - English agent language → EVERY whitelisted voice is compatible.
+ *   - Non-English → only voices whose base language matches (e.g. "ta-IN" → "ta").
+ */
+export function isVoiceCompatibleWithLanguage(
+  voiceLanguage: string | null | undefined,
+  agentLanguage: string | null | undefined,
+): boolean {
+  const agentBase = baseLanguage(agentLanguage);
+  if (agentBase === "en") return true;
+  return (voiceLanguage ?? "").split("-")[0]!.toLowerCase() === agentBase;
+}
+
+/**
+ * Single source of truth for filtering the admin-whitelisted voice list by
+ * agent language. English agents see ALL whitelisted voices (every language);
+ * non-English agents see only their language's voices.
+ */
+export function filterVoicesForLanguage<T extends { language?: string | null }>(
+  voices: readonly T[],
+  agentLanguage: string | null | undefined,
+): T[] {
+  return voices.filter(v => isVoiceCompatibleWithLanguage(v.language, agentLanguage));
+}
+
 /** True for any Tamil language variant (base language `ta`, e.g. ta-IN, ta-SG). */
 export function isTamilLanguage(language: string | undefined | null): boolean {
   if (!language) return false;

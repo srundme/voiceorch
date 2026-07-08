@@ -575,6 +575,10 @@ export default function AgentEdit() {
   const asrProvider = useWatch({ control: form.control, name: "asrProvider" });
   const llmProvider = useWatch({ control: form.control, name: "llmProvider" });
   const ttsProvider = useWatch({ control: form.control, name: "ttsProvider" });
+  // "Paste custom Voice ID" UI mode — selecting the option must NOT erase an
+  // already-saved voice ID; the value only changes when the user types into
+  // the custom input or picks a different curated voice.
+  const [voiceCustomMode, setVoiceCustomMode] = useState(false);
   const backchannelingEnabled = useWatch({ control: form.control, name: "backchannelingEnabled" });
   const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
 
@@ -1024,7 +1028,7 @@ export default function AgentEdit() {
                     <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={(v) => { field.onChange(v); setVoiceCustomMode(false); }} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Select TTS" /></SelectTrigger></FormControl>
                           <SelectContent>
                             {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -1050,8 +1054,8 @@ export default function AgentEdit() {
                       const inCurated = curatedValues.includes(field.value ?? "");
                       // When provider has a voice list but saved UUID isn't in it, treat as custom
                       const showDropdown = !!voiceList;
-                      const showCustomInput = !voiceList || !inCurated;
-                      const dropdownVal = inCurated ? (field.value ?? "") : (field.value ? "__custom__" : "");
+                      const showCustomInput = !voiceList || !inCurated || voiceCustomMode;
+                      const dropdownVal = inCurated && !voiceCustomMode ? (field.value ?? "") : (field.value || voiceCustomMode ? "__custom__" : "");
                       return (
                         <FormItem>
                           <FormLabel className="text-xs">{voiceList ? "Voice" : "Voice ID"}</FormLabel>
@@ -1062,8 +1066,13 @@ export default function AgentEdit() {
                                   options={voiceList!}
                                   value={dropdownVal}
                                   onChange={(v) => {
-                                    if (v === "__custom__") field.onChange("");
-                                    else field.onChange(v);
+                                    if (v === "__custom__") {
+                                      // Show the custom input without erasing the saved voice ID.
+                                      setVoiceCustomMode(true);
+                                      return;
+                                    }
+                                    setVoiceCustomMode(false);
+                                    field.onChange(v);
                                   }}
                                   placeholder="Select voice"
                                 />
