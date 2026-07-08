@@ -950,22 +950,24 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         // existingAgentRow was fetched at request start — reuse it here.
         const [row] = await (db.update(agentsTable) as any)
           .set({
-            name:              cfg.agentName,
-            asrLanguage:       langCode,
-            language:          langCode,
+            name:                     cfg.agentName,
+            asrLanguage:              langCode,
+            language:                 langCode,
             llmProvider,
             llmModel,
-            asrProvider:       (existingAgentRow?.asrProvider as string) ?? "sarvam",
-            asrModel:          (existingAgentRow?.asrModel as string) ?? "saaras:v3",
-            ttsProvider:       (existingAgentRow?.ttsProvider as string) ?? "cartesia",
-            ttsModel:          (existingAgentRow?.ttsModel as string) ?? "sonic-3.5",
-            telephonyProvider: (existingAgentRow?.telephonyProvider as string) ?? "vobiz",
-            ttsVoice:          finalVoiceId,
-            ttsVoiceName:      finalVoiceName,
+            asrProvider:              (existingAgentRow?.asrProvider as string) ?? "sarvam",
+            asrModel:                 (existingAgentRow?.asrModel as string) ?? "saaras:v3",
+            ttsProvider:              (existingAgentRow?.ttsProvider as string) ?? "cartesia",
+            ttsModel:                 (existingAgentRow?.ttsModel as string) ?? "sonic-3.5",
+            telephonyProvider:        (existingAgentRow?.telephonyProvider as string) ?? "vobiz",
+            ttsVoice:                 finalVoiceId,
+            ttsVoiceName:             finalVoiceName,
             systemPrompt,
             greetingMessage,
-            agentConfig:       agentConfig as any,
-            tools:             tools as any,
+            backchannelingEnabled:    true,
+            noiseCancellationEnabled: true,
+            agentConfig:              agentConfig as any,
+            tools:                    tools as any,
           })
           .where(and(eq(agentsTable.id, refineAgentId), eq(agentsTable.userId, clerkId)))
           .returning();
@@ -973,22 +975,24 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         insertedAgent = row;
       } else {
         const [row] = await db.insert(agentsTable).values({
-          userId:            clerkId,
-          name:              cfg.agentName,
-          asrProvider:       "sarvam",
-          asrModel:          "saaras:v3",
-          asrLanguage:       langCode,
-          language:          langCode,
+          userId:                   clerkId,
+          name:                     cfg.agentName,
+          asrProvider:              "sarvam",
+          asrModel:                 "saaras:v3",
+          asrLanguage:              langCode,
+          language:                 langCode,
           llmProvider,
           llmModel,
-          ttsProvider:       "cartesia",
-          ttsModel:          "sonic-3.5",
-          ttsVoice:          resolvedVoiceId,
-          telephonyProvider: "vobiz",
+          ttsProvider:              "cartesia",
+          ttsModel:                 "sonic-3.5",
+          ttsVoice:                 resolvedVoiceId,
+          telephonyProvider:        "vobiz",
           systemPrompt,
           greetingMessage,
-          agentConfig:       agentConfig as any,
-          tools:             tools as any,
+          backchannelingEnabled:    true,
+          noiseCancellationEnabled: true,
+          agentConfig:              agentConfig as any,
+          tools:                    tools as any,
         } as any).returning();
         insertedAgent = row;
       }

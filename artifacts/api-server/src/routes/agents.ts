@@ -183,6 +183,18 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  // Apply new-agent defaults for the four settings that must be ON by default.
+  // These only fire on the INSERT path (never on PATCH).
+  if (insertData["backchannelingEnabled"] == null) insertData["backchannelingEnabled"] = true;
+  if (insertData["noiseCancellationEnabled"] == null) insertData["noiseCancellationEnabled"] = true;
+  const insertAgentConfig = (insertData["agentConfig"] as Record<string, unknown> | null | undefined) ?? {};
+  if (insertAgentConfig["recordingEnabled"] == null) insertAgentConfig["recordingEnabled"] = true;
+  insertData["agentConfig"] = insertAgentConfig;
+  const insertTools = Array.isArray(insertData["tools"]) ? (insertData["tools"] as Record<string, unknown>[]) : [];
+  if (!insertTools.some((t) => t["type"] === "end_call")) {
+    insertData["tools"] = [{ type: "end_call", name: "end_call", description: "End the call when the conversation is complete." }, ...insertTools];
+  }
+
   // Guard: these columns are NOT NULL with no DB default — a missing value
   // would produce a cryptic Postgres error instead of a clear 400.
   const REQUIRED_FIELDS = ["asrProvider", "llmProvider", "ttsProvider", "telephonyProvider", "systemPrompt"] as const;
