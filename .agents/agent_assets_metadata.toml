@@ -252,3 +252,9 @@ id = "EHjTHHpVJbS-KMJNIpV8j"
 uri = "file://snapserve-openapi.yaml"
 type = "unspecified"
 title = "SnapServe OpenAPI Spec (download for Fern)"
+
+[[outputs]]
+id = "qMKt69nZToetk3dTgg_l2"
+uri = "file://.local/outputs/SnapServe-Antler-Hub-Pitch-Deck.pdf"
+type = "pdf"
+title = "SnapServe — Antler Hub Pitch Deck (PDF)"
