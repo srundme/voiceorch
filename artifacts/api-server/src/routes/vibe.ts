@@ -130,11 +130,12 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
 2. Company/brand name
 3. Language(s) the agent speaks — codes: ta-IN=Tamil, hi-IN=Hindi, te-IN=Telugu, kn-IN=Kannada, ml-IN=Malayalam, en-IN=English India, en-US=English US.
    This answer is OPTIONAL: if the user is unsure or wants to skip, keep the default language and set languageChosen=false (all voices will be shown later).
-   If they DO answer, set language=<primary code> and languageChosen=true. If they name several languages, put ALL of them (including the primary) in multilingualLanguages and set languageMode="multi".
-   The user can change or add languages at ANY time, including during voice selection — just update language/multilingualLanguages/languageChosen and the voice list refreshes automatically.
+   If they name exactly ONE language: set language=<its code> and languageChosen=true.
+   If they name TWO OR MORE languages in one answer: NEVER assume which is primary. Do NOT set language or languageChosen yet — keep languageChosen=false and treat item 3 as NOT collected. Ask a follow-up listing the languages they mentioned, e.g. "Which of these — Tamil, Hindi, or English — should be [name]'s primary language?" Only after they explicitly answer: set language=<the confirmed primary's code>, languageChosen=true, put ALL mentioned languages (including the primary) in multilingualLanguages, and set languageMode="multi".
+   The user can change or add languages at ANY time, including during voice selection — just update language/multilingualLanguages/languageChosen and the voice list refreshes automatically. If they name several languages at once during such a change, the same rule applies: ask which should be primary before changing language.
 4. Call direction: "inbound" (customers call in) or "outbound" (agent calls out). If the user says "both", "either", or it handles both scenarios — set direction="inbound" and note in description that it handles both inbound and outbound contexts.
 5. Purpose/description (what it does and who it talks to)
-→ Transition: once you have all 5, set phase="voice_selection"
+→ Transition: once you have all 5, set phase="voice_selection". EXCEPTION: if you asked which language should be primary and the user has not answered yet, item 3 is INCOMPLETE — stay in phase="core" and do NOT advance to voice_selection until the primary language is confirmed (or the user skips the language question entirely).
 
 PHASE "voice_selection"
 Voice cards are now shown directly in this chat — the user can preview and select one.
@@ -157,9 +158,10 @@ PHASE "knowledge_base"
 → Transition: set phase="multilingual"
 
 PHASE "multilingual"
-- Ask: "Should [name] handle multiple languages, or just [primary language]?"
+- If languageMode is ALREADY "multi" (languages + primary were confirmed earlier): do NOT re-ask or change the primary. Briefly confirm, e.g. "You've already set [name] up with [languages] ([primary] as primary) — want to add any more?" Only add languages if they name new ones.
+- Otherwise ask: "Should [name] handle multiple languages, or just [primary language]?"
 - If yes: ask which to add (Tamil/Hindi/Telugu/Kannada/Malayalam/English India/English US)
-- Set languageMode="multi" if more than 1; hasTamil=true if Tamil is primary or included
+- Set languageMode="multi" if more than 1; hasTamil=true if Tamil is primary or included. NEVER change the previously confirmed primary language here unless the user explicitly asks to.
 → Transition: set phase="features_gender"
 
 PHASE "features_gender"
