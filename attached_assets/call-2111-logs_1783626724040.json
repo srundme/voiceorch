@@ -1,0 +1,481 @@
+[
+  {
+    "id": 142379,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 36,
+      "agentName": "infant snapserve agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "krutrim",
+      "ttsProvider": "cartesia",
+      "ttsVoice": ""
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2111,
+      "sessionId": "live-2111",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-09T19:51:37.309Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 142381,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "कार्तिक",
+        "callCount": 9
+      },
+      "factCount": 0,
+      "facts": {},
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 142380,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN"
+    }
+  },
+  {
+    "id": 142382,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-36",
+        "from_number": "webcall-user-101122737730832668494",
+        "agent_name": "infant snapserve agent",
+        "caller_number": "webcall-user-101122737730832668494",
+        "date": "Thursday, July 9, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: कार्तिक  |  Calls: 9\n\nPrevious call summary: The agent and caller are discussing SnapServe, a topic they previously talked about. The agent asks if the caller wants to discuss it again. The caller responds with a vague affirmation.\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which may belong to a prev"
+    },
+    "metadata": null
+  },
+  {
+    "id": 142383,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "krutrim",
+      "model": "gemma-4-E4B-it"
+    }
+  },
+  {
+    "id": 142384,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "5627978d85db",
+      "promptLength": 7636,
+      "preview": "=== CALLER MEMORY ===\nName: कार्तिक  |  Calls: 9\n\nPrevious call summary: The agent and caller are discussing SnapServe, a topic they previously talked about. The agent asks if the caller wants to disc"
+    }
+  },
+  {
+    "id": 142385,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 142386,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:37.364Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": ""
+    }
+  },
+  {
+    "id": 142387,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:38.550Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "হাই कार्तिक, SnapServe নিয়ে কথা বলতে চাইছিলেন, আবার聊 করবো?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 142388,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:38.551Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 142389,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:39.019Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "turnNumber": 0,
+      "durationMs": 470
+    }
+  },
+  {
+    "id": 142390,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:45.552Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 76,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142391,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:45.867Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Bengali. Respond in Bengali. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Bengali, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142392,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.547Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1683,
+      "turnNumber": 1,
+      "durationMs": 1683
+    }
+  },
+  {
+    "id": 142393,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.676Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "হ্যাঁ, অবশ্যই!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142394,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.725Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142395,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.763Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "turnNumber": 1,
+      "durationMs": 36
+    }
+  },
+  {
+    "id": 142396,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.767Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "error",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "failed",
+        "reasonLabel": "Call failed due to an error",
+        "component": "TTS",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": "TTS error: Cartesia TTS stream error 400: {\"error_code\":null,\"message\":\"Your request was invalid: invalid voice specification: voice ID must not be empty\",\"title\":\"Invalid request\",\"request_id\":\"3acbb532-cb7e-4651-8408-9ff8acae322c\"}",
+        "expected": false,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Error",
+        "durationSeconds": 10,
+        "turns": 0,
+        "lastComponent": "TTS",
+        "lastUserTranscript": "Hello",
+        "lastAgentResponse": "হাই कार्तिक, SnapServe নিয়ে কথা বলতে চাইছিলেন, আবার聊 করবো?",
+        "recordingStatus": null,
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 10,
+      "turns": 0,
+      "errorMessage": "TTS error: Cartesia TTS stream error 400: {\"error_code\":null,\"message\":\"Your request was invalid: invalid voice specification: voice ID must not be empty\",\"title\":\"Invalid request\",\"request_id\":\"3acbb532-cb7e-4651-8408-9ff8acae322c\"}"
+    }
+  },
+  {
+    "id": 142398,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.802Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1683,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "হ্যাঁ, অবশ্যই! আপনি কি SnapServe নিয়ে আবার কথা বলতে চান?"
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142397,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.802Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "আপনি কি SnapServe নিয়ে আবার কথা বলতে চান?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142399,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.851Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 52,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 41,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 52
+    }
+  },
+  {
+    "id": 142400,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.853Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 142401,
+    "callId": 2111,
+    "agentId": 36,
+    "ts": "2026-07-09T19:51:47.853Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Cancelled",
+      "reason": "call_closed",
+      "audioDurationMs": 0,
+      "turnNumber": 1,
+      "durationMs": 1
+    }
+  }
+]

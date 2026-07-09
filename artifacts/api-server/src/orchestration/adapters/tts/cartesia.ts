@@ -75,7 +75,8 @@ export class CartesiaTTS implements TTSAdapter {
     speed?: number | null,
   ) {
     this.key = apiKey;
-    this.voiceId = voice ?? "2ee87190-8f84-4925-97da-e52547f9462c";
+    // Treat null, undefined, and empty string the same — fall back to Arushi.
+    this.voiceId = (voice && voice.trim()) ? voice : "2ee87190-8f84-4925-97da-e52547f9462c";
     this.speed = (speed != null && Number.isFinite(speed) && speed !== 1)
       ? Math.min(2, Math.max(0.5, speed))
       : null;
