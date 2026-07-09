@@ -1,0 +1,90 @@
+Good catches — both small, both worth locking down so nothing gets left to guesswork. Here's the final version with those two gaps closed.
+
+---
+
+**Task: Reduce false-positive name latching in callerMemory.ts**
+
+**File:** `artifacts/api-server/src/orchestration/callerMemory.ts` (`NAME_PATTERNS`, `isPlausibleName()`, `latchCallerName()`, ~lines 1283–1384; override guard ~line 1229)
+
+**Do not modify:** `caller_facts` schema, supersession logic, `loadCallerContext`, `updateCallerProfile` phases, episode/sentence storage, other latches (language, location, occupation), Tamil/Hindi self-introduction patterns, or the existing stricter "this is X" requirement (must be followed by speaking/calling/here).
+
+### Background
+`isPlausibleName()` already rejects most false positives (digits, >3 words, common stopwords, product vocabulary). One confirmed gap: "I am so confused" currently latches as the name "so confused" because "so" and "confused" aren't yet on the reject list. Additionally, a latched name always overrides the LLM-extracted name at call-end via a guard at ~line 1229 — this needs to become conditional, not unconditional.
+
+### Scope
+
+**1. Expand the existing stopword/blocklist in `isPlausibleName()`**
+Add: `so`, `confused`, `very`, `really` (check the current list first and only add what's missing — do not duplicate `just`, `also`, `still` if already present). Additive only — do not remove or restructure existing checks.
+
+**2. Add a next-token reject check**
+Reject the capture if the word immediately following the matched span is in this list:
+```
+['not', 'no', 'unable', 'unsure', 'just', 'really', 'so', 'very', 'still', 'also', 'trying', 'going', 'looking', 'calling']
+```
+Use this exact list — do not invent or substitute a different set.
+
+**3. Tier the trust of each match at the point of latch (in-memory only, no schema/DB changes):**
+- Tamil/Hindi patterns, "my name is X", "this is X [speaking/calling/here]" → **Tier A** (high trust)
+- "I am X" / "I'm X" → **Tier B** (low trust), only latched after passing the (now-expanded) `isPlausibleName()` checks and the next-token check above
+
+**4. Thread the tier flag to call-end (no new cache — use existing session variable)**
+Pass the tier (`'A'` or `'B'`) alongside the existing `callerNameLatchedThisCall` variable through to `updateCallerProfile`, the same way the name itself already travels via `callerNameInCall`.
+
+**5. Make the override guard conditional on tier — call-end only**
+At the identity-contamination guard (~line 1229):
+- Tier A → override behavior unchanged (latched name still wins over LLM extraction)
+- Tier B → skip the override; let the LLM-extracted name write through the existing Phase 3c path naturally
+
+**6. Mid-call behavior is unchanged for both tiers**
+The tier flag only affects the call-end override decision (point 5). It does not change how a latched name is used during the call itself — anywhere the in-session profile snapshot is read or displayed mid-call (e.g. for the agent to address the caller by name), a Tier B name is used exactly the same way a Tier A name is. This is by design: Tier B names are considered good enough to use live, just not trusted enough to permanently beat a full-transcript LLM read at call-end.
+
+**7. Dropped-call fallback needs no new storage**
+`latchCallerName` already writes the name to `caller_profiles.name` immediately and in real time. If a call drops before LLM extraction runs, the Tier B name is already persisted from that real-time write — this satisfies the fallback requirement with zero new persistence layers.
+
+**8. Testability**
+Export `isPlausibleName` and `NAME_PATTERNS` from the module (or provide a documented path to test them via `latchCallerName` with a mocked DB) so the regression suite below can run.
+
+**9. Deployment note**
+The API server runs from a prebuilt bundle — restart it after deploying this change before verifying behavior, or tests will run against stale code.
+
+### Explicit accepted trade-off (confirm before starting)
+Tier B latches lose the anti-contamination protection the override guard previously gave every latch. Today, the override guard exists because the transcript can contain the agent using a previously-stored wrong name, which the LLM's extraction step can end up "re-confirming" simply because it appears repeated in the conversation. By letting Tier B yield to the LLM at call-end, a genuinely correct Tier B latch (e.g. a real "I am Arjun" caller) could occasionally be overwritten if the LLM's extraction misreads the transcript. This is intentional: Tier B latches are inherently less reliable than Tier A, so trusting full-transcript LLM extraction over them on conflict is the right default. This does not affect Tier A latches, which keep full override protection unchanged in all cases.
+
+### Regression test suite
+
+Must be rejected (no latch):
+```
+"I am sorry"
+"I'm not able to help"
+"I am calling about my policy"
+"I'm trying to reach someone"
+"I am so confused right now"   -> currently latches as "so confused" — must be rejected after fix
+```
+
+Must still latch correctly (Tier A, byte-for-byte unchanged, including override priority):
+```
+"My name is Karthik"
+"This is Priya speaking"
+"என் பேர் Arjun"
+"मेरा नाम Divya"
+```
+
+Must latch as Tier B, usable mid-call, deferring to LLM extraction only at call-end on conflict:
+```
+"I am Arjun" + LLM extraction also says "Arjun"    -> final name = Arjun
+"I am Arjun" + LLM extraction says "Karthik"        -> final name = Karthik (Tier B overridden by LLM, per accepted trade-off)
+"I'm Divya" + call drops before extraction runs     -> final name = Divya (already persisted via real-time write, no override applies)
+```
+
+### Acceptance criteria
+- "I am so confused" no longer latches as a name.
+- All currently-working rejections continue to reject.
+- Tier A latch behavior and override priority are completely unchanged.
+- Tier B latches are usable mid-call exactly as before, but no longer permanently override a conflicting LLM-extracted name at call-end.
+- Tier B fallback works correctly across a dropped call, via the existing real-time write — no new cache or storage introduced.
+- `isPlausibleName` / `NAME_PATTERNS` are testable (exported or reachable via mocked-DB test).
+- API server bundle restarted post-deploy before verification.
+- No changes to `caller_facts`, `caller_profiles` schema, supersession logic, episode/sentence storage, or any other latch type.
+
+### Out of scope (noted separately, not part of this task)
+`replit.md` has grown large and could use trimming/reorganizing at some point — not urgent, not part of this fix.

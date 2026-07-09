@@ -16,9 +16,9 @@ import { toOpenAIMessages } from "./openai-messages.js";
  *   - gemma-4-E4B-it     — Gemma 4 4B MoE (ultra-fast)
  *   - gemma-4-31b-it     — Gemma 4 31B
  *   - gemma-4-26B-A4B-it — Gemma 4 26B MoE, 262k context
- *   - Qwen3.5-9B         — Qwen 3.5 thinking model (needs maxTokens ≥ 500 for voice)
- *   - Qwen3.6-27B        — Qwen 3.6 thinking model (needs maxTokens ≥ 500)
- *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE thinking model (needs maxTokens ≥ 500)
+ *   - Qwen3.5-9B         — Qwen 3.5 (thinking disabled via chat_template_kwargs)
+ *   - Qwen3.6-27B        — Qwen 3.6 (thinking disabled via chat_template_kwargs)
+ *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE (thinking disabled via chat_template_kwargs)
  */
 
 const DEFAULT_MODEL = "gpt-oss-20b";
@@ -30,19 +30,16 @@ const TOOL_CAPABLE_MODELS = new Set([
 ]);
 
 /**
- * Qwen3.5/3.6 thinking models: require a higher max_tokens floor so the
- * internal <think> block (which scales with prompt complexity) doesn't exhaust
- * the entire budget before the spoken reply is generated.
- * With a full production system prompt + tools the thinking block can easily
- * use 800–1200 tokens, leaving nothing for the response at a 500-token cap.
- * Floor raised to 1500 — any per-agent maxTokens setting below this is bumped.
+ * Qwen3.5/3.6 are thinking models by default on Krutrim.
+ * We disable thinking via chat_template_kwargs: { enable_thinking: false }
+ * so they behave as fast non-thinking models suitable for voice.
+ * (enable_thinking: false top-level param is ignored by Krutrim's API.)
  */
-const THINKING_MODELS = new Set([
+const NO_THINK_MODELS = new Set([
   "Qwen3.5-9B",
   "Qwen3.6-27B",
   "Qwen3.6-35B-A3B",
 ]);
-const THINKING_MIN_TOKENS = 1500;
 
 export class KrutrimLLM implements LLMAdapter {
   private client: OpenAI;
@@ -56,11 +53,7 @@ export class KrutrimLLM implements LLMAdapter {
       baseURL: "https://cloud.olakrutrim.com/v1",
     });
     this.model = model?.trim() || DEFAULT_MODEL;
-    // Thinking models need a higher floor so the internal <think> block doesn't
-    // exhaust the entire budget before the spoken reply. With a full production
-    // system prompt the think block can use 800–1200 tokens on its own.
-    const minForThinking = THINKING_MODELS.has(this.model) ? THINKING_MIN_TOKENS : 0;
-    this.maxTokens = Math.max(genParams?.maxTokens ?? 250, minForThinking);
+    this.maxTokens = genParams?.maxTokens ?? 250;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
   }
@@ -80,7 +73,7 @@ export class KrutrimLLM implements LLMAdapter {
   ): Promise<void> {
     const hasTools = TOOL_CAPABLE_MODELS.has(this.model) && (options?.tools?.length ?? 0) > 0;
 
-    const body: Parameters<typeof this.client.chat.completions.create>[0] = {
+    const body: Parameters<typeof this.client.chat.completions.create>[0] & Record<string, unknown> = {
       model: this.model,
       stream: true,
       messages: [
@@ -89,6 +82,9 @@ export class KrutrimLLM implements LLMAdapter {
       ],
       ...(this.maxTokens ? { max_tokens: this.maxTokens } : {}),
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      // Disable thinking for Qwen models — top-level enable_thinking is ignored
+      // by Krutrim; chat_template_kwargs is the only working knob (verified 2026-07-09).
+      ...(NO_THINK_MODELS.has(this.model) ? { chat_template_kwargs: { enable_thinking: false } } : {}),
     };
 
     if (hasTools && options?.tools) {
@@ -138,7 +134,7 @@ export class KrutrimLLM implements LLMAdapter {
       const token = delta.content;
       if (!token) continue;
 
-      // Strip Qwen3 thinking-mode delimiters and DeepSeek-R1 <think>…</think> blocks.
+      // Safety-net: strip any residual thinking delimiters.
       const cleaned = token
         .replace(/<\|(?:think|\/think)\|>/g, "")
         .replace(/<\/?think>/g, "");
