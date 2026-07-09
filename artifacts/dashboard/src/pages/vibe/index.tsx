@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
-  Building2, CheckCircle2, Loader2, ChevronLeft, Zap, UserCheck,
+  Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
+  PlusCircle, History,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,6 +43,15 @@ interface ChatMsg {
   timezonePicked?: boolean;      // collapses timezone picker after selection
   availabilityPicker?: boolean;  // inline availability preset picker
   availabilityPicked?: boolean;  // collapses availability picker after selection
+}
+
+interface SessionSummary {
+  id: number;
+  title: string;
+  agentId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
 }
 
 type Phase = "idle" | "thinking" | "streaming" | "building" | "done";
@@ -166,6 +176,11 @@ export default function VibePage() {
   const selectedVoiceIdRef = useRef<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const refineBaseRef = useRef<Record<string, unknown> | null>(null);
+  const activeSessionIdRef = useRef<number | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+  const [sessions, setSessions]               = useState<SessionSummary[]>([]);
+  const [sidebarOpen, setSidebarOpen]         = useState(true);
+  const [viewMode, setViewMode]               = useState<"editing" | "history">("editing");
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -189,8 +204,14 @@ export default function VibePage() {
       fetch(`/api/disposition/config/${refineId}`, {
         headers: { Authorization: `Bearer ${token ?? ""}` },
       }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`/api/vibe/sessions?agentId=${refineId}`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      }).then(r => r.ok ? r.json() : []).catch(() => []),
     ])
-      .then(([agent, dispositionsData]: [Record<string, unknown> | null, unknown]) => {
+      .then(([agent, dispositionsData, sessionList]: [Record<string, unknown> | null, unknown, SessionSummary[]]) => {
+        if (Array.isArray(sessionList) && sessionList.length > 0) {
+          setSessions(sessionList);
+        }
         if (!agent) return;
         const cfg = (agent.agentConfig ?? {}) as Record<string, unknown>;
         const lang = LANG_DISPLAY[agent.language as string ?? ""] ?? (agent.language as string) ?? "English";
@@ -422,7 +443,8 @@ export default function VibePage() {
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
-        || phaseRef.current === "streaming" || phaseRef.current === "done") return;
+        || phaseRef.current === "streaming" || phaseRef.current === "done"
+        || viewMode === "history") return;
 
     if (!overrideText) setInput("");
     if (refineId != null) setPromptPreview("");
@@ -434,6 +456,26 @@ export default function VibePage() {
 
     const history = [...historyRef.current, { role: "user" as const, content: text }];
     const token   = getToken();
+
+    // Create a new session on the first message of a new conversation
+    if (activeSessionIdRef.current === null) {
+      try {
+        const sResp = await fetch("/api/vibe/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ agentId: refineId ?? null, title: text.slice(0, 70) }),
+        });
+        if (sResp.ok) {
+          const sData = await sResp.json() as { id: number; title: string; agentId: number | null; createdAt: string };
+          activeSessionIdRef.current = sData.id;
+          setActiveSessionId(sData.id);
+          setSessions(prev => [{
+            id: sData.id, title: sData.title, agentId: sData.agentId,
+            createdAt: sData.createdAt, updatedAt: sData.createdAt, messageCount: 0,
+          }, ...prev]);
+        }
+      } catch { /* fire and forget */ }
+    }
 
     try {
       const resp = await fetch("/api/agents/vibe-chat", {
@@ -568,6 +610,14 @@ export default function VibePage() {
               setCreatedName(evt.agentName as string);
               setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
               queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
+              // Link the active session to the newly created agent (covers both new-agent and refine)
+              if (activeSessionIdRef.current !== null) {
+                fetch(`/api/vibe/sessions/${activeSessionIdRef.current}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getToken() ?? ""}` },
+                  body: JSON.stringify({ agentId: evt.agentId }),
+                }).catch(() => {});
+              }
               if (refineId != null) {
                 // Refine mode: fetch fresh state, sync preview + ref, then re-enable input.
                 fetch(`/api/agents/${evt.agentId as number}`, {
@@ -622,6 +672,22 @@ export default function VibePage() {
       historyRef.current = [...history, { role: "assistant", content: aiReply }];
       if (phaseRef.current !== "done") setPhase("idle");
 
+      // Fire-and-forget: save the completed user+assistant turn to the session
+      const sid = activeSessionIdRef.current;
+      if (sid !== null && aiReply) {
+        fetch(`/api/vibe/sessions/${sid}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ messages: [
+            { role: "user",      content: text },
+            { role: "assistant", content: aiReply },
+          ]}),
+        }).catch(() => {});
+        setSessions(prev => prev.map(s =>
+          s.id === sid ? { ...s, messageCount: s.messageCount + 2, updatedAt: new Date().toISOString() } : s,
+        ));
+      }
+
     } catch (err: unknown) {
       if ((err as Error).name === "AbortError") return;
       setMessages(prev => prev.map(m =>
@@ -629,7 +695,7 @@ export default function VibePage() {
       ));
       setPhase("idle");
     }
-  }, [input, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
+  }, [input, viewMode, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
       attachAvailabilityPickerToLastMsg, queryClient]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -654,8 +720,53 @@ export default function VibePage() {
     reader.readAsText(file);
   }, [send]);
 
+  const loadHistorySession = useCallback(async (id: number) => {
+    const token = getToken();
+    try {
+      const resp = await fetch(`/api/vibe/sessions/${id}/messages`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      });
+      if (!resp.ok) return;
+      const msgs = await resp.json() as { id: number; role: string; content: string; createdAt: string }[];
+      const chatMsgs: ChatMsg[] = msgs.map(m => ({
+        id: String(m.id),
+        role: m.role === "user" ? "user" : "ai",
+        content: m.content,
+        done: true,
+      }));
+      setMessages(chatMsgs.length > 0 ? chatMsgs : [{
+        id: "empty",
+        role: "ai",
+        content: "This session has no messages yet.",
+        done: true,
+      }]);
+      historyRef.current = msgs.map(m => ({
+        role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+        content: m.content,
+      }));
+      activeSessionIdRef.current = id;
+      setActiveSessionId(id);
+      setViewMode("history");
+    } catch { /* silently fail */ }
+  }, []);
+
+  const startNewChat = useCallback(() => {
+    activeSessionIdRef.current = null;
+    setActiveSessionId(null);
+    setViewMode("editing");
+    const agentName = (refineBaseRef.current?.agentName as string) ?? "your agent";
+    setMessages([{
+      id: uid(),
+      role: "ai",
+      done: true,
+      content: `I've loaded **${agentName}** — you can see the current setup on the right. What would you like to change?`,
+    }]);
+    historyRef.current = [];
+  }, []);
+
   const canSend = input.trim().length > 0
-    && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done";
+    && phase !== "building" && phase !== "thinking" && phase !== "streaming" && phase !== "done"
+    && viewMode === "editing";
 
   const hasRightContent = fields.length > 0 || selectedVoice.length > 0 || features.length > 0
     || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
@@ -795,6 +906,19 @@ export default function VibePage() {
       {chatStarted && (
         <div className="flex h-full animate-in fade-in duration-300">
 
+          {/* ── Sidebar: chat history — refine mode only ─────────────────── */}
+          {refineId != null && sessions.length > 0 && (
+            <VibeSidebar
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              viewMode={viewMode}
+              onSelectSession={loadHistorySession}
+              onNewChat={startNewChat}
+              open={sidebarOpen}
+              onToggle={() => setSidebarOpen(o => !o)}
+            />
+          )}
+
           {/* ── Left: Chat panel ─────────────────────────────────────────── */}
           <div className="flex flex-col w-[430px] min-w-[380px] border-r border-border/60 bg-background">
 
@@ -869,10 +993,25 @@ export default function VibePage() {
 
             {/* Input */}
             <div className="border-t border-border/60 px-4 py-3 shrink-0">
-              {inputBlock(false)}
-              <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
-                Enter to send · Shift+Enter for newline · 📎 to upload KB docs
-              </p>
+              {viewMode === "history" ? (
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-4 py-3 gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground truncate">Historical conversation · read only</p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg shrink-0"
+                    onClick={startNewChat}>
+                    <PlusCircle className="h-3 w-3" /> New Chat
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {inputBlock(false)}
+                  <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
+                    Enter to send · Shift+Enter for newline · 📎 to upload KB docs
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -1505,6 +1644,99 @@ function DoneCard({ name, id, navigate, isUpdate }: { name: string; id: number; 
           onClick={() => navigate(`/app/vibe?refine=${id}`)}>
           <Sparkles className="h-3.5 w-3.5" /> Refine with AI
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  VibeSidebar — chat history sidebar (refine mode only)                     */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function getRelativeTime(dateStr: string): string {
+  try {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  } catch { return ""; }
+}
+
+function VibeSidebar({
+  sessions, activeSessionId, viewMode, onSelectSession, onNewChat, open, onToggle,
+}: {
+  sessions: SessionSummary[];
+  activeSessionId: number | null;
+  viewMode: "editing" | "history";
+  onSelectSession: (id: number) => void;
+  onNewChat: () => void;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  if (!open) {
+    return (
+      <div className="flex flex-col items-center border-r border-border/60 bg-background pt-3 gap-2 w-10 shrink-0">
+        <button
+          onClick={onToggle}
+          title="Open chat history"
+          className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col w-[210px] shrink-0 border-r border-border/60 bg-background">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 h-14 border-b border-border/60 shrink-0">
+        <p className="text-xs font-semibold text-foreground">History</p>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={onNewChat}
+            title="New Chat"
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onToggle}
+            title="Collapse"
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      {/* Session list */}
+      <div className="flex-1 overflow-y-auto py-1.5">
+        {sessions.map(session => {
+          const isActive = session.id === activeSessionId;
+          const isViewing = isActive && viewMode === "history";
+          return (
+            <button
+              key={session.id}
+              onClick={() => onSelectSession(session.id)}
+              className={cn(
+                "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-l-2",
+                isViewing
+                  ? "bg-primary/8 border-primary"
+                  : isActive && viewMode === "editing"
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-transparent",
+              )}
+            >
+              <p className="text-xs font-medium truncate text-foreground leading-snug">{session.title}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{getRelativeTime(session.updatedAt)}</p>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

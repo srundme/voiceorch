@@ -160,6 +160,7 @@ export const agentsTable = pgTable("agents", {
   llmFallbackModel: text("llm_fallback_model"),
   ttsProvider: text("tts_provider").notNull(),
   ttsVoice: text("tts_voice"),
+  ttsVoiceName: text("tts_voice_name"),
   ttsModel: text("tts_model"),
   telephonyProvider: text("telephony_provider").notNull(),
   systemPrompt: text("system_prompt").notNull(),

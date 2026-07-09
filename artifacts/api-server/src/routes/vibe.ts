@@ -458,6 +458,48 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         if (agentRow) {
           existingAgentRow = agentRow as unknown as Record<string, unknown>;
           const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
+
+          // Fetch dispositions + scheduling calendar in parallel
+          const [dispositionRow, calendarRow] = await Promise.all([
+            db.select().from(agentDispositionsTable)
+              .where(eq(agentDispositionsTable.agentId, refineAgentId!))
+              .then(rows => rows[0] ?? null),
+            db.select().from(schedulingCalendarsTable)
+              .where(eq(schedulingCalendarsTable.agentId, refineAgentId!))
+              .then(rows => rows[0] ?? null),
+          ]);
+
+          // Scheduling sub-fields
+          let hostEmail       = "";
+          let availabilityDays: number[] = [1, 2, 3, 4, 5];
+          let availabilityStart = "09:00";
+          let availabilityEnd   = "17:00";
+          let availabilitySet   = false;
+
+          if (calendarRow) {
+            hostEmail = calendarRow.hostEmail ?? "";
+            const scheduleRows = await db.select().from(availabilitySchedulesTable)
+              .where(and(
+                eq(availabilitySchedulesTable.calendarId, calendarRow.id),
+                eq(availabilitySchedulesTable.isActive, true),
+              ));
+            if (scheduleRows.length > 0) {
+              availabilityDays  = scheduleRows.map(r => r.dayOfWeek);
+              availabilityStart = scheduleRows[0]!.startTime;
+              availabilityEnd   = scheduleRows[0]!.endTime;
+              availabilitySet   = true;
+            }
+          }
+
+          // Dispositions
+          const serverDispositions: VibeDisposition[] = dispositionRow?.taxonomy
+            ? Object.entries(dispositionRow.taxonomy as Record<string, string[]>)
+                .map(([category, outcomes]) => ({
+                  category,
+                  outcomes: Array.isArray(outcomes) ? outcomes : [],
+                }))
+            : [];
+
           // Voicemail: normalize BOTH stored shapes the same way the runtime does
           // (legacy boolean `voicemailDetection` OR the edit-page enum `machineDetectionMode`).
           const voicemailOn = resolveAmdConfig(acfg).enabled;
@@ -472,6 +514,15 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           const transferNumber =
             (existingTransferTool?.["transferTo"] as string) ||
             (acfg.transferPhoneNumber as string) || "";
+
+          const systemPromptStr = String(agentRow.systemPrompt ?? "");
+          if (systemPromptStr.length > 80000) {
+            logger.warn(
+              { evt: "vibe_refine_large_prompt", agentId: refineAgentId, chars: systemPromptStr.length },
+              "vibe-chat: agent system prompt exceeds 80 000 chars; injecting full prompt but may impact Gemini context",
+            );
+          }
+
           serverSideRefineConfig = {
             agentName:              agentRow.name,
             companyName:            acfg.companyName ?? "",
@@ -484,7 +535,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             direction:              acfg.direction ?? "inbound",
             description:            agentRow.description ?? "",
             voiceId:                agentRow.ttsVoice ?? "",
-            voiceName:              "",
+            voiceName:              String(agentRow.ttsVoiceName ?? ""),
             callFlowNotes:          acfg.callFlowNotes ?? agentRow.description ?? "",
             knowledgeBaseNotes:     acfg.knowledgeBaseNotes ?? "",
             genderDetectionEnabled: !!acfg.genderDetectionEnabled,
@@ -498,8 +549,15 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             schedulingEnabled:      !!acfg.schedulingEnabled,
             timezone:               acfg.timezone ?? "Asia/Kolkata",
             timezoneSet:            !!acfg.timezone,
+            hostEmail,
+            hostEmailSet:           !!hostEmail,
+            availabilityDays,
+            availabilityStart,
+            availabilityEnd,
+            availabilitySet,
             compliance:             acfg.compliance ?? { dpdp: false, trai: false, irdai: false },
-            systemPrompt:           String(agentRow.systemPrompt ?? "").slice(0, 15000),
+            dispositions:           serverDispositions,
+            systemPrompt:           systemPromptStr.slice(0, 100000),
             greetingMessage:        agentRow.greetingMessage ?? "",
           };
         }
@@ -525,7 +583,14 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // Fall back to client-supplied refineBaseConfig only if DB fetch failed.
     const refineContextSource = serverSideRefineConfig ?? refineBaseConfig;
     if (isRefine && refineContextSource) {
-      const existingJson = JSON.stringify(refineContextSource, null, 2).slice(0, 20000);
+      const existingJsonFull = JSON.stringify(refineContextSource, null, 2);
+      if (existingJsonFull.length > 80000) {
+        logger.warn(
+          { evt: "vibe_refine_preamble_large", chars: existingJsonFull.length },
+          "vibe-chat: refine preamble JSON exceeds 80 000 chars; passing in full to Gemini",
+        );
+      }
+      const existingJson = existingJsonFull;
       const refineBlock = [
         `[REFINE MODE — you are editing an EXISTING agent, NOT building a new one]`,
         `Current agent configuration (carry all unchanged fields forward exactly):`,
