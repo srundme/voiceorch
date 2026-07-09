@@ -215,28 +215,12 @@ function TopbarUser() {
 }
 
 /* ─── Topbar ─────────────────────────────────────────────────────────────── */
-function Topbar({ location, onSearchOpen }: { location: string; onSearchOpen: () => void }) {
+function Topbar({ location }: { location: string }) {
   return (
     <div className="shrink-0 h-[50px] flex items-center justify-between px-5 border-b border-border bg-background gap-4">
       <span className="text-[13px] font-semibold text-foreground/70 truncate">{getPageTitle(location)}</span>
 
       <div className="flex items-center gap-1">
-        {/* Search */}
-        <button
-          onClick={onSearchOpen}
-          className="hidden sm:flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors border border-transparent hover:border-border mr-1"
-        >
-          <Search className="w-3.5 h-3.5 shrink-0" />
-          <span>Search</span>
-          <kbd className="ml-1 text-[9px] font-medium px-1.5 py-0.5 rounded border border-border bg-elevated text-muted-foreground/50">⌘K</kbd>
-        </button>
-        <button
-          onClick={onSearchOpen}
-          className="sm:hidden p-2 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <Search className="w-[15px] h-[15px]" />
-        </button>
-
         <WalletChip />
         <BellButton />
         <TopbarUser />
@@ -507,7 +491,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[50px] md:pt-0">
         {/* Topbar — desktop only */}
         <div className="hidden md:block">
-          <Topbar location={location} onSearchOpen={() => setSearchOpen(true)} />
+          <Topbar location={location} />
         </div>
 
         {/* Scrollable content */}

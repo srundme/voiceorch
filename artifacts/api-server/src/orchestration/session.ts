@@ -2370,6 +2370,27 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           logger.warn({ sessionId, dispErr }, "Post-call taxonomy disposition failed");
         });
 
+        // ── Zelto call monitoring (fire-and-forget) ───────────────────────────
+        import("../services/zelto.js").then(({ pushCallToZelto }) => {
+          pushCallToZelto({
+            callId:             session.callId,
+            agentId:            ag.id,
+            agentName:          ag.name,
+            status:             callStatus,
+            direction:          (call as any).direction ?? "inbound",
+            fromNumber:         call.fromNumber ?? null,
+            toNumber:           call.toNumber ?? null,
+            durationSeconds,
+            transcript:         transcript || null,
+            callSummary:        callSummary || null,
+            dispositionResult,
+            avgSttLatencyMs:    avgSttMs,
+            avgLlmLatencyMs:    avgLlmMs,
+            avgTtsLatencyMs:    avgTtsMs,
+            endedAt:            endedAt.toISOString(),
+          }).catch((err) => logger.warn({ sessionId, err }, "Zelto push failed (session)"));
+        }).catch(() => {});
+
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {
           const wasDropped =
