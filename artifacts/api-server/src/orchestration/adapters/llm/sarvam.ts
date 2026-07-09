@@ -345,14 +345,18 @@ export class SarvamLLM implements LLMAdapter {
     // (thinking off) the model defaults to text replies and skips tool calls.
     //
     // Model-specific budget for tool turns (agent-level override still respected):
-    //   sarvam-30b  → "medium": 30b with "low" still asks for confirmation before
-    //                 calling; "medium" gives enough budget to call immediately.
-    //   sarvam-105b → "low":    105b with "medium" reasoning generates thousands of
+    //   sarvam-30b  → "low": keeps the budget small so the model doesn't exhaust
+    //                 all reasoning tokens on conversational turns and return an
+    //                 EMPTY response (silent turn). Previously "medium" but that
+    //                 caused 3+ consecutive silent turns (500+ reasoning tokens,
+    //                 zero output). The TOOL USE — MANDATORY system-prompt injection
+    //                 below compensates for any tendency to ask confirmation first.
+    //   sarvam-105b → "low": 105b with "medium" reasoning generates thousands of
     //                 reasoning tokens and produces an EMPTY final response, causing
     //                 10–15 s silent turns. 105b is powerful enough at "low" to call
     //                 tools correctly without over-reasoning.
     if (hasTools && genBody["reasoning_effort"] === null) {
-      genBody["reasoning_effort"] = this.model === "sarvam-105b" ? "low" : "medium";
+      genBody["reasoning_effort"] = "low";
     }
 
     // Sarvam-specific tool-use injection: placed at the very top of the system
