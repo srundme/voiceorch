@@ -70,7 +70,7 @@ function accentFlagEmoji(accent: string): string {
 }
 
 const METADATA_PILL_CLASS =
-  "h-5 min-w-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] leading-none";
+  "h-5 px-1.5 inline-flex items-center justify-center gap-1 rounded-full text-[10px] font-medium leading-none";
 
 function loadFavorites(): Set<string> {
   try {
@@ -353,20 +353,21 @@ export default function VoicesPage() {
                       />
                       <div className="min-w-0 flex-1 pt-0.5">
                         <p className="text-sm font-semibold text-foreground truncate">{voice.name}</p>
-                        <div className="flex items-center gap-2.5 mt-1 flex-wrap">
-                          <Badge
-                            variant="outline"
-                            className={cn(METADATA_PILL_CLASS, "font-mono font-semibold text-foreground uppercase")}
-                          >
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <Badge variant="outline" className={cn(METADATA_PILL_CLASS, "uppercase")}>
                             {voice.language.toUpperCase()}
+                          </Badge>
+                          <Badge variant="outline" className={METADATA_PILL_CLASS}>
+                            <User className="h-2.5 w-2.5" />
+                            {gender}
                           </Badge>
                           <Badge
                             variant="outline"
                             className={METADATA_PILL_CLASS}
-                            title={gender}
-                            aria-label={gender}
+                            title={accent}
+                            aria-label={accent}
                           >
-                            <User className="h-2.5 w-2.5" />
+                            {accentFlagEmoji(accent)}
                           </Badge>
                         </div>
                       </div>
@@ -390,14 +391,6 @@ export default function VoicesPage() {
                         )}
                       >
                         {voice.isListed ? "Listed" : "Available"}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={METADATA_PILL_CLASS}
-                        title={accent}
-                        aria-label={accent}
-                      >
-                        {accentFlagEmoji(accent)}
                       </Badge>
                     </div>
 
