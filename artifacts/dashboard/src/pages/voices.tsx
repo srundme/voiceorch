@@ -364,8 +364,8 @@ export default function VoicesPage() {
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5">
                         <p className="text-sm font-semibold text-foreground truncate">{voice.name}</p>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                        <div className="flex items-center gap-2.5 mt-1 flex-wrap">
+                          <Badge variant="outline" className="text-[13px] px-1.5 py-0 font-mono font-semibold text-foreground">
                             {voice.language}
                           </Badge>
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
