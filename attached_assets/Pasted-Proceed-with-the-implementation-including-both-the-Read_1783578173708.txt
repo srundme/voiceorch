@@ -1,0 +1,36 @@
+Proceed with the implementation, including both the Read-Only Vibe Chat History feature and the identified serverSideRefineConfig completeness fixes.
+
+Before implementing chat history, ensure every New Chat receives the complete latest agent state required by Vibe Builder.
+
+Include these context fixes:
+- Load existing dispositions from the correct dispositions table.
+- Load scheduling host email and availability details from the existing scheduling tables.
+- Include hostEmail, hostEmailSet, availabilityDays, availabilityStart, availabilityEnd, and availabilitySet.
+- Use the actual persisted voice name instead of an empty value.
+- Review the 15,000-character system prompt truncation and use a safe approach that does not prevent surgical editing of content outside the visible range.
+
+Then implement the approved Vibe Chat History behavior:
+
+- Show previous Vibe conversations in a conversation sidebar/history section.
+- Historical conversations are strictly read-only.
+- Opening a historical chat displays its messages but does not allow typing or sending messages.
+- Provide a clear New Chat action.
+- Every New Chat starts with empty conversation history but receives the latest complete persisted agent state as authoritative context.
+- Do not inject historical chat messages into a New Chat's LLM context.
+- Save each new Vibe conversation as a separate session.
+- Persist user and assistant messages as the conversation progresses.
+- Link Vibe-created agent conversations to the created agent ID.
+- All previous successfully applied agent changes must be known through the latest persisted agent configuration, not through old chat history.
+
+Important:
+Do not change existing Vibe prompt-editing behavior, surgical refinement logic, new-agent creation flow, calling pipelines, or unrelated agent configurations.
+
+After implementation, provide:
+1. Files changed.
+2. Database tables and migration added.
+3. API routes added.
+4. How historical chats are made read-only.
+5. How New Chat gets the latest agent state.
+6. How dispositions and scheduling context are loaded.
+7. How session messages are persisted.
+8. Test results for manually created agents and Vibe-created agents.
