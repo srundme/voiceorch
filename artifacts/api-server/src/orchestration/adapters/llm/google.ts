@@ -342,13 +342,25 @@ export class GoogleLLM implements LLMAdapter {
     const functionCalls = response.functionCalls();
 
     const meta = response.usageMetadata;
+    const metaAny = meta as Record<string, number | undefined> | undefined;
+    // thoughtsTokenCount is non-zero when the model thinks despite thinkingBudget:0 —
+    // most commonly seen on Gemini 2.5 Flash-Lite for Tamil/Indic inputs where the model
+    // ignores the budget and adds ~5–7 s of silent reasoning to the TTFT. Log it so the
+    // caller can detect and alert on this condition.
+    const thoughtTokens = metaAny?.thoughtsTokenCount ?? 0;
+    if (thoughtTokens > 0) {
+      logger.warn(
+        { model: this.model, thoughtTokens, evt: "gemini_unexpected_thinking" },
+        "Gemini returned thought tokens despite thinkingBudget:0 — adds latency for Indic inputs"
+      );
+    }
     const usage: LLMUsage | undefined = meta
       ? {
           inputTokens: meta.promptTokenCount ?? 0,
           outputTokens: meta.candidatesTokenCount ?? 0,
           // Populated on both the explicit-cache path and Gemini implicit caching,
           // so the pipeline's "LLM prompt cache" instrumentation reflects hits.
-          cachedTokens: (meta as { cachedContentTokenCount?: number }).cachedContentTokenCount ?? 0,
+          cachedTokens: metaAny?.cachedContentTokenCount ?? 0,
         }
       : undefined;
 
