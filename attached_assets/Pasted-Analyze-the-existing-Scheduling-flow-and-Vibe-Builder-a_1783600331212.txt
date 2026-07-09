@@ -1,0 +1,30 @@
+Analyze the existing Scheduling flow and Vibe Builder architecture. Do not implement or change any code yet.
+
+Goal:
+When Vibe Builder detects that an agent needs scheduling or appointment-booking tools, we want to reuse the existing Scheduling setup UI instead of recreating the same forms inside Vibe chat.
+
+Expected flow:
+Vibe Builder → identify required scheduling setup → open the existing relevant setup UI as a popup/modal → user completes the step → close popup and return to the same Vibe conversation → verify completion from backend state → Vibe tells the user the next required step.
+
+For example:
+Connect Google Account → return to Vibe → configure next required prerequisite → return to Vibe → create Event Type → return to Vibe → continue until setup is complete.
+
+Please inspect and report only:
+
+1. What is the actual dependency order between Google Account, Calendar, Availability, Event Type, and Conferencing?
+2. Which existing frontend components/pages handle each step?
+3. Can those existing components be reused inside a popup/modal in Vibe Builder without recreating them?
+4. How does Google OAuth currently work, and how can the user safely return to the same Vibe conversation after connection?
+5. How can Vibe verify from backend state that each step is actually completed?
+6. How are multiple Google accounts handled when creating Calendar/Event Type configurations?
+7. What scheduling questions does Vibe currently ask that would become unnecessary if we reuse the existing setup UI?
+8. What is the smallest and quickest safe implementation approach?
+9. Which exact files would need changes?
+
+Important:
+- Audit only. Do not write code.
+- Do not create new Scheduling forms.
+- Do not duplicate OAuth, Calendar, Availability, Event Type, or Conferencing logic.
+- Prefer reusing existing components in a popup/modal.
+- Preserve the same Vibe chat and agent state after every popup closes.
+- Do not change existing Scheduling pages or unrelated agent/call behavior.

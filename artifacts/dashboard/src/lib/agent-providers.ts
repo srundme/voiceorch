@@ -51,7 +51,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   together: [
     { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — fast, low cost (recommended)" },
     { value: "Qwen/Qwen3.5-397B-A17B", label: "Qwen3.5 397B-A17B — best quality, agentic use" },
-    { value: "MiniMaxAI/MiniMax-M3",   label: "MiniMax M3 — multilingual, strong Tamil/Indic (BYOP)" },
+    { value: "MiniMaxAI/MiniMax-M3",   label: "MiniMax M3 — multilingual, strong Tamil/Indic" },
   ],
   openrouter: [
     { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, ~$0.0023/min (recommended, fastest)" },
