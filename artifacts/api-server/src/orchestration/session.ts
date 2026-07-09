@@ -753,6 +753,13 @@ export async function createSession(params: {
     // overrides the default for ALL providers. Truncation is on a newline boundary
     // when possible so an entry is not cut mid-sentence.
     const KB_INJECT_DEFAULT_GEMINI_CHARS = 8000;
+    // Default for all non-Gemini providers: 4000 chars. Voice agents don't benefit
+    // from dumping the entire KB into the static prompt — per-turn retrieval
+    // (retrieveKbContextMulti) still injects the relevant slice every turn, so the
+    // baked full-document is largely redundant. Capping here reduces prefill cost for
+    // small/fast models (Krutrim, Groq, Sarvam, etc.) and lowers TTFT noticeably.
+    // Override for ALL providers at once via KB_INJECT_MAX_CHARS env var.
+    const KB_INJECT_DEFAULT_ALL_CHARS = 4000;
     const isGeminiAgent = agent.llmProvider?.toLowerCase() === "google";
     const kbMaxEnv = process.env["KB_INJECT_MAX_CHARS"];
     const kbMaxChars =
@@ -760,7 +767,7 @@ export async function createSession(params: {
         ? Number.parseInt(kbMaxEnv, 10)
         : isGeminiAgent
           ? KB_INJECT_DEFAULT_GEMINI_CHARS
-          : 0;
+          : KB_INJECT_DEFAULT_ALL_CHARS;
     let kbInjectText = kbEntriesResult;
     if (Number.isFinite(kbMaxChars) && kbMaxChars > 0 && kbInjectText.length > kbMaxChars) {
       const nlBoundary = kbInjectText.lastIndexOf("\n", kbMaxChars);
