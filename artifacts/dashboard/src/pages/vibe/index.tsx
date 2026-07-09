@@ -233,6 +233,19 @@ export default function VibePage() {
           if (cards.length) setDispositions(cards);
         }
 
+        // Voicemail: normalize both stored shapes (legacy `voicemailDetection`
+        // boolean OR the edit-page `machineDetectionMode` enum) — same as runtime.
+        const mdm = String(cfg.machineDetectionMode ?? "").toLowerCase();
+        const voicemailOn = cfg.voicemailDetection === true
+          || mdm === "enable" || mdm === "detect_message_end" || mdm === "detectmessageend";
+        // Call transfer: the edit page represents transfer as a `call_transfer`
+        // tool in agent.tools — read that first, fall back to agentConfig fields.
+        const agentToolsArr = Array.isArray(agent.tools) ? (agent.tools as Record<string, unknown>[]) : [];
+        const existingTransferTool = agentToolsArr.find(t => t?.type === "call_transfer");
+        const transferOn = !!existingTransferTool || !!cfg.callTransferEnabled;
+        const transferNumber = (existingTransferTool?.transferTo as string) || (cfg.transferPhoneNumber as string) || "";
+        const transferPersonName = (existingTransferTool?.transferName as string) || (cfg.transferName as string) || "";
+
         // Pre-populate features
         const schedulingOn = !!(cfg.schedulingEnabled);
         const complianceFlags = cfg.compliance as Record<string, boolean> | undefined;
@@ -246,15 +259,15 @@ export default function VibePage() {
           },
           {
             key: "call_transfer", label: "Call Transfer to Human", icon: "phone-forwarded",
-            enabled: !!(cfg.callTransferEnabled),
-            detail: cfg.callTransferEnabled
-              ? `→ ${(cfg.transferName as string) || "Human Agent"} · ${(cfg.transferPhoneNumber as string) || ""}`
+            enabled: transferOn,
+            detail: transferOn
+              ? `→ ${transferPersonName || "Human Agent"} · ${transferNumber}`
               : "Disabled",
           },
           {
             key: "voicemail", label: "Voicemail", icon: "voicemail",
-            enabled: !!(cfg.voicemailDetection),
-            detail: cfg.voicemailDetection
+            enabled: voicemailOn,
+            detail: voicemailOn
               ? ((cfg.voicemailMessage as string) ? `"${(cfg.voicemailMessage as string).slice(0, 50)}${(cfg.voicemailMessage as string).length > 50 ? "…" : ""}"` : "Enabled")
               : "Disabled",
           },
@@ -305,10 +318,10 @@ export default function VibePage() {
           genderDetectionEnabled: !!cfg.genderDetectionEnabled,
           maleSalutation:         (cfg.genderDetectionMaleSalutation as string) || "Sir",
           femaleSalutation:       (cfg.genderDetectionFemaleSalutation as string) || "Ma'am",
-          callTransferEnabled:    !!cfg.callTransferEnabled,
-          transferPhoneNumber:    cfg.transferPhoneNumber ?? "",
-          transferName:           cfg.transferName ?? "",
-          voicemailEnabled:       !!(cfg.voicemailDetection),
+          callTransferEnabled:    transferOn,
+          transferPhoneNumber:    transferNumber,
+          transferName:           transferPersonName,
+          voicemailEnabled:       voicemailOn,
           voicemailMessage:       cfg.voicemailMessage ?? "",
           schedulingEnabled:      !!cfg.schedulingEnabled,
           timezone:               cfg.timezone ?? "Asia/Kolkata",

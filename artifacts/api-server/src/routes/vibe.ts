@@ -10,6 +10,7 @@ import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
 import { getActiveLayer } from "../services/system-prompt-template.js";
+import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 
 const router = Router();
 
@@ -457,6 +458,20 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         if (agentRow) {
           existingAgentRow = agentRow as unknown as Record<string, unknown>;
           const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
+          // Voicemail: normalize BOTH stored shapes the same way the runtime does
+          // (legacy boolean `voicemailDetection` OR the edit-page enum `machineDetectionMode`).
+          const voicemailOn = resolveAmdConfig(acfg).enabled;
+          // Call transfer: the edit page represents transfer purely as a `call_transfer`
+          // tool in agent.tools — read that first, fall back to the vibe-written
+          // agentConfig fields for older vibe-created agents.
+          const existingToolsArr = Array.isArray(agentRow.tools)
+            ? (agentRow.tools as unknown as Record<string, unknown>[])
+            : [];
+          const existingTransferTool = existingToolsArr.find(t => t?.["type"] === "call_transfer");
+          const transferOn = !!existingTransferTool || !!acfg.callTransferEnabled;
+          const transferNumber =
+            (existingTransferTool?.["transferTo"] as string) ||
+            (acfg.transferPhoneNumber as string) || "";
           serverSideRefineConfig = {
             agentName:              agentRow.name,
             companyName:            acfg.companyName ?? "",
@@ -475,10 +490,10 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             genderDetectionEnabled: !!acfg.genderDetectionEnabled,
             maleSalutation:         (acfg.genderDetectionMaleSalutation as string) || "Sir",
             femaleSalutation:       (acfg.genderDetectionFemaleSalutation as string) || "Ma'am",
-            callTransferEnabled:    !!acfg.callTransferEnabled,
-            transferPhoneNumber:    acfg.transferPhoneNumber ?? "",
-            transferName:           acfg.transferName ?? "",
-            voicemailEnabled:       !!acfg.voicemailDetection,
+            callTransferEnabled:    transferOn,
+            transferPhoneNumber:    transferNumber,
+            transferName:           (existingTransferTool?.["transferName"] as string) || (acfg.transferName as string) || "",
+            voicemailEnabled:       voicemailOn,
             voicemailMessage:       acfg.voicemailMessage ?? "",
             schedulingEnabled:      !!acfg.schedulingEnabled,
             timezone:               acfg.timezone ?? "Asia/Kolkata",
@@ -729,6 +744,18 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       return;
     }
 
+    // Call transfer enabled but no phone number captured — ask for it instead of
+    // silently saving nothing. The next turn (with the number) will build normally.
+    if (cfg.callTransferEnabled && !String(cfg.transferPhoneNumber ?? "").trim()) {
+      const ask = "\n\nOne thing before I save — call transfer is enabled, but I don't have a phone number to transfer calls to yet. What number should I use? (Include the country code, e.g. +91XXXXXXXXXX.)";
+      for (const ch of ask) {
+        emit({ type: "text", delta: ch });
+        await sleep(10);
+      }
+      res.end();
+      return;
+    }
+
     // ── Build phase ──────────────────────────────────────────────────────────
     await sleep(400);
     emit({ type: "status", message: "Generating system prompt…" });
@@ -849,10 +876,34 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       agentConfig.genderDetectionMaleSalutation   = cfg.maleSalutation   || "Sir";
       agentConfig.genderDetectionFemaleSalutation = cfg.femaleSalutation || "Ma'am";
     }
+    // Pre-existing agentConfig (refine mode only) — used to preserve edit-page
+    // voicemail choices and to merge instead of clobbering unrelated keys.
+    const existingAcfg: Record<string, unknown> = isRefine
+      ? ((existingAgentRow?.agentConfig ?? {}) as Record<string, unknown>)
+      : {};
     if (cfg.voicemailEnabled) {
+      // Write the canonical UI shape (machineDetectionMode) so the builder/edit
+      // Voicemail tab reflects it; keep the legacy boolean for backward compat.
       agentConfig.voicemailDetection = true;
-      agentConfig.voicemailAction    = "leave_message";
-      agentConfig.voicemailMessage   = cfg.voicemailMessage || "";
+      const existingMode = String(existingAcfg["machineDetectionMode"] ?? "");
+      agentConfig.machineDetectionMode =
+        existingMode && existingMode !== "disabled" ? existingMode : "detect_message_end";
+      const existingAction = String(existingAcfg["voicemailAction"] ?? "");
+      if (cfg.voicemailMessage) {
+        agentConfig.voicemailAction  = "leave_message";
+        agentConfig.voicemailMessage = cfg.voicemailMessage;
+      } else if (isRefine && existingAction) {
+        // Refine with no message captured — keep the edit-page action untouched.
+        agentConfig.voicemailAction = existingAction;
+      } else {
+        agentConfig.voicemailAction  = "leave_message";
+        agentConfig.voicemailMessage = "";
+      }
+    } else if (isRefine) {
+      // User explicitly has voicemail off in refine — write the disable in both
+      // shapes so the merge below doesn't resurrect a previously-enabled state.
+      agentConfig.voicemailDetection   = false;
+      agentConfig.machineDetectionMode = "disabled";
     }
     if (cfg.schedulingEnabled) {
       agentConfig.schedulingGuardrails = true;
@@ -861,6 +912,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       agentConfig.callTransferEnabled = true;
       agentConfig.transferPhoneNumber = cfg.transferPhoneNumber;
       agentConfig.transferName        = cfg.transferName || "Human Agent";
+    } else if (isRefine) {
+      // Transfer off in refine — disable explicitly so the merge doesn't keep it on.
+      agentConfig.callTransferEnabled = false;
     }
     const comp = cfg.compliance ?? { dpdp: false, trai: false, irdai: false };
     if (comp.dpdp || comp.trai || comp.irdai) {
@@ -904,15 +958,25 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     const tools: Record<string, unknown>[] = [];
     // End-call tool: always enabled so agent can gracefully end calls
     tools.push({ type: "end_call", name: "end_call", description: "End the call when the conversation is complete." });
-    // Call-transfer tool: added when transfer was configured
+    // Call-transfer tool: added when transfer was configured. In refine mode,
+    // preserve the fields of an existing call_transfer tool (name, mode, custom
+    // description) and only update the destination number.
     if (cfg.callTransferEnabled && cfg.transferPhoneNumber) {
-      tools.push({
-        type: "call_transfer",
-        name: "transfer_to_human",
-        description: `Transfer the call to ${cfg.transferName || "a human agent"} when the caller requests it or you cannot resolve their issue.`,
-        transferTo: cfg.transferPhoneNumber,
-        transferMode: "cold",
-      });
+      const existingToolsForTransfer = isRefine && Array.isArray(existingAgentRow?.tools)
+        ? (existingAgentRow!.tools as Record<string, unknown>[])
+        : [];
+      const existingTransferTool = existingToolsForTransfer.find(t => t?.["type"] === "call_transfer");
+      if (existingTransferTool) {
+        tools.push({ ...existingTransferTool, transferTo: cfg.transferPhoneNumber });
+      } else {
+        tools.push({
+          type: "call_transfer",
+          name: "transfer_to_human",
+          description: `Transfer the call to ${cfg.transferName || "a human agent"} when the caller requests it or you cannot resolve their issue.`,
+          transferTo: cfg.transferPhoneNumber,
+          transferMode: "cold",
+        });
+      }
     }
     // Scheduling tools: added when scheduling was enabled
     const agentTimezone = cfg.timezone || "Asia/Kolkata";
@@ -944,6 +1008,27 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       ? (cfg.voiceName || existingTtsVoiceName || resolvedVoiceName)
       : resolvedVoiceName;
 
+    // Refine mode: merge the vibe-built agentConfig into the existing one instead
+    // of replacing it wholesale — pre-existing keys the vibe flow doesn't manage
+    // (advanced settings, webhook secret, barge-in tuning, …) are preserved
+    // exactly. Same for tools: keep every existing tool untouched, reconcile only
+    // the call_transfer tool, and add vibe-built tools that don't already exist.
+    let agentConfigToSave: Record<string, unknown> = agentConfig;
+    let toolsToSave: Record<string, unknown>[] = tools;
+    if (isRefine && existingAgentRow) {
+      agentConfigToSave = { ...existingAcfg, ...agentConfig };
+      const existingTools = Array.isArray(existingAgentRow.tools)
+        ? (existingAgentRow.tools as Record<string, unknown>[])
+        : [];
+      // Drop the existing call_transfer tool — it is reconciled from the vibe
+      // build (re-added when transfer is enabled, removed when disabled).
+      const keptTools = existingTools.filter(t => t?.["type"] !== "call_transfer");
+      const addedTools = tools.filter(t =>
+        t["type"] === "call_transfer" || !keptTools.some(e => e?.["type"] === t["type"])
+      );
+      toolsToSave = [...keptTools, ...addedTools];
+    }
+
     try {
       if (isRefine) {
         // Refine mode: update the existing agent (scoped to this user for security).
@@ -966,8 +1051,8 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             greetingMessage,
             backchannelingEnabled:    true,
             noiseCancellationEnabled: true,
-            agentConfig:              agentConfig as any,
-            tools:                    tools as any,
+            agentConfig:              agentConfigToSave as any,
+            tools:                    toolsToSave as any,
           })
           .where(and(eq(agentsTable.id, refineAgentId), eq(agentsTable.userId, clerkId)))
           .returning();

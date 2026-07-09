@@ -12,6 +12,8 @@ The dashboard writes the voicemail-detection setting in TWO incompatible shapes:
 
 **How to apply:** Never check one field alone. Use `resolveAmdConfig(agentConfig)` (exported from `orchestration/telephony/dial.ts`) which returns `{ enabled, twilioMode }` and handles both shapes. Used by calls.ts + campaignCaller.ts.
 
+The vibe-chat builder now writes the canonical enum shape (`machineDetectionMode: "detect_message_end"`, plus legacy `voicemailDetection` for back-compat) and its refine seeding normalizes via `resolveAmdConfig` too. Same class of trap for call transfer: the edit page represents transfer ONLY as a `call_transfer` tool in `agent.tools` (with `transferTo`/`transferName` on the tool), while older vibe-created agents used `agentConfig.callTransferEnabled`/`transferPhoneNumber` — read the tool first, fall back to agentConfig. Note: the edit-page dropdown offers only `disabled`/`detect_message_end` — writing `"enable"` renders a blank Select.
+
 ## Twilio/Plivo: synchronous gating. VoBiz: async callback ONLY (the trap)
 **Why:** AMD should complete BEFORE the AI conversation starts. Twilio/Plivo deliver a trusted verdict ON the answer webhook (Twilio `AnsweredBy`, Plivo `Machine`), so `applyAmdGate()` branches synchronously there: human/unknown/absent → open AI stream; machine → enact `voicemailAction` via static XML. **VoBiz does NOT**: per its docs, `machine_detection=true` alone never puts a verdict on the answer_url — the verdict arrives ONLY via the asynchronous `machine_detection_url` callback. Waiting for the sync flag meant voicemail was never detected on live VoBiz calls.
 
