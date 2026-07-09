@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
 import {
-  Phone, Copy, Check, ExternalLink, Zap, Key, BookOpen,
+  Phone, Copy, Check, ExternalLink, Zap, Key,
   ChevronDown, ChevronRight, AlertTriangle, CheckCircle2,
   RefreshCw, Plus, Eye, EyeOff, Users, Settings2, Timer,
   Sun, Moon, Monitor, Palette, Lock,
@@ -601,48 +601,6 @@ function GeneralTab() {
       <ChangePasswordCard />
       <RequestTimeoutCard />
       <AppearanceCard />
-
-      {/* API reference quick links */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BookOpen className="h-5 w-5 text-primary" />
-            API Endpoints
-          </CardTitle>
-          <CardDescription>Key REST and WebSocket endpoints exposed by SnapServe.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            { method: "POST", path: "/api/webhooks/twilio/voice?agentId=1", desc: "Twilio inbound call webhook (returns TwiML)" },
-            { method: "POST", path: "/api/webhooks/plivo/voice?agentId=1", desc: "Plivo inbound call webhook (returns XML)" },
-            { method: "POST", path: "/api/webhooks/vobiz/voice?agentId=1", desc: "Vobiz inbound call webhook (returns JSON)" },
-            { method: "WS", path: "/api/ws/twilio/:agentId", desc: "Twilio Media Streams WebSocket" },
-            { method: "WS", path: "/api/ws/plivo/:agentId", desc: "Plivo AudioSocket WebSocket" },
-            { method: "WS", path: "/api/ws/vobiz/:agentId", desc: "Vobiz WebSocket" },
-            { method: "GET", path: "/api/agents", desc: "List all agents" },
-            { method: "GET", path: "/api/calls", desc: "Call history with filters" },
-            { method: "GET", path: "/api/analytics/dashboard", desc: "Dashboard overview stats" },
-          ].map((ep, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0">
-              <Badge
-                variant="outline"
-                className={`text-[10px] font-mono shrink-0 w-12 justify-center ${
-                  ep.method === "WS"
-                    ? "bg-muted text-foreground border-zinc-500/20"
-                    : ep.method === "GET"
-                    ? "bg-muted text-zinc-400 border-zinc-500/20"
-                    : "bg-muted text-foreground border-zinc-500/20"
-                }`}
-              >
-                {ep.method}
-              </Badge>
-              <code className="text-xs font-mono text-foreground/80 flex-1">{ep.path}</code>
-              <span className="text-xs text-muted-foreground hidden md:block">{ep.desc}</span>
-              <CopyButton text={`${BASE_URL}${ep.path}`} />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
     </div>
   );
 }
