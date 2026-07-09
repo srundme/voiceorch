@@ -1,15 +1,24 @@
 import React, { useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Copy, Check, Key,
+  Copy, Check, Key, ChevronRight, ChevronLeft,
   Plus, Eye, EyeOff, Users, Timer,
   Sun, Moon, Monitor, Palette, Lock,
+  User, Building2, UserPlus, KeyRound,
+  Terminal, Webhook, Phone, Sparkles, Mic2,
+  Wallet, BarChart3, Layers, CreditCard,
+  Shield, LogIn, ShieldCheck, ScrollText,
+  Trash2, HelpCircle, BookOpen, LifeBuoy,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useGetAccount, useAddConcurrentSlot, useChangePassword, getGetAccountQueryKey, setDefaultTimeoutMs } from "@workspace/api-client-react";
+import {
+  useGetAccount, useAddConcurrentSlot, useChangePassword, getGetAccountQueryKey, setDefaultTimeoutMs,
+  useListPhoneNumbers, useListWebhookEndpoints, useGetWallet, customFetch,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
@@ -293,77 +302,90 @@ function ChangePasswordCard() {
   );
 }
 
-function GeneralTab() {
+function AccountBillingCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
   const { data: account, isLoading: accountLoading } = useGetAccount({ query: { queryKey: getGetAccountQueryKey() } });
   const addSlot = useAddConcurrentSlot();
 
   return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Users className="h-5 w-5 text-primary" />
+          Account & Billing
+        </CardTitle>
+        <CardDescription>
+          Manage your concurrent call capacity and account identifiers.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {accountLoading ? (
+          <div className="h-24 bg-muted/30 rounded-lg animate-pulse" />
+        ) : (
+          <>
+            <div className="flex items-center gap-2.5 p-3.5 rounded-lg border border-border/60 bg-muted/10">
+              <Key className="h-4 w-4 text-muted-foreground shrink-0" />
+              <p className="text-xs text-muted-foreground flex-1">
+                Looking to call the SnapServe REST API? Manage your API keys on the dedicated{" "}
+                <Link href="/app/api-keys" className="text-primary hover:underline font-medium">API Keys page</Link>.
+              </p>
+              <Link href="/app/api-keys">
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0">
+                  <Key className="h-3 w-3" /> API Keys
+                </Button>
+              </Link>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
+              <div className="flex items-start gap-3">
+                <Users className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Concurrent Call Slots</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Max simultaneous active calls. Add more at $5.00 / slot (deducted from wallet).</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
+                <Button
+                  size="sm" className="h-8 text-xs gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
+                  disabled={addSlot.isPending}
+                  onClick={() => addSlot.mutate(undefined, {
+                    onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
+                    onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
+                  })}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Slot ($5)
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-md border border-border/40 bg-muted/10">
+              <p className="text-xs text-muted-foreground flex-1">Wallet ID (internal)</p>
+              <code className="font-mono text-xs text-foreground/70">#{account?.walletId ?? "—"}</code>
+              {account?.walletId && <CopyButton text={String(account.walletId)} />}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function GeneralSettingsView({ onBack }: { onBack: () => void }) {
+  return (
     <div className="space-y-6">
-      {/* Account & Billing */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="h-5 w-5 text-primary" />
-            Account & Billing
-          </CardTitle>
-          <CardDescription>
-            Manage your concurrent call capacity and account identifiers.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {accountLoading ? (
-            <div className="h-24 bg-muted/30 rounded-lg animate-pulse" />
-          ) : (
-            <>
-              <div className="flex items-center gap-2.5 p-3.5 rounded-lg border border-border/60 bg-muted/10">
-                <Key className="h-4 w-4 text-muted-foreground shrink-0" />
-                <p className="text-xs text-muted-foreground flex-1">
-                  Looking to call the SnapServe REST API? Manage your API keys on the dedicated{" "}
-                  <Link href="/app/api-keys" className="text-primary hover:underline font-medium">API Keys page</Link>.
-                </p>
-                <Link href="/app/api-keys">
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0">
-                    <Key className="h-3 w-3" /> API Keys
-                  </Button>
-                </Link>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border/60 bg-muted/20">
-                <div className="flex items-start gap-3">
-                  <Users className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Concurrent Call Slots</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Max simultaneous active calls. Add more at $5.00 / slot (deducted from wallet).</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-2xl font-bold tabular-nums">{account?.concurrentLimit ?? "—"}</span>
-                  <Button
-                    size="sm" className="h-8 text-xs gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
-                    disabled={addSlot.isPending}
-                    onClick={() => addSlot.mutate(undefined, {
-                      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetAccountQueryKey() }); toast({ title: "Concurrent slot added", description: "Your limit has been increased by 1." }); },
-                      onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
-                    })}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Slot ($5)
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 p-3 rounded-md border border-border/40 bg-muted/10">
-                <p className="text-xs text-muted-foreground flex-1">Wallet ID (internal)</p>
-                <code className="font-mono text-xs text-foreground/70">#{account?.walletId ?? "—"}</code>
-                {account?.walletId && <CopyButton text={String(account.walletId)} />}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="h-4 w-4" /> Back to Settings
+      </button>
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Account Settings</h2>
+        <p className="text-muted-foreground text-sm">Manage your account, appearance, and preferences.</p>
+      </div>
+      <AccountBillingCard />
       <ChangePasswordCard />
       <RequestTimeoutCard />
       <AppearanceCard />
@@ -371,15 +393,294 @@ function GeneralTab() {
   );
 }
 
+/* ── Quick Overview stat strip ───────────────────────────────────────────── */
+
+function StatCard({
+  icon: Icon, label, value, valueClassName, href, iconClassName,
+}: {
+  icon: React.ElementType; label: string; value: React.ReactNode;
+  valueClassName?: string; href: string; iconClassName?: string;
+}) {
+  return (
+    <Link href={href}>
+      <a className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 hover:border-primary/30 hover:bg-accent/40 transition-colors group">
+        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${iconClassName ?? "bg-primary/10"}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] text-muted-foreground">{label}</p>
+          <p className={`text-sm font-semibold truncate ${valueClassName ?? "text-foreground"}`}>{value}</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+      </a>
+    </Link>
+  );
+}
+
+function useApiKeysOverview() {
+  return useQuery<{ keys: { revokedAt: string | null }[] }>({
+    queryKey: ["user-api-keys"],
+    queryFn: () => customFetch<{ keys: { revokedAt: string | null }[] }>("/api/user-api-keys"),
+  });
+}
+
+function QuickOverview() {
+  const { data: phoneNumbers } = useListPhoneNumbers();
+  const { data: webhooks } = useListWebhookEndpoints();
+  const { data: wallet } = useGetWallet();
+  const { data: apiKeysData } = useApiKeysOverview();
+
+  const activePhoneNumbers = phoneNumbers?.filter(n => !!n.agentId).length ?? 0;
+  const activeApiKeys = apiKeysData?.keys.filter(k => !k.revokedAt).length ?? 0;
+  const configuredWebhooks = webhooks?.filter(w => w.enabled).length ?? 0;
+  const balance = wallet ? `$${(wallet.balanceCents / 100).toFixed(2)}` : "—";
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-3">Quick Overview</h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          icon={Phone}
+          label="Phone Numbers"
+          value={`${activePhoneNumbers} Active`}
+          href="/app/phone-numbers"
+          iconClassName="bg-emerald-500/10 text-emerald-500"
+        />
+        <StatCard
+          icon={KeyRound}
+          label="API Keys"
+          value={`${activeApiKeys} Active`}
+          href="/app/api-keys"
+          iconClassName="bg-violet-500/10 text-violet-500"
+        />
+        <StatCard
+          icon={Webhook}
+          label="Webhooks"
+          value={`${configuredWebhooks} Configured`}
+          href="/app/webhooks"
+          iconClassName="bg-amber-500/10 text-amber-500"
+        />
+        <StatCard
+          icon={Wallet}
+          label="Wallet Balance"
+          value={balance}
+          href="/app/wallet"
+          iconClassName="bg-sky-500/10 text-sky-500"
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ── Category card grid ──────────────────────────────────────────────────── */
+
+type SubLink = {
+  icon: React.ElementType;
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  badge?: string;
+  disabled?: boolean;
+};
+
+function CategoryCard({
+  icon: Icon, title, description, links, iconClassName,
+}: {
+  icon: React.ElementType; title: string; description: string;
+  links: SubLink[]; iconClassName: string;
+}) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader className="pb-3">
+        <div className={`h-10 w-10 rounded-xl flex items-center justify-center mb-2 ${iconClassName}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription className="text-xs">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 flex-1">
+        <div className="flex flex-col divide-y divide-border/50 border-t border-border/50">
+          {links.map((link) => {
+            const content = (
+              <div className={`flex items-center gap-2.5 py-2.5 text-sm ${link.disabled ? "text-muted-foreground/40 cursor-not-allowed" : "text-foreground/80 hover:text-foreground"} transition-colors`}>
+                <link.icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                <span className="flex-1">{link.label}</span>
+                {link.badge && (
+                  <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-muted-foreground/60">
+                    {link.badge}
+                  </span>
+                )}
+                {!link.disabled && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
+              </div>
+            );
+            if (link.disabled || (!link.href && !link.onClick)) {
+              return <div key={link.label}>{content}</div>;
+            }
+            if (link.onClick) {
+              return (
+                <button key={link.label} onClick={link.onClick} className="text-left w-full">
+                  {content}
+                </button>
+              );
+            }
+            return (
+              <Link key={link.label} href={link.href!}>
+                <a className="block">{content}</a>
+              </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <CategoryCard
+        icon={User}
+        title="Account"
+        description="Manage your profile, organization and team members."
+        iconClassName="bg-violet-500/10 text-violet-500"
+        links={[
+          { icon: User, label: "Profile", disabled: true, badge: "Coming soon" },
+          { icon: Building2, label: "Organization", disabled: true, badge: "Coming soon" },
+          { icon: UserPlus, label: "Team Members", disabled: true, badge: "Coming soon" },
+          { icon: Lock, label: "Change Password", onClick: onOpenGeneral },
+        ]}
+      />
+      <CategoryCard
+        icon={Terminal}
+        title="API & Developers"
+        description="Manage API keys and developer integrations."
+        iconClassName="bg-emerald-500/10 text-emerald-500"
+        links={[
+          { icon: KeyRound, label: "API Keys", href: "/app/api-keys" },
+          { icon: Webhook, label: "Webhooks", href: "/app/webhooks" },
+        ]}
+      />
+      <CategoryCard
+        icon={Phone}
+        title="Telephony"
+        description="Configure providers and manage phone numbers."
+        iconClassName="bg-sky-500/10 text-sky-500"
+        links={[
+          { icon: Layers, label: "Providers", href: "/app/providers" },
+          { icon: Phone, label: "Phone Numbers", href: "/app/phone-numbers" },
+        ]}
+      />
+      <CategoryCard
+        icon={Sparkles}
+        title="AI Configuration"
+        description="Configure AI providers and voices for your agents."
+        iconClassName="bg-pink-500/10 text-pink-500"
+        links={[
+          { icon: Mic2, label: "Voices", href: "/app/voices" },
+          { icon: Layers, label: "AI Providers (BYOP)", href: "/app/providers" },
+        ]}
+      />
+      <CategoryCard
+        icon={CreditCard}
+        title="Billing & Usage"
+        description="Manage wallet, usage and your subscription."
+        iconClassName="bg-amber-500/10 text-amber-600"
+        links={[
+          { icon: Wallet, label: "Wallet", href: "/app/wallet" },
+          { icon: BarChart3, label: "Usage", href: "/app/usage" },
+          { icon: Users, label: "Concurrent Call Slots", onClick: onOpenGeneral },
+          { icon: CreditCard, label: "Plan & Subscription", disabled: true, badge: "Coming soon" },
+        ]}
+      />
+      <CategoryCard
+        icon={Shield}
+        title="Security"
+        description="Secure your account and manage sessions."
+        iconClassName="bg-rose-500/10 text-rose-500"
+        links={[
+          { icon: LogIn, label: "Sessions", disabled: true, badge: "Coming soon" },
+          { icon: ShieldCheck, label: "2FA", disabled: true, badge: "Coming soon" },
+          { icon: ScrollText, label: "Audit Logs", disabled: true, badge: "Coming soon" },
+        ]}
+      />
+    </div>
+  );
+}
+
+function DangerZoneCard() {
+  return (
+    <Card className="border-destructive/20">
+      <CardContent className="p-5 flex items-start gap-4">
+        <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+          <Trash2 className="h-5 w-5 text-destructive" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground">Danger Zone</p>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">Irreversible and destructive actions.</p>
+          <div className="flex flex-col divide-y divide-border/50 border-t border-border/50">
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-destructive/70">Delete Workspace</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-muted-foreground/60">Coming soon</span>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-destructive/70">Delete Account</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-muted-foreground/60">Coming soon</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NeedHelpCard() {
+  return (
+    <Card>
+      <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <HelpCircle className="h-5 w-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground">Need help?</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Check our documentation or contact support.</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <a href="/docs" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" /> View Documentation
+            </Button>
+          </a>
+          <a href="mailto:support@snapserve.ai">
+            <Button size="sm" className="h-8 text-xs gap-1.5">
+              <LifeBuoy className="h-3.5 w-3.5" /> Contact Support
+            </Button>
+          </a>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
+  const [view, setView] = useState<"overview" | "general">("overview");
+
   return (
     <div className="h-full overflow-y-auto">
-      <div className="space-y-6 p-6 md:p-8 pt-6 max-w-5xl mx-auto">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-          <p className="text-muted-foreground">Manage your account, appearance, and preferences.</p>
-        </div>
-        <GeneralTab />
+      <div className="space-y-6 p-6 md:p-8 pt-6 max-w-6xl mx-auto">
+        {view === "general" ? (
+          <GeneralSettingsView onBack={() => setView("overview")} />
+        ) : (
+          <>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+              <p className="text-muted-foreground">Manage your account, integrations, preferences and billing.</p>
+            </div>
+            <QuickOverview />
+            <CategoryGrid onOpenGeneral={() => setView("general")} />
+            <DangerZoneCard />
+            <NeedHelpCard />
+          </>
+        )}
       </div>
     </div>
   );
