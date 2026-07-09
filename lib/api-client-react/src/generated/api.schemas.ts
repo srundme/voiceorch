@@ -3579,6 +3579,13 @@ export interface MyUsageEvent {
   success: boolean;
 }
 
+export interface CallCostProvider {
+  service: string;
+  provider: string;
+  /** @nullable */
+  model?: string | null;
+}
+
 export interface CallChargeRow {
   id: number;
   createdAt: string;
@@ -3586,6 +3593,14 @@ export interface CallChargeRow {
   callId?: number | null;
   amountCents: number;
   description: string;
+  /** @nullable */
+  durationSeconds?: number | null;
+  sttCostMicros?: number;
+  llmCostMicros?: number;
+  ttsCostMicros?: number;
+  aiServiceCostMicros?: number;
+  totalCostMicros?: number;
+  providers?: CallCostProvider[];
 }
 
 export type MyUsageResponseCallCharges = {
@@ -3598,6 +3613,10 @@ export interface MyUsageResponse {
   totalUsedMicros: number;
   totalAllocatedMicros?: number;
   totalRemainingMicros?: number;
+  totalSpendMicros?: number;
+  totalCalls?: number;
+  totalMinutes?: number;
+  avgCostPerCallMicros?: number;
   perService: MyUsageServiceRow[];
   recentEvents: MyUsageEvent[];
   callCharges: MyUsageResponseCallCharges;

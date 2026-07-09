@@ -1,3 +1,4 @@
+- [Two-bucket spend model](two-bucket-spend-model.md) — call spend = wallet_transactions call_debit (cents) + usage_events (micros), additive not either/or; convert cents×10,000 before summing
 - [Webhook payment verification pattern](webhook-payment-verification.md) — payment webhooks must not trust body-supplied order/payment IDs when the signing secret is optional/unset; always re-verify with a live provider API call before crediting
 - [Detached method calls lose `this` binding](method-detach-this-binding.md) — hoisting `const fn = obj.method` before calling it drops the receiver; fingerprint is instant (sub-50ms) "success" with no response log
 - [TTS sentence-prefetch pipelining](tts-sentence-prefetch-pipelining.md) — synthesize sentence N+1 while N plays to close inter-sentence gaps; recording/ambient mixing MUST stay in the drain (playback-order) phase, never the synthesis phase

@@ -1,5 +1,5 @@
-import React from "react";
-import { BarChart3, TrendingUp, Mic, MessageSquare, Volume2, CheckCircle2, XCircle, PhoneCall } from "lucide-react";
+import React, { useState } from "react";
+import { BarChart3, TrendingUp, PhoneCall, Clock, Calculator, Mic, MessageSquare, Volume2, CheckCircle2, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { useGetMyUsage } from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 
@@ -11,6 +11,16 @@ function microsToUsdShort(micros: number): string {
   if (usd >= 1) return `$${usd.toFixed(2)}`;
   return `$${usd.toFixed(4)}`;
 }
+function formatMinutes(totalMinutes: number): string {
+  if (totalMinutes >= 100) return `${Math.round(totalMinutes)}`;
+  return totalMinutes.toFixed(1);
+}
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
+}
 
 const SERVICE_META: Record<string, { label: string; icon: React.ElementType }> = {
   stt: { label: "Speech-to-Text", icon: Mic },
@@ -18,44 +28,106 @@ const SERVICE_META: Record<string, { label: string; icon: React.ElementType }> =
   tts: { label: "Text-to-Speech",  icon: Volume2 },
 };
 
-function ServiceCard({
-  service, usedMicros, allocatedMicros, remainingMicros, eventCount,
-}: {
-  service: string; usedMicros: number; allocatedMicros: number;
-  remainingMicros: number; eventCount: number;
-}) {
-  const meta = SERVICE_META[service] ?? { label: service.toUpperCase(), icon: BarChart3 };
-  const Icon = meta.icon;
-  const hasAllocation = allocatedMicros > 0;
-  const pct = hasAllocation ? Math.min(100, (usedMicros / allocatedMicros) * 100) : 0;
-  const isOverBudget = hasAllocation && usedMicros > allocatedMicros;
-
+function SummaryCard({
+  icon: Icon, label, value, sub,
+}: { icon: React.ElementType; label: string; value: string; sub?: string }) {
   return (
     <div className="bg-card border border-border rounded-2xl p-5">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
-            <Icon className="w-4 h-4 text-muted-foreground/60" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">{meta.label}</p>
-            <p className="text-xs text-muted-foreground/60">{eventCount} events</p>
-          </div>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
+          <Icon className="w-4 h-4 text-muted-foreground/60" />
         </div>
-        <p className="text-lg font-bold text-foreground tabular-nums">{microsToUsdShort(usedMicros)}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">{label}</p>
       </div>
-      {hasAllocation && (
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground/60">
-            <span>{isOverBudget ? <span className="text-foreground font-medium">Over budget</span> : `${microsToUsdShort(remainingMicros)} remaining`}</span>
-            <span>of {microsToUsdShort(allocatedMicros)}</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-elevated overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${isOverBudget ? "bg-foreground/80" : "bg-foreground/40"}`} style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-      )}
+      <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground/50 mt-1">{sub}</p>}
     </div>
+  );
+}
+
+function ProviderPills({ providers }: { providers: { service: string; provider: string; model: string | null }[] }) {
+  if (providers.length === 0) return <span className="text-xs text-muted-foreground/40">No AI service data recorded</span>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {providers.map((p, i) => {
+        const meta = SERVICE_META[p.service] ?? { label: p.service.toUpperCase(), icon: BarChart3 };
+        const Icon = meta.icon;
+        return (
+          <span key={i} className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-elevated border border-border text-muted-foreground/70">
+            <Icon className="w-3 h-3 text-muted-foreground/50" />
+            {p.provider}{p.model ? ` / ${p.model}` : ""}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function CallChargeRowItem({ c }: { c: any }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <tr
+        className="border-b border-border/40 last:border-0 hover:bg-elevated/40 transition-colors cursor-pointer"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <td className="py-2.5 pl-4 pr-2 whitespace-nowrap">
+          {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />}
+        </td>
+        <td className="py-2.5 pr-3 whitespace-nowrap">
+          <span className="text-xs text-muted-foreground/60">{format(parseISO(c.createdAt), "MMM d, HH:mm")}</span>
+        </td>
+        <td className="py-2.5 pr-3">
+          <div className="flex items-center gap-1.5">
+            <PhoneCall className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+            <span className="text-xs text-foreground/70">{c.description}</span>
+          </div>
+        </td>
+        <td className="py-2.5 pr-4 text-right">
+          <span className="text-xs font-semibold text-foreground tabular-nums">
+            ${((Math.abs(c.amountCents) + (c.aiServiceCostMicros ?? 0) / 10_000) / 100).toFixed(2)}
+          </span>
+        </td>
+      </tr>
+      {open && (
+        <tr className="border-b border-border/40 last:border-0 bg-elevated/20">
+          <td colSpan={4} className="px-4 py-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Platform Fee</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">${(Math.abs(c.amountCents) / 100).toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">STT Cost</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsd(c.sttCostMicros ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">LLM Cost</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsd(c.llmCostMicros ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">TTS Cost</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsd(c.ttsCostMicros ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Total Cost</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">
+                  ${((Math.abs(c.amountCents) + (c.aiServiceCostMicros ?? 0) / 10_000) / 100).toFixed(4)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Call Duration</p>
+                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{formatDuration(c.durationSeconds)}</p>
+              </div>
+              <div className="col-span-2 sm:col-span-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Providers / Models</p>
+                <ProviderPills providers={c.providers ?? []} />
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -67,12 +139,12 @@ export default function UsagePage() {
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Usage</h1>
-        <p className="text-sm text-muted-foreground/60 mt-0.5">{currentMonth} · Your AI service consumption and costs</p>
+        <p className="text-sm text-muted-foreground/60 mt-0.5">{currentMonth} · Your billing and cost breakdown</p>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[0,1,2].map(i => <div key={i} className="h-24 rounded-2xl bg-card border border-border animate-pulse" />)}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {[0,1,2,3].map(i => <div key={i} className="h-24 rounded-2xl bg-card border border-border animate-pulse" />)}
         </div>
       ) : error ? (
         <div className="bg-card border border-border rounded-2xl p-5">
@@ -80,68 +152,37 @@ export default function UsagePage() {
         </div>
       ) : data ? (
         <>
-          {/* Total spend */}
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-11 w-11 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-5 h-5 text-muted-foreground/60" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Total spend this month</p>
-                  <p className="text-3xl font-bold text-foreground tabular-nums mt-0.5">{microsToUsdShort(data.totalUsedMicros)}</p>
-                </div>
-              </div>
-              {(data.totalAllocatedMicros ?? 0) > 0 && (
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Budget</p>
-                  <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsdShort(data.totalAllocatedMicros ?? 0)}</p>
-                  <span className={`inline-block mt-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full border ${(data.totalRemainingMicros ?? 0) <= 0 ? "border-border text-muted-foreground bg-elevated" : "border-border text-muted-foreground bg-elevated"}`}>
-                    {(data.totalRemainingMicros ?? 0) > 0 ? `${microsToUsdShort(data.totalRemainingMicros ?? 0)} left` : "Budget exceeded"}
-                  </span>
-                </div>
-              )}
-            </div>
-            {(data.totalAllocatedMicros ?? 0) > 0 && (
-              <div className="mt-5 h-1.5 rounded-full bg-elevated overflow-hidden">
-                <div className="h-full rounded-full bg-foreground/30 transition-all" style={{ width: `${Math.min(100, (data.totalUsedMicros / (data.totalAllocatedMicros ?? 1)) * 100)}%` }} />
-              </div>
-            )}
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SummaryCard
+              icon={TrendingUp}
+              label="Total Spend"
+              value={microsToUsdShort(data.totalSpendMicros ?? data.totalUsedMicros)}
+              sub="This month"
+            />
+            <SummaryCard
+              icon={PhoneCall}
+              label="Total Calls"
+              value={String(data.totalCalls ?? 0)}
+              sub="This month"
+            />
+            <SummaryCard
+              icon={Clock}
+              label="Total Minutes"
+              value={formatMinutes(data.totalMinutes ?? 0)}
+              sub="Talk time"
+            />
+            <SummaryCard
+              icon={Calculator}
+              label="Avg Cost / Call"
+              value={microsToUsdShort(data.avgCostPerCallMicros ?? 0)}
+              sub="This month"
+            />
           </div>
-
-          {/* Per-service AI costs */}
-          {data.perService.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {data.perService.map(row => <ServiceCard key={row.service} {...row} />)}
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-2xl p-10 flex flex-col items-center text-center gap-2">
-              <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center mb-1">
-                <BarChart3 className="w-5 h-5 text-muted-foreground/40" />
-              </div>
-              <p className="text-sm font-medium text-muted-foreground">No usage recorded this month yet.</p>
-              <p className="text-xs text-muted-foreground/50">Start running calls to see your cost breakdown here.</p>
-            </div>
-          )}
 
           {/* Call charges */}
           <div>
             <h2 className="text-sm font-semibold text-foreground mb-3">Call Charges</h2>
-            <div className="bg-card border border-border rounded-2xl p-5 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
-                  <PhoneCall className="w-4 h-4 text-muted-foreground/60" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground">Platform Call Fee</p>
-                  <p className="text-xs text-muted-foreground/60">{data.callCharges.callCount} call{data.callCharges.callCount !== 1 ? "s" : ""} this month</p>
-                </div>
-                <p className="text-lg font-bold text-foreground tabular-nums">
-                  ${(data.callCharges.totalCents / 100).toFixed(2)}
-                </p>
-              </div>
-            </div>
-
             {data.callCharges.recentCharges.length === 0 ? (
               <div className="bg-card border border-border rounded-2xl p-6 text-center">
                 <p className="text-sm text-muted-foreground/60">No call charges yet.</p>
@@ -152,29 +193,15 @@ export default function UsagePage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left py-2.5 px-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Time</th>
+                        <th className="w-8 py-2.5 pl-4"></th>
+                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Time</th>
                         <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Description</th>
                         <th className="text-right py-2.5 pr-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Charged</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.callCharges.recentCharges.map(c => (
-                        <tr key={c.id} className="border-b border-border/40 last:border-0 hover:bg-elevated/40 transition-colors">
-                          <td className="py-2.5 pl-4 pr-3 whitespace-nowrap">
-                            <span className="text-xs text-muted-foreground/60">{format(parseISO(c.createdAt), "MMM d, HH:mm")}</span>
-                          </td>
-                          <td className="py-2.5 pr-3">
-                            <div className="flex items-center gap-1.5">
-                              <PhoneCall className="w-3 h-3 text-muted-foreground/40 shrink-0" />
-                              <span className="text-xs text-foreground/70">{c.description}</span>
-                            </div>
-                          </td>
-                          <td className="py-2.5 pr-4 text-right">
-                            <span className="text-xs font-semibold text-foreground tabular-nums">
-                              ${(Math.abs(c.amountCents) / 100).toFixed(2)}
-                            </span>
-                          </td>
-                        </tr>
+                      {data.callCharges.recentCharges.map((c: any) => (
+                        <CallChargeRowItem key={c.id} c={c} />
                       ))}
                     </tbody>
                   </table>

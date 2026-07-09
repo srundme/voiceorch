@@ -5214,6 +5214,10 @@ export const GetMyUsageResponse = zod.object({
   "totalUsedMicros": zod.number(),
   "totalAllocatedMicros": zod.number().optional(),
   "totalRemainingMicros": zod.number().optional(),
+  "totalSpendMicros": zod.number().optional(),
+  "totalCalls": zod.number().optional(),
+  "totalMinutes": zod.number().optional(),
+  "avgCostPerCallMicros": zod.number().optional(),
   "perService": zod.array(zod.object({
   "service": zod.string(),
   "usedMicros": zod.number(),
@@ -5243,7 +5247,18 @@ export const GetMyUsageResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "callId": zod.number().nullish(),
   "amountCents": zod.number(),
-  "description": zod.string()
+  "description": zod.string(),
+  "durationSeconds": zod.number().nullish(),
+  "sttCostMicros": zod.number().optional(),
+  "llmCostMicros": zod.number().optional(),
+  "ttsCostMicros": zod.number().optional(),
+  "aiServiceCostMicros": zod.number().optional(),
+  "totalCostMicros": zod.number().optional(),
+  "providers": zod.array(zod.object({
+  "service": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string().nullish()
+})).optional()
 }))
 })
 })

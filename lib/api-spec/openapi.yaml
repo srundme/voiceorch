@@ -10381,6 +10381,14 @@ components:
         estimatedCostMicros: { type: number }
         success: { type: boolean }
 
+    CallCostProvider:
+      type: object
+      required: [service, provider]
+      properties:
+        service: { type: string }
+        provider: { type: string }
+        model: { type: ["string", "null"] }
+
     CallChargeRow:
       type: object
       required: [id, createdAt, amountCents, description]
@@ -10390,6 +10398,15 @@ components:
         callId: { type: ["integer", "null"] }
         amountCents: { type: integer }
         description: { type: string }
+        durationSeconds: { type: ["integer", "null"] }
+        sttCostMicros: { type: number }
+        llmCostMicros: { type: number }
+        ttsCostMicros: { type: number }
+        aiServiceCostMicros: { type: number }
+        totalCostMicros: { type: number }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/CallCostProvider" }
 
     MyUsageResponse:
       type: object
@@ -10398,6 +10415,10 @@ components:
         totalUsedMicros: { type: number }
         totalAllocatedMicros: { type: number }
         totalRemainingMicros: { type: number }
+        totalSpendMicros: { type: number }
+        totalCalls: { type: integer }
+        totalMinutes: { type: number }
+        avgCostPerCallMicros: { type: number }
         perService:
           type: array
           items: { $ref: "#/components/schemas/MyUsageServiceRow" }

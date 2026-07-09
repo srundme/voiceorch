@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usageEventsTable, providerAllocationsTable } from "@workspace/db";
+import { db, usageEventsTable, providerAllocationsTable, callsTable } from "@workspace/db";
 import { usersTable, walletTransactionsTable } from "@workspace/db/schema";
 import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -24,7 +24,7 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
     // Step 1: run all queries in parallel.
     // workspaceRows fetches distinct workspaceIds across ALL the user's events
     // (not just this month) so we can resolve workspace-specific allocations.
-    const [perServiceRows, recentEvents, workspaceRows, callChargeAgg, recentCallCharges] = await Promise.all([
+    const [perServiceRows, recentEvents, workspaceRows, callChargeAgg, recentCallCharges, callsThisMonthAgg] = await Promise.all([
       db
         .select({
           service: usageEventsTable.service,
@@ -98,6 +98,15 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
             .orderBy(desc(walletTransactionsTable.createdAt))
             .limit(20)
         : Promise.resolve([]),
+
+      // Calls placed by this user this month (for Total Calls / Total Minutes)
+      db
+        .select({
+          callCount: sql<string>`count(*)`,
+          totalDurationSeconds: sql<string>`coalesce(sum(${callsTable.durationSeconds}), 0)`,
+        })
+        .from(callsTable)
+        .where(and(eq(callsTable.userId, userId), gte(callsTable.createdAt, monthStart))),
     ]);
 
     // Step 2: Resolve allocations — global + any workspace-specific ones.
@@ -164,26 +173,114 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
     const totalAllocatedMicros = Object.values(allocByService).reduce((s, v) => s + v, 0);
 
     const chargeAgg = callChargeAgg[0] ?? { totalCents: "0", callCount: "0" };
+    const callChargeTotalCents = Number(chargeAgg.totalCents);
+
+    // Combined "Total Spend This Month": platform call fees (wallet_transactions,
+    // cents) + AI service costs (usage_events, micros). These are two distinct
+    // cost buckets (platform fee vs. underlying provider cost) so summing them
+    // does not double-count — but we DO need to add them, which the old code
+    // never did (it only surfaced totalUsedMicros on the headline card).
+    const callChargeTotalMicros = callChargeTotalCents * 10_000; // 1 cent = 10,000 micros
+    const totalSpendMicros = totalUsedMicros + callChargeTotalMicros;
+
+    const callsAgg = callsThisMonthAgg[0] ?? { callCount: "0", totalDurationSeconds: "0" };
+    const totalCalls = Number(callsAgg.callCount);
+    const totalMinutes = Number(callsAgg.totalDurationSeconds) / 60;
+    const avgCostPerCallMicros = totalCalls > 0 ? Math.round(totalSpendMicros / totalCalls) : 0;
+
+    // Step 5: Per-call cost breakdown — join recent call-charge rows to their
+    // usage_events (by callId) to expose STT/LLM/TTS cost + providers/models,
+    // and to calls.durationSeconds for call duration.
+    const chargeCallIds = recentCallCharges
+      .map((c) => c.callId)
+      .filter((id): id is number => id !== null && id !== undefined);
+
+    const [callUsageRows, callDurationRows] = await Promise.all([
+      chargeCallIds.length > 0
+        ? db
+            .select({
+              callId: usageEventsTable.callId,
+              service: usageEventsTable.service,
+              provider: usageEventsTable.provider,
+              model: usageEventsTable.model,
+              costMicros: sql<string>`coalesce(sum(${usageEventsTable.estimatedCostMicros}), 0)`,
+            })
+            .from(usageEventsTable)
+            .where(inArray(usageEventsTable.callId, chargeCallIds))
+            .groupBy(usageEventsTable.callId, usageEventsTable.service, usageEventsTable.provider, usageEventsTable.model)
+        : Promise.resolve([]),
+      chargeCallIds.length > 0
+        ? db
+            .select({ id: callsTable.id, durationSeconds: callsTable.durationSeconds })
+            .from(callsTable)
+            .where(inArray(callsTable.id, chargeCallIds))
+        : Promise.resolve([]),
+    ]);
+
+    const durationByCallId = new Map<number, number | null>();
+    for (const r of callDurationRows) durationByCallId.set(r.id, r.durationSeconds);
+
+    type CallCostBreakdown = {
+      sttCostMicros: number;
+      llmCostMicros: number;
+      ttsCostMicros: number;
+      aiServiceCostMicros: number;
+      providers: { service: string; provider: string; model: string | null }[];
+    };
+    const breakdownByCallId = new Map<number, CallCostBreakdown>();
+    for (const row of callUsageRows) {
+      if (row.callId === null || row.callId === undefined) continue;
+      const entry = breakdownByCallId.get(row.callId) ?? {
+        sttCostMicros: 0,
+        llmCostMicros: 0,
+        ttsCostMicros: 0,
+        aiServiceCostMicros: 0,
+        providers: [],
+      };
+      const cost = Number(row.costMicros);
+      if (row.service === "stt") entry.sttCostMicros += cost;
+      else if (row.service === "llm") entry.llmCostMicros += cost;
+      else if (row.service === "tts") entry.ttsCostMicros += cost;
+      entry.aiServiceCostMicros += cost;
+      entry.providers.push({ service: row.service, provider: row.provider, model: row.model ?? null });
+      breakdownByCallId.set(row.callId, entry);
+    }
 
     res.json({
       totalUsedMicros,
       totalAllocatedMicros,
       totalRemainingMicros: totalAllocatedMicros > 0 ? Math.max(0, totalAllocatedMicros - totalUsedMicros) : 0,
+      totalSpendMicros,
+      totalCalls,
+      totalMinutes,
+      avgCostPerCallMicros,
       perService,
       recentEvents: recentEvents.map((e) => ({
         ...e,
         estimatedCostMicros: Number(e.estimatedCostMicros),
       })),
       callCharges: {
-        totalCents: Number(chargeAgg.totalCents),
+        totalCents: callChargeTotalCents,
         callCount:  Number(chargeAgg.callCount),
-        recentCharges: recentCallCharges.map((t) => ({
-          id:          t.id,
-          createdAt:   t.createdAt.toISOString(),
-          callId:      t.callId ?? null,
-          amountCents: t.amountCents,
-          description: t.description,
-        })),
+        recentCharges: recentCallCharges.map((t) => {
+          const breakdown = t.callId != null ? breakdownByCallId.get(t.callId) : undefined;
+          const platformFeeCents = Math.abs(t.amountCents);
+          const aiServiceCostMicros = breakdown?.aiServiceCostMicros ?? 0;
+          return {
+            id:          t.id,
+            createdAt:   t.createdAt.toISOString(),
+            callId:      t.callId ?? null,
+            amountCents: t.amountCents,
+            description: t.description,
+            durationSeconds: t.callId != null ? (durationByCallId.get(t.callId) ?? null) : null,
+            sttCostMicros: breakdown?.sttCostMicros ?? 0,
+            llmCostMicros: breakdown?.llmCostMicros ?? 0,
+            ttsCostMicros: breakdown?.ttsCostMicros ?? 0,
+            aiServiceCostMicros,
+            totalCostMicros: platformFeeCents * 10_000 + aiServiceCostMicros,
+            providers: breakdown?.providers ?? [],
+          };
+        }),
       },
     });
   } catch (err) {
