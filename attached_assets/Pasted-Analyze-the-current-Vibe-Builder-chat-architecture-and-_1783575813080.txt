@@ -1,0 +1,33 @@
+Analyze the current Vibe Builder chat architecture and explain how persistent chat history can be implemented for both:
+
+1. New agent creation through Vibe Builder
+2. Existing agent editing through Refine with AI
+
+Current problem:
+Every time a user opens Refine with AI for an existing agent, the Vibe Builder starts with a fresh conversation. Previous Vibe Builder messages are not shown, and the session behaves like a new chat.
+
+Required behavior:
+- Previous Vibe Builder conversations must persist.
+- When Refine with AI is reopened for an agent, load and display the previous conversation history.
+- The AI should also receive the relevant previous conversation context so the conversation can continue naturally.
+- Chat history must be associated with the correct agent and user/account.
+- New messages must be saved as the conversation continues.
+- Refreshing or reopening the page must not remove chat history.
+- Existing agent configuration and the actual persisted agent state must remain the source of truth.
+- Old chat messages must not override newer agent configuration values.
+- If the agent was edited manually after an earlier Vibe conversation, reopening Refine with AI must load the latest agent configuration while still displaying the previous chat history.
+- Consider whether each agent should have one continuous conversation or multiple Vibe Builder sessions with session history.
+
+Do not implement anything yet.
+
+First inspect the existing frontend and backend flow and report:
+- where chat messages currently live,
+- whether any conversation/session tables or APIs already exist,
+- how historyRef and refineAgentId currently work,
+- where messages should be persisted,
+- how history should be loaded on page open,
+- how to prevent stale chat context from overriding current agent configuration,
+- whether a new database table/API is required,
+- and the smallest safe implementation plan.
+
+Do not modify unrelated Vibe Builder behavior, prompt generation, Refine persistence, agent configuration, or agent creation flows.

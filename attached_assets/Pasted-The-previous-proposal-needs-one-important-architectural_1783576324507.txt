@@ -1,0 +1,59 @@
+The previous proposal needs one important architectural change.
+
+I do not want only one continuous chat history per agent.
+
+I want the Vibe Builder conversation experience to work like ChatGPT conversation history.
+
+Required UX:
+
+- A user can have multiple Vibe Builder chat sessions.
+- Previous conversations should be visible in a conversation history/sidebar.
+- Each conversation should have its own title, messages, created time, and updated time.
+- Clicking a previous conversation should reopen the complete chat.
+- The user must be able to continue chatting from that conversation and continue editing the associated agent using Vibe with AI.
+- The active conversation should continue saving new user and assistant messages.
+- Users should also be able to start a new Vibe conversation.
+- Conversation history must survive refresh, logout/login, and reopening Refine with AI.
+
+Important agent-state rule:
+
+Conversation history is context, but the latest persisted agent configuration is always the source of truth.
+
+If an old conversation is reopened and the agent has been changed since that conversation, do not restore or overwrite the old agent state automatically.
+
+The backend must continue fetching and injecting the latest current agent configuration before processing a new edit request from any reopened conversation.
+
+Please re-analyze the current architecture and propose the smallest safe implementation for a session-based model.
+
+Consider a structure such as:
+
+vibe_chat_sessions:
+- id
+- user_id
+- agent_id
+- title
+- created_at
+- updated_at
+
+vibe_chat_messages:
+- id
+- session_id
+- role
+- content
+- created_at
+
+Analyze:
+1. how to create a new Vibe session,
+2. how to list previous conversations,
+3. how to open a selected conversation,
+4. how to load its messages into the UI and LLM history,
+5. how continuing an old conversation can safely edit the current agent,
+6. how new-agent Vibe conversations should be linked to the created agent,
+7. how Refine with AI should choose or create a conversation,
+8. how conversation titles can be generated,
+9. what frontend sidebar/history UI changes are needed,
+10. what database tables and API routes are required.
+
+Do not implement yet. First provide the architecture and implementation plan.
+
+Do not change existing prompt-generation logic, agent persistence logic, LLM/STT/TTS behavior, voice settings, call flow behavior, or unrelated Vibe Builder features.
