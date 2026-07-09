@@ -611,7 +611,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       <FormLabel className="text-[10px] text-muted-foreground">STT Mode</FormLabel>
                       <SmallSelect value={field.value ?? "codemix"} onChange={field.onChange}
                         options={[
-                          { value: "codemix", label: "Codemix (Tamil + English)" },
+                          { value: "codemix", label: "Codemix (Regional + English)" },
                           { value: "verbatim", label: "Verbatim (exact words)" },
                           { value: "transcribe", label: "Transcribe (basic)" },
                         ]} />
