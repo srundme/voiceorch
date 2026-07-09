@@ -1,0 +1,164 @@
+Implement a unified and reliable Knowledge ingestion flow for both:
+
+1. Vibe Builder agent creation and Refine with AI
+2. Manual Agent creation/editing and Agent Knowledge page
+
+The following four Knowledge source types must work correctly and consistently in both flows:
+
+1. FAQ
+2. Paste Text
+3. File Upload
+4. Website URL
+
+GOAL
+
+Regardless of where Knowledge is added, the final agent must have access to the complete successfully processed Knowledge through the existing Knowledge retrieval pipeline.
+
+Both Vibe Builder and manual agent flows must reuse the same backend Knowledge ingestion and agent-association architecture. Do not build separate duplicate ingestion logic for Vibe Builder.
+
+EXPECTED BEHAVIOR
+
+FAQ:
+- Accept all Question and Answer pairs.
+- Validate that required question and answer fields are present.
+- Store every valid FAQ entry.
+- Process/index the FAQ content using the existing Knowledge retrieval architecture.
+- Attach the Knowledge source to the correct agent.
+- Verify the agent can retrieve the FAQ answers during calls.
+
+PASTE TEXT:
+- Accept the complete submitted text without silently truncating or dropping sections.
+- Clean and normalize it without changing its meaning.
+- Process it into the existing Knowledge storage/indexing format.
+- Attach it to the correct agent.
+- Verify that information from different parts of the submitted text is retrievable.
+
+FILE UPLOAD:
+- Support the file types already supported by the current portal, such as PDF, DOCX, TXT, CSV, and Markdown.
+- Extract all usable textual content from the file.
+- Preserve meaningful document structure where supported.
+- Detect extraction failures and empty documents.
+- Process/index the extracted content through the existing Knowledge pipeline.
+- Attach the source to the correct agent.
+- Do not mark the file Ready if extraction or processing failed.
+
+WEBSITE:
+- Validate and normalize the submitted URL.
+- Use the existing crawler/scraper architecture if available.
+- Fetch the website and discover relevant accessible internal pages according to safe crawl limits.
+- Extract useful main-page content and relevant internal-page content.
+- Remove navigation noise, repeated headers/footers, scripts, styles, and duplicate content.
+- Handle redirects and report inaccessible pages accurately.
+- Process the extracted content through the same Knowledge indexing/retrieval pipeline used by the working source types.
+- Store the website as a real Knowledge source and attach it to the correct agent.
+- Do not treat URL validation or URL storage alone as successful ingestion.
+- Do not report Ready if zero useful content was extracted.
+- Avoid duplicate ingestion of the same normalized URL where appropriate.
+
+UNIFIED FLOW
+
+All four source types should follow the same logical lifecycle:
+
+Input
+→ validation
+→ extraction or ingestion
+→ processing
+→ storage/indexing
+→ Knowledge source creation
+→ agent association
+→ retrieval verification
+→ Ready
+
+The source status must reflect the real processing state:
+
+- validating
+- processing
+- crawling, where applicable
+- ready
+- partial
+- failed
+
+Never show Added, Uploaded, Active, or Ready before usable Knowledge content has actually been stored and made available to the agent's retrieval pipeline.
+
+VIBE BUILDER REQUIREMENTS
+
+When Vibe Builder asks whether the user has FAQs, text, files, or website links:
+
+- Support all four source types.
+- Use the same backend ingestion APIs/services as the manual Knowledge flow.
+- Show processing status in the Vibe Builder UI and Agent Preview.
+- Do not allow the AI chat response to falsely claim Knowledge was added before backend confirmation.
+- Successfully processed Knowledge should appear in the Agent Preview Knowledge section.
+- When the agent is created, all successfully processed Knowledge sources must be automatically associated with that agent.
+- After creation, the same sources must appear in Agent → Knowledge.
+- Refine with AI must load awareness of currently attached Knowledge sources.
+- Adding Knowledge through Refine with AI must attach the new source without removing or rewriting existing Knowledge sources unless explicitly requested.
+
+MANUAL AGENT / AGENT KNOWLEDGE REQUIREMENTS
+
+The existing Add Knowledge Source UI for FAQ, Paste Text, File Upload, and Website must use the same reliable ingestion pipeline.
+
+Creating or editing an agent manually must preserve all successfully attached Knowledge sources.
+
+Do not break currently working Paste Text and File Upload behavior while fixing Website ingestion and unifying the flows.
+
+KNOWLEDGE RETRIEVAL REQUIREMENT
+
+A Knowledge card appearing in the UI is not enough to consider the task successful.
+
+After ingestion, verify that the agent's actual runtime Knowledge retrieval path can retrieve information from:
+
+- an FAQ answer,
+- information near the beginning and end of a long Paste Text source,
+- information from multiple parts/pages of an uploaded document,
+- information from the website homepage,
+- information from at least one successfully crawled internal website page.
+
+Do not paste entire documents or scraped websites into the system prompt. Use the existing Knowledge storage and retrieval architecture.
+
+IMPLEMENTATION SAFETY
+
+Before changing code, inspect and reuse existing working services wherever possible.
+
+Preserve:
+- existing agents and their Knowledge associations,
+- existing Knowledge sources,
+- manual agent configuration,
+- Vibe agent configuration,
+- LLM/STT/TTS settings,
+- call pipelines,
+- unrelated portal behavior.
+
+Do not introduce separate competing Knowledge pipelines for manual creation and Vibe Builder.
+
+Before implementation, briefly report:
+1. Current flow for each of the four Knowledge source types.
+2. Which parts are already working.
+3. Root cause of failures for each broken flow.
+4. Whether Vibe Builder currently performs real ingestion or only stores Knowledge notes/metadata.
+5. Shared backend services that can be reused.
+6. Exact files that need modification.
+7. Smallest safe implementation sequence.
+
+Then implement the fix and test these cases:
+
+1. Manual Agent Knowledge → FAQ → agent retrieves correct answer.
+2. Manual Agent Knowledge → Paste Text → agent retrieves facts from different sections.
+3. Manual Agent Knowledge → File Upload → agent retrieves document information.
+4. Manual Agent Knowledge → Website → website is crawled, processed, and agent retrieves homepage and internal-page information.
+5. Vibe Builder → FAQ → source appears in preview, created agent, and Agent Knowledge.
+6. Vibe Builder → Paste Text → source is processed and attached to created agent.
+7. Vibe Builder → File Upload → source is processed and attached to created agent.
+8. Vibe Builder → Website → real crawl/processing completes before success is shown, and source is attached to the created agent.
+9. Refine with AI → add a new Knowledge source without removing existing sources.
+10. Failed or empty ingestion → show Failed or Partial instead of false Ready status.
+11. Existing agents and existing Knowledge sources continue working unchanged.
+12. Confirm runtime retrieval works for every source type, not only that the UI displays a Knowledge card.
+
+At completion, report:
+- root causes found,
+- files changed,
+- APIs/services reused or added,
+- database changes, if any,
+- test results for all four source types in both Vibe and manual flows,
+- confirmation that actual agent retrieval was tested.
