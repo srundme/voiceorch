@@ -9,7 +9,7 @@ Auth: `Authorization: Bearer <key>`
 Key format: 40-char alphanumeric (NOT a JWT, NOT a session cookie)
 
 ## Live model catalogue (GET /v1/models — verified 2026-07-09)
-- `gpt-oss-20b` — Krutrim proprietary 20B, tool-capable, **default for voice**
+- `gpt-oss-20b` — Krutrim proprietary 20B, tool-capable; **colloquial Tamil quality is poor** — do NOT use for Tamil voice agents; use gemma-4-E4B-it instead
 - `gpt-oss-120b` — Krutrim proprietary 120B, tool-capable
 - `gemma-4-E4B-it` — Gemma 4 4B MoE
 - `gemma-4-31b-it` — Gemma 4 31B
