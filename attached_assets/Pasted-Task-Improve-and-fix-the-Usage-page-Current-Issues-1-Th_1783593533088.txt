@@ -1,0 +1,63 @@
+Task: Improve and fix the Usage page.
+
+Current Issues:
+
+1. The summary cards at the top show incorrect values.
+Example:
+- Total Spend This Month = $0.0000
+- Language Model = $0.0000
+- Speech-to-Text = $0.0000
+- Text-to-Speech = $0.0000
+
+However, the page already contains real Call Charges, Platform Fees and AI Service Events below, so the summary is inconsistent.
+
+Requirements:
+
+1. Investigate why the summary cards display zero values.
+2. Find the correct source of billing/usage data already available in the application.
+3. Fix the summary cards so they display real aggregated values instead of zero or placeholder values.
+4. Do not hardcode any values.
+5. Reuse the existing billing and usage data.
+6. Do not change pricing logic or backend architecture.
+
+UI Improvements:
+
+The current top cards (Language Model, Speech-to-Text, Text-to-Speech) are not the most useful business metrics for customers.
+
+Replace them with customer-focused metrics such as:
+
+• Total Spend
+• Total Calls
+• Total Minutes
+• Average Cost per Call
+
+(Use existing data wherever possible.)
+
+Detailed Cost Breakdown:
+
+Instead of showing STT, LLM and TTS as separate summary cards, show those costs inside each individual call.
+
+Each Call Charges row should be expandable or provide a details view.
+
+When expanded, display:
+
+- Platform Fee
+- STT Cost
+- LLM Cost
+- TTS Cost
+- Total Cost
+- Call Duration
+- Providers/Models used
+
+This allows customers to understand exactly why each call cost what it did.
+
+Keep the existing Recent AI Service Events table, but make sure it stays synchronized with the detailed breakdown.
+
+Do not remove any existing billing data.
+Do not change pricing calculations.
+Do not change APIs unless required to correctly aggregate existing data.
+Do not modify unrelated pages.
+
+Goal:
+
+Create a premium SaaS Usage page similar to Vapi or Stripe Billing where the top focuses on high-level business metrics and every individual call provides a complete cost breakdown while ensuring all displayed values are accurate and consistent.

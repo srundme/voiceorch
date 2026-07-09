@@ -116,6 +116,9 @@ export const agentFormSchema = z.object({
   autoRedialEnabled:      z.boolean().optional(),
   autoRedialMaxAttempts:  z.number().min(1).max(10).optional(),
 
+  // Sarvam STT mode (only relevant when asrProvider === "sarvam")
+  sarvamSttMode: z.enum(["codemix", "verbatim", "transcribe"]).optional(),
+
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });

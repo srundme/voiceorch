@@ -605,6 +605,19 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                     </FormItem>
                   )} />
                 )}
+                {asrProvider === "sarvam" && (
+                  <FormField control={form.control} name="sarvamSttMode" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">STT Mode</FormLabel>
+                      <SmallSelect value={field.value ?? "codemix"} onChange={field.onChange}
+                        options={[
+                          { value: "codemix", label: "Codemix (Tamil + English)" },
+                          { value: "verbatim", label: "Verbatim (exact words)" },
+                          { value: "transcribe", label: "Transcribe (basic)" },
+                        ]} />
+                    </FormItem>
+                  )} />
+                )}
               </div>
               <div className="flex items-center justify-between border-t border-blue-400/10 pt-2 mt-1">
                 <div>
@@ -4503,6 +4516,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       linearDelayMs:                   (agent as any).agentConfig?.incrementalDelay ?? 0,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
+      sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
     });
     if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
       form.setError("webhookUrl", {

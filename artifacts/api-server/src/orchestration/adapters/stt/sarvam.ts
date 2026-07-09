@@ -44,6 +44,13 @@ import type { STTAdapter, SttFinalMetadata } from "./base.js";
 import type { STTConfig, StreamSTT } from "../../types.js";
 import { logger } from "../../../lib/logger.js";
 
+function envInt(name: string, def: number): number {
+  const v = process.env[name];
+  if (!v) return def;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? def : n;
+}
+
 const BATCH_URL = "https://api.sarvam.ai/speech-to-text";
 const WS_BASE   = "wss://api.sarvam.ai/speech-to-text/ws";
 
@@ -217,7 +224,11 @@ export class SarvamSTT implements STTAdapter {
     const COALESCE_MIN_MS        = 120;
     const COALESCE_DEFAULT_MS    = 220;
     const COALESCE_MAX_MS        = 500;  // raised from 350 — covers ~400ms thinking pauses
-    const COALESCE_INCOMPLETE_MS = 1200; // extra hold for obviously-incomplete fragments
+    // Extra hold for obviously-incomplete fragments. Lowered from 1200 → 800 ms
+    // (800 ms is enough for a caller to continue a mid-sentence pause; 1200 ms
+    // added dead air on multilingual calls where Sarvam's speech_end fires late).
+    // Override per-deployment with env SARVAM_COALESCE_INCOMPLETE_MS.
+    const COALESCE_INCOMPLETE_MS = envInt("SARVAM_COALESCE_INCOMPLETE_MS", 800);
     const PAUSE_HISTORY_MAX      = 5;
     const pauseHistory: number[] = [];
     let transcriptArrivedAt    = 0;   // wall-clock ms when last transcript buffered
@@ -232,12 +243,44 @@ export class SarvamSTT implements STTAdapter {
     }
 
     /**
+     * Common single-word utterances that are COMPLETE responses — acknowledgements,
+     * affirmatives, negatives, greetings — in English, Tamil, and Hindi. These bypass
+     * the COALESCE_INCOMPLETE_MS hold so "yes" / "ஆம்" / "हाँ" dispatches in ~30 ms
+     * (the normal speech_end fast-path) instead of waiting 800+ ms for "more words".
+     */
+    const COMPLETE_SINGLE_WORDS = new Set([
+      // English — affirmatives / negatives / acknowledgements / greetings
+      "yes", "no", "ok", "okay", "sure", "fine", "right", "correct", "wrong",
+      "good", "great", "perfect", "excellent", "absolutely", "definitely",
+      "yeah", "yep", "yup", "nope", "nah", "alright", "alright.",
+      "hello", "hi", "hey", "bye", "goodbye", "thanks", "thank", "thankyou",
+      "done", "stop", "cancel", "confirm", "proceed", "continue", "next",
+      "back", "send", "wait", "hold", "go", "start", "begin", "end",
+      "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+      "first", "second", "third", "morning", "evening", "afternoon", "now", "later",
+      "help", "please", "understood", "noted", "agree", "disagree",
+      // Tamil — affirmatives / negatives / acknowledgements / greetings
+      "ஆம்", "இல்ல", "இல்லை", "சரி", "ஓகே", "ஹலோ", "ஹலொ",
+      "நன்றி", "சரிங்க", "ஆமாம்", "இல்லங்க", "ஓகேங்க", "சரிங்கள",
+      "புரிஞ்சது", "தெரியும்", "தெரியல", "வேண்டாம்", "வேணும்",
+      "கொஞ்சம்", "நல்லது", "ஆகும்", "ஆகாது",
+      // Hindi — affirmatives / negatives / acknowledgements / greetings
+      "हाँ", "हां", "नहीं", "ना", "ठीक", "ओके", "हेलो", "हाँजी", "हांजी",
+      "जी", "जी।", "जी,", "धन्यवाद", "शुक्रिया", "बताओ", "आगे",
+      "समझा", "समझी", "पता", "नहीं।", "बिल्कुल", "ज़रूर", "ज़रूरी",
+      // Telugu, Kannada, Malayalam common acks
+      "అవును", "కాదు", "సరే", "ఓకే", "హలో",
+      "ಹೌದು", "ಇಲ್ಲ", "ಸರಿ", "ಓಕೆ", "ಹಲೋ",
+      "അതെ", "ഇല്ല", "ശരി", "ഓകെ", "ഹലോ",
+    ]);
+
+    /**
      * Returns true when the transcript looks like a mid-sentence fragment that the
      * caller is still formulating. Triggers COALESCE_INCOMPLETE_MS hold instead of
      * the adaptive window so the caller can finish their thought.
      *
      * Patterns detected (Tamil-aware + generic):
-     *   • Single word                          — always incomplete
+     *   • Single word (not in COMPLETE_SINGLE_WORDS) — likely a fragment
      *   • Ends with Tamil possessive suffix    — உங்களோட, என்னோட, அதோட, …
      *   • Ends with Tamil case markers         — -ஐ, -க்கு, -கிட்ட, -ல, -னால, …
      *   • Ends with common connective words    — "and", "or", "but", "also", "with"
@@ -248,8 +291,14 @@ export class SarvamSTT implements STTAdapter {
       const t = text.trim();
       const words = t.split(/\s+/);
       if (words.length === 0) return false;
-      // Single word → almost certainly a fragment
-      if (words.length === 1) return true;
+      // Single word — check bypass list first: common complete responses (yes/no/ok/hello
+      // etc.) are NOT fragments and should dispatch immediately via the normal fast-path.
+      // Unknown single words still get the COALESCE_INCOMPLETE_MS hold.
+      if (words.length === 1) {
+        const w = words[0].toLowerCase().replace(/[।,!?.]+$/, ""); // strip trailing punctuation
+        if (COMPLETE_SINGLE_WORDS.has(w) || COMPLETE_SINGLE_WORDS.has(words[0])) return false;
+        return true;
+      }
       const last = words[words.length - 1];
       // Tamil possessive / genitive suffixes → more to come
       if (/[ஓோ]ட$|உடைய$|களோட$/.test(last)) return true;

@@ -72,6 +72,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
     autoRedialEnabled, autoRedialMaxAttempts,
+    sarvamSttMode,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -104,6 +105,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (ambientNoiseVolume != null) agentConfig["ambientNoiseVolume"] = ambientNoiseVolume;
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
   if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
+  if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;

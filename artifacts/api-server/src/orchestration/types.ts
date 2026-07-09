@@ -377,6 +377,8 @@ export interface AgentConfig {
   llmMaxTokens: number | null;
   /** Min chars before a comma-clause triggers an early TTS dispatch (default 15). */
   ttsMinSentenceChars: number;
+  /** Per-agent Sarvam STT transcription mode: codemix | verbatim | transcribe. null = provider default. */
+  sarvamSttMode: string | null;
 }
 
 export interface ProviderKey {

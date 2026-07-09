@@ -1,0 +1,63 @@
+Task: Refine the Settings landing page (UI polish only).
+
+Scope:
+Only update the Settings landing page UI. Do not redesign any other page.
+
+Requirements:
+
+1. Sidebar Navigation
+- Rename the Settings landing page item from "General" to "Overview".
+- Keep the same route and functionality.
+- Do not change any other sidebar items.
+
+2. Page Header
+- Keep the page title as "Settings".
+- Display a small breadcrumb/section label "Overview" directly below the "Settings" title (or as a subtle section indicator under the heading).
+- Do not rename the page title itself.
+
+3. Account Card
+Review the Account section.
+
+- Keep:
+  • Profile
+  • Change Password
+
+- Remove:
+  • Organization
+  • Team Members
+
+These features are not currently implemented and should not appear as placeholders.
+
+4. Remove all "Coming Soon" badges from the Account card.
+
+5. Profile
+If a Profile page or existing profile functionality already exists, connect the Profile row to it.
+
+If no dedicated Profile page exists, create a simple Profile settings page using the existing user information (name, email, avatar if available) and allow basic profile editing without changing authentication or backend architecture.
+
+The Profile page should include only:
+- Name
+- Email
+- Profile picture/avatar (if already supported)
+- Save Changes
+
+Do not invent new business logic.
+
+6. Change Password
+Keep the existing Change Password functionality exactly as it is.
+
+7. Maintain the premium SaaS design that was already implemented.
+Do not redesign the page again.
+Do not modify spacing, colors, typography or layout unless required for these changes.
+
+Do NOT modify:
+- Backend
+- APIs
+- Database
+- Authentication
+- Permissions
+- Business logic
+- Existing routes (except renaming the sidebar label from General to Overview)
+
+Goal:
+Make the Settings landing page production-ready by removing placeholder items, exposing only real functionality, and improving the navigation hierarchy while preserving the premium SaaS UI.

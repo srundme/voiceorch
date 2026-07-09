@@ -872,9 +872,13 @@ export class OrchestrationPipeline {
       ? { ...this.agent.sttConfig, nativeSampleRate: 8000 }
       : this.agent.sttConfig;
 
+    const providerExtraConfig = keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null;
+    const sttExtraConfig = (this.agent.asrProvider === "sarvam" && this.agent.sarvamSttMode)
+      ? JSON.stringify({ ...(providerExtraConfig ? JSON.parse(providerExtraConfig) : {}), mode: this.agent.sarvamSttMode })
+      : providerExtraConfig;
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
-      keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null,
+      sttExtraConfig,
       sttCfg
     );
     this.llm = createLLMAdapter(this.agent.llmProvider, llmKey, this.agent.llmModel, undefined, this.agent.llmGenerationParams, config.callId);
