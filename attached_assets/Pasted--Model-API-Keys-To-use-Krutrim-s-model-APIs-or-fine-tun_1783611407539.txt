@@ -1,0 +1,59 @@
+# Model API Keys
+
+To use Krutrim's model APIs or fine-tuning features, you must create a secure API key via the **Key Management System (KMS)**. Follow the steps below to generate and manage your API keys safely.
+
+***
+
+### Steps to Create an API Key
+
+1. **Navigate to KMS:**
+   * Log in to the Krutrim Console.
+   * In the left-hand sidebar, click on **KMS** (Key Management System).
+2. **Go to the Model Section:**
+   * Within the KMS dashboard, click on the **Model** tab.
+   * This section allows you to create and manage API keys specifically for model access.
+3. **Click on "Create API Key":**
+   * You will see a button labeled **Create API Key**.
+   * Click this to open the API Key creation form.
+4. **Enter a Secret Name:**
+   * Provide a meaningful name for the API key.\
+     For example: `production-key`, `test-env`, or `fine-tune-llama3`.
+5. **Generate and Copy the API Key:**
+   * Once the key is generated, **copy it immediately** and store it securely.
+   * You will not be able to view the key again after closing the dialog.
+
+***
+
+### &#x20;Important Notes
+
+* **Security Best Practice:** Store your API keys in environment variables or secret managers. Avoid hard-coding them into your source code.
+* **Scope Limitation:** Each API key is scoped to a specific model group. Use separate keys for production and testing environments when possible.
+* **Key Rotation:** Periodically delete and regenerate your API keys to maintain security.
+
+***
+
+### &#x20;Example Usage (with cURL)
+
+```bash
+curl https://cloud.olakrutrim.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your secret key here>" \
+  -d '{
+    "model": "Meta-Llama-3-8B-Instruct",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+***
+
+### Revoking or Managing Keys
+
+To revoke or rotate an API key:
+
+1. **Go back to the KMS > Model tab.**
+2. **Find the API key** you want to manage from the list of existing keys.
+3. Click on **Delete** icon to revoke the key.
+
+***
+
+By following this process, you can securely generate and manage API keys for all your **model** workflows on the Krutrim platform.
