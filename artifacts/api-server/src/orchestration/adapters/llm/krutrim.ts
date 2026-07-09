@@ -10,27 +10,33 @@ import { toOpenAIMessages } from "./openai-messages.js";
  * Auth: Authorization: Bearer <api_key>
  * Docs: https://cloud.olakrutrim.com/docs
  *
- * Models (from catalogue — actual IDs):
- *   Text-Generation:
- *   - Qwen3-30B-A3B                 — MoE, fast, tool-capable (recommended for voice)
- *   - Qwen3-32B                     — dense, best quality, tool-capable
- *   - Llama-3.3-70B-Instruct        — strong multilingual, tool-capable
- *   - DeepSeek-R1-Distill-Llama-8B  — ultra-fast reasoning distill
- *   - DeepSeek-R1-Distill-Llama-70B — larger reasoning distill
- *   - DeepSeek-R1                   — full reasoning (slow, skip for voice)
- *   - Krutrim-1 / Krutrim-2         — India-trained proprietary
- *   - chitrapathak                  — Krutrim proprietary
- *   - Phi-4-reasoning-plus          — Microsoft reasoning
- *   - Mistral-7B-v0.2               — lightweight
+ * Live model catalogue (GET /v1/models — verified 2026-07-09):
+ *   - gpt-oss-20b        — Krutrim proprietary 20B, fast, tool-capable (recommended for voice)
+ *   - gpt-oss-120b       — Krutrim proprietary 120B, higher quality, tool-capable
+ *   - gemma-4-E4B-it     — Gemma 4 4B MoE (ultra-fast)
+ *   - gemma-4-31b-it     — Gemma 4 31B
+ *   - gemma-4-26B-A4B-it — Gemma 4 26B MoE, 262k context
+ *   - Qwen3.5-9B         — Qwen 3.5 thinking model (needs maxTokens ≥ 500 for voice)
+ *   - Qwen3.6-27B        — Qwen 3.6 thinking model (needs maxTokens ≥ 500)
+ *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE thinking model (needs maxTokens ≥ 500)
  */
 
-const DEFAULT_MODEL = "Qwen3-30B-A3B";
+const DEFAULT_MODEL = "gpt-oss-20b";
 
 /** Models that reliably support native tool/function calling on Krutrim. */
 const TOOL_CAPABLE_MODELS = new Set([
-  "Qwen3-30B-A3B",
-  "Qwen3-32B",
-  "Llama-3.3-70B-Instruct",
+  "gpt-oss-20b",
+  "gpt-oss-120b",
+]);
+
+/**
+ * Qwen3.5/3.6 thinking models: require higher max_tokens so the think block
+ * doesn't exhaust the budget before the spoken reply. Minimum 500 for voice.
+ */
+const THINKING_MODELS = new Set([
+  "Qwen3.5-9B",
+  "Qwen3.6-27B",
+  "Qwen3.6-35B-A3B",
 ]);
 
 export class KrutrimLLM implements LLMAdapter {
@@ -45,7 +51,10 @@ export class KrutrimLLM implements LLMAdapter {
       baseURL: "https://cloud.olakrutrim.com/v1",
     });
     this.model = model?.trim() || DEFAULT_MODEL;
-    this.maxTokens = genParams?.maxTokens ?? 250;
+    // Thinking models need ≥500 tokens so the <think> block doesn't exhaust
+    // the budget before the actual spoken reply is generated.
+    const minForThinking = THINKING_MODELS.has(this.model) ? 500 : 0;
+    this.maxTokens = Math.max(genParams?.maxTokens ?? 250, minForThinking);
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
   }

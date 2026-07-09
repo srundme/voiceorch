@@ -1,0 +1,67 @@
+Here's the complete, consolidated brief — ready to paste into Replit as-is.
+
+---
+
+**Task: Reduce false-positive name latching in callerMemory.ts**
+
+**File:** `artifacts/api-server/src/orchestration/callerMemory.ts` (`NAME_PATTERNS`, `isPlausibleName()`, `latchCallerName()`, ~lines 1283–1384)
+
+**Do not modify:** `caller_facts` schema, supersession logic, `loadCallerContext`, `updateCallerProfile` phases, episode/sentence storage, other latches (language, location, occupation), Tamil/Hindi self-introduction patterns, or the existing stricter "this is X" requirement (must be followed by speaking/calling/here).
+
+### Background
+`isPlausibleName()` already rejects most false positives (digits, >3 words, common stopwords, product vocabulary). The one confirmed gap: "I am so confused" currently latches as the name "so confused" because "so" and "confused" aren't yet on the reject list. Additionally, latched names always override LLM-extracted names at call-end — this needs to become conditional, not unconditional.
+
+### Scope
+
+**1. Expand the existing stopword/blocklist in `isPlausibleName()`**
+Add: `so`, `confused`, `very`, `still`, `also`, `really`, `just` (extend further as QA finds more). This is an addition to the existing list — do not remove or restructure current checks.
+
+**2. Add a next-token check**
+As an additional guard alongside the existing checks in `isPlausibleName()` — not a replacement.
+
+**3. Tier the trust of each match at the point of latch (in-memory, no schema change):**
+- Tamil/Hindi patterns, "my name is X", "this is X [speaking/calling/here]" → **Tier A** (high trust)
+- "I am X" / "I'm X" → **Tier B** (low trust), only latched after passing the (now-expanded) `isPlausibleName()` checks
+
+**4. Fix the call-end override rule**
+- Tier A latch → still overrides LLM extraction (unchanged from today)
+- Tier B latch → yields to LLM extraction if the two disagree; used only as a fallback if LLM extraction produces no name at all
+
+**5. Persist the Tier B flag using the existing drop-call cache (no new storage)**
+- When a Tier B name is latched, save it as `{ callId, name, tier: 'B' }` in the same short-lived cache/store already used for dropped-call resume (keyed by call ID).
+- At call-end — whether the call finished normally or resumed after a drop — check this cache: if an LLM-extracted name exists, it wins over the Tier B name; if none exists (e.g. the call dropped and was never resumed), the Tier B name is used as fallback.
+- This entry expires on the same schedule as existing resume data. No changes to `caller_facts` or `caller_profiles` schemas.
+
+### Regression test suite
+
+Must be rejected (no latch):
+```
+"I am sorry"                    -> already rejected today, must stay rejected
+"I'm not able to help"          -> already rejected today, must stay rejected
+"I am calling about my policy"  -> already rejected today, must stay rejected
+"I'm trying to reach someone"   -> already rejected today, must stay rejected
+"I am so confused right now"   -> currently latches as "so confused" — must be rejected after fix
+```
+
+Must still latch correctly (Tier A, byte-for-byte unchanged):
+```
+"My name is Karthik"
+"This is Priya speaking"
+"என் பேர் Arjun"
+"मेरा नाम Divya"
+```
+
+Must latch as Tier B and defer to LLM extraction on conflict:
+```
+"I am Arjun" + LLM extraction also says "Arjun"    -> final name = Arjun
+"I am Arjun" + LLM extraction says "Karthik"        -> final name = Karthik (Tier B overridden)
+"I'm Divya" + call drops before extraction runs     -> final name = Divya (Tier B used as fallback)
+```
+
+### Acceptance criteria
+- "I am so confused" no longer latches as a name.
+- All currently-working rejections continue to reject.
+- Tier A latch behavior and override priority are completely unchanged.
+- Tier B latches no longer permanently override a conflicting LLM-extracted name.
+- Tier B fallback works correctly across a dropped/resumed call, using the existing resume cache.
+- No changes to `caller_facts`, `caller_profiles` schema, supersession logic, or any other latch type.
