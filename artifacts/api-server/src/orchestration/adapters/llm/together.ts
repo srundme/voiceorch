@@ -23,11 +23,13 @@ const TOOL_CAPABLE_MODELS = new Set([
   "MiniMaxAI/MiniMax-M3",
 ]);
 
-// Only Qwen3.x models accept the Together-specific `reasoning` suppression field.
-// Sending it to other models (e.g. MiniMax) may cause a 400 error.
+// Models that accept the Together-specific `reasoning: { effort: "none" }` field
+// to suppress chain-of-thought tokens (adds latency before first spoken word).
+// MiniMax M3 supports this via Together AI's playground setting "Reasoning: Disabled".
 const REASONING_FIELD_MODELS = new Set([
   "Qwen/Qwen3.6-35B-A3B",
   "Qwen/Qwen3.5-397B-A17B",
+  "MiniMaxAI/MiniMax-M3",
 ]);
 
 const SCHEDULING_TOOL_NAME_PATTERNS = [
