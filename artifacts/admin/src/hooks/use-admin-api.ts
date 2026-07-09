@@ -749,6 +749,14 @@ export function useGrowthInactive() {
   });
 }
 
+export function useDeployments() {
+  return useQuery({
+    queryKey: ["admin", "deployments"],
+    queryFn: () => adminFetch<any[]>("/deployments"),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useGrowthFunnelV2() {
   return useQuery({
     queryKey: ["admin", "growth", "funnel-v2"],

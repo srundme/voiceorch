@@ -6,7 +6,7 @@ import { getPlivoAnswerXML } from "../orchestration/telephony/plivo.js";
 import { getVobizAnswerXML } from "../orchestration/telephony/vobiz.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { getSessionByCallId, getSessionByExternalCallId } from "../orchestration/session.js";
-import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, canonicalizeCallerKey } from "@workspace/db";
+import { db, agentsTable, callsTable, phoneNumbersTable, providersTable, scheduledCallbacksTable, campaignLeadsTable, leadTimelineTable, campaignsTable, canonicalizeCallerKey, pool } from "@workspace/db";
 import { eq, sql, and, gte, inArray } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { validateTwilioSignature, validatePlivoSignature } from "../lib/webhook-signature.js";
@@ -1471,6 +1471,52 @@ router.post("/webhooks/plivo/amd", async (req, res): Promise<void> => {
   req.log.info({ callUuid, result }, "Plivo AMD callback (persistence-only)");
   if (result) await persistAmdResult(callUuid, result);
   res.sendStatus(204);
+});
+
+// ── Railway deployment webhook ────────────────────────────────────────────────
+// Railway → Project Settings → Webhooks → URL: /api/hooks/railway
+// Optionally guard with RAILWAY_WEBHOOK_SECRET env var (sent as X-Railway-Token header).
+router.post("/hooks/railway", async (req, res): Promise<void> => {
+  const expectedSecret = process.env.RAILWAY_WEBHOOK_SECRET;
+  if (expectedSecret) {
+    const incoming = req.headers["x-railway-token"] ?? req.headers["authorization"];
+    if (incoming !== expectedSecret && incoming !== `Bearer ${expectedSecret}`) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+  }
+
+  const body: Record<string, any> = req.body ?? {};
+
+  // Railway event shape varies by event type but `status` / `type` are common roots.
+  const status      = body.status ?? body.type ?? "UNKNOWN";
+  const deployment  = body.deployment ?? body;
+  const deployId    = deployment.id ?? null;
+  const projectId   = body.project?.id ?? body.projectId ?? null;
+  const serviceId   = body.service?.id ?? body.serviceId ?? null;
+  const serviceName = body.service?.name ?? body.serviceName ?? null;
+  const environment = body.environment?.name ?? body.environmentName ?? null;
+  const deployUrl   = deployment.url ?? body.deploymentUrl ?? null;
+
+  const meta        = body.deployment?.meta ?? body.meta ?? {};
+  const commitMsg   = meta.commitMessage ?? meta.commitMsg ?? null;
+  const commitHash  = meta.commitHash ?? meta.commit ?? null;
+  const triggeredBy = meta.triggeredBy?.name ?? meta.actor ?? null;
+
+  try {
+    await pool.query(
+      `INSERT INTO deployment_events
+         (railway_deploy_id, project_id, service_id, service_name, environment,
+          status, deploy_url, commit_message, commit_hash, triggered_by, payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [deployId, projectId, serviceId, serviceName, environment,
+       status, deployUrl, commitMsg, commitHash, triggeredBy, JSON.stringify(body)]
+    );
+  } catch (err) {
+    logger.error({ err }, "railway webhook: failed to insert deployment_event");
+  }
+
+  res.json({ ok: true });
 });
 
 export default router;

@@ -1350,6 +1350,27 @@ router.get("/admin/vobiz-wallet-status", requireAdmin, async (req, res): Promise
   }
 });
 
+// ── Railway Deployment Log ────────────────────────────────────────────────────
+
+router.get("/admin/deployments", requireAdmin, async (_req, res): Promise<void> => {
+  try {
+    const result = await pool.query(`
+      SELECT id, railway_deploy_id AS "railwayDeployId", project_id AS "projectId",
+             service_id AS "serviceId", service_name AS "serviceName",
+             environment, status, deploy_url AS "deployUrl",
+             commit_message AS "commitMessage", commit_hash AS "commitHash",
+             triggered_by AS "triggeredBy", created_at AS "createdAt"
+      FROM deployment_events
+      ORDER BY created_at DESC
+      LIMIT 200
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    logger.error({ err }, "admin/deployments failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ── Ambient Sounds ────────────────────────────────────────────────────────────
 // Returns the built-in synthesized ambient tracks so the Family agent form can
 // show a dropdown.  Each entry matches the AmbientSound interface in the frontend.

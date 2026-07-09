@@ -28,6 +28,7 @@ import CallPricingPage from "@/pages/call-pricing";
 import HealthChecklistPage from "@/pages/health";
 import AmbientSoundsPage from "@/pages/ambient-sounds";
 import AuditLogsPage from "@/pages/audit-logs";
+import DeploymentsPage from "@/pages/deployments";
 
 import UsageOverviewPage from "@/pages/usage/overview";
 import ServicePage from "@/pages/usage/service";
@@ -104,6 +105,7 @@ function Router() {
       <ProtectedRoute path="/settings" component={PlatformSettings} />
       <ProtectedRoute path="/dpdp" component={DpdpPage} />
       <ProtectedRoute path="/audit-logs" component={AuditLogsPage} />
+      <ProtectedRoute path="/deployments" component={DeploymentsPage} />
 
       {/* Engineering Programme */}
       <ProtectedRoute path="/book-interns" component={BookInternsPage} />
