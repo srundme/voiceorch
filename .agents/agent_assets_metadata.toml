@@ -1,5 +1,100 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "mgxTtSfpenXq0oWElVDSC"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-1.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "E8A33HYGA86eXE1jT2b0R"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-2.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "MTtWFRNdXHD97pov0j-ud"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-3.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "6IGbNT_vQ6h-cgosFJuDW"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-4.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "_7r8uj4elxQzifF9QrKpq"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-5.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "3_1Iy4FIXq_aGnswS4ehp"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-6.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "NvSV5NlvnSZ9C__KMqGWu"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-7.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "J_r7qfuxxj_6uL9jKcdP_"
+uri = "file://artifacts/dashboard/src/assets/avatars/male-8.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "axBGyn9k7bJAB0QbPm4X7"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-1.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "Oeg-ggGHmSniY3YPHT60o"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-2.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "Lw8YiRSxBLyw1EIBZGtcz"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-3.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "ztQhftmYUg9GgYwsNaPuM"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-4.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "VF7NahR4PjNhLhXpaBveK"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-5.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "RWCjiYKQRDc6tWrS2SRks"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-6.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "BoLXRSlQdDnRT_vSlcG4_"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-7.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "dy6aX-_J6k5k7d0dB6hvl"
+uri = "file://artifacts/dashboard/src/assets/avatars/female-8.png"
+type = "image"
+title = "generated_image"
 
 [[outputs]]
 id = "hmY5jeC4AiGMAhvfrpCn9"

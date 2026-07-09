@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { getVoiceAvatar } from "@/lib/voice-avatars";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1822,15 +1823,12 @@ function VoicePill({ voice, isSelected, isPlaying, onPreview, onSelect }: {
         ? "border-primary/40 bg-primary/8 ring-1 ring-primary/20"
         : "border-border/70 bg-muted/20 hover:border-border",
     )}>
-      {/* Gender indicator */}
-      <div className={cn(
-        "h-7 w-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
-        voice.gender === "female"
-          ? "bg-rose-500/10 text-rose-400 border border-rose-500/15"
-          : "bg-sky-500/10 text-sky-400 border border-sky-500/15",
-      )}>
-        {voice.gender === "female" ? "F" : "M"}
-      </div>
+      {/* Headshot avatar */}
+      <img
+        src={getVoiceAvatar(voice.voiceId, voice.gender)}
+        alt=""
+        className="h-7 w-7 rounded-full object-cover shrink-0 ring-1 ring-border/60"
+      />
 
       {/* Name + desc */}
       <div className="flex-1 min-w-0">

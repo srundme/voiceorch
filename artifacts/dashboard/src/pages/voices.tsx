@@ -14,6 +14,7 @@ import {
 import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Info, Star, ArrowUpDown } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
+import { getVoiceAvatar, inferVoiceGender } from "@/lib/voice-avatars";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -25,28 +26,23 @@ interface Voice {
   language: string;
   description: string;
   isListed: boolean;
+  gender?: string;
 }
 
 /* ── UI-only display helpers ───────────────────────────────────────────────
- * The `/voices/whitelisted` API returns only { id, name, language,
- * description, isListed }. Gender/Accent/Provider are not persisted fields —
- * Accent is derived from the real `language` code, Gender is a stable
- * client-side display label (deterministic per voice id, not stored or sent
- * anywhere), and Provider is a fixed label because this endpoint only ever
+ * The `/voices/whitelisted` API returns { id, name, language, description,
+ * isListed, gender }. `gender` is the same admin-curated
+ * `platform_listed_voices.gender` field the vibe-chat voice picker already
+ * reads — when present it's authoritative; Accent is derived from the real
+ * `language` code; Provider is a fixed label because this endpoint only ever
  * serves Cartesia-managed voices. Favorites are local-only (localStorage). */
-
-function hashString(str: string): number {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h << 5) - h + str.charCodeAt(i);
-    h |= 0;
-  }
-  return Math.abs(h);
-}
 
 const GENDER_OPTIONS = ["Female", "Male"] as const;
 function inferGender(voice: Voice): (typeof GENDER_OPTIONS)[number] {
-  return GENDER_OPTIONS[hashString(voice.id) % GENDER_OPTIONS.length]!;
+  const real = voice.gender?.toLowerCase();
+  if (real === "female") return "Female";
+  if (real === "male") return "Male";
+  return inferVoiceGender(voice.id) === "female" ? "Female" : "Male";
 }
 
 const ACCENT_BY_LANG_PREFIX: Record<string, string> = {
@@ -79,24 +75,6 @@ function saveFavorites(favs: Set<string>) {
   }
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
-}
-
-const AVATAR_PALETTE = [
-  "bg-violet-500/15 text-violet-400 ring-violet-500/20",
-  "bg-blue-500/15 text-blue-400 ring-blue-500/20",
-  "bg-emerald-500/15 text-emerald-400 ring-emerald-500/20",
-  "bg-amber-500/15 text-amber-400 ring-amber-500/20",
-  "bg-pink-500/15 text-pink-400 ring-pink-500/20",
-  "bg-cyan-500/15 text-cyan-400 ring-cyan-500/20",
-];
-function avatarClass(id: string): string {
-  return AVATAR_PALETTE[hashString(id) % AVATAR_PALETTE.length]!;
-}
 
 type SortOption = "name-asc" | "name-desc" | "language";
 
@@ -354,14 +332,11 @@ export default function VoicesPage() {
 
                   <CardContent className="p-5 flex flex-col gap-3 h-full">
                     <div className="flex items-start gap-3 pr-6">
-                      <div
-                        className={cn(
-                          "h-11 w-11 shrink-0 rounded-full flex items-center justify-center text-sm font-semibold ring-1",
-                          avatarClass(voice.id),
-                        )}
-                      >
-                        {initials(voice.name)}
-                      </div>
+                      <img
+                        src={getVoiceAvatar(voice.id, voice.gender)}
+                        alt=""
+                        className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-border/60"
+                      />
                       <div className="min-w-0 flex-1 pt-0.5">
                         <p className="text-sm font-semibold text-foreground truncate">{voice.name}</p>
                         <div className="flex items-center gap-2.5 mt-1 flex-wrap">

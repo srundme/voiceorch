@@ -36,6 +36,10 @@ router.get("/voices/whitelisted", async (_req, res): Promise<void> => {
     language: r.language,
     description: r.description,
     isListed: r.isListed,
+    // Real, admin-curated gender label from platform_listed_voices (same
+    // source vibe-chat's voice picker already uses) — surfaced so every UI
+    // that shows this voice agrees on the same gender/avatar bucket.
+    gender: r.gender ?? undefined,
   }));
 
   res.json({ voices });
