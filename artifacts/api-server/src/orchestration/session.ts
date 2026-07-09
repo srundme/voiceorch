@@ -44,6 +44,7 @@ import {
   detectCallbackRequest,
   type CallerProfile,
   type CallerContext,
+  type NameLatchTier,
 } from "./callerMemory.js";
 
 
@@ -120,6 +121,10 @@ interface ActiveSession {
   /** Name latched mid-call via latchCallerName (caller said "my name is X").
    *  Used to guard against LLM-extraction contamination at call-end. */
   callerNameLatchedThisCall: string | null;
+  /** Trust tier of that latch: "A" = explicit self-intro (overrides a
+   *  conflicting LLM-extracted name at call-end), "B" = ambiguous "I am X"
+   *  (defers to LLM extraction at call-end). */
+  callerNameLatchTier: NameLatchTier | null;
   /** Agent persona fingerprint at call start — written to caller memory at
    *  call-end so future calls can detect a persona swap (whiplash guard). */
   personaHash: string;
@@ -517,6 +522,10 @@ export async function createSession(params: {
   // Tracks the name latched THIS call via latchCallerName (caller said "my name is X").
   // Kept separate from callerProfileSnapshot.name so we can detect contamination at call-end.
   let callerNameLatchedThisCall: string | null = null;
+  // Trust tier of that latch ("A" = explicit self-intro, "B" = ambiguous "I am X").
+  // Threaded to updateCallerProfile so only Tier A latches override a
+  // conflicting LLM-extracted name at call-end.
+  let callerNameLatchTier: NameLatchTier | null = null;
 
   const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
@@ -1165,9 +1174,12 @@ export async function createSession(params: {
           callId:       callRecord.id,
         }).then((latched) => {
           if (latched && callerProfileSnapshot) {
-            callerProfileSnapshot = { ...callerProfileSnapshot, name: latched };
+            callerProfileSnapshot = { ...callerProfileSnapshot, name: latched.name };
           }
-          if (latched) callerNameLatchedThisCall = latched;
+          if (latched) {
+            callerNameLatchedThisCall = latched.name;
+            callerNameLatchTier = latched.tier;
+          }
         });
         // Real-time structured fact latch — pattern-based detection, fire-and-forget
         void latchCallerFact({
@@ -1419,6 +1431,7 @@ export async function createSession(params: {
     get voicemailActionExecuted() { return voicemailActionExecuted; },
     get callerProfileSnapshot() { return callerProfileSnapshot; },
     get callerNameLatchedThisCall() { return callerNameLatchedThisCall; },
+    get callerNameLatchTier() { return callerNameLatchTier; },
     personaHash,
     callerPhone,
     agentUserId:          agent.userId ?? null,
@@ -2455,6 +2468,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   callId:            session.callId,
                   wasDropped,
                   callerNameInCall:  session.callerNameLatchedThisCall,
+                  callerNameLatchTier: session.callerNameLatchTier,
                   personaHash:       session.personaHash ?? undefined,
                   // Persist the language the caller was using when the call ended.
                   // Only meaningful when languageAutoDetect is ON; ignored otherwise

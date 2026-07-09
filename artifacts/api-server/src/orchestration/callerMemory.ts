@@ -919,6 +919,18 @@ function computeSentimentTrend(sentiments: string[]): string {
 
 // ── updateCallerProfile — enhanced with graph edges ───────────────────────────
 
+/**
+ * Call-end identity-contamination override decision (pure — exported for
+ * regression testing). A Tier A latch (explicit self-introduction) always
+ * overrides a conflicting LLM-extracted name; a Tier B latch ("I am X")
+ * defers to the full-transcript LLM extraction. An absent/null tier is
+ * treated as Tier A to preserve legacy behavior for callers that don't
+ * thread the tier.
+ */
+export function shouldLatchOverrideExtraction(latchTier?: NameLatchTier | null): boolean {
+  return latchTier !== "B";
+}
+
 export async function updateCallerProfile(opts: {
   agentId: number;
   phoneNumber: string;
@@ -935,6 +947,13 @@ export async function updateCallerProfile(opts: {
    * from a transcript where the agent may have already used the wrong (stored) name.
    */
   callerNameInCall?: string | null;
+  /**
+   * Trust tier of the mid-call latch (see NameLatchTier). Tier "A" (explicit
+   * self-introduction) keeps full override priority over a conflicting LLM
+   * extraction. Tier "B" ("I am X" / "I'm X") defers to the LLM extraction at
+   * call-end on conflict. Absent/null is treated as Tier A (legacy behavior).
+   */
+  callerNameLatchTier?: NameLatchTier | null;
   /** Current agent persona fingerprint (computePersonaHash). Written to the
    *  reserved marker fact at call end so future calls can detect a persona swap;
    *  when a swap is detected here, the caller's pre-swap memory is retired. */
@@ -956,7 +975,7 @@ export async function updateCallerProfile(opts: {
    */
   explicitLanguageRequest?: string | null;
 }): Promise<void> {
-  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, personaHash, finalLanguage, explicitLanguageRequest } = opts;
+  const { agentId, history, llm, existing, callId, wasDropped = false, durationSeconds, callerNameInCall, callerNameLatchTier, personaHash, finalLanguage, explicitLanguageRequest } = opts;
   // Defense-in-depth: write under the SAME canonical key the read path uses.
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
@@ -1231,11 +1250,18 @@ export async function updateCallerProfile(opts: {
     extracted.name &&
     extracted.name.toLowerCase() !== callerNameInCall.toLowerCase()
   ) {
-    logger.warn(
-      { agentId, phoneNumber, callId, latchedName: callerNameInCall, extractedName: extracted.name },
-      "Caller memory: LLM-extracted name conflicts with mid-call latched name — keeping latched name to prevent identity contamination",
-    );
-    extracted.name = callerNameInCall;
+    if (shouldLatchOverrideExtraction(callerNameLatchTier)) {
+      logger.warn(
+        { agentId, phoneNumber, callId, latchedName: callerNameInCall, extractedName: extracted.name, latchTier: callerNameLatchTier ?? "A" },
+        "Caller memory: LLM-extracted name conflicts with mid-call latched name — keeping latched name to prevent identity contamination",
+      );
+      extracted.name = callerNameInCall;
+    } else {
+      logger.info(
+        { agentId, phoneNumber, callId, latchedName: callerNameInCall, extractedName: extracted.name, latchTier: callerNameLatchTier },
+        "Caller memory: LLM-extracted name conflicts with low-trust (Tier B) mid-call latch — deferring to LLM extraction",
+      );
+    }
   }
   const newName    = extracted.name    || existing?.name    || null;
   const newSummary = extracted.summary || (personaSwapped ? null : existing?.summary) || null;
@@ -1276,29 +1302,47 @@ export async function updateCallerProfile(opts: {
   }
 }
 
-// ── Real-time name latch (unchanged) ──────────────────────────────────────────
+// ── Real-time name latch ──────────────────────────────────────────────────────
+
+/**
+ * Trust tier of a real-time name latch.
+ *  - "A" (high trust): explicit self-introduction ("my name is X", "this is X
+ *    speaking", "call me X", Tamil/Hindi introductions). At call-end the
+ *    latched name overrides a conflicting LLM-extracted name (anti-contamination).
+ *  - "B" (low trust): the ambiguous "I am X" / "I'm X" pattern. Usable mid-call
+ *    exactly like Tier A, but at call-end a conflicting LLM extraction from the
+ *    full transcript wins.
+ */
+export type NameLatchTier = "A" | "B";
 
 // \p{L} matches any Unicode letter (Latin, Tamil, Devanagari, Telugu, etc.)
 // \p{M} matches combining marks (vowel signs in Indic scripts)
-const NAME_PATTERNS: RegExp[] = [
-  /\bmy name is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
-  /\bi(?:'m| am) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+export const NAME_PATTERNS: { pattern: RegExp; tier: NameLatchTier }[] = [
+  { pattern: /\bmy name is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
+  // "I am X" / "I'm X" is inherently ambiguous ("I am fine", "I am so
+  // confused") — low-trust Tier B: latched for mid-call use, but defers to the
+  // full-transcript LLM extraction at call-end on conflict.
+  { pattern: /\bi(?:'m| am) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "B" },
   // "this is X" alone is too ambiguous in real speech (introduces topics as
   // often as identities — "this is regarding the managed plan"); require an
   // explicit speaker cue so only genuine self-introductions match.
-  /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\s+(?:speaking|calling|here)\b/iu,
-  /\bcall me ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
-  /\bname(?:'s| is) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu,
+  { pattern: /\bthis is ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\s+(?:speaking|calling|here)\b/iu, tier: "A" },
+  { pattern: /\bcall me ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
+  { pattern: /\bname(?:'s| is) ([\p{L}\p{M}][\p{L}\p{M}]*(?: [\p{L}\p{M}][\p{L}\p{M}]*)?)\b/iu, tier: "A" },
   // Tamil: "என் பேர் <name>" / "என்னோட பேர் <name>"
-  /என்(?:னோட)?\s*பேர்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+  { pattern: /என்(?:னோட)?\s*பேர்\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
   // Hindi: "मेरा नाम <name>" / "मैं <name> हूँ"
-  /मेरा\s*नाम\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u,
+  { pattern: /मेरा\s*नाम\s+([\p{L}\p{M}][\p{L}\p{M}]*(?:\s[\p{L}\p{M}][\p{L}\p{M}]*)?)/u, tier: "A" },
 ];
 
 const NAME_STOPWORDS = new Set([
   "sure", "sorry", "good", "fine", "here", "happy", "okay", "just",
   "calling", "speaking", "back", "checking", "looking", "trying",
   "not", "also", "right", "ready", "interested",
+  // Intensifiers / emotional-state words. "I am so confused" structurally
+  // matches the "I am X" pattern and (pre-fix) latched "so confused" as the
+  // caller's name. These are never part of a real human name.
+  "so", "confused", "very", "really",
   // Scheduling/time words. "call me tomorrow by 5" / "call me back later" are
   // callback-scheduling phrases, not self-introductions, but they structurally
   // match the "call me X" / "I am X" patterns above. Without these, a captured
@@ -1324,13 +1368,22 @@ const NAME_BLOCKLIST = new Set([
   "question", "help", "support", "account", "number", "phone",
 ]);
 
+// Next-token reject list: if the word IMMEDIATELY following the matched span
+// is one of these, the "name" is almost certainly a sentence fragment, not an
+// identity statement ("I am Arjun Kumar trying to reach…" → not a self-intro).
+// Checked alongside (not replacing) isPlausibleName().
+const NAME_NEXT_TOKEN_REJECTS = new Set([
+  "not", "no", "unable", "unsure", "just", "really", "so", "very", "still",
+  "also", "trying", "going", "looking", "calling",
+]);
+
 /**
  * Rejects candidates that don't structurally look like a human name — either
  * because they're too long/short, contain digits/punctuation, or contain a
  * word from the product/business vocabulary blocklist (a strong signal the
  * LLM or regex mistook a topic phrase for an identity statement).
  */
-function isPlausibleName(candidate: string): boolean {
+export function isPlausibleName(candidate: string): boolean {
   const trimmed = candidate.trim();
   if (!trimmed || trimmed.length < 2 || trimmed.length > 40) return false;
   if (/\d/.test(trimmed)) return false;
@@ -1344,38 +1397,53 @@ function isPlausibleName(candidate: string): boolean {
   return true;
 }
 
+/**
+ * Pure detection core of the real-time name latch (no DB access — exported for
+ * regression testing). Runs the tiered NAME_PATTERNS over the transcript and
+ * validates the capture with isPlausibleName() plus the next-token reject
+ * check. Returns the detected name and its trust tier, or null.
+ */
+export function detectNameLatch(transcript: string): { name: string; tier: NameLatchTier } | null {
+  for (const { pattern, tier } of NAME_PATTERNS) {
+    const match = transcript.match(pattern);
+    const candidate = match?.[1]?.trim();
+    if (!candidate || !isPlausibleName(candidate)) continue;
+    // Next-token reject: the word immediately after the matched span reveals a
+    // sentence continuation, not a self-introduction ("I am Arjun Kumar trying
+    // to reach…"). Applies alongside the per-word stopword/blocklist checks.
+    if (typeof match!.index === "number") {
+      const after = transcript.slice(match!.index + match![0].length);
+      const nextToken = after.match(/[\p{L}\p{M}]+/u)?.[0]?.toLowerCase();
+      if (nextToken && NAME_NEXT_TOKEN_REJECTS.has(nextToken)) continue;
+    }
+    return { name: candidate, tier };
+  }
+  return null;
+}
+
 export async function latchCallerName(opts: {
   agentId: number;
   phoneNumber: string;
   transcript: string;
   existingName: string | null;
   callId: number;
-}): Promise<string | null> {
+}): Promise<{ name: string; tier: NameLatchTier } | null> {
   const { agentId, transcript, existingName, callId } = opts;
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
-  let detected: string | null = null;
-  for (const pattern of NAME_PATTERNS) {
-    const match = transcript.match(pattern);
-    const candidate = match?.[1]?.trim();
-    if (candidate && isPlausibleName(candidate)) {
-      detected = candidate;
-      break;
-    }
-  }
-
+  const detected = detectNameLatch(transcript);
   if (!detected) return null;
-  if (detected.toLowerCase() === existingName?.toLowerCase()) return null;
+  if (detected.name.toLowerCase() === existingName?.toLowerCase()) return null;
 
   try {
     await db
       .update(callerProfilesTable)
-      .set({ name: detected, updatedAt: new Date() })
+      .set({ name: detected.name, updatedAt: new Date() })
       .where(and(
         eq(callerProfilesTable.agentId,     agentId),
         eq(callerProfilesTable.phoneNumber, phoneNumber),
       ));
-    logger.info({ callId, agentId, phoneNumber, detectedName: detected }, "Caller name latched in real-time");
+    logger.info({ callId, agentId, phoneNumber, detectedName: detected.name, latchTier: detected.tier }, "Caller name latched in real-time");
     return detected;
   } catch (err) {
     logger.warn({ callId, agentId, phoneNumber, err }, "Real-time caller name latch DB write failed");
