@@ -201,7 +201,7 @@ function PhoneCell({ number }: { number?: string | null }) {
       <TooltipTrigger asChild>
         <button
           onClick={handleCopy}
-          className="font-mono text-[11px] text-foreground/70 max-w-[130px] truncate block hover:text-foreground transition-colors text-left"
+          className="font-mono text-[11px] text-foreground/70 max-w-full truncate block hover:text-foreground transition-colors text-left"
         >
           {number}
         </button>
@@ -639,32 +639,32 @@ export default function CallsList() {
         {/* Table */}
         <div ref={callsScrollRef} className="flex-1 overflow-auto px-8 py-6">
           <div className="overflow-x-auto">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[140px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Date & Time</TableHead>
-                <TableHead className="w-[90px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call ID</TableHead>
-                <TableHead className="py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Agent</TableHead>
-                <TableHead className="w-[140px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">From</TableHead>
-                <TableHead className="w-[140px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">To</TableHead>
-                <TableHead className="w-[130px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call Type</TableHead>
-                <TableHead className="w-[120px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
-                <TableHead className="w-[90px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Duration</TableHead>
-                <TableHead className="w-[80px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Cost</TableHead>
-                <TableHead className="w-[56px] py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Actions</TableHead>
+                <TableHead className="w-[110px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Date & Time</TableHead>
+                <TableHead className="w-[72px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call ID</TableHead>
+                <TableHead className="w-[15%] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Agent</TableHead>
+                <TableHead className="w-[20%] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">From</TableHead>
+                <TableHead className="w-[20%] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">To</TableHead>
+                <TableHead className="w-[110px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call Type</TableHead>
+                <TableHead className="w-[100px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
+                <TableHead className="w-[76px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Duration</TableHead>
+                <TableHead className="w-[72px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Cost</TableHead>
+                <TableHead className="w-[48px] py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {callsLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i} className="h-16">
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-24" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-16" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-20" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-14" /></TableCell>
                     <TableCell className="py-3.5"><Skeleton className="h-3 w-28" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-24" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-24" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-32" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-32" /></TableCell>
                     <TableCell className="py-3.5"><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-5 w-16 rounded-md" /></TableCell>
                     <TableCell className="py-3.5"><Skeleton className="h-3 w-10" /></TableCell>
                     <TableCell className="py-3.5"><Skeleton className="h-3 w-10" /></TableCell>
                     <TableCell className="text-right py-3.5"><Skeleton className="h-6 w-6 ml-auto rounded" /></TableCell>
