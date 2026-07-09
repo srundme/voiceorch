@@ -10,32 +10,27 @@ import { toOpenAIMessages } from "./openai-messages.js";
  * Auth: Authorization: Bearer <api_key>
  * Docs: https://cloud.olakrutrim.com/docs
  *
- * Models (from catalogue):
- *   - Qwen/Qwen3.5-9B         — smallest, fastest TTFT, cheapest (₹3/1M in)
- *   - Qwen/Qwen3.6-35B-A3B   — MoE: 3B active params, 35B quality (₹7/1M in)
- *   - Qwen/Qwen3.6-27B       — dense 27B (₹23/1M in, skip for voice)
- *   - Google/gemma-4-E4B-it  — 4B multimodal, good quality (₹3/1M in)
- *   - Google/gemma-4-31b-it  — 31B multimodal (₹9/1M in)
- *   - OpenAI/gpt-oss-20b     — 20B open-source (₹8/1M in)
- *   - OpenAI/gpt-oss-120b    — 120B open-source (₹13/1M in)
- *
- * Tool calling: Qwen3.x and Gemma-4 support native function calling via the
- * standard OpenAI tools/tool_calls interface. gpt-oss models may vary.
- *
- * BYOP only — no managed platform key (Krutrim accounts are user-provisioned).
+ * Models (from catalogue — actual IDs):
+ *   Text-Generation:
+ *   - Qwen3-30B-A3B                 — MoE, fast, tool-capable (recommended for voice)
+ *   - Qwen3-32B                     — dense, best quality, tool-capable
+ *   - Llama-3.3-70B-Instruct        — strong multilingual, tool-capable
+ *   - DeepSeek-R1-Distill-Llama-8B  — ultra-fast reasoning distill
+ *   - DeepSeek-R1-Distill-Llama-70B — larger reasoning distill
+ *   - DeepSeek-R1                   — full reasoning (slow, skip for voice)
+ *   - Krutrim-1 / Krutrim-2         — India-trained proprietary
+ *   - chitrapathak                  — Krutrim proprietary
+ *   - Phi-4-reasoning-plus          — Microsoft reasoning
+ *   - Mistral-7B-v0.2               — lightweight
  */
 
-const DEFAULT_MODEL = "Qwen/Qwen3.5-9B";
+const DEFAULT_MODEL = "Qwen3-30B-A3B";
 
 /** Models that reliably support native tool/function calling on Krutrim. */
 const TOOL_CAPABLE_MODELS = new Set([
-  "Qwen/Qwen3.5-9B",
-  "Qwen/Qwen3.6-35B-A3B",
-  "Qwen/Qwen3.6-27B",
-  "Google/gemma-4-E4B-it",
-  "Google/gemma-4-31b-it",
-  "OpenAI/gpt-oss-20b",
-  "OpenAI/gpt-oss-120b",
+  "Qwen3-30B-A3B",
+  "Qwen3-32B",
+  "Llama-3.3-70B-Instruct",
 ]);
 
 export class KrutrimLLM implements LLMAdapter {
@@ -128,8 +123,10 @@ export class KrutrimLLM implements LLMAdapter {
       const token = delta.content;
       if (!token) continue;
 
-      // Strip Qwen3 thinking-mode delimiters that may appear with thinking=true.
-      const cleaned = token.replace(/<\|(?:think|\/think)\|>/g, "");
+      // Strip Qwen3 thinking-mode delimiters and DeepSeek-R1 <think>…</think> blocks.
+      const cleaned = token
+        .replace(/<\|(?:think|\/think)\|>/g, "")
+        .replace(/<\/?think>/g, "");
       if (!cleaned) continue;
 
       full += cleaned;

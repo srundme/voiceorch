@@ -59,12 +59,16 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, ~$0.0083/min, best for agentic use" },
   ],
   krutrim: [
-    { value: "Qwen/Qwen3.5-9B",        label: "Qwen3.5 9B — fastest, cheapest (₹3/1M, recommended for voice)" },
-    { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — MoE 3B active params, 35B quality (₹7/1M)" },
-    { value: "Google/gemma-4-E4B-it",  label: "Gemma 4 4B — lightweight, good quality (₹3/1M)" },
-    { value: "Google/gemma-4-31b-it",  label: "Gemma 4 31B — highest quality (₹9/1M)" },
-    { value: "OpenAI/gpt-oss-20b",     label: "GPT-oss 20B — open-source (₹8/1M)" },
-    { value: "OpenAI/gpt-oss-120b",    label: "GPT-oss 120B — large open-source (₹13/1M)" },
+    { value: "Qwen3-30B-A3B",                 label: "Qwen3 30B-A3B ⭐ — MoE, fast, tool-capable (recommended for voice)" },
+    { value: "Qwen3-32B",                     label: "Qwen3 32B — dense, best quality" },
+    { value: "Llama-3.3-70B-Instruct",        label: "Llama 3.3 70B — strong multilingual, tool-capable" },
+    { value: "DeepSeek-R1-Distill-Llama-8B",  label: "DeepSeek-R1 Distill 8B — ultra-fast, reasoning" },
+    { value: "DeepSeek-R1-Distill-Llama-70B", label: "DeepSeek-R1 Distill 70B — reasoning, high quality" },
+    { value: "Krutrim-2",                     label: "Krutrim-2 — India-trained model" },
+    { value: "Krutrim-1",                     label: "Krutrim-1 — India-trained model (v1)" },
+    { value: "chitrapathak",                  label: "Chitrapathak — Krutrim proprietary" },
+    { value: "Mistral-7B-v0.2",               label: "Mistral 7B v0.2 — lightweight, fast" },
+    { value: "DeepSeek-R1",                   label: "DeepSeek-R1 — full reasoning (slow, not recommended for voice)" },
   ],
 };
 
