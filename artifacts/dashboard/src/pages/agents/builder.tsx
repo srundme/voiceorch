@@ -2153,6 +2153,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
             <div className="space-y-5 rounded-xl border border-border/50 bg-card/40 p-4">
               <AdvSlider form={form} name="asrEndpointingSilenceMs"  label="STT Endpointing Silence"     hint="Silence after last spoken word before Azure sends the transcript. Lower = faster response, but risks cutting callers off mid-sentence. Fast: 100ms · Balanced: 300ms (default) · Patient: 400ms+ for slower speakers" min={50} max={2000} step={25}  fmt={v => `${v}ms`} />
               <AdvSlider form={form} name="ttsMinSentenceChars"       label="TTS Early Dispatch Threshold" hint="Min characters before a comma-clause fires an early TTS request mid-stream. Lower = TTS fires earlier. Default: 15" min={5}   max={200}  step={5}   fmt={v => `${v}ch`} />
+              <AdvSlider form={form} name="ttsSpeed"                  label="TTS Playback Speed"           hint="Speech rate multiplier. 1.0 = natural. 1.1–1.3 sounds quicker without rushing. Only applied for Cartesia and ElevenLabs voices." min={0.7} max={1.5}  step={0.05} fmt={v => `${v.toFixed(2)}×`} />
               <AdvSlider form={form} name="linearDelayMs"             label="Post-Transcript Buffer"       hint="Extra wait after transcript arrives before LLM starts — helps callers who pause mid-sentence. Default: 0ms" min={0}   max={2000} step={50}  fmt={v => v === 0 ? "off" : `${v}ms`} />
               <FormField control={form.control} name="llmMaxTokens" render={({ field }) => (
                 <FormItem className="space-y-0">

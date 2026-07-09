@@ -70,7 +70,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     stagedPromptEnabled, stagedPromptStages, stagedPromptCoreIdentity,
     ambientNoiseEnabled, ambientNoiseTrack, ambientNoiseVolume,
     preferredManagedNumber,
-    asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
+    asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     autoRedialEnabled, autoRedialMaxAttempts,
     sarvamSttMode, kbBakedOnly,
     // Inbound/outbound phone number assignment is read-only in the agent form —
@@ -107,6 +107,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
+  if (ttsSpeed != null && ttsSpeed !== 1) agentConfig["ttsSpeed"] = ttsSpeed;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
