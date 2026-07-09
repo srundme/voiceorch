@@ -32,6 +32,8 @@ interface AgentField   { key: string; label: string; value: string; icon: string
 interface FeatureCard  { key: string; label: string; enabled: boolean; icon: string; detail: string; }
 interface DispositionCard { category: string; outcomes: string[]; }
 interface LangPill     { code: string; label: string; }
+interface VibeTool { toolType: string; label: string; enabled: boolean; status: string; statusNote?: string; }
+interface VibeToolSection { category: string; label: string; tools: VibeTool[]; }
 
 interface ChatMsg {
   id: string;
@@ -164,6 +166,7 @@ export default function VibePage() {
   const [selectedVoice,  setSelectedVoice]  = useState<string>("");
   const [langPills,      setLangPills]      = useState<LangPill[]>([]);
   const [features,       setFeatures]       = useState<FeatureCard[]>([]);
+  const [vibeTools,      setVibeTools]      = useState<VibeToolSection[]>([]);
   const [dispositions,   setDispositions]   = useState<DispositionCard[]>([]);
   const [callFlowNotes,  setCallFlowNotes]  = useState("");
   const [kbNotes,        setKbNotes]        = useState("");
@@ -357,6 +360,32 @@ export default function VibePage() {
           },
         ];
         setFeatures(panelFeatures);
+
+        // Pre-populate scheduling tools from existing agent tools
+        if (schedulingOn) {
+          const ALL_SCHEDULING_TYPES = ["native_booking","native_check_availability","native_list_bookings","native_reschedule","native_cancel"];
+          const TOOL_LABELS: Record<string, string> = {
+            native_booking:            "Book Appointment",
+            native_check_availability: "Check Availability",
+            native_list_bookings:      "List Bookings",
+            native_reschedule:         "Reschedule Booking",
+            native_cancel:             "Cancel Booking",
+          };
+          const enabledTypes = new Set(
+            agentToolsArr.filter(t => ALL_SCHEDULING_TYPES.includes(t?.type as string)).map(t => t.type as string)
+          );
+          setVibeTools([{
+            category: "scheduling",
+            label:    "Appointment & Scheduling Tools",
+            tools:    ALL_SCHEDULING_TYPES.map(toolType => ({
+              toolType,
+              label:      TOOL_LABELS[toolType] ?? toolType,
+              enabled:    enabledTypes.has(toolType),
+              status:     enabledTypes.has(toolType) ? "selected" : "disabled",
+              statusNote: enabledTypes.has(toolType) ? "Calendar auto-configured" : undefined,
+            })),
+          }]);
+        }
 
         if (agent.ttsVoice) {
           selectedVoiceIdRef.current = agent.ttsVoice as string;
@@ -674,6 +703,21 @@ export default function VibePage() {
               });
               break;
 
+            case "tools":
+              setVibeTools(prev => {
+                const next = [...prev];
+                const category = evt.category as string;
+                const section: VibeToolSection = {
+                  category,
+                  label: evt.label as string,
+                  tools: (evt.tools as VibeTool[]) ?? [],
+                };
+                const idx = next.findIndex(s => s.category === category);
+                if (idx >= 0) next[idx] = section; else next.push(section);
+                return next;
+              });
+              break;
+
             case "disposition_card":
               setDispositions(prev => {
                 if (prev.find(d => d.category === evt.category)) return prev;
@@ -898,7 +942,7 @@ export default function VibePage() {
     && viewMode === "editing";
 
   const hasRightContent = fields.length > 0 || selectedVoice.length > 0 || features.length > 0
-    || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
+    || vibeTools.length > 0 || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
     || callFlowNotes.length > 0 || kbNotes.length > 0;
 
   // Landing = no user message yet and not refine mode
@@ -1248,6 +1292,50 @@ export default function VibePage() {
                   <div className="grid grid-cols-2 gap-2">
                     {features.map(f => <FeatureChip key={f.key} feature={f} />)}
                   </div>
+                </Section>
+              )}
+
+              {/* Tools — only rendered when scheduling is enabled (at least one tool selected) */}
+              {vibeTools.some(s => s.tools.some(t => t.enabled)) && (
+                <Section title="Tools">
+                  {vibeTools.map(section => (
+                    <div key={section.category} className="space-y-1.5">
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {section.tools.map(tool => (
+                          <div
+                            key={tool.toolType}
+                            className={cn(
+                              "flex items-center gap-3 rounded-xl border px-3.5 py-2.5",
+                              tool.enabled
+                                ? "border-emerald-500/30 bg-emerald-500/5"
+                                : "border-border/40 bg-muted/20 opacity-50",
+                            )}
+                          >
+                            <div className={cn(
+                              "flex h-6 w-6 items-center justify-center rounded-full shrink-0",
+                              tool.enabled ? "bg-emerald-500/15" : "bg-muted",
+                            )}>
+                              {tool.enabled
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                : <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/30" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn("text-xs font-medium", tool.enabled ? "text-foreground" : "text-muted-foreground")}>{tool.label}</p>
+                              {tool.statusNote && <p className="text-[10px] text-muted-foreground">{tool.statusNote}</p>}
+                            </div>
+                            <span className={cn(
+                              "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0",
+                              tool.enabled
+                                ? "text-emerald-700 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+                                : "text-muted-foreground border-border/40 bg-background",
+                            )}>
+                              {tool.enabled ? "Selected" : "Off"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </Section>
               )}
 

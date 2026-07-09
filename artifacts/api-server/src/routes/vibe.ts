@@ -102,6 +102,7 @@ interface VibeConfig {
   voicemailEnabled: boolean;
   voicemailMessage: string;
   schedulingEnabled: boolean;
+  schedulingTools: string[];
   timezone: string;
   timezoneSet: boolean;
   hostEmail: string;
@@ -201,7 +202,16 @@ PHASE "features_scheduling"
     Once they pick, set availabilityDays (array of day_of_week numbers: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat), availabilityStart (HH:MM), availabilityEnd (HH:MM), and availabilitySet=true.
     Common presets: Mon–Fri=[1,2,3,4,5], Mon–Sat=[1,2,3,4,5,6], All days=[0,1,2,3,4,5,6]
 
-  After all three sub-steps complete: say "Great! I've configured scheduling for [name] — a calendar, availability schedule, and a default 30-min booking event type will be created automatically. You can connect Google Calendar and add more event types from the Scheduling section after creation."
+  Sub-step D — Tools (schedulingTools):
+    After availabilitySet=true, ask a single compact question:
+    "I'll enable booking, availability-check, list, reschedule, and cancel by default. Any you'd like to leave out?"
+    If the user says nothing, "that's fine", or skips, set schedulingTools to all five:
+    ["native_booking","native_check_availability","native_list_bookings","native_reschedule","native_cancel"].
+    If the user removes specific tools (e.g. "skip reschedule and cancel"), set schedulingTools to only the confirmed subset.
+    The user can say things like "just booking and availability" or "skip reschedule" — parse the intent and update schedulingTools accordingly.
+    If the user already specified their tool needs earlier (e.g. "I just need basic booking"), you can set schedulingTools directly without asking.
+
+  After all sub-steps complete: say "Great! I've configured scheduling for [name] — a calendar, availability schedule, and a default 30-min booking event type will be created automatically. You can connect Google Calendar and add more event types from the Scheduling section after creation."
 
 → Transition to "features_compliance" ONLY after: timezoneSet=true AND hostEmailSet=true AND availabilitySet=true (or schedulingEnabled=false)
 
@@ -266,6 +276,7 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
     "voicemailEnabled": false,
     "voicemailMessage": "",
     "schedulingEnabled": false,
+    "schedulingTools": [],
     "timezone": "Asia/Kolkata",
     "timezoneSet": false,
     "hostEmail": "",
@@ -576,6 +587,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             voicemailEnabled:       voicemailOn,
             voicemailMessage:       acfg.voicemailMessage ?? "",
             schedulingEnabled:      !!acfg.schedulingEnabled,
+            schedulingTools:        existingToolsArr
+              .filter(t => (["native_booking","native_check_availability","native_list_bookings","native_reschedule","native_cancel"] as string[]).includes(t["type"] as string))
+              .map(t => t["type"] as string),
             timezone:               acfg.timezone ?? "Asia/Kolkata",
             timezoneSet:            !!acfg.timezone,
             hostEmail,
@@ -777,6 +791,13 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       ? (userNumbers.find(n => n.id === pickedNumberId) ?? null)
       : null;
 
+    // Helper: resolve the scheduling tools subset from cfg, defaulting to all 5
+    function resolveSchedulingTools(c: VibeConfig): string[] {
+      const ALL = ["native_booking","native_check_availability","native_list_bookings","native_reschedule","native_cancel"];
+      if (!c.schedulingEnabled) return [];
+      return (c.schedulingTools?.length) ? c.schedulingTools : ALL;
+    }
+
     // Core field events
     const coreFields = [
       { key: "name",      label: "Agent Name",     value: cfg.agentName,                                                         icon: "bot"      },
@@ -862,6 +883,35 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       for (const f of features) {
         await sleep(120);
         emit({ type: "feature", ...f });
+      }
+
+      // Tools section — always emit so the preview stays in sync with persistence.
+      // schedulingEnabled=false → all 5 emitted as disabled (preview shows none selected, matches DB write of 0 tools).
+      // schedulingEnabled=true  → selected subset enabled, rest disabled.
+      {
+        const ALL_SCHEDULING_TYPES = ["native_booking","native_check_availability","native_list_bookings","native_reschedule","native_cancel"];
+        const TOOL_LABELS: Record<string, string> = {
+          native_booking:            "Book Appointment",
+          native_check_availability: "Check Availability",
+          native_list_bookings:      "List Bookings",
+          native_reschedule:         "Reschedule Booking",
+          native_cancel:             "Cancel Booking",
+        };
+        const selectedTypes = resolveSchedulingTools(cfg);
+        const selectedSet = new Set(selectedTypes);
+        await sleep(80);
+        emit({
+          type:     "tools",
+          category: "scheduling",
+          label:    "Appointment & Scheduling Tools",
+          tools:    ALL_SCHEDULING_TYPES.map(toolType => ({
+            toolType,
+            label:      TOOL_LABELS[toolType] ?? toolType,
+            enabled:    selectedSet.has(toolType),
+            status:     selectedSet.has(toolType) ? "selected" : "disabled",
+            statusNote: selectedSet.has(toolType) ? "Calendar auto-configured" : undefined,
+          })),
+        });
       }
     }
 
@@ -1153,20 +1203,18 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         });
       }
     }
-    // Scheduling tools: added when scheduling was enabled
+    // Scheduling tools: added for the exact subset the user confirmed
     const agentTimezone = cfg.timezone || "Asia/Kolkata";
-    if (cfg.schedulingEnabled) {
-      ["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"].forEach(type => {
-        const nameMap: Record<string, string> = {
-          native_booking:              "book_appointment",
-          native_check_availability:   "check_availability",
-          native_list_bookings:        "list_bookings",
-          native_reschedule:           "reschedule_booking",
-          native_cancel:               "cancel_booking",
-        };
-        tools.push({ type, name: nameMap[type], description: "", timezone: agentTimezone });
-      });
-    }
+    const nameMap: Record<string, string> = {
+      native_booking:              "book_appointment",
+      native_check_availability:   "check_availability",
+      native_list_bookings:        "list_bookings",
+      native_reschedule:           "reschedule_booking",
+      native_cancel:               "cancel_booking",
+    };
+    resolveSchedulingTools(cfg).forEach(type => {
+      tools.push({ type, name: nameMap[type] ?? type, description: "", timezone: agentTimezone });
+    });
 
     // DB insert or update — agent
     let insertedAgent: { id: number; name: string };
@@ -1331,7 +1379,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
 
     // DB insert — scheduling calendar + availability + default event type
-    if (cfg.schedulingEnabled) {
+    if (resolveSchedulingTools(cfg).length > 0) {
       try {
         const [cal] = await db.insert(schedulingCalendarsTable)
           .values({

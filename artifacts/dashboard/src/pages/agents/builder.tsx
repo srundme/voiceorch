@@ -1406,13 +1406,20 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   };
 
 
+  const BOOKING_TOOLS_ICONS: Record<string, React.ReactElement> = {
+    native_booking:            <BookOpen className="h-4 w-4" />,
+    native_check_availability: <Sparkles className="h-4 w-4" />,
+    native_list_bookings:      <List className="h-4 w-4" />,
+    native_reschedule:         <Pencil className="h-4 w-4" />,
+    native_cancel:             <X className="h-4 w-4" />,
+  };
   const BOOKING_TOOLS = [
-    { type: "native_booking",           fnName: "book_appointment",   icon: <BookOpen className="h-4 w-4" />, color: "emerald", label: "Book Appointment",    description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live." },
-    { type: "native_check_availability", fnName: "check_availability", icon: <Sparkles className="h-4 w-4" />, color: "sky",     label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow." },
-    { type: "native_list_bookings",      fnName: "list_bookings",      icon: <List className="h-4 w-4" />,     color: "violet",  label: "List Bookings",      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows." },
-    { type: "native_reschedule",         fnName: "reschedule_booking", icon: <Pencil className="h-4 w-4" />,   color: "amber",   label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller." },
-    { type: "native_cancel",             fnName: "cancel_booking",     icon: <X className="h-4 w-4" />,        color: "red",     label: "Cancel Booking",     description: "Allows the agent to cancel an upcoming booking on the caller's request." },
-  ] as const;
+    { type: "native_booking",           fnName: "book_appointment",   color: "emerald", label: "Book Appointment",    description: "Lets the agent book a meeting slot for the caller. Agent collects name, email, and preferred time, then confirms the booking live.",    icon: BOOKING_TOOLS_ICONS["native_booking"] },
+    { type: "native_check_availability", fnName: "check_availability", color: "sky",     label: "Check Availability", description: "Enables the agent to look up open slots before suggesting a time. Use alongside Book Appointment for a natural booking flow.",             icon: BOOKING_TOOLS_ICONS["native_check_availability"] },
+    { type: "native_list_bookings",      fnName: "list_bookings",      color: "violet",  label: "List Bookings",      description: "Allows the agent to retrieve existing bookings for the caller — useful for reschedule or cancellation flows.",                           icon: BOOKING_TOOLS_ICONS["native_list_bookings"] },
+    { type: "native_reschedule",         fnName: "reschedule_booking", color: "amber",   label: "Reschedule Booking", description: "Lets the agent reschedule an existing booking to a new time slot chosen by the caller.",                                                icon: BOOKING_TOOLS_ICONS["native_reschedule"] },
+    { type: "native_cancel",             fnName: "cancel_booking",     color: "red",     label: "Cancel Booking",     description: "Allows the agent to cancel an upcoming booking on the caller's request.",                                                               icon: BOOKING_TOOLS_ICONS["native_cancel"] },
+  ];
 
   const BOOKING_TOOL_SCHEMAS: Record<string, object> = {
     native_booking: {
