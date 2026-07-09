@@ -1,5 +1,8 @@
 import React, { useState } from "react";
-import { Plus, Lock, Trash2, ExternalLink } from "lucide-react";
+import {
+  Plus, Lock, Trash2, ExternalLink, Mic, Brain, AudioLines, Phone,
+  KeyRound, ShieldCheck, ArrowRight,
+} from "lucide-react";
 import {
   useListProviders,
   useCreateProvider,
@@ -17,6 +20,10 @@ import {
   DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import {
@@ -25,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
+import { cn } from "@/lib/utils";
 
 /* ── Provider definitions ────────────────────────────────────────────────── */
 interface ExtraField {
@@ -90,6 +98,65 @@ const TYPE_DESC: Record<string, string> = {
   telephony:     "Handle call infrastructure",
 };
 
+const TYPE_ICONS: Record<string, React.ElementType> = {
+  asr:       Mic,
+  llm:       Brain,
+  tts:       AudioLines,
+  telephony: Phone,
+};
+
+/* Deterministic accent palette per provider, keyed by first letter of the value */
+const AVATAR_PALETTE = [
+  "bg-blue-500/15 text-blue-500",
+  "bg-violet-500/15 text-violet-500",
+  "bg-emerald-500/15 text-emerald-500",
+  "bg-amber-500/15 text-amber-500",
+  "bg-rose-500/15 text-rose-500",
+  "bg-cyan-500/15 text-cyan-500",
+  "bg-fuchsia-500/15 text-fuchsia-500",
+  "bg-orange-500/15 text-orange-500",
+];
+
+function avatarClasses(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function providerInitials(name: string) {
+  const cleaned = name.replace(/[^a-zA-Z0-9 ]/g, " ").trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+  return cleaned.slice(0, 2).toUpperCase();
+}
+
+/* Small ring showing configured/total completion for a category */
+function CompletionRing({ value, total }: { value: number; total: number }) {
+  const size = 34;
+  const stroke = 3.5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = total > 0 ? Math.min(1, value / total) : 0;
+  const offset = circumference * (1 - pct);
+  const complete = total > 0 && value >= total;
+
+  return (
+    <div className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} strokeWidth={stroke} fill="none" className="stroke-border" />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} strokeWidth={stroke} fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className={cn("transition-all duration-500", complete ? "stroke-emerald-500" : value > 0 ? "stroke-primary" : "stroke-transparent")}
+        />
+      </svg>
+      <span className="absolute text-[9px] font-semibold tabular-nums text-foreground/70">{value}/{total}</span>
+    </div>
+  );
+}
+
 /* ── Form schema ──────────────────────────────────────────────────────────── */
 const providerFormSchema = z.object({
   providerType: z.enum(["asr", "llm", "tts", "telephony"]),
@@ -106,6 +173,7 @@ export default function ProvidersList() {
   const { toast }   = useToast();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [extraFieldValues, setExtraFieldValues] = useState<Record<string, string>>({});
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const { data: providers, isLoading } = useListProviders({ query: { queryKey: getListProvidersQueryKey() } });
   const createProvider = useCreateProvider();
@@ -159,21 +227,22 @@ export default function ProvidersList() {
     );
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm("Remove this provider? Agents using it will stop working.")) {
-      deleteProvider.mutate(
-        { id },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
-            toast({ title: "Provider removed" });
-          },
-          onError: (err: unknown) => {
-            toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
-          }
-        }
-      );
-    }
+  const confirmDelete = () => {
+    if (pendingDeleteId == null) return;
+    const id = pendingDeleteId;
+    deleteProvider.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListProvidersQueryKey() });
+          toast({ title: "Provider removed" });
+        },
+        onError: (err: unknown) => {
+          toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+        },
+        onSettled: () => setPendingDeleteId(null),
+      }
+    );
   };
 
   const groupedProviders = providers?.reduce((acc, p) => {
@@ -195,7 +264,7 @@ export default function ProvidersList() {
         </div>
         <button
           onClick={() => openDialog()}
-          className="flex items-center gap-2 text-[12.5px] font-medium border border-border rounded-lg px-4 py-2 hover:bg-accent text-foreground/80 hover:text-foreground transition-colors"
+          className="flex items-center gap-2 text-[12.5px] font-medium rounded-lg px-4 py-2 bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:brightness-105 transition-all"
           data-testid="button-add-provider"
         >
           <Plus className="h-3.5 w-3.5" /> Add Provider
@@ -204,81 +273,99 @@ export default function ProvidersList() {
 
       {/* Add Provider Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[460px]">
-          <DialogHeader>
-            <DialogTitle className="text-[15px] font-semibold">Add Provider Key</DialogTitle>
-            <DialogDescription className="text-[12.5px]">
-              Credentials are stored server-side and used at call time.
+        <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/70 bg-gradient-to-b from-accent/40 to-transparent">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                <KeyRound className="h-4 w-4" />
+              </div>
+              <DialogTitle className="text-[15px] font-semibold">Add Provider Key</DialogTitle>
+            </div>
+            <DialogDescription className="text-[12.5px] flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              Credentials are encrypted at rest and used at call time only.
             </DialogDescription>
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-1">
-              <FormField control={form.control} name="providerType" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-[12.5px]">Service Category</FormLabel>
-                  <Select onValueChange={(val) => { field.onChange(val); form.setValue("providerName", ""); form.setValue("apiKey", ""); setExtraFieldValues({}); }} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="asr">Speech-to-Text (ASR)</SelectItem>
-                      <SelectItem value="llm">Language Model (LLM)</SelectItem>
-                      <SelectItem value="tts">Text-to-Speech (TTS)</SelectItem>
-                      <SelectItem value="telephony">Telephony</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="px-6 pt-5 pb-6 space-y-5">
 
-              <FormField control={form.control} name="providerName" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-[12.5px]">Provider</FormLabel>
-                  <Select onValueChange={(val) => { field.onChange(val); form.setValue("apiKey", ""); setExtraFieldValues({}); }} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {availableProviders.map(p => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  {selectedDef && (
-                    <FormDescription className="text-[11px] flex items-center gap-1">
-                      Get credentials at{" "}
-                      <a href={selectedDef.docsUrl} target="_blank" rel="noopener noreferrer" className="text-foreground/70 hover:text-foreground inline-flex items-center gap-0.5 hover:underline">
-                        {selectedDef.docsLabel}<ExternalLink className="h-2.5 w-2.5" />
-                      </a>
-                    </FormDescription>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {/* Step 1 — category & provider */}
+              <div className="space-y-3.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50">1 · Choose service</p>
 
-              {selectedDef?.extraFields && selectedDef.extraFields.length > 0 && (
-                <div className="space-y-3">
-                  {selectedDef.extraFields.map(f => (
-                    <div key={f.key} className="space-y-1.5">
-                      <label className="text-[12.5px] font-medium leading-none">{f.label}</label>
-                      <Input placeholder={f.placeholder} value={extraFieldValues[f.key] ?? ""} onChange={e => setExtraFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))} />
-                      {f.hint && <p className="text-[11px] text-muted-foreground/60">{f.hint}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {selectedDef && (
-                <FormField control={form.control} name="apiKey" render={({ field }) => (
+                <FormField control={form.control} name="providerType" render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[12.5px]">{selectedDef.apiKeyLabel}</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder={selectedDef.apiKeyPlaceholder} {...field} />
-                    </FormControl>
+                    <FormLabel className="text-[12.5px]">Service Category</FormLabel>
+                    <Select onValueChange={(val) => { field.onChange(val); form.setValue("providerName", ""); form.setValue("apiKey", ""); setExtraFieldValues({}); }} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="asr">Speech-to-Text (ASR)</SelectItem>
+                        <SelectItem value="llm">Language Model (LLM)</SelectItem>
+                        <SelectItem value="tts">Text-to-Speech (TTS)</SelectItem>
+                        <SelectItem value="telephony">Telephony</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )} />
+
+                <FormField control={form.control} name="providerName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-[12.5px]">Provider</FormLabel>
+                    <Select onValueChange={(val) => { field.onChange(val); form.setValue("apiKey", ""); setExtraFieldValues({}); }} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {availableProviders.map(p => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                    {selectedDef && (
+                      <FormDescription className="text-[11px] flex items-center gap-1">
+                        <ArrowRight className="h-2.5 w-2.5 text-muted-foreground/40" />
+                        Get credentials at{" "}
+                        <a href={selectedDef.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary/90 hover:text-primary inline-flex items-center gap-0.5 font-medium hover:underline">
+                          {selectedDef.docsLabel}<ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+
+              {/* Step 2 — credentials */}
+              {selectedDef && (
+                <div className="space-y-3.5 pt-1 border-t border-border/60">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 pt-3.5">2 · Enter credentials</p>
+
+                  {selectedDef.extraFields && selectedDef.extraFields.length > 0 && (
+                    <div className="space-y-3">
+                      {selectedDef.extraFields.map(f => (
+                        <div key={f.key} className="space-y-1.5">
+                          <label className="text-[12.5px] font-medium leading-none">{f.label}</label>
+                          <Input placeholder={f.placeholder} value={extraFieldValues[f.key] ?? ""} onChange={e => setExtraFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))} />
+                          {f.hint && <p className="text-[11px] text-muted-foreground/60">{f.hint}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <FormField control={form.control} name="apiKey" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[12.5px]">{selectedDef.apiKeyLabel}</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder={selectedDef.apiKeyPlaceholder} className="font-mono" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
               )}
 
               <DialogFooter className="pt-2">
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={createProvider.isPending} data-testid="button-save-provider">
-                  {createProvider.isPending ? "Saving…" : "Save"}
+                  {createProvider.isPending ? "Saving…" : "Save Provider"}
                 </Button>
               </DialogFooter>
             </form>
@@ -286,13 +373,44 @@ export default function ProvidersList() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete confirmation */}
+      <AlertDialog open={pendingDeleteId != null} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this provider?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Agents currently using this provider will stop working until a replacement key is added. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Provider Grid */}
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="bg-card rounded-2xl border border-border p-6">
-              <Skeleton className="h-4 w-32 mb-4" />
-              <Skeleton className="h-16 w-full" />
+            <div key={i} className="bg-card rounded-2xl border border-border overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                <Skeleton className="h-9 w-9 rounded-lg" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3.5 w-28" />
+                  <Skeleton className="h-2.5 w-36" />
+                </div>
+                <Skeleton className="h-8 w-8 rounded-full" />
+              </div>
+              <div className="p-3 space-y-1.5">
+                <Skeleton className="h-14 w-full rounded-xl" />
+                <Skeleton className="h-14 w-full rounded-xl" />
+              </div>
             </div>
           ))}
         </div>
@@ -301,52 +419,90 @@ export default function ProvidersList() {
           {(["asr", "llm", "tts", "telephony"] as const).map(type => {
             const typeProviders = groupedProviders[type] ?? [];
             const supported     = SUPPORTED_PROVIDERS[type]!;
+            const Icon          = TYPE_ICONS[type]!;
+            const isEmpty       = typeProviders.length === 0;
             return (
-              <div key={type} className="bg-card rounded-2xl border border-border overflow-hidden">
+              <div key={type} className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                 {/* Header */}
-                <div className="px-5 py-4 border-b border-border">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[13px] font-semibold text-foreground">{TYPE_LABELS[type]}</p>
-                    <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/40 px-2 py-0.5 rounded border border-border">
-                      {typeProviders.length} / {supported.length}
-                    </span>
+                <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Icon className="h-4 w-4" />
                   </div>
-                  <p className="text-[11px] text-muted-foreground/50 mt-0.5">{TYPE_DESC[type]}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-foreground">{TYPE_LABELS[type]}</p>
+                    <p className="text-[11px] text-muted-foreground/50 truncate">{TYPE_DESC[type]}</p>
+                  </div>
+                  <CompletionRing value={typeProviders.length} total={supported.length} />
                 </div>
 
                 {/* Provider entries */}
                 <div className="p-3 flex flex-col gap-1.5">
-                  {typeProviders.map(provider => (
-                    <div key={provider.id} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-elevated/60 border border-border/60">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[12.5px] font-medium text-foreground/80 capitalize">{provider.providerName}</span>
-                          {provider.isActive && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded border border-foreground/[0.07] bg-foreground/[0.04] text-foreground/40">ACTIVE</span>
-                          )}
-                        </div>
-                        <div className="flex items-center text-[11px] text-muted-foreground/40 gap-1 font-mono mt-0.5">
-                          <Lock className="h-2.5 w-2.5" />
-                          •••• {provider.apiKeyHint ?? "••••"}
-                        </div>
+                  {isEmpty ? (
+                    <div className="flex flex-col items-center text-center gap-2 py-7 px-4 rounded-xl border border-dashed border-border/60 bg-accent/20">
+                      <div className="h-9 w-9 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground/40">
+                        <Icon className="h-4 w-4" />
                       </div>
+                      <p className="text-[12px] font-medium text-foreground/70">No {TYPE_LABELS[type]} provider yet</p>
+                      <p className="text-[11px] text-muted-foreground/50 max-w-[220px]">
+                        Connect a key to enable {TYPE_DESC[type].toLowerCase()} for your agents.
+                      </p>
                       <button
-                        className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground/30 hover:text-muted-foreground/70 hover:bg-accent transition-colors"
-                        onClick={() => handleDelete(provider.id)}
+                        className="mt-1 flex items-center gap-1.5 text-[12px] font-medium rounded-lg px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+                        onClick={() => openDialog(type)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Plus className="h-3 w-3" /> Connect {TYPE_LABELS[type]}
                       </button>
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      {typeProviders.map(provider => {
+                        const def = supported.find(p => p.value === provider.providerName);
+                        const displayName = def?.label ?? provider.providerName;
+                        return (
+                          <div
+                            key={provider.id}
+                            className="group flex items-center justify-between px-3 py-2.5 rounded-xl bg-elevated/60 border border-border/60 hover:border-border hover:bg-elevated transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center text-[10.5px] font-bold shrink-0", avatarClasses(provider.providerName))}>
+                                {providerInitials(displayName)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[12.5px] font-medium text-foreground/85 truncate">{displayName}</span>
+                                  {provider.isActive && (
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                      ACTIVE
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center text-[11px] text-muted-foreground/45 gap-1 font-mono mt-0.5">
+                                  <Lock className="h-2.5 w-2.5" />
+                                  •••• {provider.apiKeyHint ?? "••••"}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground/25 opacity-60 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                              onClick={() => setPendingDeleteId(provider.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
 
-                  {/* Add button */}
-                  <button
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-border/50 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 hover:border-border hover:bg-accent/30 transition-colors mt-0.5"
-                    onClick={() => openDialog(type)}
-                  >
-                    <Plus className="h-3 w-3" />
-                    Add {TYPE_LABELS[type]}
-                  </button>
+                      {/* Add button */}
+                      <button
+                        className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-border/50 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 hover:border-border hover:bg-accent/30 transition-colors mt-0.5"
+                        onClick={() => openDialog(type)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add {TYPE_LABELS[type]}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
