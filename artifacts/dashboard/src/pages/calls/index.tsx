@@ -216,15 +216,15 @@ function PhoneCell({ number }: { number?: string | null }) {
 /* ── Mini Stat Card ──────────────────────────────────────────────────────── */
 function MiniStat({ label, value, icon, trend }: { label: string; value: string; icon: React.ReactNode; trend?: string }) {
   return (
-    <Card className="border-0 shadow-none bg-transparent hover:bg-elevated/30 transition-colors">
-      <CardContent className="p-3 flex items-center gap-3">
-        <div className="h-8 w-8 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
+    <Card className="h-full border border-border bg-elevated/40 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-primary/30 transition-all duration-200">
+      <CardContent className="h-full p-4 flex items-center gap-3.5">
+        <div className="h-10 w-10 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
           {icon}
         </div>
-        <div>
-          <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">{label}</p>
-          <div className="flex items-center gap-1.5">
-            <p className="text-sm font-semibold text-foreground">{value}</p>
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">{label}</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <p className="text-xl font-bold text-foreground leading-tight tracking-tight">{value}</p>
             {trend && (
               <span className="text-[10px] text-emerald-500 flex items-center gap-0.5">
                 <TrendingUp className="h-3 w-3" />{trend}
@@ -464,10 +464,10 @@ export default function CallsList() {
                   Voice Operations
                 </p>
               </div>
-              <h1 className="text-xl font-semibold tracking-tight text-foreground leading-none">
-                Call Log
+              <h1 className="text-2xl font-bold tracking-tight text-foreground leading-tight">
+                Call Logs
               </h1>
-              <p className="text-xs mt-1 text-muted-foreground/60">
+              <p className="text-sm mt-1.5 text-muted-foreground/50">
                 Complete history of voice interactions with AI agents
               </p>
             </div>
@@ -475,31 +475,31 @@ export default function CallsList() {
 
           {/* Stats Row */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
               <MiniStat
                 label="Total Calls"
                 value={String(stats.total)}
-                icon={<Phone className="h-3.5 w-3.5 text-muted-foreground/50" />}
+                icon={<Phone className="h-4 w-4 text-muted-foreground/50" />}
               />
               <MiniStat
                 label="Completed"
                 value={String(stats.completed)}
-                icon={<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
               />
               <MiniStat
                 label="Voicemail"
                 value={String(stats.voicemail)}
-                icon={<Voicemail className="h-3.5 w-3.5 text-violet-500" />}
+                icon={<Voicemail className="h-4 w-4 text-violet-500" />}
               />
               <MiniStat
                 label="Failed"
                 value={String(stats.failed)}
-                icon={<AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
+                icon={<AlertTriangle className="h-4 w-4 text-red-500" />}
               />
               <MiniStat
                 label="Avg Duration"
                 value={formatDuration(stats.avgDuration)}
-                icon={<Clock className="h-3.5 w-3.5 text-muted-foreground/50" />}
+                icon={<Clock className="h-4 w-4 text-muted-foreground/50" />}
               />
             </div>
           )}
