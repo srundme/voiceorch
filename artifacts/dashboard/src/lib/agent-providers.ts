@@ -11,6 +11,7 @@ export const LLM_PROVIDERS = [
   { value: "sarvam",    label: "Sarvam" },
   { value: "together",  label: "Together AI (Qwen3.6 / MiniMax M3)" },
   { value: "openrouter", label: "OpenRouter (Qwen3.5 / Qwen3.6)" },
+  { value: "krutrim",    label: "Krutrim 🇮🇳 (Bangalore-hosted — lowest latency for India)" },
 ];
 
 export const TTS_PROVIDERS = [
@@ -56,6 +57,14 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openrouter: [
     { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, ~$0.0023/min (recommended, fastest)" },
     { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, ~$0.0083/min, best for agentic use" },
+  ],
+  krutrim: [
+    { value: "Qwen/Qwen3.5-9B",        label: "Qwen3.5 9B — fastest, cheapest (₹3/1M, recommended for voice)" },
+    { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — MoE 3B active params, 35B quality (₹7/1M)" },
+    { value: "Google/gemma-4-E4B-it",  label: "Gemma 4 4B — lightweight, good quality (₹3/1M)" },
+    { value: "Google/gemma-4-31b-it",  label: "Gemma 4 31B — highest quality (₹9/1M)" },
+    { value: "OpenAI/gpt-oss-20b",     label: "GPT-oss 20B — open-source (₹8/1M)" },
+    { value: "OpenAI/gpt-oss-120b",    label: "GPT-oss 120B — large open-source (₹13/1M)" },
   ],
 };
 
