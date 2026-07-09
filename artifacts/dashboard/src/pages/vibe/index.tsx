@@ -8,7 +8,7 @@ import {
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
-  PlusCircle, History,
+  PlusCircle, History, PhoneIncoming, Info,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,6 +26,8 @@ const AVAILABILITY_PRESETS = [
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
 interface VoiceOption  { voiceId: string; voiceName: string; gender: string; language: string; description: string; languageMatch?: boolean; }
+interface PhoneNumberOption { id: number; number: string; region: string; assignedAgentId: number | null; }
+interface NoticeCard   { message: string; }
 interface AgentField   { key: string; label: string; value: string; icon: string; }
 interface FeatureCard  { key: string; label: string; enabled: boolean; icon: string; detail: string; }
 interface DispositionCard { category: string; outcomes: string[]; }
@@ -43,6 +45,9 @@ interface ChatMsg {
   timezonePicked?: boolean;      // collapses timezone picker after selection
   availabilityPicker?: boolean;  // inline availability preset picker
   availabilityPicked?: boolean;  // collapses availability picker after selection
+  notices?: NoticeCard[];        // distinct info notices (multi-language heads-up, no-numbers)
+  phoneNumbers?: PhoneNumberOption[]; // inline phone-number picker
+  phoneNumbersPicked?: boolean;  // collapses phone-number picker after pick/skip
 }
 
 interface SessionSummary {
@@ -62,6 +67,7 @@ const FIELD_ICONS: Record<string, React.ElementType> = {
   bot: () => <img src="/snapserve-icon.png" className="h-3.5 w-3.5" alt="" />,
   building: Building2, globe: Globe, mic: Mic,
   phone: Phone, cpu: Cpu, ear: Ear, speaker: Speaker,
+  "phone-incoming": PhoneIncoming,
 };
 const FEATURE_ICONS: Record<string, React.ElementType> = {
   "user-check": UserCheck, "phone-forwarded": PhoneForwarded,
@@ -181,6 +187,9 @@ export default function VibePage() {
   const [sessions, setSessions]               = useState<SessionSummary[]>([]);
   const [sidebarOpen, setSidebarOpen]         = useState(true);
   const [viewMode, setViewMode]               = useState<"editing" | "history">("editing");
+  // Dedupe for notice cards — once per language decision / notice signature.
+  const noticeSigsRef = useRef<Set<string>>(new Set());
+  const [selectedNumber, setSelectedNumber] = useState<string>("");
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -207,8 +216,11 @@ export default function VibePage() {
       fetch(`/api/vibe/sessions?agentId=${refineId}`, {
         headers: { Authorization: `Bearer ${token ?? ""}` },
       }).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`/api/phone-numbers`, {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      }).then(r => r.ok ? r.json() : null).catch(() => null),
     ])
-      .then(([agent, dispositionsData, sessionList]: [Record<string, unknown> | null, unknown, SessionSummary[]]) => {
+      .then(([agent, dispositionsData, sessionList, phoneNumbersData]: [Record<string, unknown> | null, unknown, SessionSummary[], unknown]) => {
         if (Array.isArray(sessionList) && sessionList.length > 0) {
           setSessions(sessionList);
         }
@@ -222,7 +234,8 @@ export default function VibePage() {
           { key: "company",   label: "Company",        value: (cfg.companyName as string) || "—",          icon: "building" },
           { key: "language",  label: "Language",       value: lang,                                        icon: "globe"    },
           { key: "direction", label: "Call Direction",
-            value: cfg.direction === "outbound" ? "Outbound" : "Inbound",                                  icon: "phone"    },
+            value: cfg.direction === "both" ? "Inbound & Outbound"
+              : cfg.direction === "outbound" ? "Outbound" : "Inbound",                                     icon: "phone"    },
           { key: "voice",     label: "Voice",
             value: (agent.ttsVoice as string)
               ? ((agent.ttsVoiceName as string) || `…${(agent.ttsVoice as string).slice(-8)}`)
@@ -236,7 +249,27 @@ export default function VibePage() {
             key: "greeting", label: "Greeting", value: (agent.greetingMessage as string).slice(0, 80) + ((agent.greetingMessage as string).length > 80 ? "…" : ""), icon: "message-circle",
           });
         }
+        // Inbound number panel field (inbound / "both" agents)
+        const numberRows = Array.isArray(phoneNumbersData) ? (phoneNumbersData as Record<string, unknown>[]) : [];
+        const assignedRow = numberRows.find(n => n.agentId === refineId);
+        if (cfg.direction === "inbound" || cfg.direction === "both" || assignedRow) {
+          panelFields.push({
+            key: "inbound_number", label: "Inbound Number",
+            value: (assignedRow?.number as string) || "Not assigned", icon: "phone-incoming",
+          });
+        }
+        if (assignedRow?.number) setSelectedNumber(assignedRow.number as string);
         setFields(panelFields);
+
+        // Seed the notice dedupe so an already-multilingual agent doesn't get the
+        // multi-language heads-up again on the first refine turn.
+        if (cfg.isMultilingual) {
+          const langSet = [...new Set(
+            [agent.language as string, ...((cfg.multilingualLanguages as string[]) ?? [])]
+              .map(s => String(s ?? "").trim()).filter(Boolean)
+          )].sort();
+          noticeSigsRef.current.add(`multi:${langSet.join(",")}`);
+        }
 
         // Pre-populate call flow + KB notes
         const cfNotes = (cfg.callFlowNotes as string) || (agent.description as string) || "";
@@ -440,6 +473,34 @@ export default function VibePage() {
     setMessages(prev => prev.map(m => m.availabilityPicker ? { ...m, availabilityPicked: true } : m));
   }, []);
 
+  // Attach a distinct notice card to the last AI message (deduped by signature)
+  const attachNoticeToLastMsg = useCallback((message: string) => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last?.role === "ai") {
+        return [...prev.slice(0, -1), { ...last, notices: [...(last.notices ?? []), { message }] }];
+      }
+      return prev;
+    });
+  }, []);
+
+  // Attach the phone-number picker to the last AI message (strip older open pickers)
+  const attachPhoneNumbersToLastMsg = useCallback((numbers: PhoneNumberOption[]) => {
+    setMessages(prev => {
+      const cleared = prev.map(m => m.phoneNumbers && !m.phoneNumbersPicked ? { ...m, phoneNumbers: undefined } : m);
+      const last = cleared[cleared.length - 1];
+      if (last?.role === "ai") {
+        return [...cleared.slice(0, -1), { ...last, phoneNumbers: numbers, phoneNumbersPicked: false }];
+      }
+      return cleared;
+    });
+  }, []);
+
+  // Collapse all phone-number pickers after pick/skip
+  const collapsePhonePickers = useCallback(() => {
+    setMessages(prev => prev.map(m => m.phoneNumbers ? { ...m, phoneNumbersPicked: true } : m));
+  }, []);
+
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || phaseRef.current === "building" || phaseRef.current === "thinking"
@@ -531,6 +592,25 @@ export default function VibePage() {
               collapseVoicePickers();
               selectedVoiceIdRef.current = String(evt.voiceId ?? "");
               setSelectedVoice(String(evt.voiceName ?? ""));
+              break;
+
+            case "notice": {
+              const sig = String(evt.signature ?? "");
+              if (sig && noticeSigsRef.current.has(sig)) break;
+              if (sig) noticeSigsRef.current.add(sig);
+              attachNoticeToLastMsg(String(evt.message ?? ""));
+              break;
+            }
+
+            case "phone_number_options": {
+              const nums = (evt.numbers as PhoneNumberOption[]) ?? [];
+              if (nums.length > 0) attachPhoneNumbersToLastMsg(nums);
+              break;
+            }
+
+            case "phone_number_selected":
+              collapsePhonePickers();
+              setSelectedNumber(String(evt.number ?? ""));
               break;
 
             case "field":
@@ -696,7 +776,8 @@ export default function VibePage() {
       setPhase("idle");
     }
   }, [input, viewMode, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
-      attachAvailabilityPickerToLastMsg, queryClient]);
+      attachAvailabilityPickerToLastMsg, attachNoticeToLastMsg,
+      attachPhoneNumbersToLastMsg, collapsePhonePickers, queryClient]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -984,6 +1065,16 @@ export default function VibePage() {
                       collapseAvailabilityPickers();
                       send(`Set availability: ${preset.label} — days: [${preset.days.join(",")}], hours: ${preset.start}–${preset.end}`);
                     }}
+                    selectedNumber={selectedNumber}
+                    onAssignNumber={n => {
+                      collapsePhonePickers();
+                      setSelectedNumber(n.number);
+                      send(`Assign ${n.number} (number id ${n.id}) as the inbound number`);
+                    }}
+                    onSkipNumber={() => {
+                      collapsePhonePickers();
+                      send("Skip the phone number for now");
+                    }}
                   />
                 ))}
                 {phase === "thinking" && <ThinkingLogo />}
@@ -1196,7 +1287,7 @@ export default function VibePage() {
 /*  Chat components                                                            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, onSelectTimezone, onSelectAvailability }: {
+function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, onSelectTimezone, onSelectAvailability, selectedNumber, onAssignNumber, onSkipNumber }: {
   msg: ChatMsg;
   selectedVoice: string;
   playingVoice: string | null;
@@ -1204,6 +1295,9 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
   onSelect: (v: VoiceOption) => void;
   onSelectTimezone: (tz: { value: string; label: string }) => void;
   onSelectAvailability: (preset: typeof AVAILABILITY_PRESETS[number]) => void;
+  selectedNumber: string;
+  onAssignNumber: (n: PhoneNumberOption) => void;
+  onSkipNumber: () => void;
 }) {
   const isAi = msg.role === "ai";
 
@@ -1305,6 +1399,62 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
           <div className="flex items-center gap-2 text-[11px] text-primary">
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span className="font-medium">Availability set</span>
+          </div>
+        )}
+
+        {/* Distinct notice cards (multi-language heads-up, phone-number info) */}
+        {msg.notices?.map((n, i) => (
+          <div key={i} className="flex items-start gap-2.5 rounded-xl border border-sky-500/25 bg-sky-500/8 px-3.5 py-3">
+            <Info className="h-4 w-4 text-sky-400 shrink-0 mt-0.5" />
+            <p className="text-xs leading-relaxed text-foreground/90">{n.message}</p>
+          </div>
+        ))}
+
+        {/* Phone-number picker — collapsed once picked/skipped */}
+        {msg.phoneNumbers && msg.phoneNumbers.length > 0 && !msg.phoneNumbersPicked && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+              Your phone numbers
+            </p>
+            <div className="rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
+              {msg.phoneNumbers.map(n => (
+                <div
+                  key={n.id}
+                  className="flex items-center gap-3 px-3 py-2.5 border-b border-border/30 last:border-0"
+                >
+                  <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
+                    <PhoneIncoming className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold">{n.number}</p>
+                    <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                      {[n.region, n.assignedAgentId != null ? "currently assigned to another agent" : "unassigned"]
+                        .filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-7 rounded-full px-3 text-[11px] shrink-0"
+                    onClick={() => onAssignNumber(n)}
+                  >
+                    Assign
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={onSkipNumber}
+              className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            >
+              Skip for now
+            </button>
+          </div>
+        )}
+        {/* Collapsed phone-number state */}
+        {msg.phoneNumbers && msg.phoneNumbers.length > 0 && msg.phoneNumbersPicked && (
+          <div className="flex items-center gap-2 text-[11px] text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="font-medium">{selectedNumber ? `${selectedNumber} connected` : "Phone number step done"}</span>
           </div>
         )}
 

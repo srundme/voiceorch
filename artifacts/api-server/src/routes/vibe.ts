@@ -3,7 +3,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import {
   db, agentsTable, platformSettingsTable, schedulingCalendarsTable,
   availabilitySchedulesTable, eventTypesTable,
-  platformListedVoicesTable, agentDispositionsTable,
+  platformListedVoicesTable, agentDispositionsTable, phoneNumbersTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
@@ -85,7 +85,9 @@ interface VibeConfig {
   multilingualLanguages: string[];
   hasTamil:     boolean;
   gender:       "male" | "female";
-  direction:    "inbound" | "outbound";
+  direction:    "inbound" | "outbound" | "both";
+  phoneNumberId:      number | string | null;
+  phoneNumberSkipped: boolean;
   description:  string;
   voiceId:      string;
   voiceName:    string;
@@ -134,7 +136,7 @@ Collect these 5 things (can gather multiple per turn if the user volunteers them
    If they name exactly ONE language: set language=<its code> and languageChosen=true.
    If they name TWO OR MORE languages in one answer: NEVER assume which is primary. Do NOT set language or languageChosen yet — keep languageChosen=false and treat item 3 as NOT collected. Ask a follow-up listing the languages they mentioned, e.g. "Which of these — Tamil, Hindi, or English — should be [name]'s primary language?" Only after they explicitly answer: set language=<the confirmed primary's code>, languageChosen=true, put ALL mentioned languages (including the primary) in multilingualLanguages, and set languageMode="multi".
    The user can change or add languages at ANY time, including during voice selection — just update language/multilingualLanguages/languageChosen and the voice list refreshes automatically. If they name several languages at once during such a change, the same rule applies: ask which should be primary before changing language.
-4. Call direction: "inbound" (customers call in) or "outbound" (agent calls out). If the user says "both", "either", or it handles both scenarios — set direction="inbound" and note in description that it handles both inbound and outbound contexts.
+4. Call direction: "inbound" (customers call in), "outbound" (agent calls out), or "both" (handles both). If the user says "both", "either", or that it handles both scenarios — set direction="both".
 5. Purpose/description (what it does and who it talks to)
 → Transition: once you have all 5, set phase="voice_selection". EXCEPTION: if you asked which language should be primary and the user has not answered yet, item 3 is INCOMPLETE — stay in phase="core" and do NOT advance to voice_selection until the primary language is confirmed (or the user skips the language question entirely).
 
@@ -211,7 +213,15 @@ PHASE "dispositions"
 - Based on the purpose/direction, AUTO-GENERATE 3–5 relevant call outcome categories with outcomes.
 - Present them conversationally: "Here's how I've categorized call outcomes for [name]: [brief list]. Does this look right, or want to tweak anything?"
 - Adjust if the user asks
-→ Transition: set phase="build"
+→ Transition: if direction is "inbound" or "both", set phase="phone_number". If direction is "outbound", set phase="build".
+
+PHASE "phone_number" (ONLY when direction is "inbound" or "both" — for pure "outbound" agents skip this phase entirely and go straight to build)
+- The user's purchased phone numbers are listed in the [USER PHONE NUMBERS] context block. Number cards are shown directly in this chat automatically — do NOT type the list out yourself.
+- If the list has numbers: say "Since [name] takes incoming calls, let's connect a phone number — pick one below, or skip for now and connect one later from the Phone Numbers page."
+- When the user picks one (by clicking Assign or naming it): set phoneNumberId to that number's EXACT id from the list. NEVER invent an id.
+- If the user skips: set phoneNumberSkipped=true. The agent is still created — a number can be connected later.
+- If the list says NONE: tell them they don't have any numbers yet — they can purchase one from the Phone Numbers page and connect it to this agent later using "Refine with AI". Set phoneNumberSkipped=true and move on. Do NOT block creation.
+→ Transition: set phase="build" once phoneNumberId is set OR phoneNumberSkipped=true
 
 PHASE "build"
 - Say: "Perfect — I have everything I need! Building [name] now..."
@@ -223,6 +233,7 @@ RULES:
 - Always return the COMPLETE config with ALL previously collected fields in every response
 - Suggest sensible defaults when the user is unsure
 - 1–2 questions per turn max
+- The moment the config BECOMES multi-language (languageMode changes to "multi"), include one brief heads-up in your reply: the agent will start every call in English and automatically switch to the caller's language as soon as they respond in it — so "English (India)" will show as the agent's base language. Say this ONCE per language decision, not on every turn.
 
 RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
 {
@@ -239,6 +250,8 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
     "hasTamil": false,
     "gender": "female",
     "direction": "inbound",
+    "phoneNumberId": null,
+    "phoneNumberSkipped": false,
     "description": "",
     "voiceId": "",
     "voiceName": "",
@@ -446,11 +459,27 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       return;
     }
 
+    // User's purchased (active) phone numbers — used for the phone_number phase
+    // context, the inline picker emit, and save-time assignment validation.
+    let userNumbers: Array<{ id: number; number: string; region: string | null; agentId: number | null }> = [];
+    try {
+      const numRows = await db.select().from(phoneNumbersTable)
+        .where(and(eq(phoneNumbersTable.userId, clerkId), eq(phoneNumbersTable.status, "active")));
+      userNumbers = numRows.map(n => ({ id: n.id, number: n.number, region: n.region, agentId: n.agentId }));
+    } catch (err) {
+      logger.warn({ err }, "vibe-chat: failed to fetch user phone numbers");
+    }
+
     // Refine mode: fetch the existing agent row server-side (ownership-checked) at
     // request start so the Gemini context is authoritative, not client-supplied.
     // This row is also reused later to preserve provider/model fields on DB update.
     let existingAgentRow: Record<string, unknown> | null = null;
     let serverSideRefineConfig: Record<string, unknown> | null = null;
+    // Number already assigned to the agent being refined (if any) — used so refine
+    // confirms the existing number instead of re-asking.
+    const refineAssignedNumber = isRefine
+      ? (userNumbers.find(n => n.agentId === refineAgentId) ?? null)
+      : null;
     if (isRefine) {
       try {
         const [agentRow] = await db.select().from(agentsTable)
@@ -559,6 +588,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             dispositions:           serverDispositions,
             systemPrompt:           systemPromptStr.slice(0, 100000),
             greetingMessage:        agentRow.greetingMessage ?? "",
+            phoneNumberId:          refineAssignedNumber?.id ?? null,
+            assignedPhoneNumber:    refineAssignedNumber?.number ?? "",
+            phoneNumberSkipped:     false,
           };
         }
       } catch (err) {
@@ -578,6 +610,19 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         ...messages,
       ];
     }
+
+    // Inject the user's purchased phone numbers so the AI can offer them during
+    // the phone_number phase (inbound/"both" agents) and use exact ids on pick.
+    const phoneCtx = userNumbers.length > 0
+      ? `[USER PHONE NUMBERS — purchased numbers that can be connected for inbound calls]\n${userNumbers.map(n =>
+          `- id: ${n.id} | ${n.number}${n.region ? ` | ${n.region}` : ""}${n.agentId ? ` | currently assigned to agent #${n.agentId}` : " | unassigned"}`
+        ).join("\n")}\n[END USER PHONE NUMBERS — when the user picks one, set phoneNumberId to its exact id from this list]`
+      : `[USER PHONE NUMBERS]\nNONE — the user has not purchased any phone numbers yet.\n[END USER PHONE NUMBERS]`;
+    contextualMessages = [
+      { role: "user" as const, content: phoneCtx },
+      { role: "assistant" as const, content: JSON.stringify({ reply: "Noted — I can see the user's phone numbers.", phase: "core", ready: false, config: null }) },
+      ...contextualMessages,
+    ];
 
     // Refine mode: prepend a preamble with the server-fetched authoritative config.
     // Fall back to client-supplied refineBaseConfig only if DB fetch failed.
@@ -609,6 +654,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         `- Do NOT rewrite, paraphrase, simplify, reformat, restructure, or shorten any part of the system prompt. The output "systemPrompt" must differ from the input "systemPrompt" only at the exact requested change site(s).`,
         `- Return the full edited system prompt in config.systemPrompt — never truncate it.`,
         `- If the user's request does not touch the system prompt text at all (e.g. voice change, transfer number update), return config.systemPrompt unchanged, copied verbatim from above.`,
+        ``,
+        `Phone number rules (refine):`,
+        `- If "assignedPhoneNumber" above is set, this agent ALREADY has a phone number connected. If the user brings up phone numbers, briefly CONFIRM the existing one — do NOT re-ask or change it unless they explicitly ask for a different number.`,
+        `- If the user asks to connect/assign/change a phone number and the [USER PHONE NUMBERS] list has numbers: respond with phase="phone_number" and ready=false so the number cards appear in the chat; once they pick, set phoneNumberId to the exact id and proceed with phase="build".`,
+        `- If the list says NONE, point them to the Phone Numbers page to purchase one first.`,
       ].join("\n");
       contextualMessages = [
         { role: "user" as const, content: refineBlock },
@@ -699,18 +749,54 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       emit({ type: "voice_selected", voiceId: cfg.voiceId, voiceName: cfg.voiceName });
     }
 
+    // Multi-language heads-up — a visually distinct notice card in the chat.
+    // The client dedupes on `signature` so it appears once per language decision.
+    if (cfg.languageMode === "multi") {
+      const langSet = [...new Set(
+        [cfg.language, ...(cfg.multilingualLanguages ?? [])].map(s => String(s ?? "").trim()).filter(Boolean)
+      )].sort();
+      const nonEnglish = langSet.filter(c => !c.toLowerCase().startsWith("en"));
+      if (nonEnglish.length > 0) {
+        const labels = nonEnglish.map(c => LANG_MAP[c]?.label ?? c);
+        emit({
+          type: "notice",
+          noticeType: "language",
+          signature: `multi:${langSet.join(",")}`,
+          message: `Multi-language setup: ${cfg.agentName} will start every call in English (India) — that's the base language shown on the agent — and automatically switch to ${labels.join(", ")} the moment the caller speaks it. None of your language choices are lost.`,
+        });
+      }
+    }
+
+    // Phone-number phase helpers (inbound / "both" agents only). The picked id is
+    // validated against the user's own active numbers — never trusted raw.
+    const dirTakesInbound = cfg.direction === "inbound" || cfg.direction === "both";
+    const pickedNumberIdRaw = cfg.phoneNumberId;
+    const pickedNumberId = pickedNumberIdRaw != null && String(pickedNumberIdRaw).trim() !== ""
+      ? Number(pickedNumberIdRaw) : null;
+    const pickedNumberRow = pickedNumberId != null && Number.isFinite(pickedNumberId)
+      ? (userNumbers.find(n => n.id === pickedNumberId) ?? null)
+      : null;
+
     // Core field events
     const coreFields = [
       { key: "name",      label: "Agent Name",     value: cfg.agentName,                                                         icon: "bot"      },
       { key: "company",   label: "Company",        value: cfg.companyName || "—",                                                icon: "building" },
       { key: "language",  label: "Language",       value: langDisplay,                                                           icon: "globe"    },
-      { key: "direction", label: "Call Direction", value: cfg.direction === "inbound" ? "Inbound" : "Outbound",                  icon: "phone"    },
+      { key: "direction", label: "Call Direction",
+        value: cfg.direction === "both" ? "Inbound & Outbound" : cfg.direction === "outbound" ? "Outbound" : "Inbound",
+        icon: "phone" },
       { key: "llm",       label: "AI Brain",       value: isTamil ? "Gemini 2.5 Flash" : "Groq Llama 3.3 70B",                  icon: "cpu"      },
       { key: "stt",       label: "Speech-to-Text", value: "Sarvam Saaras v3",                                                    icon: "ear"      },
       { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                                                  icon: "speaker"  },
     ];
     if (cfg.voiceId) {
       coreFields.splice(3, 0, { key: "voice", label: "Voice", value: `${cfg.voiceName} — ${cfg.gender === "female" ? "Female" : "Male"}`, icon: "mic" });
+    }
+    {
+      const displayNumber = pickedNumberRow?.number || refineAssignedNumber?.number || "";
+      if (dirTakesInbound && (displayNumber || cfg.phoneNumberSkipped || phase === "phone_number" || phase === "build" || parsed.ready)) {
+        coreFields.push({ key: "inbound_number", label: "Inbound Number", value: displayNumber || "Not assigned", icon: "phone-incoming" });
+      }
     }
     for (const field of coreFields) {
       emit({ type: "field", ...field });
@@ -734,7 +820,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 
     // Feature cards — emit for every phase past voice/call_flow/kb
     const featurePhases = ["features_gender","features_transfer","features_voicemail",
-      "features_scheduling","features_compliance","dispositions","build","multilingual"];
+      "features_scheduling","features_compliance","dispositions","phone_number","build","multilingual"];
     if (featurePhases.includes(phase) || parsed.ready) {
       const features: Array<{ key: string; label: string; enabled: boolean; icon: string; detail: string }> = [
         {
@@ -789,6 +875,29 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     if (cfg.schedulingEnabled && cfg.timezoneSet && cfg.hostEmailSet && !cfg.availabilitySet && phase === "features_scheduling") {
       await sleep(150);
       emit({ type: "availability_picker" });
+    }
+
+    // Phone-number step (inbound / "both" agents): show the user's purchased
+    // numbers as in-chat cards, or point to the Phone Numbers page when empty.
+    if (dirTakesInbound && userNumbers.length === 0
+        && (phase === "phone_number" || (!isRefine && (phase === "build" || parsed.ready)))) {
+      emit({
+        type: "notice",
+        noticeType: "phone_numbers",
+        signature: "no-phone-numbers",
+        message: "You don't have any phone numbers yet, so nothing is connected for incoming calls. You can purchase one from the Phone Numbers page anytime and connect it to this agent with \"Refine with AI\" — the agent is still being created now.",
+      });
+    }
+    if (dirTakesInbound && phase === "phone_number" && userNumbers.length > 0
+        && !pickedNumberRow && !cfg.phoneNumberSkipped) {
+      await sleep(150);
+      emit({
+        type: "phone_number_options",
+        numbers: userNumbers.map(n => ({ id: n.id, number: n.number, region: n.region ?? "", assignedAgentId: n.agentId })),
+      });
+    }
+    if (pickedNumberRow) {
+      emit({ type: "phone_number_selected", numberId: pickedNumberRow.id, number: pickedNumberRow.number });
     }
 
     // Disposition cards
@@ -860,7 +969,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         agentName:           cfg.agentName,
         companyName:         cfg.companyName,
         useCase:             cfg.description,
-        agentDirection:      cfg.direction === "outbound" ? "Outbound" : cfg.direction === "inbound" ? "Inbound" : "Inbound",
+        agentDirection:      cfg.direction === "outbound" ? "Outbound" : cfg.direction === "both" ? "Inbound and Outbound" : "Inbound",
         language:            langDisplay,
         selectedLanguages:   (cfg.multilingualLanguages ?? []).filter((l: string) => l !== langDisplay),
         callFlowDescription: cfg.callFlowNotes ?? cfg.description,
@@ -927,6 +1036,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       summarizationEnabled: true,
       languageAutoDetect:   cfg.languageMode === "multi",
       isMultilingual:       cfg.languageMode === "multi",
+      direction:            cfg.direction || "inbound",
     };
     if (cfg.direction === "outbound") {
       agentConfig.autoRedial = { enabled: true, maxAttempts: 3 };
@@ -1165,6 +1275,39 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       emit({ type: "error", message: "Failed to save agent. Please try again." });
       res.end();
       return;
+    }
+
+    // Inbound phone-number assignment (vibe phone_number phase) — mirrors
+    // PATCH /phone-numbers/:id/assign. Non-fatal: agent creation already succeeded.
+    // pickedNumberRow is validated against the user's own active numbers above.
+    if (pickedNumberRow && pickedNumberRow.agentId !== insertedAgent.id) {
+      try {
+        const [numRow] = await db.update(phoneNumbersTable)
+          .set({ agentId: insertedAgent.id })
+          .where(and(eq(phoneNumbersTable.id, pickedNumberRow.id), eq(phoneNumbersTable.userId, clerkId)))
+          .returning();
+        if (numRow) {
+          await db.update(agentsTable)
+            .set({ inboundPhoneNumberId: numRow.id, outboundPhoneNumberId: numRow.id })
+            .where(and(eq(agentsTable.id, insertedAgent.id), eq(agentsTable.userId, clerkId)));
+          await logActivity({
+            userId:       clerkId,
+            eventType:    "phone_number.assigned",
+            resourceType: "phone_number",
+            resourceId:   String(numRow.id),
+            description:  `Phone number ${numRow.number} assigned to agent #${insertedAgent.id}`,
+          });
+          emit({ type: "field", key: "inbound_number", label: "Inbound Number", value: numRow.number, icon: "phone-incoming" });
+        }
+      } catch (err) {
+        logger.warn({ err, numberId: pickedNumberRow.id, agentId: insertedAgent.id }, "vibe-chat: phone number assignment failed (non-fatal)");
+        emit({
+          type: "notice",
+          noticeType: "phone_numbers",
+          signature: `assign-failed-${pickedNumberRow.id}`,
+          message: `I couldn't connect ${pickedNumberRow.number} automatically — you can assign it from the Phone Numbers page.`,
+        });
+      }
     }
 
     // DB insert/upsert — dispositions
