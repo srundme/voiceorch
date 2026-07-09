@@ -755,6 +755,18 @@ export async function createSession(params: {
     );
   }
 
+  // Auto-inject KB trust instruction whenever a knowledge base is attached.
+  // Users don't add this themselves — we do it for them so weaker models don't
+  // ignore the per-turn retrieved context or hallucinate over it.
+  // Only appended if the system prompt doesn't already contain the marker.
+  if (
+    agentConfig.knowledgeSourceIds.length > 0 &&
+    !agentConfig.systemPrompt.includes("[KB_TRUST]")
+  ) {
+    agentConfig.systemPrompt +=
+      "\n\n[KB_TRUST] When relevant information is provided in your context from the knowledge base, use it directly and precisely. Do not guess or invent product details, pricing, policies, or facts that are not present in what you have been given.";
+  }
+
   // Scope provider keys to this agent's owner (fetched in parallel above).
   // Managed agents (userId=null) rely entirely on platform managed keys below.
   const providerKeys = new Map<string, string>();
