@@ -198,6 +198,7 @@ export default function VibePage() {
   const createdIdRef       = useRef<number | null>(null);
   const [urlInputOpen,    setUrlInputOpen]    = useState(false);
   const [urlInputValue,   setUrlInputValue]   = useState("");
+  const [showKbPanel,     setShowKbPanel]     = useState(false);
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -755,6 +756,7 @@ export default function VibePage() {
 
             case "knowledge_base":
               setKbNotes(String(evt.notes ?? ""));
+              setShowKbPanel(true);
               // Track the text KB source created during this phase on the server
               if (typeof evt.kbSourceId === "number") {
                 const sid = evt.kbSourceId as number;
@@ -803,7 +805,7 @@ export default function VibePage() {
             case "disposition_card":
               setDispositions(prev => {
                 if (prev.find(d => d.category === evt.category)) return prev;
-                return [...prev, { category: evt.category as string, outcomes: evt.outcomes as string[] }];
+                return [...prev, { category: evt.category as string, outcomes: Array.isArray(evt.outcomes) ? evt.outcomes as string[] : [] }];
               });
               break;
 
@@ -1414,6 +1416,22 @@ export default function VibePage() {
                   compact
                   onClose={() => setShowTestCall(false)}
                 />
+              ) : showKbPanel ? (
+                <VibeKbPanel
+                  sources={vibeKbSources}
+                  urlInputOpen={urlInputOpen}
+                  urlInputValue={urlInputValue}
+                  onUrlChange={setUrlInputValue}
+                  onUrlToggle={() => setUrlInputOpen(v => !v)}
+                  onUrlSubmit={handleUrlSubmit}
+                  onFileClick={() => fileInputRef.current?.click()}
+                  onDone={() => {
+                    setShowKbPanel(false);
+                    if (vibeKbSources.length > 0) {
+                      send("I've added my knowledge base documents. Continue.");
+                    }
+                  }}
+                />
               ) : !hasRightContent ? (
                 <EmptyState />
               ) : (
@@ -1985,14 +2003,15 @@ const OUTCOME_COLORS = [
 
 function DispositionRow({ d, i }: { d: DispositionCard; i: number }) {
   const c = OUTCOME_COLORS[i % OUTCOME_COLORS.length]!;
+  const outcomes = d.outcomes ?? [];
   return (
     <div className={cn("rounded-xl border overflow-hidden animate-in fade-in duration-300", c.bg)}>
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
         <p className="text-[11px] font-semibold">{d.category}</p>
-        <span className="text-[10px] text-muted-foreground">{d.outcomes.length}</span>
+        <span className="text-[10px] text-muted-foreground">{outcomes.length}</span>
       </div>
       <div className="px-4 py-2.5 flex flex-wrap gap-1.5">
-        {d.outcomes.map(o => (
+        {outcomes.map(o => (
           <span key={o} className={cn("rounded-md border px-2 py-0.5 text-[10px] font-medium", c.tag)}>{o}</span>
         ))}
       </div>
@@ -2032,6 +2051,147 @@ function EmptyState() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function VibeKbPanel({
+  sources,
+  urlInputOpen,
+  urlInputValue,
+  onUrlChange,
+  onUrlToggle,
+  onUrlSubmit,
+  onFileClick,
+  onDone,
+}: {
+  sources: { id: number; name: string; type: string; status: string }[];
+  urlInputOpen: boolean;
+  urlInputValue: string;
+  onUrlChange: (v: string) => void;
+  onUrlToggle: () => void;
+  onUrlSubmit: () => void;
+  onFileClick: () => void;
+  onDone: () => void;
+}) {
+  const statusIcon = (status: string) =>
+    status === "ready"      ? <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-0.5 shrink-0" /> :
+    status === "failed"     ? <div className="h-1.5 w-1.5 rounded-full bg-destructive mt-0.5 shrink-0" /> :
+                              <div className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-0.5 shrink-0 animate-pulse" />;
+
+  return (
+    <div className="flex flex-col gap-6 max-w-2xl py-2">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/8 border border-primary/15 flex items-center justify-center shrink-0">
+            <BookOpen className="h-5 w-5 text-primary/70" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">Knowledge Base</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              Upload documents or add website URLs your agent will use to answer questions.
+              PDFs, Word docs, CSVs, and plain text are all supported.
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant={sources.length > 0 ? "default" : "outline"}
+          className="h-7 text-xs rounded-lg shrink-0 ml-4"
+          onClick={onDone}
+        >
+          {sources.length > 0 ? "Done — Continue" : "Skip for now"}
+        </Button>
+      </div>
+
+      {/* Upload actions */}
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-2 text-xs rounded-lg flex-1"
+            onClick={onFileClick}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            Upload document
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-2 text-xs rounded-lg flex-1"
+            onClick={onUrlToggle}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            Add website URL
+          </Button>
+        </div>
+
+        {urlInputOpen && (
+          <div className="flex items-center gap-2 animate-in slide-in-from-top-1 duration-150">
+            <input
+              type="url"
+              value={urlInputValue}
+              onChange={e => onUrlChange(e.target.value)}
+              placeholder="https://your-website.com/docs"
+              className="flex-1 h-8 rounded-lg border border-border bg-background px-3 text-xs outline-none focus:ring-1 focus:ring-primary/40"
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === "Enter") { e.preventDefault(); onUrlSubmit(); }
+                if (e.key === "Escape") { onUrlToggle(); }
+              }}
+            />
+            <Button
+              size="sm"
+              variant="default"
+              className="h-8 text-xs rounded-lg"
+              disabled={!urlInputValue.trim()}
+              onClick={onUrlSubmit}
+            >
+              Add
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Sources list */}
+      {sources.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            Added ({sources.length})
+          </p>
+          {sources.map(s => (
+            <div
+              key={s.id}
+              className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3"
+            >
+              {statusIcon(s.status)}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{s.name}</p>
+                <p className="text-[10px] text-muted-foreground capitalize mt-0.5">
+                  {s.type === "url" ? "Website" : s.type === "text" ? "Notes" : "Document"}
+                  {" · "}
+                  {s.status === "ready" ? "Ready" : s.status === "failed" ? "Failed" : "Processing…"}
+                </p>
+              </div>
+              {s.type === "url"
+                ? <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                : <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-6 py-10 flex flex-col items-center gap-3 text-center">
+          <BookOpen className="h-7 w-7 text-muted-foreground/40" />
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">No documents yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Upload a file or add a URL above — or skip if your agent doesn't need a knowledge base.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
