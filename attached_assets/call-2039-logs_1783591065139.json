@@ -1,0 +1,905 @@
+[
+  {
+    "id": 137501,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 129,
+      "agentName": "Galaxy Final",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2039,
+      "sessionId": "df18df42-2803-4ef6-ad80-00068c9b9665",
+      "callType": "Live Call",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-09T09:36:28.271Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 137503,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 2
+      },
+      "factCount": 3,
+      "facts": {
+        "family_members": "children",
+        "location": "Sri Lanka",
+        "interested_in": "Gala Fit wellness program"
+      },
+      "recentCallsCount": 2
+    },
+    "metadata": null
+  },
+  {
+    "id": 137505,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "sourceIds": [
+        7
+      ],
+      "injected": true,
+      "preview": "Title: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY HEALTH INSURANCE\n\nMobile App — Complete User Guide\n\nApp Version V.3.2.0\n\nA complete walkthrough of every section, screen, and feature\n\nJune 2026\n\n1. App Overview\n\nThe Galaxy Health Insurance mobile app (Version V.3.2.0) is the all-in-one self-service platform for policyholders. It gives you full access to your insurance policies, claims, h"
+    },
+    "metadata": null
+  },
+  {
+    "id": 137502,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "07971442381",
+        "from_number": "919444702393",
+        "agent_name": "Galaxy Final",
+        "caller_number": "919444702393",
+        "date": "Thursday, July 9, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY HEALTH INSURANCE\n\nMobile App — Complete User Guide\n\nApp Version V.3.2.0\n\nA complete walkthrough of every section, screen, and feature\n\nJune 2026\n\n1. App Overview\n\nThe Galaxy Health Insurance mobile app (Version V.3.2.0) is the all-in-one self-service platform for policyholders. It gives you full access to your insurance policies, claims, healthcare services, wellness programs, and account manageme"
+    },
+    "metadata": null
+  },
+  {
+    "id": 137504,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 137506,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 137508,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 137507,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    }
+  },
+  {
+    "id": 137509,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:28.292Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "4bce1b44b610",
+      "promptLength": 40277,
+      "preview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY "
+    }
+  },
+  {
+    "id": 137511,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:29.189Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Welcome back! I trust you're doing well. Were you hoping to continue our chat about the Gala Fit program today?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 137510,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:29.189Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 137512,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:30.480Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1295,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 178914,
+      "textLength": 111,
+      "firstByteMs": 284
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1295
+    }
+  },
+  {
+    "id": 137513,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:35.216Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5591,
+      "turnNumber": 0,
+      "durationMs": 6029
+    }
+  },
+  {
+    "id": 137514,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:39.091Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "I want to know",
+      "endDetectToFinalMs": 125,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137515,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:39.219Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137516,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:40.819Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1612,
+      "turnNumber": 1,
+      "durationMs": 1612
+    }
+  },
+  {
+    "id": 137517,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:41.002Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Okay, so you want to know about the Gala Fit program, right?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137518,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:41.002Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "It's a wellness program that comes with your policy, and it actually helps you stay healthy while you're covered."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137519,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:41.051Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137520,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:41.202Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You can earn Wellness Coins by doing simple everyday things like walking or getting check-ups, and these coins can give you a discount when you renew your policy."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137521,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:41.256Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1612,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay, so you want to know about the Gala Fit program, right? It's a wellness program that comes with your policy, and it actually helps you stay healthy while you're covered. You can earn Wellness Coins by doing simple everyday things like walking or getting check-ups, and these coins can give you a discount when you renew your policy. Do you have a couple of minutes to talk more about it, sir?"
+    },
+    "metadata": {
+      "inputTokens": 13960,
+      "outputTokens": 125,
+      "cachedTokens": 9873,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 137522,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:41.844Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 844,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 109794,
+      "textLength": 60,
+      "firstByteMs": 141
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 844
+    }
+  },
+  {
+    "id": 137523,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:42.173Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1173,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 184034,
+      "textLength": 113,
+      "firstByteMs": 164
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1173
+    }
+  },
+  {
+    "id": 137524,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:42.826Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 5,
+      "threshold": 2,
+      "turnNumber": 1,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 137525,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:42.845Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 3431,
+      "turnNumber": 1,
+      "durationMs": 1792,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 137526,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:42.845Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "But be discovered after 12 months or not.",
+      "endDetectToFinalMs": 84,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137527,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:42.960Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137528,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:43.055Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1854,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 273634,
+      "textLength": 162,
+      "firstByteMs": 177
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1854
+    }
+  },
+  {
+    "id": 137529,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:43.993Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1038,
+      "turnNumber": 2,
+      "durationMs": 1038
+    }
+  },
+  {
+    "id": 137530,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:44.209Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Okay, so you're asking if the benefits can be discovered after twelve months, right?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137531,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:44.214Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1038,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Okay, so you're asking if the benefits can be discovered after twelve months, right? Could you please clarify what you mean by \"discovered after twelve months\"? Are you referring to the wellness coins or something else?"
+    },
+    "metadata": {
+      "inputTokens": 14063,
+      "outputTokens": 60,
+      "cachedTokens": 9873,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137532,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:44.260Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137533,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:45.447Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1238,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 153314,
+      "textLength": 84,
+      "firstByteMs": 154
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 1238
+    }
+  },
+  {
+    "id": 137534,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:36:49.207Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4791,
+      "turnNumber": 2,
+      "durationMs": 4947
+    }
+  },
+  {
+    "id": 137535,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:00.011Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 2,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 137536,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:00.011Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137537,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:00.012Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 137538,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:00.790Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 780,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 54,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 780
+    }
+  },
+  {
+    "id": 137539,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:03.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 2,
+      "durationMs": 3124
+    }
+  },
+  {
+    "id": 137540,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:05.168Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 137542,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:05.233Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2039"
+    }
+  },
+  {
+    "id": 137541,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:05.233Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2039"
+    }
+  },
+  {
+    "id": 137543,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:05.277Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 37,
+        "turns": 2,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "But be discovered after 12 months or not.",
+        "lastAgentResponse": "Okay, so you're asking if the benefits can be discovered after twelve months, right?",
+        "recordingStatus": "saved",
+        "warningCount": 3,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 37,
+      "turns": 2,
+      "avgSttMs": 0,
+      "avgLlmMs": 1325,
+      "avgTtsMs": 1675
+    }
+  },
+  {
+    "id": 137544,
+    "callId": 2039,
+    "agentId": 129,
+    "ts": "2026-07-09T09:37:05.973Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
