@@ -134,7 +134,11 @@ interface VibeConfig {
   description:  string;
   voiceId:      string;
   voiceName:    string;
-  callFlowNotes:     string;
+  callFlowNotes:      string;
+  mandatoryQuestions: string;
+  agentRules:         string;
+  callbackGreeting:   string;
+  dispositionLogic:   string;
   knowledgeBaseNotes: string;
   genderDetectionEnabled: boolean;
   maleSalutation:         string;
@@ -193,11 +197,17 @@ Voice cards are now shown directly in this chat — the user can preview and sel
 → Transition: once voice chosen, set phase="call_flow"
 
 PHASE "call_flow"
-Understand how the agent should handle calls:
-- Ask: "How should [name] open the call? For example: 'Hello, I'm [name] from [company], calling about...' — or just describe the flow and I'll write the opener."
-- Capture what they want in callFlowNotes (opening line, key talking points, objection handling style, closing)
-- You can suggest a sample script based on the purpose and let them confirm or adjust
-→ Transition: set phase="knowledge_base"
+Deeply understand the full call script — don't rush this phase. Collect across 2–3 turns:
+Turn 1: Ask: "Walk me through how [name] should handle the call — the opening, the main pitch or purpose, key questions, how to handle objections, and how to close. Even a rough sketch is fine."
+Turn 2 (once you have the general flow): Ask BOTH of these in the same message:
+  (a) "What are the questions [name] MUST ask on every call? List them in the order they should be asked. For example: 'Do you have an existing policy?', 'What's your budget?', 'Are you the decision maker?'"
+  (b) "Any strict rules — things [name] should always do or never do? E.g. 'Never quote a price without checking', 'Always get consent before recording', 'Don't call after 7pm'"
+Turn 3 (if direction is outbound or both): Ask: "If [name] calls back someone it already spoke to before, how should it open differently? For example: pick up from where they left off, re-introduce briefly, or start fresh."
+- Capture the opening + flow in callFlowNotes.
+- Capture the must-ask questions (numbered list) in mandatoryQuestions. If none given, leave empty.
+- Capture the rules (dos and don'ts) in agentRules. If none given, leave empty.
+- Capture the callback opening in callbackGreeting. If not applicable or not given, leave empty.
+→ Transition: set phase="knowledge_base" only after you have callFlowNotes AND mandatoryQuestions (even if empty after asking).
 
 PHASE "knowledge_base"
 - Ask: "Does [name] need a knowledge base? You can upload documents in the platform after creation. For now — what should [name] know about [company]'s products, services, pricing, or FAQs? I'll bake this into the system prompt."
@@ -249,9 +259,11 @@ PHASE "features_compliance"
 → Transition: set phase="dispositions"
 
 PHASE "dispositions"
-- Based on the purpose/direction, AUTO-GENERATE 3–5 relevant call outcome categories with outcomes.
-- Present them conversationally: "Here's how I've categorized call outcomes for [name]: [brief list]. Does this look right, or want to tweak anything?"
-- Adjust if the user asks
+- First ask: "How would you define a HOT or Interested Lead for [name]? What does a caller say or do on a call that tells you they're genuinely interested? And what signals mean they're Not Interested?" (1–2 sentences is fine)
+- Capture their answer in dispositionLogic.
+- Then, based on dispositionLogic + purpose + direction, AUTO-GENERATE 3–5 specific outcome categories with clear outcomes. Make them precise — not generic. For example, instead of "Interested", say "Hot Lead — wants quote" and "Warm Lead — needs follow-up". Use the user's own language from their dispositionLogic answer.
+- Present them conversationally: "Here's how I've defined call outcomes for [name] based on what you told me: [brief list]. Does this look right?"
+- Adjust if the user asks. Update dispositionLogic if they refine their definition.
 → Transition: if direction is "inbound" or "both", set phase="phone_number". If direction is "outbound", set phase="build".
 
 PHASE "phone_number" (ONLY when direction is "inbound" or "both" — for pure "outbound" agents skip this phase entirely and go straight to build)
@@ -295,6 +307,10 @@ RESPONSE FORMAT — ONLY valid JSON, no prose outside it:
     "voiceId": "",
     "voiceName": "",
     "callFlowNotes": "",
+    "mandatoryQuestions": "",
+    "agentRules": "",
+    "callbackGreeting": "",
+    "dispositionLogic": "",
     "knowledgeBaseNotes": "",
     "genderDetectionEnabled": false,
     "maleSalutation": "Sir",
@@ -1105,7 +1121,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         language:            langDisplay,
         selectedLanguages:   (cfg.multilingualLanguages ?? []).filter((l: string) => l !== langDisplay),
         callFlowDescription: cfg.callFlowNotes ?? cfg.description,
-        keyKnowledge:        "",  // KB content indexed as sources; not baked into system prompt
+        mandatoryQuestions:  cfg.mandatoryQuestions ?? "",
+        agentRules:          cfg.agentRules ?? "",
+        callbackGreeting:    cfg.callbackGreeting ?? "",
+        dispositionLogic:    cfg.dispositionLogic ?? "",
+        keyKnowledge:        "",  // KB indexed as sources — never baked into system prompt
         transferInfo:        transferNote,
         complianceFlags:     complianceNote,
         genderDetection:     cfg.genderDetectionEnabled ? "Use {caller_salutation} (Sir/Ma'am) once the caller's gender is detected." : "",
@@ -1228,34 +1248,29 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       agentConfig.compliance = comp;
     }
 
-    // Greeting — colloquial, language-aware
-    function buildGreeting(name: string, company: string, lang: string, callFlowNotes: string | undefined): string {
-      // If call-flow notes contain a quoted opening line, use that verbatim
+    // Greeting — always a simple opener; the system prompt handles the full intro.
+    // Only honour a user-typed quoted line from their call-flow notes.
+    function buildGreeting(_name: string, _company: string, lang: string, callFlowNotes: string | undefined): string {
       if (callFlowNotes) {
-        const q = callFlowNotes.match(/["'"'"]([^"'"'"]{8,120})["'"'"]/);
-        if (q) return q[1];
-        // First sentence if it looks like an actual opener (contains name or company)
-        const first = callFlowNotes.split(/[.!?।\n]/)[0]?.trim();
-        if (first && first.length > 15 && (
-          first.toLowerCase().includes(name.toLowerCase()) ||
-          first.toLowerCase().includes(company.toLowerCase())
-        )) return first;
+        const q = callFlowNotes.match(/[""'"'][^""'"']{8,80}[""'"']/);
+        if (q) return q[0].slice(1, -1);
       }
+      // Simple locale greeting — no name/company at all.
+      // The system prompt teaches the agent to introduce itself after the caller responds.
       switch (lang) {
-        case "ta-IN": return `வணக்கம்! நான் ${name}, ${company}-லருந்து பேசுறேன். எப்படி உதவட்டும்?`;
-        case "hi-IN": return `नमस्ते! मैं ${name} बोल रहा हूँ, ${company} से। आपकी कैसे मदद करूँ?`;
-        case "te-IN": return `నమస్కారం! నేను ${name}, ${company} నుండి మాట్లాడుతున్నాను. ఏమి సహాయం చేయమంటారు?`;
-        case "kn-IN": return `ನಮಸ್ಕಾರ! ನಾನು ${name}, ${company} ನಿಂದ ಮಾತನಾಡ್ತಿದ್ದೇನೆ. ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?`;
-        case "ml-IN": return `നമസ്കാരം! ഞാൻ ${name}, ${company}-ൽ നിന്ന് വിളിക്കുകയാണ്. എന്ത് സഹായം ചെയ്യട്ടെ?`;
-        case "mr-IN": return `नमस्कार! मी ${name}, ${company} मधून बोलतोय. कशी मदत करू?`;
-        case "bn-IN": return `হ্যালো! আমি ${name}, ${company} থেকে বলছি। কীভাবে সাহায্য করতে পারি?`;
-        case "gu-IN": return `નમસ્તે! હું ${name}, ${company} થી વાત કરું છું। કેવી રીતે મદદ કરી શકું?`;
-        case "pa-IN": return `ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ${name}, ${company} ਤੋਂ ਗੱਲ ਕਰ ਰਿਹਾ ਹਾਂ। ਕਿਵੇਂ ਮਦਦ ਕਰਾਂ?`;
-        case "en-IN": return `Hello! I'm ${name} calling from ${company}. How can I help you today?`;
-        default:      return `Hello! I'm ${name} from ${company}. How can I help you today?`;
+        case "ta-IN": return "வணக்கம்!";
+        case "hi-IN": return "नमस्ते!";
+        case "te-IN": return "నమస్కారం!";
+        case "kn-IN": return "ನಮಸ್ಕಾರ!";
+        case "ml-IN": return "നമസ്കാരം!";
+        case "mr-IN": return "नमस्कार!";
+        case "bn-IN": return "হ্যালো!";
+        case "gu-IN": return "નમસ્તે!";
+        case "pa-IN": return "ਸਤ ਸ੍ਰੀ ਅਕਾਲ!";
+        default:      return "Hello!";
       }
     }
-    // In refine mode, preserve the agent's existing greeting unless the user explicitly
+    // In refine modee mode, preserve the agent's existing greeting unless the user explicitly
     // changed it (Gemini carries it forward in cfg.greetingMessage from the refine context).
     const greetingMessage = (isRefine && cfg.greetingMessage)
       ? cfg.greetingMessage
@@ -1624,40 +1639,65 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
 function buildPromptInstruction(cfg: VibeConfig, langDisplay: string): string {
   return `You are a senior voice AI prompt engineer. Write a complete, production-ready system prompt for a voice agent.
 
-Requirements:
-- Define the agent's name, company, goal, and personality
-- CRITICAL: Write in COLLOQUIAL, CONVERSATIONAL spoken language — the way real people actually talk on the phone. NOT formal, NOT literary, NOT textbook language. Short sentences, everyday words, natural rhythm.
-- For Indian languages (Tamil, Hindi, Telugu, Kannada, Malayalam): use the everyday spoken/colloquial dialect, NOT the classical or formal written register. E.g. for Tamil: "நான் Priya, Galaxy Insurance-லருந்து பேசுறேன்" not "நான் Priya, Galaxy Insurance நிறுவனத்திலிருந்து பேசுகிறேன்".
-- Voice-first: no bullet points, no lists, no markdown — only spoken sentences
-- Handle common objections and edge cases naturally with conversational responses
-- Aim for 500–700 words
-- Language: ${langDisplay}
-${cfg.callTransferEnabled ? `- Include clear instructions for when to transfer to ${cfg.transferName || "a human agent"} at ${cfg.transferPhoneNumber}` : ""}
-${cfg.genderDetectionEnabled ? `- Use {caller_salutation} placeholder for Sir/Ma'am once gender is detected` : ""}
-${cfg.schedulingEnabled ? "- Include natural booking/appointment-scheduling dialogue" : ""}
-${cfg.voicemailEnabled ? `- Include a brief note about leaving voicemail when calls go unanswered` : ""}
-${cfg.compliance?.irdai ? "- Include IRDAI-compliant insurance disclosures and avoid mis-selling language" : ""}
-${cfg.compliance?.dpdp ? "- Include DPDP consent language — inform caller about data collection at call start" : ""}
-${cfg.compliance?.trai ? "- Follow TRAI regulations: respect DND status, state purpose of call clearly" : ""}
+CRITICAL REQUIREMENTS:
+1. COLLOQUIAL SPOKEN LANGUAGE ONLY. Write exactly the way a confident, warm human rep talks on the phone — short sentences, everyday contractions, natural rhythm. NOT formal/literary. For Indian languages: use everyday spoken dialect (e.g. Tamil: "கொஞ்சம் சொல்லுங்க" not formal "கூறுங்கள்").
+2. VOICE-FIRST. No bullet points, no markdown, no headers in the output — only flowing spoken prose that maps directly to how the agent should speak.
+3. TOKEN-EFFICIENT. Do NOT repeat yourself. Do NOT list knowledge-base facts or company descriptions — those come from a separate indexed KB. Only include what the agent needs to know to BEHAVE correctly.
+4. Aim for 450–600 words. Every sentence must earn its place.
 
-Output ONLY the system prompt text — no commentary, no markdown, no code fences.`;
+STRUCTURE TO FOLLOW (prose sections, no headers):
+
+Section 1 — Identity & opening behaviour:
+Who the agent is, what company, and EXACTLY how it introduces itself after the caller responds to "Hello!". For outbound: agent introduces itself, states reason for call in one sentence, then asks a permission-to-continue question. For inbound: agent greets warmly, asks how it can help.
+
+Section 2 — Call flow & script:
+Based on the call flow notes provided, write the step-by-step conversational flow in prose. Each step is 1–2 natural sentences describing what the agent says or asks and how it reacts to responses. Include objection-handling lines verbatim where given.
+
+Section 3 — Mandatory questions (if any):
+State clearly: "You must ask these questions on every call in this order — do not skip them even if the caller seems disengaged: [questions with natural phrasing]."
+
+Section 4 — Rules (if any):
+State the DOs and DON'Ts as firm directives. Be precise. No wishy-washy language.
+
+Section 5 — Caller memory & returning callers:
+Always include this: "The platform gives you {prior_facts} — a memory of what this caller told you before. If {prior_facts} is non-empty, this is a returning caller. Do NOT start the call from scratch. Acknowledge what you know: 'Last time we spoke, you mentioned…' then continue from where things left off. If {prior_facts} is empty, treat the caller as new."
+${cfg.callbackGreeting ? `For callbacks specifically: ${cfg.callbackGreeting}` : ""}
+
+Section 6 — Call outcome / disposition logic:
+Write this as a firm directive: "After the call ends, tag the outcome as follows: [disposition categories with exact definitions from the disposition logic provided]." Be specific — name exactly what a caller must say or do to qualify as each outcome.
+
+Section 7 — Voice delivery (Cartesia Sonic):
+Include exactly this paragraph: "Your voice is powered by Cartesia Sonic. Use these delivery markers sparingly and only when they add real expressiveness: <break time='0.5s' /> for a natural pause before an important point; <break time='1s' /> when waiting for the caller to process something; [excited] before a genuinely positive statement; [sad] for empathetic moments; <laugh /> for a natural, warm chuckle when appropriate. Do NOT overuse these — plain speech is the default. NEVER use them mid-sentence in a way that sounds robotic."
+
+${cfg.callTransferEnabled ? `Section 8 — Transfer: When the caller explicitly asks for a human, or you cannot resolve their issue after two genuine attempts, use the transfer tool to connect them to ${cfg.transferName || "a human agent"} at ${cfg.transferPhoneNumber}. Say: "Let me connect you to someone who can help directly — just a moment." Do NOT transfer for minor objections.` : ""}
+${cfg.compliance?.irdai ? "Compliance: You must not make exaggerated claims about returns or coverage. Always say 'subject to terms and conditions'. If a caller asks for a guaranteed return, clarify this is not possible." : ""}
+${cfg.compliance?.dpdp ? "Compliance: At the start of every call, inform the caller: 'This call may be recorded for quality purposes. By continuing, you consent to data processing in accordance with DPDP regulations.'" : ""}
+${cfg.compliance?.trai ? "Compliance: State the purpose of your call clearly within the first 30 seconds. If the caller says they are on DNC, apologize and end the call immediately." : ""}
+
+Output ONLY the system prompt text — no commentary, no markdown fences, no section labels.`;
 }
 
 function buildPromptUserContent(cfg: VibeConfig, langDisplay: string): string {
   const lines = [
     `Agent Name: ${cfg.agentName}`,
     `Company: ${cfg.companyName}`,
-    `Direction: ${cfg.direction}`,
+    `Direction: ${cfg.direction === "outbound" ? "Outbound (agent calls leads)" : cfg.direction === "both" ? "Both inbound and outbound" : "Inbound (customers call in)"}`,
     `Language: ${langDisplay}`,
     `Purpose: ${cfg.description}`,
   ];
-  if (cfg.callFlowNotes) lines.push(`Call Flow / Script Notes: ${cfg.callFlowNotes}`);
-  // knowledgeBaseNotes is indexed as a KB source — not included in system-prompt summary
-  if (cfg.callTransferEnabled) lines.push(`Call Transfer: Transfer to "${cfg.transferName}" at ${cfg.transferPhoneNumber} when human help is needed`);
-  if (cfg.genderDetectionEnabled) lines.push(`Gender Detection: Enabled (male=${cfg.maleSalutation}, female=${cfg.femaleSalutation})`);
-  if (cfg.schedulingEnabled) lines.push("Scheduling: Agent can book appointments");
-  if (cfg.voicemailEnabled) lines.push(`Voicemail: "${cfg.voicemailMessage}"`);
-  if (cfg.dispositions?.length) lines.push(`Dispositions: ${cfg.dispositions.map(d => `${d.category} (${d.outcomes.join(", ")})`).join("; ")}`);
+  if (cfg.callFlowNotes)      lines.push(`\nCALL FLOW NOTES:\n${cfg.callFlowNotes}`);
+  if (cfg.mandatoryQuestions) lines.push(`\nMANDATORY QUESTIONS (must ask every call in order):\n${cfg.mandatoryQuestions}`);
+  if (cfg.agentRules)         lines.push(`\nAGENT RULES (strict DOs and DON'Ts):\n${cfg.agentRules}`);
+  if (cfg.callbackGreeting)   lines.push(`\nCALLBACK / RETURNING CALLER OPENING:\n${cfg.callbackGreeting}`);
+  if (cfg.dispositionLogic)   lines.push(`\nDISPOSITION LOGIC (how to tag outcomes):\n${cfg.dispositionLogic}`);
+  if (cfg.dispositions?.length) {
+    lines.push(`\nOUTCOME CATEGORIES:\n${cfg.dispositions.map(d => `${d.category}: ${(d.outcomes ?? []).join(" / ")}`).join("\n")}`);
+  }
+  if (cfg.callTransferEnabled) lines.push(`\nTransfer to: "${cfg.transferName || "Human Agent"}" at ${cfg.transferPhoneNumber}`);
+  if (cfg.genderDetectionEnabled) lines.push(`Gender detection enabled — use {caller_salutation} (${cfg.maleSalutation}/${cfg.femaleSalutation}) after detection`);
+  if (cfg.schedulingEnabled)  lines.push("Scheduling: agent can book, reschedule, and cancel appointments");
+  if (cfg.voicemailEnabled && cfg.voicemailMessage) lines.push(`Voicemail message: "${cfg.voicemailMessage}"`);
+  // knowledgeBaseNotes is indexed as a separate KB source — intentionally excluded from system prompt
   return lines.join("\n");
 }
 
