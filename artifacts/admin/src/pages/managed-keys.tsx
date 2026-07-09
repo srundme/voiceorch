@@ -126,6 +126,12 @@ const CATEGORIES: Category[] = [
         description: "Qwen3.6 35B-A3B, Qwen3.5 397B-A17B via OpenRouter. Get from openrouter.ai.",
         placeholder: "sk-or-...",
       },
+      {
+        key: "managed_krutrim_key",
+        label: "Krutrim API Key 🇮🇳",
+        description: "Qwen3.5-9B, Qwen3.6-35B-A3B, Gemma-4 — Bangalore-hosted, lowest latency for India. Get from cloud.olakrutrim.com.",
+        placeholder: "...",
+      },
     ],
   },
   {

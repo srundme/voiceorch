@@ -798,7 +798,7 @@ export async function createSession(params: {
     assemblyai: "managed_assemblyai_key",
     together:   "managed_together_key",
     openrouter: "managed_openrouter_key",
-    // krutrim: BYOP-only — no managed platform key (user-provisioned accounts).
+    krutrim:    "managed_krutrim_key",
   };
   // Providers that also need an extra-config blob — key stores the region string, not JSON
   // (matches what the admin Managed Keys panel writes as managed_azure_speech_region)
