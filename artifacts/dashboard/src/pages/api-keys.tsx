@@ -12,6 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { customFetch } from "@workspace/api-client-react";
 
 interface ApiKey {
   id: number;
@@ -25,11 +26,7 @@ interface ApiKey {
 function useApiKeys() {
   return useQuery<{ keys: ApiKey[] }>({
     queryKey: ["user-api-keys"],
-    queryFn: async () => {
-      const r = await fetch("/api/user-api-keys");
-      if (!r.ok) throw new Error("Failed to load API keys");
-      return r.json();
-    },
+    queryFn: () => customFetch<{ keys: ApiKey[] }>("/api/user-api-keys"),
   });
 }
 
@@ -54,24 +51,19 @@ export default function ApiKeysPage() {
   const [revokeId,   setRevokeId]   = useState<number | null>(null);
 
   const createMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const r = await fetch("/api/user-api-keys", {
+    mutationFn: (name: string) =>
+      customFetch<{ key: string; prefix: string; name: string }>("/api/user-api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
-      });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed to create key"); }
-      return r.json() as Promise<{ key: string; prefix: string; name: string }>;
-    },
+      }),
     onSuccess: (data) => { qc.invalidateQueries({ queryKey: ["user-api-keys"] }); setCreateOpen(false); setNewKeyName(""); setRevealKey(data.key); },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const revokeMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const r = await fetch(`/api/user-api-keys/${id}`, { method: "DELETE" });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Failed to revoke key"); }
-    },
+    mutationFn: (id: number) =>
+      customFetch<void>(`/api/user-api-keys/${id}`, { method: "DELETE" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["user-api-keys"] }); setRevokeId(null); toast({ title: "Key revoked" }); },
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
