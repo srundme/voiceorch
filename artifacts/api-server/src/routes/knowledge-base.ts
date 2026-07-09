@@ -308,6 +308,29 @@ router.post("/knowledge-sources/upload", requireAuth, upload.single("file"), asy
   }
 });
 
+/* ── Extract text only (used by Vibe Build chat — no DB write) ─────────── */
+
+router.post("/knowledge-sources/extract-text", requireAuth, upload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) { res.status(400).json({ error: "file is required" }); return; }
+
+  const allowedExts = ["pdf", "docx", "txt", "csv", "md", "markdown", "html", "json"];
+  const lower = (file.originalname || "").toLowerCase();
+  const ext = lower.includes(".") ? lower.slice(lower.lastIndexOf(".") + 1) : "";
+  if (!allowedExts.includes(ext)) {
+    res.status(400).json({ error: `Unsupported file type ".${ext}"` });
+    return;
+  }
+
+  try {
+    const text = await extractDocumentText(file);
+    res.json({ text });
+  } catch (err) {
+    req.log.warn({ err, file: file.originalname }, "KB extract-text failed");
+    res.status(400).json({ error: "Failed to extract text from the uploaded document" });
+  }
+});
+
 /* ── Get detail ──────────────────────────────────────────────────────────── */
 
 router.get("/knowledge-sources/:id", requireAuth, async (req, res) => {

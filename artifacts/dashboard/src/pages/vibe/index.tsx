@@ -799,15 +799,47 @@ export default function VibePage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    const allowed = ["text/plain","text/csv","text/markdown","application/json","text/html"];
-    if (!allowed.includes(file.type) && !file.name.match(/\.(txt|md|csv|json|html)$/i)) {
-      alert("Please upload a .txt, .md, .csv, or .json file. PDF support coming soon.");
+
+    const isBinary = /\.(pdf|docx)$/i.test(file.name) ||
+      file.type === "application/pdf" ||
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    const isPlainText = ["text/plain","text/csv","text/markdown","application/json","text/html"].includes(file.type) ||
+      /\.(txt|md|csv|json|html)$/i.test(file.name);
+
+    if (!isBinary && !isPlainText) {
+      alert("Please upload a .txt, .md, .csv, .json, .html, .pdf, or .docx file.");
       return;
     }
+
+    if (isBinary) {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const token = localStorage.getItem("voiceorch:session");
+        const res = await fetch("/api/knowledge-sources/extract-text", {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Upload failed" }));
+          alert((err as any).error ?? "Failed to extract text from the file.");
+          return;
+        }
+        const { text } = await res.json() as { text: string };
+        const content = text.slice(0, 12000);
+        send(`[Knowledge Base Upload — "${file.name}"]\n\n${content}`);
+      } catch {
+        alert("Failed to upload the file. Please try again.");
+      }
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = (ev.target?.result as string ?? "").slice(0, 12000);
@@ -892,7 +924,7 @@ export default function VibePage() {
             : "text-sm pr-20 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50",
         )}
       />
-      <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html" className="hidden" onChange={handleFileUpload} />
+      <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html,.pdf,.docx" className="hidden" onChange={handleFileUpload} />
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={phase === "done" || phase === "building" || isThinking}
