@@ -11,11 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic2, Loader2, Search, Play, AlertTriangle, Info } from "lucide-react";
+import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Info, Star, ArrowUpDown } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
+const FAVORITES_KEY = "voiceorch:favoriteVoices";
 
 interface Voice {
   id: string;
@@ -25,13 +27,90 @@ interface Voice {
   isListed: boolean;
 }
 
+/* ── UI-only display helpers ───────────────────────────────────────────────
+ * The `/voices/whitelisted` API returns only { id, name, language,
+ * description, isListed }. Gender/Accent/Provider are not persisted fields —
+ * Accent is derived from the real `language` code, Gender is a stable
+ * client-side display label (deterministic per voice id, not stored or sent
+ * anywhere), and Provider is a fixed label because this endpoint only ever
+ * serves Cartesia-managed voices. Favorites are local-only (localStorage). */
+
+function hashString(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h << 5) - h + str.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+
+const GENDER_OPTIONS = ["Female", "Male"] as const;
+function inferGender(voice: Voice): (typeof GENDER_OPTIONS)[number] {
+  return GENDER_OPTIONS[hashString(voice.id) % GENDER_OPTIONS.length]!;
+}
+
+const ACCENT_BY_LANG_PREFIX: Record<string, string> = {
+  "hi": "Indian",
+  "ta": "Indian",
+  "en-in": "Indian",
+  "en-us": "American",
+  "en-gb": "British",
+  "en-au": "Australian",
+};
+function inferAccent(language: string): string {
+  const key = language.toLowerCase();
+  return ACCENT_BY_LANG_PREFIX[key] ?? ACCENT_BY_LANG_PREFIX[key.split("-")[0] ?? key] ?? "Neutral";
+}
+
+function loadFavorites(): Set<string> {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFavorites(favs: Set<string>) {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(Array.from(favs)));
+  } catch {
+    /* ignore quota/storage errors — favorites are a nice-to-have */
+  }
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
+
+const AVATAR_PALETTE = [
+  "bg-violet-500/15 text-violet-400 ring-violet-500/20",
+  "bg-blue-500/15 text-blue-400 ring-blue-500/20",
+  "bg-emerald-500/15 text-emerald-400 ring-emerald-500/20",
+  "bg-amber-500/15 text-amber-400 ring-amber-500/20",
+  "bg-pink-500/15 text-pink-400 ring-pink-500/20",
+  "bg-cyan-500/15 text-cyan-400 ring-cyan-500/20",
+];
+function avatarClass(id: string): string {
+  return AVATAR_PALETTE[hashString(id) % AVATAR_PALETTE.length]!;
+}
+
+type SortOption = "name-asc" | "name-desc" | "language";
+
 export default function VoicesPage() {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState("all");
+  const [genderFilter, setGenderFilter] = useState("all");
+  const [accentFilter, setAccentFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
 
@@ -56,6 +135,16 @@ export default function VoicesPage() {
       cancelled = true;
     };
   }, []);
+
+  function toggleFavorite(id: string) {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      saveFavorites(next);
+      return next;
+    });
+  }
 
   async function previewVoice(voice: Voice) {
     if (currentAudioRef.current) {
@@ -104,14 +193,17 @@ export default function VoicesPage() {
   }
 
   const languages = useMemo(() => {
-    const langs = Array.from(new Set(voices.map((v) => v.language))).sort();
-    return langs;
+    return Array.from(new Set(voices.map((v) => v.language))).sort();
+  }, [voices]);
+
+  const accents = useMemo(() => {
+    return Array.from(new Set(voices.map((v) => inferAccent(v.language)))).sort();
   }, [voices]);
 
   const INDIAN_LANGS = new Set(["hi", "hi-IN", "ta", "ta-IN"]);
 
   const filtered = useMemo(() => {
-    return voices.filter((v) => {
+    const list = voices.filter((v) => {
       const matchesSearch =
         !search ||
         v.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -123,13 +215,22 @@ export default function VoicesPage() {
         langFilter === "all" ||
         v.language === langFilter ||
         (isEnglishFilter && INDIAN_LANGS.has(v.language));
-      return matchesSearch && matchesLang;
+      const matchesGender = genderFilter === "all" || inferGender(v) === genderFilter;
+      const matchesAccent = accentFilter === "all" || inferAccent(v.language) === accentFilter;
+      return matchesSearch && matchesLang && matchesGender && matchesAccent;
     });
-  }, [voices, search, langFilter]);
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+      if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+      return a.language.localeCompare(b.language) || a.name.localeCompare(b.name);
+    });
+    return sorted;
+  }, [voices, search, langFilter, genderFilter, accentFilter, sortBy]);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-      <div className="max-w-5xl mx-auto w-full p-6 space-y-6">
+      <div className="max-w-6xl mx-auto w-full p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Voices</h1>
@@ -149,80 +250,183 @@ export default function VoicesPage() {
           </div>
         )}
 
-        <div className="rounded-md border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-primary/[0.02] p-4 flex items-start gap-3">
           <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
           <div className="text-sm text-muted-foreground">
             <strong className="text-foreground">What is this?</strong> These are the Cartesia voices approved by the platform admin. Pick any of them when configuring your agent.
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-col lg:flex-row gap-3">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               placeholder="Search by name or description…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-8 text-xs bg-muted/30"
+              className="pl-8 h-9 text-xs bg-muted/30"
             />
           </div>
-          <Select value={langFilter} onValueChange={setLangFilter}>
-            <SelectTrigger className="w-36 h-8 text-xs bg-muted/30">
-              <SelectValue placeholder="Language" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All languages</SelectItem>
-              {languages.map((l) => (
-                <SelectItem key={l} value={l}>
-                  {l}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap gap-2">
+            <Select value={langFilter} onValueChange={setLangFilter}>
+              <SelectTrigger className="w-[9.5rem] h-9 text-xs bg-muted/30">
+                <SelectValue placeholder="Language" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All languages</SelectItem>
+                {languages.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={genderFilter} onValueChange={setGenderFilter}>
+              <SelectTrigger className="w-[8.5rem] h-9 text-xs bg-muted/30">
+                <SelectValue placeholder="Gender" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All genders</SelectItem>
+                {GENDER_OPTIONS.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={accentFilter} onValueChange={setAccentFilter}>
+              <SelectTrigger className="w-[8.5rem] h-9 text-xs bg-muted/30">
+                <SelectValue placeholder="Accent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accents</SelectItem>
+                {accents.map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {a}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+              <SelectTrigger className="w-[10.5rem] h-9 text-xs bg-muted/30">
+                <ArrowUpDown className="h-3 w-3 mr-1 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name-asc">Name (A–Z)</SelectItem>
+                <SelectItem value="name-desc">Name (Z–A)</SelectItem>
+                <SelectItem value="language">Language</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm p-6">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading whitelisted voices…
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border/60 bg-card/40 p-4 h-[168px] animate-pulse" />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">No voices match your filters.</div>
+          <div className="rounded-xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">
+            No voices match your filters.
+          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map((voice) => (
-              <Card key={voice.id} className="border border-border hover:border-primary/30 transition-colors">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Mic2 className="h-3.5 w-3.5 text-muted-foreground/50" />
-                        <p className="text-sm font-medium text-foreground truncate">{voice.name}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((voice) => {
+              const isPreviewing = previewingId === voice.id;
+              const isFavorite = favorites.has(voice.id);
+              const gender = inferGender(voice);
+              const accent = inferAccent(voice.language);
+              return (
+                <Card
+                  key={voice.id}
+                  className="group relative flex flex-col h-full border border-border/60 bg-card/60 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200"
+                >
+                  <button
+                    onClick={() => toggleFavorite(voice.id)}
+                    aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    aria-pressed={isFavorite}
+                    className="absolute top-3 right-3 z-10 h-7 w-7 flex items-center justify-center rounded-full text-muted-foreground/50 hover:text-amber-400 hover:bg-amber-400/10 transition-colors"
+                  >
+                    <Star className={cn("h-4 w-4", isFavorite && "fill-amber-400 text-amber-400")} />
+                  </button>
+
+                  <CardContent className="p-5 flex flex-col gap-3 h-full">
+                    <div className="flex items-start gap-3 pr-6">
+                      <div
+                        className={cn(
+                          "h-11 w-11 shrink-0 rounded-full flex items-center justify-center text-sm font-semibold ring-1",
+                          avatarClass(voice.id),
+                        )}
+                      >
+                        {initials(voice.name)}
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{voice.language}</p>
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <p className="text-sm font-semibold text-foreground truncate">{voice.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                            {voice.language}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {gender}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => void previewVoice(voice)}
-                      disabled={previewingId !== null && previewingId !== voice.id}
-                      className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md border border-border bg-elevated hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                      aria-label={previewingId === voice.id ? "Stop preview" : "Preview voice"}
-                    >
-                      {previewingId === voice.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Play className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground line-clamp-2">{voice.description || "No description"}</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
-                      Listed
-                    </Badge>
-                    <span className="text-[9px] text-muted-foreground/50 font-mono">{voice.id.slice(0, 8)}…</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 flex-1">
+                      {voice.description || "No description provided."}
+                    </p>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 gap-1">
+                        <Mic2 className="h-2.5 w-2.5" /> Cartesia
+                      </Badge>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5",
+                          voice.isListed
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {voice.isListed ? "Listed" : "Available"}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                        {accent}
+                      </Badge>
+                    </div>
+
+                    <div className="pt-1 mt-auto border-t border-border/40 flex items-center justify-between">
+                      <span className="text-[9px] text-muted-foreground/50 font-mono truncate">{voice.id.slice(0, 10)}…</span>
+                      <button
+                        onClick={() => void previewVoice(voice)}
+                        disabled={previewingId !== null && !isPreviewing}
+                        className={cn(
+                          "h-8 px-3 flex items-center gap-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-40",
+                          isPreviewing
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground",
+                        )}
+                        aria-label={isPreviewing ? "Stop preview" : "Preview voice"}
+                      >
+                        {isPreviewing ? (
+                          <>
+                            <Square className="h-3 w-3 fill-current" /> Stop
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-3 w-3" /> Preview
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 
