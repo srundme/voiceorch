@@ -6422,7 +6422,8 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
       // Consume run of consecutive !/?
       while (i + 1 < text.length && (text[i + 1] === '!' || text[i + 1] === '?')) i++;
       const s = text.slice(segStart, i + 1).trim();
-      if (s.length >= 4) sentences.push(s);
+      // Min 2 chars (not 4) so short Indic exclamations like "வணக்கம்!" fire immediately
+      if (s.length >= 2) sentences.push(s);
       i++;
       while (i < text.length && text[i] === ' ') i++;
       segStart = i;
@@ -6503,9 +6504,11 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
 
   // Comma-clause fallback: keep TTS latency low on long list-heavy responses
   // with no sentence boundary yet.
-  if (sentences.length === 0 && remainder.length >= 60) {
+  // Threshold lowered 60→40 chars so Tamil responses (which often stream one long
+  // clause before a period) fire TTS sooner instead of waiting for 60+ chars.
+  if (sentences.length === 0 && remainder.length >= 40) {
     const commaIdx = remainder.lastIndexOf(", ");
-    if (commaIdx >= 30) {
+    if (commaIdx >= 20) {
       const clause = remainder.slice(0, commaIdx).trim();
       if (clause.length >= minCommaClauseChars) {
         sentences.push(clause);

@@ -23,6 +23,9 @@ import { toOpenAIMessages } from "./openai-messages.js";
 
 const DEFAULT_MODEL = "gpt-oss-20b";
 
+/** Hard per-request timeout — fail fast so the pipeline's retry/fallback logic can take over */
+const REQUEST_TIMEOUT_MS = Number(process.env.KRUTRIM_REQUEST_TIMEOUT_MS) || 15000;
+
 /** Models that reliably support native tool/function calling on Krutrim. */
 const TOOL_CAPABLE_MODELS = new Set([
   "gpt-oss-20b",
@@ -95,7 +98,10 @@ export class KrutrimLLM implements LLMAdapter {
       body.tool_choice = "auto";
     }
 
-    const stream = await this.client.chat.completions.create({ ...body, stream: true });
+    const stream = await this.client.chat.completions.create(
+      { ...body, stream: true },
+      { timeout: REQUEST_TIMEOUT_MS }
+    );
 
     let full = "";
     let usage: LLMUsage | undefined;
