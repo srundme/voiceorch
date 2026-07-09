@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Info, Star, ArrowUpDown } from "lucide-react";
+import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Info, Star, ArrowUpDown, User } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { getVoiceAvatar, inferVoiceGender } from "@/lib/voice-avatars";
@@ -57,6 +57,20 @@ function inferAccent(language: string): string {
   const key = language.toLowerCase();
   return ACCENT_BY_LANG_PREFIX[key] ?? ACCENT_BY_LANG_PREFIX[key.split("-")[0] ?? key] ?? "Neutral";
 }
+
+const ACCENT_FLAG_EMOJI: Record<string, string> = {
+  Indian: "🇮🇳",
+  American: "🇺🇸",
+  British: "🇬🇧",
+  Australian: "🇦🇺",
+  Neutral: "🌐",
+};
+function accentFlagEmoji(accent: string): string {
+  return ACCENT_FLAG_EMOJI[accent] ?? ACCENT_FLAG_EMOJI.Neutral;
+}
+
+const METADATA_PILL_CLASS =
+  "h-5 min-w-5 px-1.5 inline-flex items-center justify-center rounded-full text-[10px] leading-none";
 
 function loadFavorites(): Set<string> {
   try {
@@ -340,11 +354,19 @@ export default function VoicesPage() {
                       <div className="min-w-0 flex-1 pt-0.5">
                         <p className="text-sm font-semibold text-foreground truncate">{voice.name}</p>
                         <div className="flex items-center gap-2.5 mt-1 flex-wrap">
-                          <Badge variant="outline" className="text-[13px] px-1.5 py-0 font-mono font-semibold text-foreground">
-                            {voice.language}
+                          <Badge
+                            variant="outline"
+                            className={cn(METADATA_PILL_CLASS, "font-mono font-semibold text-foreground uppercase")}
+                          >
+                            {voice.language.toUpperCase()}
                           </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            {gender}
+                          <Badge
+                            variant="outline"
+                            className={METADATA_PILL_CLASS}
+                            title={gender}
+                            aria-label={gender}
+                          >
+                            <User className="h-2.5 w-2.5" />
                           </Badge>
                         </div>
                       </div>
@@ -369,8 +391,13 @@ export default function VoicesPage() {
                       >
                         {voice.isListed ? "Listed" : "Available"}
                       </Badge>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                        {accent}
+                      <Badge
+                        variant="outline"
+                        className={METADATA_PILL_CLASS}
+                        title={accent}
+                        aria-label={accent}
+                      >
+                        {accentFlagEmoji(accent)}
                       </Badge>
                     </div>
 
