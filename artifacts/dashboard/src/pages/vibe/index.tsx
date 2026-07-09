@@ -199,6 +199,10 @@ export default function VibePage() {
   const [urlInputOpen,    setUrlInputOpen]    = useState(false);
   const [urlInputValue,   setUrlInputValue]   = useState("");
   const [showKbPanel,     setShowKbPanel]     = useState(false);
+  // Once the user clicks "Done — Continue" on the KB panel, prevent re-show from any late SSE event
+  const kbDoneRef = useRef(false);
+  // Show scheduling wizard as right-panel takeover after agent is created with scheduling enabled
+  const [showCalPanel,    setShowCalPanel]    = useState(false);
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -756,7 +760,7 @@ export default function VibePage() {
 
             case "knowledge_base":
               setKbNotes(String(evt.notes ?? ""));
-              setShowKbPanel(true);
+              if (!kbDoneRef.current) setShowKbPanel(true);
               // Track the text KB source created during this phase on the server
               if (typeof evt.kbSourceId === "number") {
                 const sid = evt.kbSourceId as number;
@@ -883,6 +887,9 @@ export default function VibePage() {
                   })
                   .catch(() => {});
                 setLastSavedAgentId(evt.agentId as number);
+                // If scheduling was enabled, surface the Google Calendar connect panel
+                // as a full right-panel takeover so the user can connect Google right now
+                if (schedulingSetup) setShowCalPanel(true);
                 setPhase("done");
               }
               break;
@@ -1426,11 +1433,20 @@ export default function VibePage() {
                   onUrlSubmit={handleUrlSubmit}
                   onFileClick={() => fileInputRef.current?.click()}
                   onDone={() => {
+                    kbDoneRef.current = true;
                     setShowKbPanel(false);
                     if (vibeKbSources.length > 0) {
                       send("I've added my knowledge base documents. Continue.");
+                    } else {
+                      send("Skip the knowledge base for now. Continue.");
                     }
                   }}
+                />
+              ) : showCalPanel && schedulingSetup && (lastSavedAgentId ?? createdId) != null ? (
+                <VibeCalendarPanel
+                  agentId={(lastSavedAgentId ?? createdId)!}
+                  timezone={schedulingSetup.timezone}
+                  onDone={() => setShowCalPanel(false)}
                 />
               ) : !hasRightContent ? (
                 <EmptyState />
@@ -2192,6 +2208,47 @@ function VibeKbPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function VibeCalendarPanel({
+  agentId,
+  timezone,
+  onDone,
+}: {
+  agentId: number;
+  timezone: string;
+  onDone: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-6 max-w-2xl py-2">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/8 border border-primary/15 flex items-center justify-center shrink-0">
+            <Calendar className="h-5 w-5 text-primary/70" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">Connect Google Calendar</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              Connect Google Calendar so your agent can create Meet links and sync bookings automatically.
+              You can also set your availability and configure the booking event type below.
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs rounded-lg shrink-0 ml-4"
+          onClick={onDone}
+        >
+          Done
+        </Button>
+      </div>
+
+      {/* Scheduling wizard inline */}
+      <VibeSchedulingWizard agentId={agentId} timezone={timezone} />
     </div>
   );
 }

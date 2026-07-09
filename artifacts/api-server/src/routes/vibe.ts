@@ -1166,7 +1166,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         const pj = await (pr as Response).json() as any;
         const parts = pj?.candidates?.[0]?.content?.parts ?? [];
         const gen = (parts.find((p: any) => !p.thought && p.text) ?? parts[parts.length - 1])?.text?.trim();
-        if (gen) systemPrompt = gen;
+        if (gen) systemPrompt = stripPromptMarkdown(gen);
       }
     } catch (err) {
       logger.warn({ err }, "vibe-chat: prompt gen failed, using fallback");
@@ -1636,6 +1636,22 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
   }
 });
 
+/** Strip markdown formatting from a generated system prompt so it reads as clean spoken prose. */
+function stripPromptMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")          // bold → plain
+    .replace(/\*([^*\n]+)\*/g, "$1")               // italic → plain
+    .replace(/_([^_\n]+)_/g, "$1")                 // _italic_ → plain
+    .replace(/`([^`\n]+)`/g, "$1")                 // inline code → plain
+    .replace(/^#{1,6}\s+/gm, "")                   // ## headers → plain line
+    .replace(/^[-*•]\s+/gm, "")                    // bullet markers → none
+    .replace(/^\d+\.\s+/gm, "")                    // numbered list → none
+    .replace(/^Section \d+[^:\n]*:?\s*$/gm, "")    // "Section 1 — ..." headings → removed
+    .replace(/^>\s*/gm, "")                        // blockquotes
+    .replace(/\n{3,}/g, "\n\n")                    // excessive blank lines → max 2
+    .trim();
+}
+
 function buildPromptInstruction(cfg: VibeConfig, langDisplay: string): string {
   return `You are a senior voice AI prompt engineer. Write a complete, production-ready system prompt for a voice agent.
 
@@ -1645,36 +1661,39 @@ CRITICAL REQUIREMENTS:
 3. TOKEN-EFFICIENT. Do NOT repeat yourself. Do NOT list knowledge-base facts or company descriptions — those come from a separate indexed KB. Only include what the agent needs to know to BEHAVE correctly.
 4. Aim for 450–600 words. Every sentence must earn its place.
 
-STRUCTURE TO FOLLOW (prose sections, no headers):
+STRUCTURE (write flowing prose — absolutely NO section headers, bullet points, bold, or markdown in your output):
 
-Section 1 — Identity & opening behaviour:
-Who the agent is, what company, and EXACTLY how it introduces itself after the caller responds to "Hello!". For outbound: agent introduces itself, states reason for call in one sentence, then asks a permission-to-continue question. For inbound: agent greets warmly, asks how it can help.
+PARAGRAPH 1 — Identity and opening.
+State who the agent is and what company. Then write the exact words the agent says IMMEDIATELY after the caller responds to "Hello!". ${cfg.direction === "outbound" ? 'This is an OUTBOUND agent — it calls people. After "Hello!" the agent introduces its name and company, states the reason for calling in ONE sentence, then asks a short yes/no permission question like "Kya aap abhi ek minute mein baat kar sakte hain?" (adapt to language). Do NOT write "For outbound:" or any label — just write the actual words the agent speaks.' : 'This is an INBOUND agent — people call it. After "Hello!" the agent introduces itself warmly and asks how it can help.'}
 
-Section 2 — Call flow & script:
-Based on the call flow notes provided, write the step-by-step conversational flow in prose. Each step is 1–2 natural sentences describing what the agent says or asks and how it reacts to responses. Include objection-handling lines verbatim where given.
+PARAGRAPH 2 — Call flow.
+Turn the call flow notes into a step-by-step conversational script written as flowing prose. Each step: what the agent says, then how it reacts to different caller responses. Include all objection-handling lines.
 
-Section 3 — Mandatory questions (if any):
-State clearly: "You must ask these questions on every call in this order — do not skip them even if the caller seems disengaged: [questions with natural phrasing]."
+${cfg.mandatoryQuestions ? `PARAGRAPH 3 — Mandatory questions.
+Write: "You must ask the following questions on every call, in this exact order, no matter what — do not skip them even if the caller seems ready to close: ${cfg.mandatoryQuestions}"` : ""}
 
-Section 4 — Rules (if any):
-State the DOs and DON'Ts as firm directives. Be precise. No wishy-washy language.
+${cfg.agentRules ? `PARAGRAPH 4 — Rules.
+Translate these rules into firm first-person directives (e.g. "I will always…", "I will never…"): ${cfg.agentRules}` : ""}
 
-Section 5 — Caller memory & returning callers:
-Always include this: "The platform gives you {prior_facts} — a memory of what this caller told you before. If {prior_facts} is non-empty, this is a returning caller. Do NOT start the call from scratch. Acknowledge what you know: 'Last time we spoke, you mentioned…' then continue from where things left off. If {prior_facts} is empty, treat the caller as new."
-${cfg.callbackGreeting ? `For callbacks specifically: ${cfg.callbackGreeting}` : ""}
+PARAGRAPH 5 — Returning callers.
+Write this verbatim (adapt language as needed): "The platform provides {prior_facts} — everything this caller has told me in previous calls. If {prior_facts} contains information, I recognise this is a returning caller. I do NOT start the conversation from scratch. Instead I acknowledge what I know — 'Last time we spoke, you mentioned…' — and pick up from there. If {prior_facts} is empty, I treat the caller as new."${cfg.callbackGreeting ? ` Then add: "${cfg.callbackGreeting}"` : ""}
 
-Section 6 — Call outcome / disposition logic:
-Write this as a firm directive: "After the call ends, tag the outcome as follows: [disposition categories with exact definitions from the disposition logic provided]." Be specific — name exactly what a caller must say or do to qualify as each outcome.
+PARAGRAPH 6 — Call outcomes.
+Write this as a strict directive: "After every call I tag the outcome. Here is how I decide: ${cfg.dispositionLogic || "tag based on caller intent and engagement level"}."
 
-Section 7 — Voice delivery (Cartesia Sonic):
-Include exactly this paragraph: "Your voice is powered by Cartesia Sonic. Use these delivery markers sparingly and only when they add real expressiveness: <break time='0.5s' /> for a natural pause before an important point; <break time='1s' /> when waiting for the caller to process something; [excited] before a genuinely positive statement; [sad] for empathetic moments; <laugh /> for a natural, warm chuckle when appropriate. Do NOT overuse these — plain speech is the default. NEVER use them mid-sentence in a way that sounds robotic."
+PARAGRAPH 7 — Voice delivery.
+Write this verbatim: "My voice is Cartesia Sonic. I use delivery markers sparingly: <break time='0.5s' /> before an important point, <break time='1s' /> when the caller needs a moment to think, [excited] before a genuinely good piece of news, [sad] for empathetic moments, <laugh /> for a warm natural chuckle. I never overuse these — plain speech is the default. I never place them mid-word or mid-number."
+${cfg.callTransferEnabled ? `
+PARAGRAPH 8 — Transfer.
+When the caller explicitly asks for a human, or I cannot resolve the issue after two genuine attempts, I use the transfer tool to connect them to ${cfg.transferName || "a human agent"} at ${cfg.transferPhoneNumber}. I say: "Let me connect you to someone who can help — just a moment." I do NOT transfer for minor objections.` : ""}
+${cfg.compliance?.irdai ? "\nCompliance: I never make exaggerated claims about returns or coverage. I always say 'subject to terms and conditions'. If a caller asks for a guaranteed return I clarify that is not possible." : ""}
+${cfg.compliance?.dpdp ? "\nCompliance: At the very start of every call I say: 'This call may be recorded for quality purposes. By continuing, you consent to data processing under the DPDP Act.'" : ""}
+${cfg.compliance?.trai ? "\nCompliance: I state the purpose of my call clearly within the first 30 seconds. If the caller says they are on DND I apologise and end the call immediately." : ""}
 
-${cfg.callTransferEnabled ? `Section 8 — Transfer: When the caller explicitly asks for a human, or you cannot resolve their issue after two genuine attempts, use the transfer tool to connect them to ${cfg.transferName || "a human agent"} at ${cfg.transferPhoneNumber}. Say: "Let me connect you to someone who can help directly — just a moment." Do NOT transfer for minor objections.` : ""}
-${cfg.compliance?.irdai ? "Compliance: You must not make exaggerated claims about returns or coverage. Always say 'subject to terms and conditions'. If a caller asks for a guaranteed return, clarify this is not possible." : ""}
-${cfg.compliance?.dpdp ? "Compliance: At the start of every call, inform the caller: 'This call may be recorded for quality purposes. By continuing, you consent to data processing in accordance with DPDP regulations.'" : ""}
-${cfg.compliance?.trai ? "Compliance: State the purpose of your call clearly within the first 30 seconds. If the caller says they are on DNC, apologize and end the call immediately." : ""}
-
-Output ONLY the system prompt text — no commentary, no markdown fences, no section labels.`;
+IMPORTANT OUTPUT RULES:
+- Output ONLY the system prompt text. Zero commentary, zero markdown, zero code fences, zero section labels.
+- Every paragraph is plain prose — no bold, no bullets, no numbered lists, no asterisks.
+- The agent speaks in ${langDisplay} — every example phrase and spoken line must be in ${langDisplay} (colloquial/spoken register, never formal/literary).`;
 }
 
 function buildPromptUserContent(cfg: VibeConfig, langDisplay: string): string {
