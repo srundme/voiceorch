@@ -2336,6 +2336,9 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
           // Placed inside this IIFE so callSummary, dispositionResult, avgSttMs
           // etc. are all in scope. No-ops when no Zelto key is configured.
           import("../services/zelto.js").then(({ pushCallToZelto }) => {
+            const startedAt = durationSeconds
+              ? new Date(endedAt.getTime() - durationSeconds * 1000).toISOString()
+              : undefined;
             pushCallToZelto({
               callId:             session.callId,
               agentId:            ag.id,
@@ -2345,13 +2348,14 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
               fromNumber:         call.fromNumber ?? null,
               toNumber:           call.toNumber ?? null,
               durationSeconds,
+              startedAt,
+              endedAt:            endedAt.toISOString(),
               transcript:         transcript || null,
               callSummary:        callSummary || null,
               dispositionResult,
               avgSttLatencyMs:    avgSttMs,
               avgLlmLatencyMs:    avgLlmMs,
               avgTtsLatencyMs:    avgTtsMs,
-              endedAt:            endedAt.toISOString(),
             }).catch((err) => logger.warn({ sessionId, err }, "Zelto push failed (session)"));
           }).catch(() => {});
         })();

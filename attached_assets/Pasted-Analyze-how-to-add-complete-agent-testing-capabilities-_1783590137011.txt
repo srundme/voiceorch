@@ -1,0 +1,104 @@
+Analyze how to add complete agent testing capabilities directly inside the Vibe Builder Agent Preview, especially during Refine with AI.
+
+CURRENT ISSUE
+
+When an agent is initially created through Vibe Builder, the completed state may show actions such as Make a Call, Edit Agent, or Refine with AI.
+
+However, when an existing agent is opened through Refine with AI and the user makes an update, there is no convenient way to immediately test the updated agent from the Vibe Builder Agent Preview.
+
+The user currently has to:
+1. Make the change in Refine with AI.
+2. Leave Vibe Builder.
+3. Return to the Agent page.
+4. Start a Call or Web Call from there.
+5. Return again to Refine with AI if another correction is needed.
+
+This breaks the edit → test → correct → retest workflow.
+
+EXPECTED BEHAVIOR
+
+The Agent Preview inside Vibe Builder should support testing the current saved agent directly.
+
+After every successful agent creation or refine update, provide testing actions inside the Agent Preview, such as:
+
+- Web Call / Test Call
+- Call, if the existing telephony flow supports it safely
+- End test and return to the same Vibe conversation
+
+Required workflow:
+
+Refine with AI
+→ user requests a change
+→ change is successfully persisted
+→ Agent Preview refreshes with the latest saved configuration
+→ Test Call / Web Call becomes available
+→ user tests the updated agent without leaving Vibe Builder
+→ test ends
+→ user remains in the same Vibe Builder page and conversation
+→ user can request another correction
+→ update
+→ test again
+
+IMPORTANT REQUIREMENTS
+
+1. Reuse the existing Call and Web Call infrastructure already used by the Agent page. Do not create a duplicate calling pipeline specifically for Vibe Builder.
+
+2. The test must use the latest successfully persisted agent configuration, including:
+- system prompt
+- greeting
+- language
+- LLM configuration
+- STT configuration
+- TTS and voice configuration
+- Knowledge associations
+- tools
+- scheduling configuration
+- feature toggles
+- dispositions
+- other existing runtime configuration used by the normal call flow
+
+3. Do not start a test against unsaved preview-only state. Clearly define whether testing is enabled only after the latest Vibe change has successfully persisted.
+
+4. If an update is currently processing, disable the Test Call action until persistence succeeds.
+
+5. After a successful update, refresh/re-fetch the current agent state before enabling the test so the preview and test use the same saved version.
+
+6. The user must remain on the Vibe Builder page after the test ends. Do not navigate to Agent Overview.
+
+7. The existing Vibe conversation must remain intact after starting and ending a test.
+
+8. The user must be able to repeat this cycle multiple times:
+Edit → Save/Apply → Test → Edit again → Save/Apply → Test again.
+
+9. Test both new-agent Vibe creation and existing-agent Refine with AI flows.
+
+10. Preserve all existing Call and Web Call behavior elsewhere in the portal.
+
+UI EXPECTATION
+
+Add a persistent testing action area in the Agent Preview header or another consistent visible location.
+
+For example:
+- Test Call / Web Call
+- Call
+
+These actions should remain available after each successful update instead of appearing only during the first agent creation completion state.
+
+ANALYZE ONLY FIRST. DO NOT IMPLEMENT YET.
+
+Report:
+
+1. How the existing Agent page starts Web Calls.
+2. How the existing Agent page starts telephony Calls.
+3. Which components, hooks, APIs, dialogs, and call-session state can be reused.
+4. Why the Vibe completion state currently shows call actions only in some cases.
+5. How Refine with AI knows that an update has successfully persisted.
+6. How to guarantee that the test uses the latest saved agent configuration.
+7. Whether Web Call can be embedded directly in the Vibe page using the existing component.
+8. Whether telephony Call should reuse the existing call modal/dialog.
+9. How to preserve Vibe chat history and current session state while a test is running.
+10. The smallest safe implementation plan.
+11. Exact files that would need changes.
+12. Risks to the existing calling pipeline and how to avoid them.
+
+Do not modify the calling pipeline, Web Call pipeline, agent runtime logic, or unrelated portal behavior during analysis.

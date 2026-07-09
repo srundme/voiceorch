@@ -1076,18 +1076,24 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
 
   // Zelto call monitoring (fire-and-forget)
   import("../services/zelto.js").then(({ pushCallToZelto }) => {
+    const endedAt  = new Date().toISOString();
+    const startedAt = durationSeconds
+      ? new Date(Date.now() - durationSeconds * 1000).toISOString()
+      : undefined;
     pushCallToZelto({
-      callId:           call.id,
-      agentId:          call.agentId,
-      status:           call.status ?? undefined,
-      direction:        (call as any).direction ?? "inbound",
-      fromNumber:       call.fromNumber ?? null,
-      toNumber:         call.toNumber ?? null,
+      callId:            call.id,
+      agentId:           call.agentId,
+      status:            call.status ?? undefined,
+      direction:         (call as any).direction ?? "inbound",
+      fromNumber:        call.fromNumber ?? null,
+      toNumber:          call.toNumber ?? null,
       durationSeconds,
-      transcript:       call.transcript ?? null,
-      callSummary:      (call as any).callSummary ?? null,
+      startedAt,
+      endedAt,
+      costCents:         debitCents ?? null,
+      transcript:        call.transcript ?? null,
+      callSummary:       (call as any).callSummary ?? null,
       dispositionResult: (call as any).dispositionResult as Record<string, unknown> | null ?? null,
-      endedAt:          new Date().toISOString(),
     }).catch(() => {});
   }).catch(() => {});
 
