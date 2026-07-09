@@ -1,0 +1,176 @@
+# AI Studio SDK
+
+## Krutrim Cloud SDK Guide (Python)
+
+### 1. Overview
+
+The Krutrim Python SDK (`krutrim-cloud`) provides a simple and consistent interface to interact with various AI and infrastructure services offered by Krutrim Cloud. It supports synchronous and asynchronous workflows, allowing developers to integrate image generation, text completion, and speech services into their applications with ease.
+
+Supported Python Versions: **3.10 – 3.12**\
+Package: <https://pypi.org/project/krutrim-cloud>
+
+***
+
+### 2. Installation
+
+Install the SDK via pip:
+
+```bash
+pip install krutrim-cloud
+```
+
+#### System Dependencies
+
+Some modules require `ffmpeg` and `ffprobe` to be available in your environment:
+
+```bash
+# macOS (with Homebrew)
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+```
+
+***
+
+### 3. Authentication
+
+You need an API key to authenticate your requests. This can be provided as an environment variable or passed directly into the client.
+
+#### Environment Variable (Recommended)
+
+```bash
+export KRUTRIM_CLOUD_API_KEY="your_api_key_here"
+```
+
+#### Manual Key Injection
+
+```python
+from krutrim_cloud import KrutrimCloud
+client = KrutrimCloud(api_key="your_api_key_here")
+```
+
+***
+
+### 4. Client Initialization
+
+#### Synchronous Client
+
+```python
+from krutrim_cloud import KrutrimCloud
+client = KrutrimCloud()
+```
+
+#### Asynchronous Client
+
+```python
+from krutrim_cloud import KrutrimCloudAsync
+client = KrutrimCloudAsync()
+```
+
+***
+
+### 5. Core Functionalities
+
+#### 5.1 Image Generation (Diffusion)
+
+```python
+response = client.images.generations.diffusion(
+    model_name="diffusion1XL",
+    image_height=1024,
+    image_width=1024,
+    prompt="a cyberpunk cityscape at night"
+)
+
+print(response.generated_images)
+```
+
+#### 5.2 Text Completion
+
+```python
+response = client.texts.completions.bhashini(
+    prompt="Write a short story about a robot and a child.",
+    language="en"
+)
+print(response.generated_text)
+```
+
+#### 5.3 Speech APIs (DIS / Bhashik Speech)
+
+```python
+response = client.speech.tts.bhashik(
+    text="Namaste, Krutrim Cloud!",
+    voice="hi_female_1"
+)
+
+with open("output.mp3", "wb") as f:
+    f.write(response.audio)
+```
+
+***
+
+### 6. Error Handling
+
+API responses may raise exceptions for invalid input, network issues, or internal errors.
+
+Basic handling:
+
+```python
+try:
+    response = client.texts.completions.bhashini(prompt="Hello")
+except Exception as e:
+    print(f"Error: {str(e)}")
+```
+
+***
+
+### 7. Using Async Workflows
+
+```python
+import asyncio
+from krutrim_cloud import KrutrimCloudAsync
+
+async def run():
+    client = KrutrimCloudAsync()
+    result = await client.images.generations.diffusion(
+        model_name="diffusion1XL",
+        image_height=512,
+        image_width=512,
+        prompt="a futuristic AI city"
+    )
+    print(result.generated_images)
+
+asyncio.run(run())
+```
+
+***
+
+### 8. Examples & Sample Projects
+
+Explore example notebooks and scripts:
+
+* [Basic Inference](https://github.com/ola-krutrim/krutrim-cloud-python/tree/main/examples)
+* \[Fine-Tuning (Coming Soon)]
+* \[CLI Wrapper (WIP)]
+
+***
+
+### 9. Versioning & Updates
+
+To upgrade the SDK:
+
+```bash
+pip install --upgrade krutrim-cloud
+```
+
+Check the [GitHub repo](https://github.com/ola-krutrim/krutrim-cloud-python) for changelogs and release notes.
+
+***
+
+### 10. Support & Contribution
+
+* For issues, submit a GitHub Issue [here](https://github.com/ola-krutrim/krutrim-cloud-python/issues)
+* For API key access, contact the Krutrim team
+* For feedback or enhancements, reach out via your internal Slack or community portal
+
+***
