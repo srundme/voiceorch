@@ -177,6 +177,7 @@ export default function VibePage() {
 
   const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const historyRef  = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
   const voicesRef   = useRef<{ shown: boolean; list: VoiceOption[] }>({ shown: false, list: [] });
   const selectedVoiceIdRef = useRef<string>("");
@@ -199,6 +200,21 @@ export default function VibePage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const prevPhaseRef = useRef<Phase>("idle");
+  useEffect(() => {
+    const wasActive = prevPhaseRef.current === "thinking"
+      || prevPhaseRef.current === "streaming"
+      || prevPhaseRef.current === "building";
+    prevPhaseRef.current = phase;
+    if (phase === "idle" && wasActive) {
+      chatInputRef.current?.focus();
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    chatInputRef.current?.focus();
+  }, []);
 
   // ── Refine mode: load existing agent on mount ────────────────────────────
   useEffect(() => {
@@ -862,6 +878,7 @@ export default function VibePage() {
   const inputBlock = (isLanding: boolean) => (
     <div className={cn("relative", isLanding ? "w-full" : "")}>
       <Textarea
+        ref={chatInputRef}
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKey}
