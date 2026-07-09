@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Info, Star, ArrowUpDown, User } from "lucide-react";
+import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Star, ArrowUpDown, User } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
 import { getVoiceAvatar, resolveVoiceGenderLabel } from "@/lib/voice-avatars";
@@ -238,13 +238,6 @@ export default function VoicesPage() {
             </div>
           </div>
         )}
-
-        <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] to-primary/[0.02] p-4 flex items-start gap-3">
-          <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-          <div className="text-sm text-muted-foreground">
-            <strong className="text-foreground">What is this?</strong> These are the Cartesia voices approved by the platform admin. Pick any of them when configuring your agent.
-          </div>
-        </div>
 
         <div className="flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1 min-w-[200px]">
