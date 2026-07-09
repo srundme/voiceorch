@@ -30,14 +30,19 @@ const TOOL_CAPABLE_MODELS = new Set([
 ]);
 
 /**
- * Qwen3.5/3.6 thinking models: require higher max_tokens so the think block
- * doesn't exhaust the budget before the spoken reply. Minimum 500 for voice.
+ * Qwen3.5/3.6 thinking models: require a higher max_tokens floor so the
+ * internal <think> block (which scales with prompt complexity) doesn't exhaust
+ * the entire budget before the spoken reply is generated.
+ * With a full production system prompt + tools the thinking block can easily
+ * use 800–1200 tokens, leaving nothing for the response at a 500-token cap.
+ * Floor raised to 1500 — any per-agent maxTokens setting below this is bumped.
  */
 const THINKING_MODELS = new Set([
   "Qwen3.5-9B",
   "Qwen3.6-27B",
   "Qwen3.6-35B-A3B",
 ]);
+const THINKING_MIN_TOKENS = 1500;
 
 export class KrutrimLLM implements LLMAdapter {
   private client: OpenAI;
@@ -51,9 +56,10 @@ export class KrutrimLLM implements LLMAdapter {
       baseURL: "https://cloud.olakrutrim.com/v1",
     });
     this.model = model?.trim() || DEFAULT_MODEL;
-    // Thinking models need ≥500 tokens so the <think> block doesn't exhaust
-    // the budget before the actual spoken reply is generated.
-    const minForThinking = THINKING_MODELS.has(this.model) ? 500 : 0;
+    // Thinking models need a higher floor so the internal <think> block doesn't
+    // exhaust the entire budget before the spoken reply. With a full production
+    // system prompt the think block can use 800–1200 tokens on its own.
+    const minForThinking = THINKING_MODELS.has(this.model) ? THINKING_MIN_TOKENS : 0;
     this.maxTokens = Math.max(genParams?.maxTokens ?? 250, minForThinking);
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;

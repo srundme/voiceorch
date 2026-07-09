@@ -1,0 +1,83 @@
+Here's the fully consolidated, corrected brief — ready to paste into Replit as the final version.
+
+---
+
+**Task: Reduce false-positive name latching in callerMemory.ts**
+
+**File:** `artifacts/api-server/src/orchestration/callerMemory.ts` (`NAME_PATTERNS`, `isPlausibleName()`, `latchCallerName()`, ~lines 1283–1384; override guard ~line 1229)
+
+**Do not modify:** `caller_facts` schema, supersession logic, `loadCallerContext`, `updateCallerProfile` phases, episode/sentence storage, other latches (language, location, occupation), Tamil/Hindi self-introduction patterns, or the existing stricter "this is X" requirement (must be followed by speaking/calling/here).
+
+### Background
+`isPlausibleName()` already rejects most false positives (digits, >3 words, common stopwords, product vocabulary). One confirmed gap: "I am so confused" currently latches as the name "so confused" because "so" and "confused" aren't yet on the reject list. Additionally, a latched name always overrides the LLM-extracted name at call-end via a guard at ~line 1229 — this needs to become conditional, not unconditional.
+
+### Scope
+
+**1. Expand the existing stopword/blocklist in `isPlausibleName()`**
+Add: `so`, `confused`, `very`, `really` (check the current list first and only add what's missing — do not duplicate `just`, `also`, `still` if they're already present). This is additive to the existing list — do not remove or restructure current checks.
+
+**2. Add a next-token check**
+As an additional guard alongside the existing checks in `isPlausibleName()` — not a replacement for any current logic.
+
+**3. Tier the trust of each match at the point of latch (in-memory only, no schema/DB changes):**
+- Tamil/Hindi patterns, "my name is X", "this is X [speaking/calling/here]" → **Tier A** (high trust)
+- "I am X" / "I'm X" → **Tier B** (low trust), only latched after passing the (now-expanded) `isPlausibleName()` checks
+
+**4. Thread the tier flag to call-end (no new cache — use existing session variable)**
+Pass the tier (`'A'` or `'B'`) alongside the existing `callerNameLatchedThisCall` variable through to `updateCallerProfile`, the same way the name itself already travels via `callerNameInCall`.
+
+**5. Make the override guard conditional on tier**
+At the identity-contamination guard (~line 1229):
+- Tier A → override behavior unchanged (latched name still wins over LLM extraction)
+- Tier B → skip the override; let the LLM-extracted name write through the existing Phase 3c path naturally
+
+**6. Dropped-call fallback needs no new storage**
+`latchCallerName` already writes the name to `caller_profiles.name` immediately and in real time. If a call drops before LLM extraction runs, the Tier B name is already persisted from that real-time write — this satisfies the fallback requirement with zero new persistence layers.
+
+**7. Testability**
+Export `isPlausibleName` and `NAME_PATTERNS` from the module (or provide a documented path to test them via `latchCallerName` with a mocked DB) so the regression suite below can actually run.
+
+**8. Deployment note**
+The API server runs from a prebuilt bundle — restart it after deploying this change before verifying behavior, or tests will run against stale code.
+
+### Explicit accepted trade-off (confirm before starting)
+Tier B latches lose the anti-contamination protection the override guard previously gave every latch. If the LLM misreads a transcript at call-end, its extracted name can now overwrite a genuinely correct Tier B latch (e.g., a real "I am Arjun" caller). This is intentional: Tier B latches are inherently less reliable than Tier A, so trusting full-transcript LLM extraction over them on conflict is the right default. This does not affect Tier A latches, which keep full override protection unchanged.
+
+### Regression test suite
+
+Must be rejected (no latch):
+```
+"I am sorry"
+"I'm not able to help"
+"I am calling about my policy"
+"I'm trying to reach someone"
+"I am so confused right now"   -> currently latches as "so confused" — must be rejected after fix
+```
+
+Must still latch correctly (Tier A, byte-for-byte unchanged, including override priority):
+```
+"My name is Karthik"
+"This is Priya speaking"
+"என் பேர் Arjun"
+"मेरा नाम Divya"
+```
+
+Must latch as Tier B and defer to LLM extraction on conflict:
+```
+"I am Arjun" + LLM extraction also says "Arjun"    -> final name = Arjun
+"I am Arjun" + LLM extraction says "Karthik"        -> final name = Karthik (Tier B overridden by LLM, per accepted trade-off)
+"I'm Divya" + call drops before extraction runs     -> final name = Divya (already persisted via real-time write, no override applies)
+```
+
+### Acceptance criteria
+- "I am so confused" no longer latches as a name.
+- All currently-working rejections continue to reject.
+- Tier A latch behavior and override priority are completely unchanged.
+- Tier B latches no longer permanently override a conflicting LLM-extracted name.
+- Tier B fallback works correctly across a dropped call, via the existing real-time write — no new cache or storage introduced.
+- `isPlausibleName` / `NAME_PATTERNS` are testable (exported or reachable via mocked-DB test).
+- API server bundle restarted post-deploy before verification.
+- No changes to `caller_facts`, `caller_profiles` schema, supersession logic, episode/sentence storage, or any other latch type.
+
+### Out of scope (noted separately, not part of this task)
+`replit.md` has grown large and could use trimming/reorganizing at some point — not urgent, not part of this fix.

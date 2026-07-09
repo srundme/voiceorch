@@ -1,0 +1,437 @@
+[
+  {
+    "id": 140459,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.305Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "varun bro",
+      "asrProvider": "sarvam",
+      "llmProvider": "krutrim",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2082,
+      "sessionId": "live-2082",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-09T16:14:55.290Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 140458,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.305Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Anna",
+        "callCount": 25
+      },
+      "factCount": 9,
+      "facts": {
+        "language_pref": "tamil",
+        "name": "Anna",
+        "has_galaxy_health_insurance_app": "false",
+        "has_gala_fit_program": "true",
+        "family_size": "12",
+        "interested_in": "earning wellness coins",
+        "has_wellness_program": "Gala Fit",
+        "aware_of_policy_details": "true",
+        "has_galaxy_marvel_policy": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 140461,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.305Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 140460,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.306Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-59",
+        "from_number": "webcall-user-email:karthiasc12@gmail.com",
+        "agent_name": "varun bro",
+        "caller_number": "webcall-user-email:karthiasc12@gmail.com",
+        "date": "Thursday, July 9, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: Anna  |  Calls: 25\n\nPrevious call summary: The caller, Anna, asked to speak in Tamil and then switched to English to continue discussing the Gala Fit program and earning Wellness Coins, but did not provide further details\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• has_galaxy_health_insurance_app: false\n• has_gala_fit_program: true\n• family_size: 12\n• interested_in: earning wellness coins\n• has_wellness_program: Gala Fit\n• aware_of_policy_details: true\n• has_galaxy_marvel_policy: true\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call "
+    },
+    "metadata": null
+  },
+  {
+    "id": 140463,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.306Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "krutrim",
+      "model": "Qwen3.6-35B-A3B"
+    }
+  },
+  {
+    "id": 140462,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.306Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 140465,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.306Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    }
+  },
+  {
+    "id": 140464,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:14:55.306Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "1b78bc2ef997",
+      "promptLength": 22215,
+      "preview": "=== CALLER MEMORY ===\nName: Anna  |  Calls: 25\n\nPrevious call summary: The caller, Anna, asked to speak in Tamil and then switched to English to continue discussing the Gala Fit program and earning We"
+    }
+  },
+  {
+    "id": 140466,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:04.895Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 94,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140467,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:05.014Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "Qwen3.6-35B-A3B",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 1,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140468,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:09.040Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 4030,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": ""
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "Qwen3.6-35B-A3B",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140469,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:19.842Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 1,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 140471,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:19.842Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "மன்னிக்கவும், எனக்கு புரியவில்லை — மீண்டும் சொல்ல முடியுமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140470,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:19.842Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140472,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:20.890Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1050,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 127714,
+      "textLength": 59,
+      "firstByteMs": 322
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1050
+    }
+  },
+  {
+    "id": 140473,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:24.264Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3991,
+      "turnNumber": 1,
+      "durationMs": 4422
+    }
+  },
+  {
+    "id": 140474,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:27.077Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 140475,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:27.148Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2082"
+    }
+  },
+  {
+    "id": 140476,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:27.148Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2082"
+    }
+  },
+  {
+    "id": 140477,
+    "callId": 2082,
+    "agentId": 59,
+    "ts": "2026-07-09T16:15:27.177Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 31,
+        "turns": 1,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "Hello",
+        "lastAgentResponse": null,
+        "recordingStatus": "saved",
+        "warningCount": 1,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 31,
+      "turns": 1,
+      "avgSttMs": 0,
+      "avgLlmMs": 4831,
+      "avgTtsMs": 0
+    }
+  }
+]
