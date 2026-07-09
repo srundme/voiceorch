@@ -85,19 +85,27 @@ export class TogetherLLM implements LLMAdapter {
     const toolChoice = togetherTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
 
     // Disable reasoning/thinking tokens — they add latency before first spoken word
-    // and are never useful for a real-time voice call. Only send the Together-specific
-    // `reasoning` field to models that accept it; sending it to others (e.g. MiniMax)
-    // returns a 400. Cast to any because the OpenAI SDK types don't expose this field.
+    // and are never useful for a real-time voice call.
+    // Together AI's API uses { enabled: false } (NOT { effort: "none" } — that was wrong
+    // and caused reasoning to stay ON, adding 4-6s per turn). Only send this field to
+    // models that support it; unsupported models return a 400.
+    // Cast to any because the OpenAI SDK types don't expose Together-specific fields.
+    //
+    // Voice max_tokens: cap at 250 tokens when no explicit limit is configured.
+    // MiniMax M3's Together serverless default is 500 tokens (~375 words per turn —
+    // far too long for voice, causes 7-8s inference). 250 tokens is ~90 spoken words,
+    // plenty for a full voice reply, and cuts inference time roughly in half.
+    const voiceMaxTokens = this.maxTokens ?? 250;
     const reqBody: any = {
       model:          this.model,
       stream:         true,
       stream_options: { include_usage: true },
-      ...(REASONING_FIELD_MODELS.has(this.model) ? { reasoning: { effort: "none" } } : {}),
+      ...(REASONING_FIELD_MODELS.has(this.model) ? { reasoning: { enabled: false } } : {}),
       messages: [
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
       ],
-      ...(this.maxTokens   ? { max_tokens: this.maxTokens }     : {}),
+      max_tokens: voiceMaxTokens,
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
       ...(togetherTools ? { tools: togetherTools, tool_choice: toolChoice } : {}),
     };

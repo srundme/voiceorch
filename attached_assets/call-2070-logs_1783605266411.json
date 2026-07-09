@@ -1,0 +1,667 @@
+[
+  {
+    "id": 140081,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.766Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "varun bro",
+      "asrProvider": "sarvam",
+      "llmProvider": "together",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2070,
+      "sessionId": "live-2070",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-09T13:53:38.751Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 140083,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 19
+      },
+      "factCount": 8,
+      "facts": {
+        "language_pref": "kannada",
+        "has_galaxy_health_insurance_app": "false",
+        "has_gala_fit_program": "true",
+        "family_size": "12",
+        "interested_in": "earning wellness coins",
+        "has_wellness_program": "Gala Fit",
+        "aware_of_policy_details": "true",
+        "has_galaxy_marvel_policy": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 140082,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-59",
+        "from_number": "webcall-user-email:karthiasc12@gmail.com",
+        "agent_name": "varun bro",
+        "caller_number": "webcall-user-email:karthiasc12@gmail.com",
+        "date": "Thursday, July 9, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which may belong to a previous caller on the same number.\n=====================================\n\nYou are Varun (வருண்), a human customer service executive calling on behalf of Galaxy Health Insurance.\n\nBe: warm, conversational, patient, helpful, huma"
+    },
+    "metadata": null
+  },
+  {
+    "id": 140084,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 140085,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "together",
+      "model": "MiniMaxAI/MiniMax-M3"
+    }
+  },
+  {
+    "id": 140086,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 140088,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    }
+  },
+  {
+    "id": 140087,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:38.767Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "37d1733da9f0",
+      "promptLength": 20742,
+      "preview": "=== CALLER MEMORY ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch "
+    }
+  },
+  {
+    "id": 140089,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:44.290Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ಹೇಗಿದ್ದೀರಾ? ಏನು ಸುದ್ದಿ?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 140090,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:44.290Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 140091,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:45.075Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 790,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 50914,
+      "textLength": 23,
+      "firstByteMs": 372
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 791
+    }
+  },
+  {
+    "id": 140092,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:46.223Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1591,
+      "turnNumber": 0,
+      "durationMs": 1935
+    }
+  },
+  {
+    "id": 140093,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:48.259Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ಹಾ ಬೋಲೋ ಬೈ",
+      "endDetectToFinalMs": 95,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140094,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:48.391Z",
+    "component": "LLM",
+    "provider": "together",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "MiniMaxAI/MiniMax-M3",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Kannada. Respond in Kannada. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Kannada, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140095,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:56.732Z",
+    "component": "LLM",
+    "provider": "together",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 8346,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": ""
+    },
+    "metadata": {
+      "inputTokens": 6326,
+      "outputTokens": 500,
+      "cachedTokens": 0,
+      "model": "MiniMaxAI/MiniMax-M3",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140096,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:57.534Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello"
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140097,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:53:57.645Z",
+    "component": "LLM",
+    "provider": "together",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "MiniMaxAI/MiniMax-M3",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Kannada. Respond in Kannada. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Kannada, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140098,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:05.512Z",
+    "component": "LLM",
+    "provider": "together",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 7870,
+      "turnNumber": 2,
+      "durationMs": 7870
+    }
+  },
+  {
+    "id": 140099,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:05.677Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ನಮಸ್ಕಾರ ಸರ್."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140100,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:05.727Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140101,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:06.266Z",
+    "component": "LLM",
+    "provider": "together",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 7870,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ನಮಸ್ಕಾರ ಸರ್. ನಾನು ವರುಣ್ ಮಾತನಾಡ್ತಿದ್ದೀನಿ, Galaxy Health Insurance"
+    },
+    "metadata": {
+      "inputTokens": 6264,
+      "outputTokens": 500,
+      "cachedTokens": 0,
+      "model": "MiniMaxAI/MiniMax-M3",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140102,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:06.266Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ನಾನು ವರುಣ್ ಮಾತನಾಡ್ತಿದ್ದೀನಿ, Galaxy Health Insurance"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140103,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:06.544Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 868,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 30434,
+      "textLength": 12,
+      "firstByteMs": 345
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 868
+    }
+  },
+  {
+    "id": 140104,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:06.963Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 951,
+      "turnNumber": 2,
+      "durationMs": 1235
+    }
+  },
+  {
+    "id": 140105,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:06.963Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 140106,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:07.227Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 962,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117474,
+      "textLength": 51,
+      "firstByteMs": 284
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 962
+    }
+  },
+  {
+    "id": 140107,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:10.703Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3671,
+      "turnNumber": 2,
+      "durationMs": 3740
+    }
+  },
+  {
+    "id": 140108,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:13.079Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 140109,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:13.158Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2070"
+    }
+  },
+  {
+    "id": 140110,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:13.158Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2070"
+    }
+  },
+  {
+    "id": 140111,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:13.191Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 34,
+        "turns": 2,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "Hello",
+        "lastAgentResponse": "ನಮಸ್ಕಾರ ಸರ್. ನಾನು ವರುಣ್ ಮಾತನಾಡ್ತಿದ್ದೀನಿ, Galaxy Health Insurance",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 34,
+      "turns": 2,
+      "avgSttMs": 0,
+      "avgLlmMs": 8510,
+      "avgTtsMs": 4190
+    }
+  },
+  {
+    "id": 140112,
+    "callId": 2070,
+    "agentId": 59,
+    "ts": "2026-07-09T13:54:13.698Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
