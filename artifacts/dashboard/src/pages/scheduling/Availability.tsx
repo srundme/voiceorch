@@ -150,13 +150,13 @@ function ScheduleRow({
   );
 }
 
-export default function AvailabilityPage() {
+export default function AvailabilityPage({ embedded = false, calendarId: calendarIdProp }: { embedded?: boolean; calendarId?: number; params?: Record<string, string | undefined> } = {}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: calendars } = useListCalendars();
   const [selectedCalendarId, setSelectedCalendarId] = useState<number | null>(null);
 
-  const calendarId = selectedCalendarId ?? calendars?.[0]?.id ?? null;
+  const calendarId = calendarIdProp ?? selectedCalendarId ?? calendars?.[0]?.id ?? null;
 
   const { data: schedules, isLoading } = useListAvailability(
     { calendarId: calendarId! },
@@ -265,17 +265,18 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <SchedulingTabNav />
-    <div className="flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full flex-1 overflow-y-auto">
+    <div className={embedded ? "flex flex-col gap-6 max-w-3xl" : "flex flex-col h-full overflow-hidden"}>
+      {!embedded && <SchedulingTabNav />}
+    <div className={embedded ? "contents" : "flex flex-col gap-6 p-6 max-w-3xl mx-auto w-full flex-1 overflow-y-auto"}>
 
       {/* Header */}
+      {!embedded && (
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Availability</h1>
           <p className="text-sm text-muted-foreground">Set when you're available to be booked</p>
         </div>
-        {calendars && calendars.length > 1 && (
+        {calendars && calendars.length > 1 && !calendarIdProp && (
           <Select value={String(calendarId ?? "")} onValueChange={v => setSelectedCalendarId(parseInt(v))}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Select calendar" /></SelectTrigger>
             <SelectContent>
@@ -284,6 +285,7 @@ export default function AvailabilityPage() {
           </Select>
         )}
       </div>
+      )}
 
       {!calendarId && (
         <Card>

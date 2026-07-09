@@ -17,14 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
 import { getListAgentsQueryKey } from "@workspace/api-client-react";
-
-const AVAILABILITY_PRESETS = [
-  { id: "mf9to5",  label: "Mon – Fri,  9 AM – 5 PM", days: [1,2,3,4,5],     start: "09:00", end: "17:00" },
-  { id: "ms9to6",  label: "Mon – Sat,  9 AM – 6 PM", days: [1,2,3,4,5,6],   start: "09:00", end: "18:00" },
-  { id: "ms10to7", label: "Mon – Sat, 10 AM – 7 PM", days: [1,2,3,4,5,6],   start: "10:00", end: "19:00" },
-  { id: "all247",  label: "All days,   24 × 7",       days: [0,1,2,3,4,5,6], start: "00:00", end: "23:59" },
-  { id: "manual",  label: "I'll configure it myself", days: [1,2,3,4,5],     start: "09:00", end: "17:00" },
-] as const;
+import VibeSchedulingWizard from "./SchedulingWizard";
 
 /* ── types ─────────────────────────────────────────────────────────────────── */
 
@@ -46,10 +39,6 @@ interface ChatMsg {
   voices?: VoiceOption[];        // inline voice picker
   voiceAgentLangs?: string[];    // agent's chosen language(s) for the picker's default filter
   voicePicked?: boolean;         // collapses picker after selection
-  timezonePicker?: boolean;      // inline timezone picker
-  timezonePicked?: boolean;      // collapses timezone picker after selection
-  availabilityPicker?: boolean;  // inline availability preset picker
-  availabilityPicked?: boolean;  // collapses availability picker after selection
   notices?: NoticeCard[];        // distinct info notices (multi-language heads-up, no-numbers)
   phoneNumbers?: PhoneNumberOption[]; // inline phone-number picker
   phoneNumbersPicked?: boolean;  // collapses phone-number picker after pick/skip
@@ -599,38 +588,6 @@ export default function VibePage() {
     setMessages(prev => prev.map(m => m.voices ? { ...m, voicePicked: true } : m));
   }, []);
 
-  // Attach timezone picker to last AI message
-  const attachTimezonePickerToLastMsg = useCallback(() => {
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === "ai") {
-        return [...prev.slice(0, -1), { ...last, timezonePicker: true, timezonePicked: false }];
-      }
-      return prev;
-    });
-  }, []);
-
-  // Collapse all timezone pickers after selection
-  const collapseTimezonePickers = useCallback(() => {
-    setMessages(prev => prev.map(m => m.timezonePicker ? { ...m, timezonePicked: true } : m));
-  }, []);
-
-  // Attach availability picker to last AI message
-  const attachAvailabilityPickerToLastMsg = useCallback(() => {
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === "ai") {
-        return [...prev.slice(0, -1), { ...last, availabilityPicker: true, availabilityPicked: false }];
-      }
-      return prev;
-    });
-  }, []);
-
-  // Collapse all availability pickers after selection
-  const collapseAvailabilityPickers = useCallback(() => {
-    setMessages(prev => prev.map(m => m.availabilityPicker ? { ...m, availabilityPicked: true } : m));
-  }, []);
-
   // Attach a distinct notice card to the last AI message (deduped by signature)
   const attachNoticeToLastMsg = useCallback((message: string) => {
     setMessages(prev => {
@@ -853,14 +810,6 @@ export default function VibePage() {
               setSchedulingSetup({ timezone: String(evt.timezone ?? "Asia/Kolkata") });
               break;
 
-            case "timezone_picker":
-              attachTimezonePickerToLastMsg();
-              break;
-
-            case "availability_picker":
-              attachAvailabilityPickerToLastMsg();
-              break;
-
             case "prompt_stream":
               setPromptPreview(prev => prev + (evt.delta as string));
               break;
@@ -973,7 +922,7 @@ export default function VibePage() {
       setPhase("idle");
     }
   }, [input, viewMode, setPhase, appendAiDelta, attachVoicesToLastMsg, collapseVoicePickers,
-      attachAvailabilityPickerToLastMsg, attachNoticeToLastMsg,
+      attachNoticeToLastMsg,
       attachPhoneNumbersToLastMsg, collapsePhonePickers, queryClient]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1365,11 +1314,6 @@ export default function VibePage() {
                       setSelectedVoice(v.voiceName);
                       send(`I'll go with ${v.voiceName}`);
                     }}
-                    onSelectTimezone={tz => { collapseTimezonePickers(); send(`Use ${tz.label} (${tz.value})`); }}
-                    onSelectAvailability={preset => {
-                      collapseAvailabilityPickers();
-                      send(`Set availability: ${preset.label} — days: [${preset.days.join(",")}], hours: ${preset.start}–${preset.end}`);
-                    }}
                     selectedNumber={selectedNumber}
                     onAssignNumber={n => {
                       collapsePhonePickers();
@@ -1608,46 +1552,13 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* Scheduling Setup Guidance */}
-              {schedulingSetup && (
+              {/* Scheduling Setup Wizard */}
+              {schedulingSetup && (lastSavedAgentId ?? createdId) != null && (
                 <Section title="Scheduling Setup">
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-amber-500 shrink-0" />
-                      <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                        2 steps to activate booking
-                      </p>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      Timezone: <span className="font-medium text-foreground">{schedulingSetup.timezone}</span>
-                    </p>
-                    <div className="space-y-2">
-                      <a
-                        href="/app/scheduling"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2.5 hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold shrink-0">1</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium">Connect Google Calendar</p>
-                          <p className="text-[10px] text-muted-foreground truncate">app/scheduling → Calendars tab</p>
-                        </div>
-                      </a>
-                      <a
-                        href="/app/scheduling/event-types"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-background px-3 py-2.5 hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold shrink-0">2</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium">Create an event type</p>
-                          <p className="text-[10px] text-muted-foreground truncate">app/scheduling/event-types →</p>
-                        </div>
-                      </a>
-                    </div>
-                  </div>
+                  <VibeSchedulingWizard
+                    agentId={(lastSavedAgentId ?? createdId)!}
+                    timezone={schedulingSetup.timezone}
+                  />
                 </Section>
               )}
 
@@ -1704,14 +1615,12 @@ export default function VibePage() {
 /*  Chat components                                                            */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, onSelectTimezone, onSelectAvailability, selectedNumber, onAssignNumber, onSkipNumber }: {
+function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, selectedNumber, onAssignNumber, onSkipNumber }: {
   msg: ChatMsg;
   selectedVoice: string;
   playingVoice: string | null;
   onPreview: (id: string) => void;
   onSelect: (v: VoiceOption) => void;
-  onSelectTimezone: (tz: { value: string; label: string }) => void;
-  onSelectAvailability: (preset: typeof AVAILABILITY_PRESETS[number]) => void;
   selectedNumber: string;
   onAssignNumber: (n: PhoneNumberOption) => void;
   onSkipNumber: () => void;
@@ -1762,63 +1671,6 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
             <span className="font-medium">{selectedVoice ? `${selectedVoice} selected` : "Voice selected"}</span>
           </div>
         )}
-        {/* Timezone picker — shown when scheduling is enabled */}
-        {msg.timezonePicker && !msg.timezonePicked && (
-          <div className="space-y-2 pt-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-              Select timezone
-            </p>
-            <div className="rounded-xl border border-border/60 bg-muted/30 overflow-hidden max-h-52 overflow-y-auto">
-              {AGENT_TIMEZONES.map(tz => (
-                <button
-                  key={tz.value}
-                  onClick={() => onSelectTimezone(tz)}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors border-b border-border/30 last:border-0"
-                >
-                  {tz.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {/* Collapsed timezone state */}
-        {msg.timezonePicker && msg.timezonePicked && (
-          <div className="flex items-center gap-2 text-[11px] text-primary">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span className="font-medium">Timezone selected</span>
-          </div>
-        )}
-
-        {/* Availability picker — shown when scheduling is being set up */}
-        {msg.availabilityPicker && !msg.availabilityPicked && (
-          <div className="space-y-2 pt-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-              Select availability
-            </p>
-            <div className="rounded-xl border border-border/60 bg-muted/30 overflow-hidden">
-              {AVAILABILITY_PRESETS.map(preset => (
-                <button
-                  key={preset.id}
-                  onClick={() => onSelectAvailability(preset)}
-                  className="w-full text-left px-3 py-2.5 text-xs hover:bg-primary/10 hover:text-primary transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
-                >
-                  <span className="font-medium">{preset.label}</span>
-                  {preset.id === "mf9to5" && (
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">recommended</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {/* Collapsed availability state */}
-        {msg.availabilityPicker && msg.availabilityPicked && (
-          <div className="flex items-center gap-2 text-[11px] text-primary">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span className="font-medium">Availability set</span>
-          </div>
-        )}
-
         {/* Distinct notice cards (multi-language heads-up, phone-number info) */}
         {msg.notices?.map((n, i) => (
           <div key={i} className="flex items-start gap-2.5 rounded-xl border border-sky-500/25 bg-sky-500/8 px-3.5 py-3">

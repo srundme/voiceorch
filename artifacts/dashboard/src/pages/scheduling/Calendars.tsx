@@ -107,11 +107,13 @@ function defaultForm(): FormState {
 function CalendarFormDialog({
   open,
   onClose,
+  onSaved,
   editing,
   takenAgentIds = new Set(),
 }: {
   open: boolean;
   onClose: () => void;
+  onSaved?: () => void;
   editing: SchedulingCalendar | null;
   takenAgentIds?: Set<number>;
 }) {
@@ -186,6 +188,7 @@ function CalendarFormDialog({
         toast({ title: "Calendar created" });
       }
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
+      onSaved?.();
       onClose();
     } catch (e: any) {
       const msg = formatApiError(e);
@@ -613,7 +616,7 @@ function CalendarCard({
   );
 }
 
-export default function CalendarsPage({ embedded = false }: { embedded?: boolean }) {
+export default function CalendarsPage({ embedded = false, onCalendarSaved }: { embedded?: boolean; onCalendarSaved?: () => void }) {
   const [createOpen, setCreateOpen] = useState(false);
   const { data: calendars, isLoading } = useListCalendars();
   const { data: agents } = useListAgents();
@@ -869,6 +872,7 @@ export default function CalendarsPage({ embedded = false }: { embedded?: boolean
       <CalendarFormDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        onSaved={onCalendarSaved}
         editing={null}
         takenAgentIds={new Set(calendars?.map(c => c.agentId) ?? [])}
       />

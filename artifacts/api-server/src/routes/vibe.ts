@@ -229,24 +229,10 @@ PHASE "features_voicemail"
 PHASE "features_scheduling"
 - Ask: "Does [name] need to book appointments or manage scheduling?"
 - If NO: schedulingEnabled=false → transition to "features_compliance"
-- If YES: schedulingEnabled=true. Then complete ALL of these sub-steps IN ORDER before transitioning:
+- If YES: schedulingEnabled=true. Then complete this sub-step before transitioning:
 
-  Sub-step A — Timezone (timezoneSet):
-    A timezone picker UI will appear automatically in the chat for the user to select.
-    Once they pick one, set timezone=<IANA string they picked> and timezoneSet=true.
-    Do NOT ask for timezone in text — the UI picker handles it.
-
-  Sub-step B — Host email (hostEmailSet):
-    After timezoneSet=true, ask: "What email address should receive booking notifications and appear as the organizer on calendar invites?"
-    Once they provide it, set hostEmail=<email> and hostEmailSet=true.
-
-  Sub-step C — Availability (availabilitySet):
-    After hostEmailSet=true, an availability picker UI will appear automatically.
-    Once they pick, set availabilityDays (array of day_of_week numbers: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat), availabilityStart (HH:MM), availabilityEnd (HH:MM), and availabilitySet=true.
-    Common presets: Mon–Fri=[1,2,3,4,5], Mon–Sat=[1,2,3,4,5,6], All days=[0,1,2,3,4,5,6]
-
-  Sub-step D — Tools (schedulingTools):
-    After availabilitySet=true, ask a single compact question:
+  Sub-step — Tools (schedulingTools):
+    Ask a single compact question:
     "I'll enable booking, availability-check, list, reschedule, and cancel by default. Any you'd like to leave out?"
     If the user says nothing, "that's fine", or skips, set schedulingTools to all five:
     ["native_booking","native_check_availability","native_list_bookings","native_reschedule","native_cancel"].
@@ -254,9 +240,9 @@ PHASE "features_scheduling"
     The user can say things like "just booking and availability" or "skip reschedule" — parse the intent and update schedulingTools accordingly.
     If the user already specified their tool needs earlier (e.g. "I just need basic booking"), you can set schedulingTools directly without asking.
 
-  After all sub-steps complete: say "Great! I've configured scheduling for [name] — a calendar, availability schedule, and a default 30-min booking event type will be created automatically. You can connect Google Calendar and add more event types from the Scheduling section after creation."
+  After the tools sub-step: say "Great! I've set up scheduling for [name] — a calendar, default availability, and a 30-min booking event type will be created automatically. A setup checklist will appear on the right so you can connect Google Calendar and configure your availability without leaving this page."
 
-→ Transition to "features_compliance" ONLY after: timezoneSet=true AND hostEmailSet=true AND availabilitySet=true (or schedulingEnabled=false)
+→ Transition to "features_compliance" ONLY after: schedulingTools is set (or schedulingEnabled=false)
 
 PHASE "features_compliance"
 - Ask: "Any compliance standards? Options: DPDP (India data protection), TRAI (telecom), IRDAI (insurance). Choose any or none."
@@ -1018,18 +1004,6 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       }
     }
 
-    // Timezone picker — show when scheduling enabled and not yet confirmed by user
-    if (cfg.schedulingEnabled && !cfg.timezoneSet && phase === "features_scheduling") {
-      await sleep(150);
-      emit({ type: "timezone_picker" });
-    }
-
-    // Availability picker — show after timezone + host email collected, before availability confirmed
-    if (cfg.schedulingEnabled && cfg.timezoneSet && cfg.hostEmailSet && !cfg.availabilitySet && phase === "features_scheduling") {
-      await sleep(150);
-      emit({ type: "availability_picker" });
-    }
-
     // Phone-number step (inbound / "both" agents): show the user's purchased
     // numbers as in-chat cards, or point to the Phone Numbers page when empty.
     if (dirTakesInbound && userNumbers.length === 0
@@ -1541,36 +1515,46 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           .returning();
 
         if (cal) {
-          // Availability schedule — Mon-Fri 9-5 default or user selection
-          const days: number[]  = cfg.availabilityDays?.length ? cfg.availabilityDays : [1,2,3,4,5];
-          const startTime       = cfg.availabilityStart || "09:00";
-          const endTime         = cfg.availabilityEnd   || "17:00";
-          await db.insert(availabilitySchedulesTable)
-            .values(days.map((day: number) => ({
-              calendarId: cal.id,
-              dayOfWeek:  day,
-              startTime,
-              endTime,
-              isActive:   true,
-            })))
-            .onConflictDoNothing()
-            .catch(() => {});
+          // Availability schedule — only create defaults if none exist yet (preserve user config on Refine)
+          const existingAvail = await db.select({ id: availabilitySchedulesTable.id })
+            .from(availabilitySchedulesTable)
+            .where(eq(availabilitySchedulesTable.calendarId, cal.id))
+            .limit(1);
+          if (existingAvail.length === 0) {
+            const days: number[] = [1, 2, 3, 4, 5];
+            const startTime = "09:00";
+            const endTime   = "17:00";
+            await db.insert(availabilitySchedulesTable)
+              .values(days.map((day: number) => ({
+                calendarId: cal.id,
+                dayOfWeek:  day,
+                startTime,
+                endTime,
+                isActive:   true,
+              })))
+              .catch(() => {});
+          }
 
-          // Auto-create a default "Quick Chat" 30-min event type
-          const slugBase = cfg.agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-          await db.insert(eventTypesTable)
-            .values({
-              calendarId:       cal.id,
-              userId:           clerkId,
-              name:             "Quick Chat",
-              slug:             `${slugBase}-${Date.now()}`,
-              description:      `Book a quick call with ${cfg.agentName}`,
-              durationMinutes:  30,
-              confirmationMode: "instant",
-              isActive:         true,
-            })
-            .onConflictDoNothing()
-            .catch(() => {});
+          // Auto-create a default "Quick Chat" 30-min event type — only if none exists (no duplicates on Refine)
+          const existingET = await db.select({ id: eventTypesTable.id })
+            .from(eventTypesTable)
+            .where(eq(eventTypesTable.calendarId, cal.id))
+            .limit(1);
+          if (existingET.length === 0) {
+            const slugBase = cfg.agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+            await db.insert(eventTypesTable)
+              .values({
+                calendarId:       cal.id,
+                userId:           clerkId,
+                name:             "Quick Chat",
+                slug:             `${slugBase}-${Date.now()}`,
+                description:      `Book a quick call with ${cfg.agentName}`,
+                durationMinutes:  30,
+                confirmationMode: "instant",
+                isActive:         true,
+              })
+              .catch(() => {});
+          }
         }
       } catch (err) {
         logger.warn({ err }, "vibe-chat: scheduling setup failed (non-fatal)");

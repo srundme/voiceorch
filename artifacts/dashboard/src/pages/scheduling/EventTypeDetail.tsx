@@ -70,10 +70,10 @@ function SlugCopyBox({ slug }: { slug: string }) {
   );
 }
 
-export default function EventTypeDetailPage() {
+export default function EventTypeDetailPage({ id: idProp, embedded = false, onSaved }: { id?: number; embedded?: boolean; onSaved?: () => void; params?: Record<string, string | undefined> } = {}) {
   const [, params] = useRoute("/app/scheduling/event-types/:id");
   const [, navigate] = useLocation();
-  const id = parseInt(params?.id ?? "0", 10);
+  const id = idProp ?? parseInt(params?.id ?? "0", 10);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -225,6 +225,7 @@ export default function EventTypeDetailPage() {
       await updateMut.mutateAsync({ id, data: { ...form } });
       await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
       setDirty(false);
+      onSaved?.();
       toast({ title: "Saved" });
     } catch (e) {
       toast({ title: "Save failed", description: formatApiError(e), variant: "destructive" });
@@ -281,14 +282,16 @@ export default function EventTypeDetailPage() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
       <div className="border-b bg-background px-4 py-2.5 flex items-center gap-3 shrink-0">
-        <DetailNav
-          backTo={`${BASE}/app/scheduling/event-types`}
-          backLabel="Back to Event Types"
-          crumbs={[
-            { label: "Event Types", href: `${BASE}/app/scheduling/event-types` },
-            { label: et.name },
-          ]}
-        />
+        {!embedded && (
+          <DetailNav
+            backTo={`${BASE}/app/scheduling/event-types`}
+            backLabel="Back to Event Types"
+            crumbs={[
+              { label: "Event Types", href: `${BASE}/app/scheduling/event-types` },
+              { label: et.name },
+            ]}
+          />
+        )}
         <div className="flex-1" />
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Switch
