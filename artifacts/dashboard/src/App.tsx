@@ -65,7 +65,7 @@ import DocsPage from "@/pages/docs/index";
 
 import ImpersonatePage from "@/pages/impersonate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
-import { initMetaPixel, trackCompleteRegistration } from "@/lib/meta-pixel";
+import { initMetaPixel } from "@/lib/meta-pixel";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -125,31 +125,6 @@ function QueryClientCacheInvalidator() {
 
   return null;
 }
-
-// ── Shared style constants ─────────────────────────────────────────────────────
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 12,
-  padding: "14px 16px",
-  fontSize: "0.9rem",
-  color: "#fff",
-  outline: "none",
-  transition: "border-color .15s, background .15s",
-};
-
-function inputFocus(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = "rgba(168,85,247,0.5)";
-  e.currentTarget.style.background = "rgba(168,85,247,0.06)";
-}
-function inputBlur(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
-  e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-}
-
-type SignInMode = "login" | "register" | "forgot";
-type ForgotStep = "email" | "otp" | "newPassword";
 
 const authFeatures = [
   { icon: PhoneCall, text: "Launch voice agents on your own ASR, LLM & TTS keys — or go fully managed" },
@@ -234,18 +209,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
 }
 
 function SignInPage() {
-  const { signIn } = useAuth();
-  const [location, navigate] = useLocation();
-  // Default to the register form when the user lands on /sign-up (e.g. from a
-  // marketing-site "Sign Up" CTA) instead of always showing "Welcome back".
-  const [mode, setMode] = useState<SignInMode>(() =>
-    location.startsWith("/sign-up") ? "register" : "login",
-  );
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // If a previous tab/session was force-signed-out (e.g. the server started
   // rejecting requests because the account was suspended/deleted), surface a
@@ -256,171 +220,6 @@ function SignInPage() {
       setError("You've been signed out because your account access has changed. Please contact support if you believe this is a mistake.");
     }
   }, []);
-
-  // Forgot password flow state
-  const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [googleOnly, setGoogleOnly] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  // Start / restart the 60-second resend cooldown
-  function startResendCooldown() {
-    setResendCooldown(60);
-  }
-
-  // Tick the cooldown down every second
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const id = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(id);
-  }, [resendCooldown]);
-
-  function resetForgotFlow() {
-    setForgotStep("email");
-    setForgotEmail("");
-    setOtp("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setGoogleOnly(false);
-    setError(null);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const body: Record<string, string> = { email, password };
-      if (mode === "register" && name.trim()) body.name = name.trim();
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json() as { token?: string; error?: string };
-      if (!res.ok || !data.token) {
-        setError(data.error ?? "Something went wrong. Please try again.");
-      } else {
-        // POST /api/auth/register only ever returns 200 for a brand-new
-        // account (it 409s if the email already exists), so this is exactly
-        // "new account successfully created via email+password" — never an
-        // existing-user login (mode === "login" never reaches this branch).
-        // TEMPORARY diagnostic logging — remove once production firing is
-        // confirmed. Shows whether the success branch is reached and what
-        // mode it thinks it's in.
-        // eslint-disable-next-line no-console
-        console.log("Email auth success", { mode, endpoint, hasToken: Boolean(data.token) });
-        if (mode === "register") {
-          void trackCompleteRegistration("Email", data.token);
-        }
-        signIn(data.token);
-        navigate("/app");
-      }
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleForgotSendOtp(e: React.FormEvent) {
-    e.preventDefault();
-    if (!forgotEmail.trim()) {
-      setError("Please enter your email address.");
-      return;
-    }
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/password-reset/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: forgotEmail.trim() }),
-      });
-      const data = await res.json() as { ok?: boolean; hint?: string; error?: string };
-      if (res.status === 429) {
-        setError("Too many attempts — please wait a few minutes before requesting another code.");
-        return;
-      }
-      if (!res.ok) {
-        setError(data.error ?? "Something went wrong. Please try again.");
-        return;
-      }
-      if (data.hint === "google_only") {
-        setGoogleOnly(true);
-        return;
-      }
-      setForgotStep("otp");
-      startResendCooldown();
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleForgotVerify(e: React.FormEvent) {
-    e.preventDefault();
-    if (!otp.trim() || otp.trim().length !== 6) {
-      setError("Please enter the 6-digit code from your email.");
-      return;
-    }
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/password-reset/check-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: forgotEmail.trim(), otp: otp.trim() }),
-      });
-      const data = await res.json() as { ok?: boolean; error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Invalid or expired code. Please try again.");
-        return;
-      }
-      setForgotStep("newPassword");
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleForgotSetPassword(e: React.FormEvent) {
-    e.preventDefault();
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/password-reset/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: forgotEmail.trim(), otp: otp.trim(), newPassword }),
-      });
-      const data = await res.json() as { token?: string; error?: string };
-      if (!res.ok || !data.token) {
-        setError(data.error ?? "Something went wrong. Please try again.");
-        return;
-      }
-      signIn(data.token);
-      navigate("/app");
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const cardStyle: React.CSSProperties = {
     width: 440,
@@ -434,22 +233,6 @@ function SignInPage() {
     zIndex: 1,
   };
   const cardClassName = "animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500";
-
-  const submitBtnStyle = (isLoading: boolean): React.CSSProperties => ({
-    marginTop: 6,
-    width: "100%",
-    background: isLoading ? "rgba(255,255,255,0.35)" : "#fff",
-    color: "#000",
-    fontWeight: 700,
-    fontSize: "0.9rem",
-    padding: "14px 0",
-    borderRadius: 12,
-    border: "none",
-    cursor: isLoading ? "not-allowed" : "pointer",
-    transition: "background .15s",
-    letterSpacing: "-0.1px",
-    boxShadow: isLoading ? "none" : "0 2px 12px rgba(0,0,0,0.2)",
-  });
 
   const logoIcon = (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28, gap: 16 }}>
@@ -514,317 +297,22 @@ function SignInPage() {
     </a>
   );
 
-  const orDivider = (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0" }}>
-      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-      <span style={{ fontSize: "0.78rem", color: "#3a3c4e", fontWeight: 500, letterSpacing: "0.04em" }}>or</span>
-      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-    </div>
-  );
-
-  // ── Forgot flow ──────────────────────────────────────────────────────────────
-  if (mode === "forgot") {
-    const backToLogin = (
-      <p style={{ marginTop: 22, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
-        <button
-          onClick={() => { setMode("login"); resetForgotFlow(); }}
-          style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
-        >
-          Back to sign in
-        </button>
-      </p>
-    );
-
-    // Google-only hint
-    if (googleOnly) {
-      return (
-        <AuthShell>
-          <div style={cardStyle} className={cardClassName}>
-            {logoIcon}
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Google account detected</h1>
-              <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.6 }}>
-                This email is linked to a Google account. Password reset isn't available — sign in with Google instead.
-              </p>
-            </div>
-            {googleBtn}
-            {backToLogin}
-          </div>
-        </AuthShell>
-      );
-    }
-
-    // Step: enter email
-    if (forgotStep === "email") {
-      return (
-        <AuthShell>
-          <div style={cardStyle} className={cardClassName}>
-            {logoIcon}
-            <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Reset your password</h1>
-              <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
-                Enter your email and we'll send a 6-digit code to reset your password.
-              </p>
-            </div>
-            {errorBanner}
-            <form onSubmit={handleForgotSendOtp} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <input
-                type="email"
-                placeholder="Email address"
-                required
-                value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
-                style={inputStyle}
-                onFocus={inputFocus}
-                onBlur={inputBlur}
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                style={submitBtnStyle(loading)}
-                onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = "0.85"; }}
-                onMouseLeave={e => { if (!loading) e.currentTarget.style.opacity = "1"; }}
-              >
-                {loading ? "Sending…" : "Send reset code"}
-              </button>
-            </form>
-            {backToLogin}
-          </div>
-        </AuthShell>
-      );
-    }
-
-    // Step: enter OTP
-    if (forgotStep === "otp") {
-      return (
-        <AuthShell>
-          <div style={cardStyle} className={cardClassName}>
-            {logoIcon}
-            <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Check your email</h1>
-              <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
-                We sent a 6-digit code to <strong style={{ color: "#a0a3b8" }}>{forgotEmail}</strong>. Enter it below.
-              </p>
-            </div>
-            {errorBanner}
-            <form onSubmit={handleForgotVerify} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <input
-                type="text"
-                placeholder="6-digit code"
-                required
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                style={{ ...inputStyle, letterSpacing: "0.3em", textAlign: "center", fontSize: "1.4rem" }}
-                onFocus={inputFocus}
-                onBlur={inputBlur}
-                autoComplete="one-time-code"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                style={submitBtnStyle(loading)}
-                onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = "0.85"; }}
-                onMouseLeave={e => { if (!loading) e.currentTarget.style.opacity = "1"; }}
-              >
-                {loading ? "Verifying…" : "Verify code"}
-              </button>
-            </form>
-            <p style={{ marginTop: 16, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
-              Didn't receive it?{" "}
-              {resendCooldown > 0 ? (
-                <span style={{ color: "#5a5c6e", fontSize: "0.85rem" }}>
-                  Resend in 0:{String(resendCooldown).padStart(2, "0")}
-                </span>
-              ) : (
-                <button
-                  onClick={async () => {
-                    setError(null);
-                    setOtp("");
-                    startResendCooldown();
-                    try {
-                      await fetch("/api/auth/password-reset/request", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ email: forgotEmail.trim() }),
-                      });
-                    } catch { /* ignore */ }
-                  }}
-                  style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
-                >
-                  Resend code
-                </button>
-              )}
-            </p>
-            {backToLogin}
-          </div>
-        </AuthShell>
-      );
-    }
-
-    // Step: set new password
-    return (
-      <AuthShell>
-        <div style={cardStyle} className={cardClassName}>
-          {logoIcon}
-          <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>Set new password</h1>
-            <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
-              Choose a strong password — at least 8 characters.
-            </p>
-          </div>
-          {errorBanner}
-          <form onSubmit={handleForgotSetPassword} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input
-              type="password"
-              placeholder="New password"
-              required
-              minLength={8}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              style={inputStyle}
-              onFocus={inputFocus}
-              onBlur={inputBlur}
-            />
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              required
-              minLength={8}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              style={inputStyle}
-              onFocus={inputFocus}
-              onBlur={inputBlur}
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              style={submitBtnStyle(loading)}
-              onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
-              onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
-            >
-              {loading ? "Saving…" : "Set new password"}
-            </button>
-          </form>
-          {backToLogin}
-        </div>
-      </AuthShell>
-    );
-  }
-
-  // ── Login / Register ──────────────────────────────────────────────────────────
   return (
     <AuthShell>
       <div style={cardStyle} className={cardClassName}>
         {logoIcon}
 
-        {/* Heading */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <h1 style={{ fontWeight: 700, fontSize: "1.25rem", color: "#fff", letterSpacing: "-0.3px", marginBottom: 8 }}>
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            Welcome to SnapServe
           </h1>
           <p style={{ fontSize: "0.875rem", color: "#5a5c6e", lineHeight: 1.5 }}>
-            {mode === "login"
-              ? "Sign in to manage your voice agents."
-              : "New here? You'll get $5 free credit to start building."}
+            Sign in to manage your voice agents.
           </p>
         </div>
 
         {errorBanner}
-
-        {/* Google OAuth */}
         {googleBtn}
-        {orDivider}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {mode === "register" && (
-            <input
-              type="text"
-              placeholder="Your name (optional)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={inputStyle}
-              onFocus={inputFocus}
-              onBlur={inputBlur}
-            />
-          )}
-          <input
-            type="email"
-            placeholder="Email address"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={inputStyle}
-            onFocus={inputFocus}
-            onBlur={inputBlur}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={inputStyle}
-            onFocus={inputFocus}
-            onBlur={inputBlur}
-          />
-
-          {/* Forgot password link — only on login */}
-          {mode === "login" && (
-            <div style={{ textAlign: "right" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotEmail(email);
-                  resetForgotFlow();
-                  setForgotEmail(email);
-                  setMode("forgot");
-                }}
-                style={{ background: "none", border: "none", color: "#5a5c6e", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
-              >
-                Forgot password?
-              </button>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            style={submitBtnStyle(loading)}
-            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#e8e8e8"; }}
-            onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#fff"; }}
-          >
-            {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
-          </button>
-        </form>
-
-        {/* Footer */}
-        <p style={{ marginTop: 22, textAlign: "center", fontSize: "0.85rem", color: "#44475a" }}>
-          {mode === "login" ? (
-            <>
-              No account?{" "}
-              <button
-                onClick={() => { setMode("register"); setError(null); }}
-                style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
-              >
-                Sign up free
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <button
-                onClick={() => { setMode("login"); setError(null); }}
-                style={{ background: "none", border: "none", color: "#a0a3b8", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline", textUnderlineOffset: 3, padding: 0 }}
-              >
-                Sign in
-              </button>
-            </>
-          )}
-        </p>
       </div>
     </AuthShell>
   );
