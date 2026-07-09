@@ -747,6 +747,11 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
 
     const cfg   = parsed.config;
+    // Normalize: if Gemini set schedulingTools but omitted the boolean flag (LLM output
+    // variation), treat scheduling as enabled — the tools array is the stronger signal.
+    if (cfg && Array.isArray(cfg.schedulingTools) && cfg.schedulingTools.length > 0 && !cfg.schedulingEnabled) {
+      cfg.schedulingEnabled = true;
+    }
     const phase = (parsed.phase ?? "core").trim();
 
     // Emit voice options on EVERY voice_selection-phase turn (not just the first)
@@ -1494,7 +1499,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     }
 
     // DB insert — scheduling calendar + availability + default event type
-    if (resolveSchedulingTools(cfg).length > 0) {
+    if (cfg.schedulingEnabled) {
       try {
         const [cal] = await db.insert(schedulingCalendarsTable)
           .values({
@@ -1569,6 +1574,29 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         connectCalendarUrl: "/app/scheduling",
         eventTypesUrl:     "/app/scheduling",
       });
+    } else {
+      // Fallback: even when cfg.schedulingEnabled was falsy (LLM omitted the flag
+      // or reset it during refine), if a scheduling calendar already exists for this
+      // agent (e.g. from a prior creation or a refine that preserved it), surface the
+      // wizard so the user can complete setup without recreating the agent.
+      try {
+        const [existingCal] = await db.select({ id: schedulingCalendarsTable.id, timezone: schedulingCalendarsTable.timezone })
+          .from(schedulingCalendarsTable)
+          .where(eq(schedulingCalendarsTable.agentId, insertedAgent.id))
+          .limit(1);
+        if (existingCal) {
+          emit({
+            type:              "scheduling_setup",
+            timezone:          existingCal.timezone ?? agentTimezone,
+            hostEmail:         cfg.hostEmail || "",
+            availabilityDays:  [1,2,3,4,5],
+            connectCalendarUrl: "/app/scheduling",
+            eventTypesUrl:     "/app/scheduling",
+          });
+        }
+      } catch (err) {
+        logger.warn({ err }, "vibe-chat: scheduling fallback check failed (non-fatal)");
+      }
     }
 
     await logActivity({
