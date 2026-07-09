@@ -110,13 +110,75 @@ const GREETING: ChatMsg = {
   content: "Hey! I'll help you build your voice agent in a few minutes.\n\nTell me — what do you want this agent to do, and who will it be talking to?",
 };
 
-/* ── landing suggestions ────────────────────────────────────────────────────── */
-const SUGGESTIONS = [
-  "Sales follow-up agent in Tamil",
-  "Customer support for a SaaS product",
-  "Appointment booking for a clinic",
-  "Lead qualification for real estate",
+/* ── landing template recommendations ──────────────────────────────────────── */
+interface VibeTemplate {
+  emoji: string;
+  title: string;
+  desc: string;
+  tag: string;
+  message: string;
+}
+const VIBE_TEMPLATES: VibeTemplate[] = [
+  {
+    emoji: "📞",
+    title: "Insurance Sales",
+    desc: "Follow up on leads, qualify intent, handle objections",
+    tag: "Outbound · Hindi / English",
+    message: "Build an outbound insurance sales agent in Hindi and English. Her name is Priya, she works for PolicyFirst. She follows up on enquiry leads, qualifies interest level, handles price and trust objections naturally, and books a callback for hot leads. She must ask: what plan they enquired about, their age, and if they already have any insurance.",
+  },
+  {
+    emoji: "🏥",
+    title: "Clinic Appointments",
+    desc: "Book, reschedule & cancel patient slots",
+    tag: "Inbound · English",
+    message: "Build an inbound appointment booking agent for a dental clinic called Smile Care. Her name is Riya. She helps patients book, reschedule, or cancel appointments — collecting their name, preferred date and time, and reason for the visit — then reads back a confirmation summary before ending the call.",
+  },
+  {
+    emoji: "🏠",
+    title: "Real Estate Leads",
+    desc: "Qualify buyers on budget, location & timeline",
+    tag: "Outbound · English / Hindi",
+    message: "Build an outbound real estate lead qualification agent in English and Hindi. His name is Arjun, he works for PropConnect. He calls leads who enquired about properties and qualifies them on budget, preferred location and configuration (2BHK/3BHK), and purchase timeline. He tags them as Hot Lead, Warm Lead, or Not Interested and books a site-visit callback for hot leads.",
+  },
+  {
+    emoji: "💼",
+    title: "SaaS Support",
+    desc: "Resolve account, billing & upgrade issues",
+    tag: "Inbound · English",
+    message: "Build an inbound customer support agent for a B2B SaaS product. Her name is Tara, she works for Snappy. She handles account issues, billing queries, and plan upgrade questions. She must always collect the caller's registered email first, then identify the issue type (account/billing/feature), and either resolve it on the call or escalate to the right team.",
+  },
+  {
+    emoji: "🍽️",
+    title: "Restaurant Bookings",
+    desc: "Take table reservations & answer menu queries",
+    tag: "Inbound · English / Tamil",
+    message: "Build an inbound restaurant reservation agent in English and Tamil for a restaurant called Spice Garden. Her name is Meera. She takes table bookings by collecting the guest's name, date, time, number of guests, and any dietary needs, then confirms the reservation. She can also answer basic questions about the menu and location.",
+  },
+  {
+    emoji: "📊",
+    title: "Loan Pre-qualification",
+    desc: "Check eligibility, collect income & EMI details",
+    tag: "Outbound · Hindi",
+    message: "Build an outbound Hindi loan eligibility agent for a fintech company called QuickCredit. His name is Rahul. He calls loan applicants to pre-qualify them by asking about monthly income, employment type (salaried/self-employed), existing EMIs, and rough credit history. He then tells them if they likely qualify and books a video call with a loan advisor for eligible leads.",
+  },
+  {
+    emoji: "🎓",
+    title: "EdTech Enrolment",
+    desc: "Convert trial users into paid course enrolments",
+    tag: "Outbound · English / Hindi",
+    message: "Build an outbound EdTech enrolment agent in English and Hindi. Her name is Shruti, she works for SkillPath. She calls free trial users who haven't converted yet, asks what they liked about the course, handles pricing objections (a 15% discount is available this week), and books a demo call with a counsellor for undecided leads.",
+  },
+  {
+    emoji: "🛒",
+    title: "E-commerce Support",
+    desc: "Handle order tracking, returns & refunds",
+    tag: "Inbound · English",
+    message: "Build an inbound customer support agent for an e-commerce store called QuickMart. His name is Dev. He handles order tracking enquiries, return requests, and refund status questions. He must always collect the order ID first, then pull up the order status and guide the caller through the next step — whether that's a refund, replacement, or pickup.",
+  },
 ];
+
+/* Kept for backward compat (refine page still references SUGGESTIONS via search) */
+const SUGGESTIONS = VIBE_TEMPLATES.map(t => t.title);
 
 /* ── voice preview ──────────────────────────────────────────────────────────── */
 async function previewVoice(voiceId: string, setPlaying: (id: string | null) => void) {
@@ -1229,18 +1291,34 @@ export default function VibePage() {
               </div>
             </div>
 
-            {/* Suggestion chips */}
+            {/* Template recommendation cards */}
             {!isThinking && (
-              <div className="flex flex-wrap gap-2 justify-center mt-5 max-w-2xl">
-                {SUGGESTIONS.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setInput(s)}
-                    className="rounded-full border border-border/60 bg-muted/20 backdrop-blur-sm px-4 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/50 hover:shadow-[0_0_16px_rgba(var(--primary)/0.15)] transition-all"
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="mt-8 w-full max-w-2xl">
+                <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-widest text-center mb-4">
+                  Start from a template
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {VIBE_TEMPLATES.map(t => (
+                    <button
+                      key={t.title}
+                      onClick={() => send(t.message)}
+                      className={cn(
+                        "group relative flex flex-col items-start gap-2 rounded-xl border border-border/50 bg-muted/10 backdrop-blur-sm px-3.5 py-3 text-left",
+                        "hover:border-primary/35 hover:bg-muted/25 hover:shadow-[0_0_20px_rgba(var(--primary)/0.12)]",
+                        "transition-all duration-200",
+                      )}
+                    >
+                      <span className="text-xl leading-none">{t.emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-foreground truncate">{t.title}</p>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">{t.desc}</p>
+                      </div>
+                      <span className="text-[9px] font-medium text-primary/60 bg-primary/8 border border-primary/15 rounded-full px-2 py-0.5 mt-auto">
+                        {t.tag}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
