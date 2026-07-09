@@ -795,6 +795,32 @@ export class OrchestrationPipeline {
     return false;
   }
 
+  /**
+   * Call-log visibility for echo-guard discards (call 2039): whenever a final
+   * transcript is thrown away by the tail-echo window or the content self-echo
+   * guard, write a warning row to the call execution log (component STT) with
+   * the discarded text, the guard that fired, and timing context — so a lost
+   * caller word is diagnosable from the dashboard Logs tab alone. Purely
+   * additive telemetry; fire-and-forget, never affects call flow.
+   */
+  private logDiscardedTranscript(transcript: string, guard: "tail_echo_guard" | "self_echo_content_guard"): void {
+    const now = Date.now();
+    this.logExec(EXEC_COMPONENTS.STT, "system", {
+      status: "info",
+      provider: this.agent.asrProvider,
+      turnNumber: this._activeTurnIndex,
+      warningFlags: ["transcript_discarded"],
+      metadata: {
+        event: "Transcript Discarded",
+        reason: guard === "tail_echo_guard" ? "post-playback tail-echo window (content matched agent speech)" : "content matched agent's own recent speech (self-echo)",
+        guard,
+        discardedText: transcript.slice(0, 300),
+        isPlaying: this.isPlaying,
+        msLeftInEchoWindow: Math.max(0, this.bargeInHoldUntil - now),
+      },
+    });
+  }
+
   constructor(config: SessionConfig) {
     this.config = config;
     this.agent = config.agentConfig;
@@ -1285,19 +1311,33 @@ export class OrchestrationPipeline {
     this.inSpeechSegment = false;
 
     // Tail-echo guard: a final transcript arriving shortly after the agent
-    // stopped speaking — when we did NOT detect a genuine barge-in — is almost
-    // certainly the echo/sidetone of our own closing words returning via the
-    // carrier. Discard it so it neither starts a spurious new turn nor (had it
-    // landed a few ms earlier) clips the tail of the final sentence. The window
-    // is the echo grace re-armed at the end of playback (armTailEchoGrace()),
-    // mirroring the web path's end grace.
+    // stopped speaking — when we did NOT detect a genuine barge-in — used to be
+    // discarded on TIME ALONE, which silently ate genuine one-word replies
+    // ("yes", "okay") spoken a beat after the agent's line ended (call 2039).
+    // The guard is now CONTENT-AWARE: inside the window (the echo grace re-armed
+    // at the end of playback via armTailEchoGrace(), mirroring the web path's
+    // end grace) we discard only when the transcript actually matches the
+    // agent's own recent speech (isSelfEcho token-overlap check — which itself
+    // exempts single-word AFFIRMATIONS, so a caller's quick "yes" passes).
+    // A true echo of our own closing words still matches and is dropped, so
+    // echo protection is preserved (calls 772/1320 must not regress).
     if (!this.isPlaying && !this.bargeInRequested && Date.now() < this.bargeInHoldUntil) {
-      this.streamingBargeInWordCount = 0;
-      logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding post-playback echo transcript");
-      // Discarded as echo — stay cleanly in Listening (re-arm stall, drop any
-      // stale best-partial) rather than leaving the turn in limbo.
-      this.safetyNet.beginListening();
-      return;
+      if (!isSemanticInterrupt(transcript) && this.isSelfEcho(transcript)) {
+        this.streamingBargeInWordCount = 0;
+        logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding post-playback echo transcript");
+        this.logDiscardedTranscript(transcript, "tail_echo_guard");
+        // Discarded as echo — stay cleanly in Listening (re-arm stall, drop any
+        // stale best-partial) rather than leaving the turn in limbo.
+        this.safetyNet.beginListening();
+        return;
+      }
+      // Inside the tail-echo window but the content does NOT match our own
+      // speech — genuine caller input (e.g. a fast one-word reply). Let it
+      // proceed as a real turn.
+      logger.info(
+        { callId: this.config.callId, transcript, msLeftInWindow: this.bargeInHoldUntil - Date.now() },
+        "Streaming STT: transcript inside tail-echo window accepted (no self-echo content match)"
+      );
     }
 
     // Content-based self-echo guard (additive to the time-window tail-echo guard
@@ -1311,6 +1351,7 @@ export class OrchestrationPipeline {
     if (!isSemanticInterrupt(transcript) && this.isSelfEcho(transcript)) {
       this.streamingBargeInWordCount = 0;
       logger.info({ callId: this.config.callId, transcript }, "Streaming STT: discarding self-echo transcript (content match)");
+      this.logDiscardedTranscript(transcript, "self_echo_content_guard");
       // Mirror the tail-echo guard: when not playing we're in a listening turn, so
       // re-arm the stall backstop and drop any stale best-partial. While the agent
       // is still speaking the safety net is dormant — leave it untouched.

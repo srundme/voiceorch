@@ -147,6 +147,15 @@ const NOISE_ALPHA         = 0.98;  // slow-tracking IIR for noise-frame noise fl
 const CALIB_ALPHA         = 0.7;   // fast-tracking IIR used during calibration phase
 const CALIB_FRAMES        = 25;    // ~500 ms @ 20 ms/frame before gating begins
 const NOISE_FRAME_BYTES   = 320;   // 20 ms @ 8 kHz → 160 samples → 320 bytes
+// Below-threshold frames are ATTENUATED, not replaced with pure digital silence.
+// Hard-zeroing erased short/soft utterances ("yes", "okay") entirely before they
+// reached any STT provider — the provider-independent one-word-reply loss (call
+// 2039). Attenuated frames keep enough residual signal for STT VADs to latch
+// onto quiet speech onsets while still suppressing background noise.
+const GATE_ATTENUATION    = 0.15;  // scale gated frames to 15% instead of zeroing
+// After a speech frame, keep the gate open for this many subsequent frames
+// (hangover) so brief pauses inside/around short utterances aren't clipped.
+const GATE_HANGOVER_FRAMES = 5;    // 5 × 20 ms = 100 ms hangover
 
 function rms(samples: Int16Array): number {
   let sum = 0;
@@ -164,16 +173,19 @@ function rms(samples: Int16Array): number {
  *   begins after calibration completes.
  *
  * Active phase:
- *   - Noise frames (energy < noiseFloor × GATE_RATIO): zeroed out; noise floor
- *     updated downward/upward with slow IIR (NOISE_ALPHA).
- *   - Speech frames (energy ≥ noiseFloor × GATE_RATIO): passed through; noise
- *     floor is NOT updated downward so the calibrated background estimate is
- *     preserved across speech bursts.
+ *   - Noise frames (energy < noiseFloor × GATE_RATIO): attenuated to
+ *     GATE_ATTENUATION (NOT zeroed — hard-zeroing erased short/soft caller
+ *     utterances before STT); noise floor updated with slow IIR (NOISE_ALPHA).
+ *   - Speech frames (energy ≥ noiseFloor × GATE_RATIO): passed through and the
+ *     gate is held open for GATE_HANGOVER_FRAMES so speech onsets/tails are not
+ *     clipped; noise floor is NOT updated downward so the calibrated background
+ *     estimate is preserved across speech bursts.
  */
 export class NoiseCanceller {
   private readonly bqStates: BiquadState[] = makeBiquadStates();
   private noiseFloor      = 0.0;
   private calibFrameCount = 0;
+  private hangoverFrames  = 0;
 
   process(pcm8k: Buffer): Buffer {
     const samples = new Int16Array(pcm8k.buffer, pcm8k.byteOffset, pcm8k.length / 2);
@@ -201,12 +213,26 @@ export class NoiseCanceller {
       }
 
       if (energy < this.noiseFloor * GATE_RATIO) {
-        // Noise frame: update noise floor estimate and zero out.
-        this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy;
-        out.fill(0, offset, end);
+        if (this.hangoverFrames > 0) {
+          // Hangover: a speech frame occurred recently — keep the gate open so
+          // brief dips inside/around a short utterance aren't clipped. The
+          // noise floor is NOT updated here (the frame may carry a speech tail).
+          this.hangoverFrames--;
+          out.set(frame, offset);
+        } else {
+          // Noise frame: update noise floor estimate and attenuate. Never
+          // hard-zero — pure digital silence erased short/soft utterances
+          // entirely before they reached any STT provider (call 2039).
+          this.noiseFloor = NOISE_ALPHA * this.noiseFloor + (1 - NOISE_ALPHA) * energy;
+          for (let i = offset; i < end; i++) {
+            out[i] = Math.round(filtered[i]! * GATE_ATTENUATION);
+          }
+        }
       } else {
-        // Speech frame: pass through; do NOT pull noise floor down — preserve
-        // the calibrated background estimate across speech bursts.
+        // Speech frame: pass through and hold the gate open; do NOT pull the
+        // noise floor down — preserve the calibrated background estimate
+        // across speech bursts.
+        this.hangoverFrames = GATE_HANGOVER_FRAMES;
         out.set(frame, offset);
       }
     }
