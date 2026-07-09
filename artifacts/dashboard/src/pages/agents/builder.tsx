@@ -2175,6 +2175,20 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   </FormControl>
                 </FormItem>
               )} />
+              <FormField control={form.control} name="kbBakedOnly" render={({ field }) => (
+                <FormItem className="flex flex-row items-start gap-3 pt-1">
+                  <FormControl>
+                    <input type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                      checked={!!field.value}
+                      onChange={e => field.onChange(e.target.checked)} />
+                  </FormControl>
+                  <div>
+                    <FormLabel className="text-[12px] font-medium text-foreground/90 cursor-pointer">Skip per-turn KB retrieval (baked only)</FormLabel>
+                    <p className="text-[10px] text-muted-foreground/70 mt-0.5">Skips the per-turn vector search before each LLM call — saves ~150–200ms. Use when your KB is small and already baked into the system prompt.</p>
+                  </div>
+                </FormItem>
+              )} />
             </div>
 
             <div>
