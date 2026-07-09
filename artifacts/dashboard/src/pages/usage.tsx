@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BarChart3, TrendingUp, PhoneCall, Clock, Calculator, Mic, MessageSquare, Volume2, CheckCircle2, XCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { BarChart3, TrendingUp, PhoneCall, Clock, Calculator, Mic, MessageSquare, Volume2, PhoneOutgoing, Receipt, ChevronDown, ChevronRight } from "lucide-react";
 import { useGetMyUsage } from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 
@@ -45,26 +45,83 @@ function SummaryCard({
   );
 }
 
-function ProviderPills({ providers }: { providers: { service: string; provider: string; model: string | null }[] }) {
-  if (providers.length === 0) return <span className="text-xs text-muted-foreground/40">No AI service data recorded</span>;
+function ProviderBadge({ service, provider, model }: { service: string; provider?: string | null; model?: string | null }) {
+  const meta = SERVICE_META[service] ?? { label: service.toUpperCase(), icon: BarChart3 };
+  const Icon = meta.icon;
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {providers.map((p, i) => {
-        const meta = SERVICE_META[p.service] ?? { label: p.service.toUpperCase(), icon: BarChart3 };
-        const Icon = meta.icon;
-        return (
-          <span key={i} className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-elevated border border-border text-muted-foreground/70">
-            <Icon className="w-3 h-3 text-muted-foreground/50" />
-            {p.provider}{p.model ? ` / ${p.model}` : ""}
-          </span>
-        );
-      })}
+    <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md bg-elevated border border-border text-muted-foreground/70 whitespace-nowrap">
+      <Icon className="w-3 h-3 text-muted-foreground/50" />
+      {provider ? (
+        <span>
+          {provider}
+          {model ? <span className="text-muted-foreground/40"> / {model}</span> : null}
+        </span>
+      ) : (
+        <span className="text-muted-foreground/40">Not Available</span>
+      )}
+    </span>
+  );
+}
+
+function LineItem({
+  icon: Icon,
+  label,
+  service,
+  provider,
+  model,
+  usageLabel,
+  costMicros,
+  available = true,
+}: {
+  icon: React.ElementType;
+  label: string;
+  service?: string;
+  provider?: string | null;
+  model?: string | null;
+  usageLabel: string | null;
+  costMicros: number | null | undefined;
+  available?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-border/40 last:border-0">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="h-7 w-7 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
+          <Icon className="w-3.5 h-3.5 text-muted-foreground/60" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-foreground/80">{label}</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {service && <ProviderBadge service={service} provider={provider} model={model} />}
+            {usageLabel && <span className="text-[11px] text-muted-foreground/50">{usageLabel}</span>}
+          </div>
+        </div>
+      </div>
+      <span className="text-xs font-semibold text-foreground tabular-nums shrink-0">
+        {!available ? (
+          <span className="text-muted-foreground/40 font-normal italic">Not Available</span>
+        ) : costMicros == null ? (
+          <span className="text-muted-foreground/40 font-normal italic">Pending</span>
+        ) : (
+          microsToUsd(costMicros)
+        )}
+      </span>
     </div>
   );
 }
 
 function CallChargeRowItem({ c }: { c: any }) {
   const [open, setOpen] = useState(false);
+
+  const stt = (c.providers ?? []).find((p: any) => p.service === "stt");
+  const llm = (c.providers ?? []).find((p: any) => p.service === "llm");
+  const tts = (c.providers ?? []).find((p: any) => p.service === "tts");
+
+  const sttUsage = c.sttAudioSeconds ? `${c.sttAudioSeconds}s audio` : null;
+  const llmUsage = (c.llmInputTokens || c.llmOutputTokens) ? `${c.llmInputTokens ?? 0}↑ ${c.llmOutputTokens ?? 0}↓ tokens` : null;
+  const ttsUsage = c.ttsCharacters ? `${c.ttsCharacters} chars` : null;
+
+  const grandTotalMicros = Math.abs(c.amountCents) * 10_000 + (c.aiServiceCostMicros ?? 0);
+
   return (
     <>
       <tr
@@ -85,43 +142,69 @@ function CallChargeRowItem({ c }: { c: any }) {
         </td>
         <td className="py-2.5 pr-4 text-right">
           <span className="text-xs font-semibold text-foreground tabular-nums">
-            ${((Math.abs(c.amountCents) + (c.aiServiceCostMicros ?? 0) / 10_000) / 100).toFixed(2)}
+            {microsToUsd(grandTotalMicros)}
           </span>
         </td>
       </tr>
       {open && (
         <tr className="border-b border-border/40 last:border-0 bg-elevated/20">
-          <td colSpan={4} className="px-4 py-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Platform Fee</p>
-                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">${(Math.abs(c.amountCents) / 100).toFixed(2)}</p>
+          <td colSpan={4} className="px-4 py-3">
+            <div className="max-w-xl">
+              <LineItem
+                icon={Mic}
+                label="Speech-to-Text"
+                service="stt"
+                provider={stt?.provider}
+                model={stt?.model}
+                usageLabel={sttUsage}
+                costMicros={c.sttCostMicros}
+                available={!!stt || (c.sttCostMicros ?? 0) > 0}
+              />
+              <LineItem
+                icon={MessageSquare}
+                label="Language Model"
+                service="llm"
+                provider={llm?.provider}
+                model={llm?.model}
+                usageLabel={llmUsage}
+                costMicros={c.llmCostMicros}
+                available={!!llm || (c.llmCostMicros ?? 0) > 0}
+              />
+              <LineItem
+                icon={Volume2}
+                label="Text-to-Speech"
+                service="tts"
+                provider={tts?.provider}
+                model={tts?.model}
+                usageLabel={ttsUsage}
+                costMicros={c.ttsCostMicros}
+                available={!!tts || (c.ttsCostMicros ?? 0) > 0}
+              />
+              <LineItem
+                icon={PhoneOutgoing}
+                label="Telephony"
+                usageLabel={null}
+                costMicros={null}
+                available={false}
+              />
+              <LineItem
+                icon={Receipt}
+                label="Platform Fee"
+                usageLabel={null}
+                costMicros={Math.abs(c.amountCents) * 10_000}
+              />
+              <div className="flex items-center justify-between gap-3 py-2.5 border-b border-border/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
+                    <Clock className="w-3.5 h-3.5 text-muted-foreground/60" />
+                  </div>
+                  <p className="text-xs font-medium text-foreground/80">Call Duration</p>
+                </div>
+                <span className="text-xs font-semibold text-foreground tabular-nums">{formatDuration(c.durationSeconds)}</span>
               </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">STT Cost</p>
-                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsd(c.sttCostMicros ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">LLM Cost</p>
-                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsd(c.llmCostMicros ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">TTS Cost</p>
-                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{microsToUsd(c.ttsCostMicros ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Total Cost</p>
-                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">
-                  ${((Math.abs(c.amountCents) + (c.aiServiceCostMicros ?? 0) / 10_000) / 100).toFixed(4)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">Call Duration</p>
-                <p className="text-sm font-semibold text-foreground tabular-nums mt-0.5">{formatDuration(c.durationSeconds)}</p>
-              </div>
-              <div className="col-span-2 sm:col-span-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Providers / Models</p>
-                <ProviderPills providers={c.providers ?? []} />
+              <div className="flex items-center justify-between gap-3 pt-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-foreground">Grand Total</p>
+                <span className="text-sm font-bold text-foreground tabular-nums">{microsToUsd(grandTotalMicros)}</span>
               </div>
             </div>
           </td>
@@ -202,68 +285,6 @@ export default function UsagePage() {
                     <tbody>
                       {data.callCharges.recentCharges.map((c: any) => (
                         <CallChargeRowItem key={c.id} c={c} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Recent AI service events */}
-          <div>
-            <h2 className="text-sm font-semibold text-foreground mb-3">Recent AI Service Events</h2>
-            {data.recentEvents.length === 0 ? (
-              <div className="bg-card border border-border rounded-2xl p-6 text-center">
-                <p className="text-sm text-muted-foreground/60">No usage events yet.</p>
-              </div>
-            ) : (
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left py-2.5 px-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Time</th>
-                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Service</th>
-                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Provider / Model</th>
-                        <th className="text-left py-2.5 pr-3 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Usage</th>
-                        <th className="text-right py-2.5 pr-4 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.recentEvents.map(e => (
-                        <tr key={e.id} className="border-b border-border/40 last:border-0 hover:bg-elevated/40 transition-colors">
-                          <td className="py-2.5 pl-4 pr-3">
-                            <div className="flex items-center gap-2">
-                              {e.success
-                                ? <CheckCircle2 className="w-3.5 h-3.5 text-foreground/30 shrink-0" />
-                                : <XCircle className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0" />}
-                              <span className="text-xs text-muted-foreground/60 whitespace-nowrap">{format(parseISO(e.createdAt), "MMM d, HH:mm")}</span>
-                            </div>
-                          </td>
-                          <td className="py-2.5 pr-3">
-                            <div className="flex items-center gap-1.5">
-                              {SERVICE_META[e.service] && React.createElement(SERVICE_META[e.service]!.icon, { className: "w-3 h-3 text-muted-foreground/50" })}
-                              <span className="text-xs font-medium text-foreground/70 capitalize">{e.service}</span>
-                            </div>
-                          </td>
-                          <td className="py-2.5 pr-3">
-                            <span className="text-xs text-muted-foreground/60">{e.provider}</span>
-                            {e.model && <span className="text-xs text-muted-foreground/40 ml-1">/ {e.model}</span>}
-                          </td>
-                          <td className="py-2.5 pr-3">
-                            {e.service === "llm" && (e.inputTokens || e.outputTokens)
-                              ? <span className="text-xs text-muted-foreground/60">{e.inputTokens}↑ {e.outputTokens}↓ tokens</span>
-                              : e.service === "stt" && e.audioSeconds
-                              ? <span className="text-xs text-muted-foreground/60">{e.audioSeconds}s</span>
-                              : e.service === "tts" && e.characters
-                              ? <span className="text-xs text-muted-foreground/60">{e.characters} chars</span>
-                              : null}
-                          </td>
-                          <td className="py-2.5 pr-4 text-right">
-                            <span className="text-xs font-semibold text-foreground tabular-nums">{microsToUsd(e.estimatedCostMicros)}</span>
-                          </td>
-                        </tr>
                       ))}
                     </tbody>
                   </table>

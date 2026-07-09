@@ -10450,6 +10450,10 @@ components:
         ttsCostMicros: { type: number }
         aiServiceCostMicros: { type: number }
         totalCostMicros: { type: number }
+        sttAudioSeconds: { type: number }
+        llmInputTokens: { type: integer }
+        llmOutputTokens: { type: integer }
+        ttsCharacters: { type: integer }
         providers:
           type: array
           items: { $ref: "#/components/schemas/CallCostProvider" }

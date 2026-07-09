@@ -5267,6 +5267,10 @@ export const GetMyUsageResponse = zod.object({
   "ttsCostMicros": zod.number().optional(),
   "aiServiceCostMicros": zod.number().optional(),
   "totalCostMicros": zod.number().optional(),
+  "sttAudioSeconds": zod.number().optional(),
+  "llmInputTokens": zod.number().optional(),
+  "llmOutputTokens": zod.number().optional(),
+  "ttsCharacters": zod.number().optional(),
   "providers": zod.array(zod.object({
   "service": zod.string(),
   "provider": zod.string(),

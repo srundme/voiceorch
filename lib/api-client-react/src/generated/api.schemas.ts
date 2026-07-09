@@ -3616,6 +3616,10 @@ export interface CallChargeRow {
   ttsCostMicros?: number;
   aiServiceCostMicros?: number;
   totalCostMicros?: number;
+  sttAudioSeconds?: number;
+  llmInputTokens?: number;
+  llmOutputTokens?: number;
+  ttsCharacters?: number;
   providers?: CallCostProvider[];
 }
 

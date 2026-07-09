@@ -204,6 +204,10 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
               provider: usageEventsTable.provider,
               model: usageEventsTable.model,
               costMicros: sql<string>`coalesce(sum(${usageEventsTable.estimatedCostMicros}), 0)`,
+              audioSeconds: sql<string>`coalesce(sum(${usageEventsTable.audioSeconds}), 0)`,
+              inputTokens: sql<string>`coalesce(sum(${usageEventsTable.inputTokens}), 0)`,
+              outputTokens: sql<string>`coalesce(sum(${usageEventsTable.outputTokens}), 0)`,
+              characters: sql<string>`coalesce(sum(${usageEventsTable.characters}), 0)`,
             })
             .from(usageEventsTable)
             .where(inArray(usageEventsTable.callId, chargeCallIds))
@@ -225,6 +229,10 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
       llmCostMicros: number;
       ttsCostMicros: number;
       aiServiceCostMicros: number;
+      sttAudioSeconds: number;
+      llmInputTokens: number;
+      llmOutputTokens: number;
+      ttsCharacters: number;
       providers: { service: string; provider: string; model: string | null }[];
     };
     const breakdownByCallId = new Map<number, CallCostBreakdown>();
@@ -235,12 +243,24 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
         llmCostMicros: 0,
         ttsCostMicros: 0,
         aiServiceCostMicros: 0,
+        sttAudioSeconds: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+        ttsCharacters: 0,
         providers: [],
       };
       const cost = Number(row.costMicros);
-      if (row.service === "stt") entry.sttCostMicros += cost;
-      else if (row.service === "llm") entry.llmCostMicros += cost;
-      else if (row.service === "tts") entry.ttsCostMicros += cost;
+      if (row.service === "stt") {
+        entry.sttCostMicros += cost;
+        entry.sttAudioSeconds += Number(row.audioSeconds);
+      } else if (row.service === "llm") {
+        entry.llmCostMicros += cost;
+        entry.llmInputTokens += Number(row.inputTokens);
+        entry.llmOutputTokens += Number(row.outputTokens);
+      } else if (row.service === "tts") {
+        entry.ttsCostMicros += cost;
+        entry.ttsCharacters += Number(row.characters);
+      }
       entry.aiServiceCostMicros += cost;
       entry.providers.push({ service: row.service, provider: row.provider, model: row.model ?? null });
       breakdownByCallId.set(row.callId, entry);
@@ -278,6 +298,10 @@ router.get("/usage/me", requireAuth, async (req, res): Promise<void> => {
             ttsCostMicros: breakdown?.ttsCostMicros ?? 0,
             aiServiceCostMicros,
             totalCostMicros: platformFeeCents * 10_000 + aiServiceCostMicros,
+            sttAudioSeconds: breakdown?.sttAudioSeconds ?? 0,
+            llmInputTokens: breakdown?.llmInputTokens ?? 0,
+            llmOutputTokens: breakdown?.llmOutputTokens ?? 0,
+            ttsCharacters: breakdown?.ttsCharacters ?? 0,
             providers: breakdown?.providers ?? [],
           };
         }),
