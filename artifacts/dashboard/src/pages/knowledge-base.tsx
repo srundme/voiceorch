@@ -47,10 +47,17 @@ const TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: s
 };
 
 const STATUS_META: Record<string, { label: string; color: string; spin?: boolean }> = {
-  active: { label: "Active", color: "text-emerald-400" },
-  processing: { label: "Processing…", color: "text-amber-400", spin: true },
-  error: { label: "Error", color: "text-red-400" },
+  active:     { label: "Active",       color: "text-emerald-400" },
+  ready:      { label: "Ready",        color: "text-emerald-400" },
+  partial:    { label: "Partial",      color: "text-amber-400" },
+  validating: { label: "Validating…",  color: "text-amber-400", spin: true },
+  processing: { label: "Processing…",  color: "text-amber-400", spin: true },
+  crawling:   { label: "Crawling…",    color: "text-amber-400", spin: true },
+  error:      { label: "Error",        color: "text-red-400" },
+  failed:     { label: "Failed",       color: "text-red-400" },
 };
+
+const NON_TERMINAL_STATUSES = new Set(["validating", "processing", "crawling"]);
 
 /* ── Source Card ─────────────────────────────────────────────────────────── */
 
@@ -700,17 +707,31 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
         </Button>
       </div>
 
-      {/* Processing banner */}
+      {/* Status banners */}
+      {source.status === "validating" && (
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          Checking URL… Validating that the website is reachable and safe to index.
+        </div>
+      )}
       {source.status === "processing" && (
         <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          Website is being crawled. Entries will appear once complete. Refresh to check.
+          {source.type === "website" ? "Website fetched — discovering internal pages…" : "Indexing content…"}
         </div>
       )}
-      {source.status === "error" && (
+      {source.status === "crawling" && (
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3 text-sm text-amber-400">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          Crawling website pages. Entries will appear once complete. Refresh to check.
+        </div>
+      )}
+      {(source.status === "error" || source.status === "failed") && (
         <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-sm text-red-400">
           <XCircle className="w-4 h-4 shrink-0" />
-          Website crawl failed. Check that the URL is publicly accessible and try again.
+          {source.type === "website"
+            ? "Website crawl failed. Check that the URL is publicly accessible and try again."
+            : "Ingestion failed. Delete this source and try again."}
         </div>
       )}
 
@@ -721,7 +742,7 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
             {source.type === "faq" ? "Q&A Pairs" : "Entries"}
             <span className="ml-1.5 text-muted-foreground font-normal">({source.entries?.length ?? 0})</span>
           </h3>
-          {source.status === "active" && (
+          {(["active", "ready", "partial"].includes(source.status)) && (
             <AddEntryForm sourceId={source.id} type={source.type} onAdded={refresh} />
           )}
         </div>
@@ -729,7 +750,7 @@ function DetailView({ sourceId, onBack }: { sourceId: number; onBack: () => void
         {source.entries?.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground text-sm">
             No entries yet.{" "}
-            {source.status === "active" && 'Click "Add Entry" to get started.'}
+            {(["active", "ready", "partial"].includes(source.status)) && 'Click "Add Entry" to get started.'}
           </div>
         ) : (
           <div className="space-y-1">
@@ -764,10 +785,10 @@ export default function KnowledgeBasePage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Auto-poll every 3 s while any source is still crawling
+  // Auto-poll every 3 s while any source is still processing or crawling
   React.useEffect(() => {
-    const hasProcessing = sources?.some((s) => s.status === "processing");
-    if (!hasProcessing) return;
+    const hasNonTerminal = sources?.some((s) => NON_TERMINAL_STATUSES.has(s.status));
+    if (!hasNonTerminal) return;
     const timer = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: getListKnowledgeSourcesQueryKey() });
     }, 3000);

@@ -1626,12 +1626,21 @@ export const KnowledgeSourceType = {
   file: 'file',
 } as const;
 
+/**
+ * Lifecycle statuses: validating (URL checks, website only), processing (ingesting), crawling (multi-page fetch, website only), ready (fully indexed), partial (website partially indexed), failed (ingestion error). Legacy values: active (= ready), error (= failed) — kept for backward compat with older rows.
+
+ */
 export type KnowledgeSourceStatus = typeof KnowledgeSourceStatus[keyof typeof KnowledgeSourceStatus];
 
 
 export const KnowledgeSourceStatus = {
-  active: 'active',
+  validating: 'validating',
   processing: 'processing',
+  crawling: 'crawling',
+  ready: 'ready',
+  partial: 'partial',
+  failed: 'failed',
+  active: 'active',
   error: 'error',
 } as const;
 
@@ -1639,6 +1648,8 @@ export interface KnowledgeSource {
   id: number;
   name: string;
   type: KnowledgeSourceType;
+  /** Lifecycle statuses: validating (URL checks, website only), processing (ingesting), crawling (multi-page fetch, website only), ready (fully indexed), partial (website partially indexed), failed (ingestion error). Legacy values: active (= ready), error (= failed) — kept for backward compat with older rows.
+   */
   status: KnowledgeSourceStatus;
   entryCount: number;
   createdAt: string;
@@ -1659,8 +1670,13 @@ export type KnowledgeSourceDetailStatus = typeof KnowledgeSourceDetailStatus[key
 
 
 export const KnowledgeSourceDetailStatus = {
-  active: 'active',
+  validating: 'validating',
   processing: 'processing',
+  crawling: 'crawling',
+  ready: 'ready',
+  partial: 'partial',
+  failed: 'failed',
+  active: 'active',
   error: 'error',
 } as const;
 
@@ -5058,6 +5074,15 @@ export type UpdateCallDispositionBody = {
 export type UploadKnowledgeSourceBody = {
   name: string;
   file: Blob;
+};
+
+export type AttachKnowledgeSourceToAgent200 = {
+  attached: boolean;
+};
+
+export type AttachKnowledgeSourceToAgent409 = {
+  error?: string;
+  status?: string;
 };
 
 export type ListTransactionsParams = {

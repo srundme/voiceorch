@@ -63,6 +63,8 @@ import type {
   AmbientSoundOption,
   AmbientSoundRecord,
   AssignPhoneNumberInput,
+  AttachKnowledgeSourceToAgent200,
+  AttachKnowledgeSourceToAgent409,
   AutoPaySettings,
   AvailabilityOverride,
   AvailabilityOverrideInput,
@@ -3778,6 +3780,78 @@ export const useDeleteKnowledgeSource = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteKnowledgeSourceMutationOptions(options));
+    }
+
+export const getAttachKnowledgeSourceToAgentUrl = (id: number,
+    agentId: number,) => {
+
+
+
+
+  return `/api/knowledge-sources/${id}/attach-agent/${agentId}`
+}
+
+/**
+ * @summary Attach a ready knowledge source to an agent (idempotent)
+ */
+export const attachKnowledgeSourceToAgent = async (id: number,
+    agentId: number, options?: RequestInit): Promise<AttachKnowledgeSourceToAgent200> => {
+
+  return customFetch<AttachKnowledgeSourceToAgent200>(getAttachKnowledgeSourceToAgentUrl(id,agentId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getAttachKnowledgeSourceToAgentMutationOptions = <TError = ErrorType<void | AttachKnowledgeSourceToAgent409>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attachKnowledgeSourceToAgent>>, TError,{id: number;agentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof attachKnowledgeSourceToAgent>>, TError,{id: number;agentId: number}, TContext> => {
+
+const mutationKey = ['attachKnowledgeSourceToAgent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof attachKnowledgeSourceToAgent>>, {id: number;agentId: number}> = (props) => {
+          const {id,agentId} = props ?? {};
+
+          return  attachKnowledgeSourceToAgent(id,agentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AttachKnowledgeSourceToAgentMutationResult = NonNullable<Awaited<ReturnType<typeof attachKnowledgeSourceToAgent>>>
+
+    export type AttachKnowledgeSourceToAgentMutationError = ErrorType<void | AttachKnowledgeSourceToAgent409>
+
+    /**
+ * @summary Attach a ready knowledge source to an agent (idempotent)
+ */
+export const useAttachKnowledgeSourceToAgent = <TError = ErrorType<void | AttachKnowledgeSourceToAgent409>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attachKnowledgeSourceToAgent>>, TError,{id: number;agentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof attachKnowledgeSourceToAgent>>,
+        TError,
+        {id: number;agentId: number},
+        TContext
+      > => {
+      return useMutation(getAttachKnowledgeSourceToAgentMutationOptions(options));
     }
 
 export const getAddKnowledgeEntryUrl = (id: number,) => {

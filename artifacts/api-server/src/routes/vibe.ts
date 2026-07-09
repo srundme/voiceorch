@@ -4,8 +4,10 @@ import {
   db, agentsTable, platformSettingsTable, schedulingCalendarsTable,
   availabilitySchedulesTable, eventTypesTable,
   platformListedVoicesTable, agentDispositionsTable, phoneNumbersTable,
+  agentKnowledgeSourcesTable, knowledgeSourcesTable, knowledgeEntriesTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
+import { ingestKbTextEntries } from "../services/kb-ingest.js";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
 import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
@@ -30,6 +32,47 @@ const LANG_MAP: Record<string, { code: string; label: string; gemini: boolean }>
 };
 
 function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
+
+/**
+ * Detect Q&A-formatted text (e.g., "Q: ... A: ..." or "Q. ... A. ...") and
+ * parse it into structured FAQ entries.
+ * Returns an array of {title: question, content: answer} when ≥2 pairs are found,
+ * or null when the text is free-form (should be stored as a `text` source).
+ */
+function parseQaEntries(text: string): Array<{ title: string; content: string }> | null {
+  const lines = text.split("\n");
+  const pairs: Array<{ q: string; a: string }> = [];
+  let currentQ = "";
+  let currentALines: string[] = [];
+  let mode: "q" | "a" | null = null;
+
+  const flush = () => {
+    if (currentQ && currentALines.length > 0) {
+      pairs.push({ q: currentQ, a: currentALines.join(" ").trim() });
+    }
+    currentQ = "";
+    currentALines = [];
+    mode = null;
+  };
+
+  for (const line of lines) {
+    const qMatch = line.match(/^(?:Q\s*[:.]\s*|Question\s*[:.]\s*)(.+)/i);
+    const aMatch = line.match(/^(?:A\s*[:.]\s*|Answer\s*[:.]\s*)(.+)/i);
+    if (qMatch) {
+      flush();
+      currentQ = qMatch[1]!.trim();
+      mode = "q";
+    } else if (aMatch && mode === "q") {
+      currentALines = [aMatch[1]!.trim()];
+      mode = "a";
+    } else if (mode === "a" && line.trim()) {
+      currentALines.push(line.trim());
+    }
+  }
+  flush();
+
+  return pairs.length >= 2 ? pairs.map(p => ({ title: p.q, content: p.a })) : null;
+}
 
 async function getGeminiKey(): Promise<string | null> {
   try {
@@ -434,16 +477,21 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     selectedVoiceId = "",
     refineAgentId,
     refineBaseConfig,
+    knowledgeSourceIds = [] as number[],
   } = req.body as {
-    messages:          VibeChatMessage[];
-    voicesShown?:      boolean;
-    availableVoices?:  VibeVoice[];
-    selectedVoiceId?:  string;
-    refineAgentId?:    number;
-    refineBaseConfig?: Record<string, unknown>;
+    messages:             VibeChatMessage[];
+    voicesShown?:         boolean;
+    availableVoices?:     VibeVoice[];
+    selectedVoiceId?:     string;
+    refineAgentId?:       number;
+    refineBaseConfig?:    Record<string, unknown>;
+    knowledgeSourceIds?:  number[];
   };
 
   const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
+  // Holds the text KB source created during this turn's knowledge_base phase so the
+  // build step can attach it even if the build fires on the same SSE stream.
+  let sessionTextKbSourceId: number | undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "messages array required" });
@@ -499,14 +547,22 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           existingAgentRow = agentRow as unknown as Record<string, unknown>;
           const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
 
-          // Fetch dispositions + scheduling calendar in parallel
-          const [dispositionRow, calendarRow] = await Promise.all([
+          // Fetch dispositions, scheduling calendar, and KB sources in parallel
+          const [dispositionRow, calendarRow, kbSourceRows] = await Promise.all([
             db.select().from(agentDispositionsTable)
               .where(eq(agentDispositionsTable.agentId, refineAgentId!))
               .then(rows => rows[0] ?? null),
             db.select().from(schedulingCalendarsTable)
               .where(eq(schedulingCalendarsTable.agentId, refineAgentId!))
               .then(rows => rows[0] ?? null),
+            db.select({
+              id:   knowledgeSourcesTable.id,
+              name: knowledgeSourcesTable.name,
+              type: knowledgeSourcesTable.type,
+            }).from(agentKnowledgeSourcesTable)
+              .innerJoin(knowledgeSourcesTable, eq(agentKnowledgeSourcesTable.sourceId, knowledgeSourcesTable.id))
+              .where(eq(agentKnowledgeSourcesTable.agentId, refineAgentId!))
+              .catch(() => [] as { id: number; name: string; type: string }[]),
           ]);
 
           // Scheduling sub-fields
@@ -602,9 +658,10 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
             dispositions:           serverDispositions,
             systemPrompt:           systemPromptStr.slice(0, 100000),
             greetingMessage:        agentRow.greetingMessage ?? "",
-            phoneNumberId:          refineAssignedNumber?.id ?? null,
-            assignedPhoneNumber:    refineAssignedNumber?.number ?? "",
-            phoneNumberSkipped:     false,
+            phoneNumberId:            refineAssignedNumber?.id ?? null,
+            assignedPhoneNumber:      refineAssignedNumber?.number ?? "",
+            phoneNumberSkipped:       false,
+            existingKnowledgeSources: kbSourceRows.map(s => ({ id: s.id, name: s.name, type: s.type })),
           };
         }
       } catch (err) {
@@ -828,7 +885,53 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       emit({ type: "call_flow", notes: cfg.callFlowNotes });
     }
     if (cfg.knowledgeBaseNotes) {
-      emit({ type: "knowledge_base", notes: cfg.knowledgeBaseNotes });
+      // Create (or update) a KB source during the knowledge_base phase so KB content
+      // goes through the same ingestKbTextEntries() pipeline as the manual flow.
+      // Detects Q&A-formatted content and creates a `faq` source with structured
+      // Q/A entries; falls back to `text` for free-form notes.
+      try {
+        const notes = cfg.knowledgeBaseNotes.trim().slice(0, 15_000);
+        if (notes) {
+          const bodyKbIds = Array.isArray(knowledgeSourceIds)
+            ? knowledgeSourceIds.filter((id): id is number => typeof id === "number" && id > 0)
+            : [];
+          // Find existing text/faq source from this Vibe session (user may be refining notes)
+          const existingKbSource = bodyKbIds.length > 0
+            ? await db.select({ id: knowledgeSourcesTable.id, type: knowledgeSourcesTable.type })
+                .from(knowledgeSourcesTable)
+                .where(and(
+                  eq(knowledgeSourcesTable.userId, clerkId),
+                  inArray(knowledgeSourcesTable.type, ["text", "faq"]),
+                  inArray(knowledgeSourcesTable.id, bodyKbIds),
+                ))
+                .then(rows => rows[0] ?? null)
+                .catch(() => null)
+            : null;
+
+          // Detect Q&A-formatted content → create faq source; otherwise text source
+          const qaEntries = parseQaEntries(notes);
+          const sourceType: "text" | "faq" = qaEntries ? "faq" : "text";
+          const entries = qaEntries ?? [{ title: "Knowledge Base Notes", content: notes }];
+
+          // Route through the shared ingestion service — same path as POST /knowledge-sources
+          const ingestResult = await ingestKbTextEntries({
+            userId:         clerkId,
+            sourceName:     `${cfg.agentName ?? "Agent"} — Knowledge Base`,
+            type:           sourceType,
+            entries,
+            existingSourceId: existingKbSource?.id,
+          });
+          sessionTextKbSourceId = ingestResult.sourceId;
+
+          logger.info(
+            { sourceId: ingestResult.sourceId, sourceType, entryCount: entries.length },
+            "vibe-chat: KB source upserted via shared ingestion service",
+          );
+        }
+      } catch (kbErr) {
+        logger.warn({ kbErr }, "vibe-chat: KB source upsert during knowledge_base phase failed (non-fatal)");
+      }
+      emit({ type: "knowledge_base", notes: cfg.knowledgeBaseNotes, ...(sessionTextKbSourceId != null ? { kbSourceId: sessionTextKbSourceId } : {}) });
     }
 
     // Language pills (multilingual)
@@ -1023,7 +1126,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         language:            langDisplay,
         selectedLanguages:   (cfg.multilingualLanguages ?? []).filter((l: string) => l !== langDisplay),
         callFlowDescription: cfg.callFlowNotes ?? cfg.description,
-        keyKnowledge:        cfg.knowledgeBaseNotes ?? "",
+        keyKnowledge:        "",  // KB content indexed as sources; not baked into system prompt
         transferInfo:        transferNote,
         complianceFlags:     complianceNote,
         genderDetection:     cfg.genderDetectionEnabled ? "Use {caller_salutation} (Sir/Ma'am) once the caller's gender is detected." : "",
@@ -1326,6 +1429,43 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       return;
     }
 
+    // KB source attachment ─────────────────────────────────────────────────────
+    // Collect IDs supplied by the frontend (from file uploads during this session)
+    const rawKbIds = Array.isArray(knowledgeSourceIds)
+      ? knowledgeSourceIds.filter((id): id is number => typeof id === "number" && id > 0)
+      : [];
+    const allKbSourceIds: number[] = [...rawKbIds];
+
+    // Include the text KB source created during the knowledge_base SSE phase this turn
+    // (covers the case where build fires on the same stream as knowledge_base emit)
+    if (sessionTextKbSourceId != null && !allKbSourceIds.includes(sessionTextKbSourceId)) {
+      allKbSourceIds.push(sessionTextKbSourceId);
+    }
+
+    // Attach validated, terminal-success source IDs to the agent (ownership-checked, idempotent).
+    // Only status in {active, ready, partial} is considered successfully indexed.
+    if (allKbSourceIds.length > 0) {
+      try {
+        const uniqueIds = Array.from(new Set(allKbSourceIds));
+        const TERMINAL_SUCCESS = ["active", "ready", "partial"];
+        const ownedRows = await db.select({ id: knowledgeSourcesTable.id })
+          .from(knowledgeSourcesTable)
+          .where(and(
+            eq(knowledgeSourcesTable.userId, clerkId),
+            inArray(knowledgeSourcesTable.id, uniqueIds),
+            inArray(knowledgeSourcesTable.status, TERMINAL_SUCCESS),
+          ));
+        const ownedIds = ownedRows.map(r => r.id);
+        if (ownedIds.length > 0) {
+          await db.insert(agentKnowledgeSourcesTable)
+            .values(ownedIds.map(sourceId => ({ agentId: insertedAgent.id, sourceId })))
+            .onConflictDoNothing();
+        }
+      } catch (kbErr) {
+        logger.warn({ kbErr }, "vibe-chat: KB source attachment failed (non-fatal)");
+      }
+    }
+
     // Inbound phone-number assignment (vibe phone_number phase) — mirrors
     // PATCH /phone-numbers/:id/assign. Non-fatal: agent creation already succeeded.
     // pickedNumberRow is validated against the user's own active numbers above.
@@ -1500,7 +1640,7 @@ function buildPromptUserContent(cfg: VibeConfig, langDisplay: string): string {
     `Purpose: ${cfg.description}`,
   ];
   if (cfg.callFlowNotes) lines.push(`Call Flow / Script Notes: ${cfg.callFlowNotes}`);
-  if (cfg.knowledgeBaseNotes) lines.push(`Product / Service Knowledge: ${cfg.knowledgeBaseNotes}`);
+  // knowledgeBaseNotes is indexed as a KB source — not included in system-prompt summary
   if (cfg.callTransferEnabled) lines.push(`Call Transfer: Transfer to "${cfg.transferName}" at ${cfg.transferPhoneNumber} when human help is needed`);
   if (cfg.genderDetectionEnabled) lines.push(`Gender Detection: Enabled (male=${cfg.maleSalutation}, female=${cfg.femaleSalutation})`);
   if (cfg.schedulingEnabled) lines.push("Scheduling: Agent can book appointments");

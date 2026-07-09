@@ -1102,6 +1102,47 @@ paths:
         "404":
           description: Not found
 
+  /knowledge-sources/{id}/attach-agent/{agentId}:
+    post:
+      operationId: attachKnowledgeSourceToAgent
+      tags: [knowledge]
+      summary: Attach a ready knowledge source to an agent (idempotent)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Source attached (or was already attached)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attached]
+                properties:
+                  attached:
+                    type: boolean
+        "404":
+          description: Source or agent not found
+        "409":
+          description: Source not yet indexed (still processing or failed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  status:
+                    type: string
+
   /knowledge-sources/{id}/entries:
     post:
       operationId: addKnowledgeEntry
@@ -8186,7 +8227,12 @@ components:
           enum: [faq, text, website, file]
         status:
           type: string
-          enum: [active, processing, error]
+          enum: [validating, processing, crawling, ready, partial, failed, active, error]
+          description: >
+            Lifecycle statuses: validating (URL checks, website only), processing (ingesting),
+            crawling (multi-page fetch, website only), ready (fully indexed),
+            partial (website partially indexed), failed (ingestion error).
+            Legacy values: active (= ready), error (= failed) — kept for backward compat with older rows.
         entryCount:
           type: integer
         createdAt:
@@ -8209,7 +8255,7 @@ components:
           enum: [faq, text, website, file]
         status:
           type: string
-          enum: [active, processing, error]
+          enum: [validating, processing, crawling, ready, partial, failed, active, error]
         entryCount:
           type: integer
         createdAt:

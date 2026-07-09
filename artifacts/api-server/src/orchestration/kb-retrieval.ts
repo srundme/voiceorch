@@ -1,5 +1,5 @@
 import { db, knowledgeEntriesTable, agentKnowledgeSourcesTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -10,47 +10,73 @@ import { logger } from "../lib/logger.js";
  */
 const MAX_KB_ENTRIES = 200;
 
+/** Format a single knowledge entry row into a prompt-injectable block. */
+function formatEntry(e: { title?: string | null; content: string; keywords?: string | null }): string {
+  const parts: string[] = [];
+  if (e.title) parts.push(`Title: ${e.title}`);
+  parts.push(`Content: ${e.content}`);
+  if (e.keywords) parts.push(`Keywords: ${e.keywords}`);
+  return parts.join("\n");
+}
+
 /**
- * Load all knowledge entries for a source and format them as a
- * prompt-injectable context block.
+ * Load knowledge entries for a source and format them as a prompt-injectable
+ * context block.
  *
- * Strategy: pass every entry to the agent's LLM — no keyword matching,
- * no FTS, no stemming. The LLM reads everything and selects what's
- * relevant. Reliable for sources up to ~200 entries.
+ * Strategy:
+ * - When `query` is non-empty: use PostgreSQL FTS (`ts_rank_cd`) to rank
+ *   entries by relevance to the query, returning the topK most relevant.
+ *   Backed by a GIN index on `to_tsvector('english', title||content||keywords)`.
+ * - When `query` is empty (session-start full-dump): return entries in
+ *   insertion order up to MAX_KB_ENTRIES.
  *
  * `knowledgeSourceId` corresponds to `knowledge_sources.id`.
  * Returns an empty string when there are no entries so the caller skips injection.
  */
 export async function retrieveKbContext(
   knowledgeSourceId: number,
-  _query: string,
+  query: string,
   topK = 50,
 ): Promise<string> {
+  const cap = Math.min(Math.max(topK, 10), MAX_KB_ENTRIES);
   try {
-    const entries = await db
-      .select()
-      .from(knowledgeEntriesTable)
-      .where(eq(knowledgeEntriesTable.sourceId, knowledgeSourceId))
-      .limit(Math.min(Math.max(topK, 50), MAX_KB_ENTRIES));
+    const hasQuery = query.trim().length > 0;
 
-    if (!entries.length) return "";
-
-    if (entries.length >= MAX_KB_ENTRIES) {
-      logger.warn(
-        { knowledgeSourceId, cap: MAX_KB_ENTRIES },
-        "KB entries capped at MAX_KB_ENTRIES — source has more entries than were injected into the prompt",
-      );
+    if (hasQuery) {
+      // FTS-ranked retrieval — uses the GIN index for performance
+      type FtsRow = { id: number; source_id: number; user_id: string; title: string | null; content: string; keywords: string | null; created_at: Date; rank: number };
+      const rows = await db.execute<FtsRow>(sql`
+        SELECT id, source_id, user_id, title, content, keywords, created_at,
+          ts_rank_cd(
+            to_tsvector('english',
+              coalesce(title, '') || ' ' || content || ' ' || coalesce(keywords, '')
+            ),
+            plainto_tsquery('english', ${query.trim()})
+          ) AS rank
+        FROM knowledge_entries
+        WHERE source_id = ${knowledgeSourceId}
+          AND to_tsvector('english',
+                coalesce(title, '') || ' ' || content || ' ' || coalesce(keywords, '')
+              ) @@ plainto_tsquery('english', ${query.trim()})
+        ORDER BY rank DESC, id ASC
+        LIMIT ${cap}
+      `);
+      const entries = rows.rows as FtsRow[];
+      if (!entries.length) return "";
+      return entries.map(e => formatEntry({ title: e.title, content: e.content, keywords: e.keywords })).join("\n\n---\n\n");
+    } else {
+      // Full-dump (session-start) — no query to rank against
+      const entries = await db
+        .select()
+        .from(knowledgeEntriesTable)
+        .where(eq(knowledgeEntriesTable.sourceId, knowledgeSourceId))
+        .limit(cap);
+      if (!entries.length) return "";
+      if (entries.length >= MAX_KB_ENTRIES) {
+        logger.warn({ knowledgeSourceId, cap: MAX_KB_ENTRIES }, "KB entries capped at MAX_KB_ENTRIES");
+      }
+      return entries.map(e => formatEntry(e)).join("\n\n---\n\n");
     }
-
-    return entries
-      .map(e => {
-        const parts: string[] = [];
-        if (e.title) parts.push(`Title: ${e.title}`);
-        parts.push(`Content: ${e.content}`);
-        if (e.keywords) parts.push(`Keywords: ${e.keywords}`);
-        return parts.join("\n");
-      })
-      .join("\n\n---\n\n");
   } catch (err) {
     logger.warn({ err, knowledgeSourceId }, "KB context load failed");
     return "";

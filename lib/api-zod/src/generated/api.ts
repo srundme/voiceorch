@@ -1565,7 +1565,7 @@ export const ListKnowledgeSourcesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "type": zod.enum(['faq', 'text', 'website', 'file']),
-  "status": zod.enum(['active', 'processing', 'error']),
+  "status": zod.enum(['validating', 'processing', 'crawling', 'ready', 'partial', 'failed', 'active', 'error']).describe('Lifecycle statuses: validating (URL checks, website only), processing (ingesting), crawling (multi-page fetch, website only), ready (fully indexed), partial (website partially indexed), failed (ingestion error). Legacy values: active (= ready), error (= failed) — kept for backward compat with older rows.\n'),
   "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1612,7 +1612,7 @@ export const GetKnowledgeSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "type": zod.enum(['faq', 'text', 'website', 'file']),
-  "status": zod.enum(['active', 'processing', 'error']),
+  "status": zod.enum(['validating', 'processing', 'crawling', 'ready', 'partial', 'failed', 'active', 'error']),
   "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
@@ -1645,7 +1645,7 @@ export const UpdateKnowledgeSourceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "type": zod.enum(['faq', 'text', 'website', 'file']),
-  "status": zod.enum(['active', 'processing', 'error']),
+  "status": zod.enum(['validating', 'processing', 'crawling', 'ready', 'partial', 'failed', 'active', 'error']).describe('Lifecycle statuses: validating (URL checks, website only), processing (ingesting), crawling (multi-page fetch, website only), ready (fully indexed), partial (website partially indexed), failed (ingestion error). Legacy values: active (= ready), error (= failed) — kept for backward compat with older rows.\n'),
   "entryCount": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1657,6 +1657,19 @@ export const UpdateKnowledgeSourceResponse = zod.object({
  */
 export const DeleteKnowledgeSourceParams = zod.object({
   "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Attach a ready knowledge source to an agent (idempotent)
+ */
+export const AttachKnowledgeSourceToAgentParams = zod.object({
+  "id": zod.coerce.number(),
+  "agentId": zod.coerce.number()
+})
+
+export const AttachKnowledgeSourceToAgentResponse = zod.object({
+  "attached": zod.boolean()
 })
 
 

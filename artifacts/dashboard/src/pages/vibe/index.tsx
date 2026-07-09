@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Phone, Settings2, Sparkles, Globe, Mic, Cpu, Ear, Speaker,
@@ -200,6 +201,13 @@ export default function VibePage() {
   // Dedupe for notice cards — once per language decision / notice signature.
   const noticeSigsRef = useRef<Set<string>>(new Set());
   const [selectedNumber, setSelectedNumber] = useState<string>("");
+  const vibeKbSourceIdsRef = useRef<number[]>([]);
+  const [vibeKbSources,   setVibeKbSources]   = useState<{ id: number; name: string; type: string; status: string }[]>([]);
+  // Mirror refs so interval/recursive callbacks always see fresh state without stale closures
+  const vibeKbSourcesRef  = useRef<{ id: number; name: string; type: string; status: string }[]>([]);
+  const createdIdRef       = useRef<number | null>(null);
+  const [urlInputOpen,    setUrlInputOpen]    = useState(false);
+  const [urlInputValue,   setUrlInputValue]   = useState("");
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -224,6 +232,102 @@ export default function VibePage() {
   useEffect(() => {
     chatInputRef.current?.focus();
   }, []);
+
+  // Keep mirror refs in sync with state so callbacks see fresh data without stale closures
+  useEffect(() => { vibeKbSourcesRef.current = vibeKbSources; }, [vibeKbSources]);
+  useEffect(() => { createdIdRef.current = createdId; }, [createdId]);
+
+  // ── Poll non-terminal Vibe KB sources until each reaches a terminal status ──
+  // Uses a recursive setTimeout (not a one-shot) so polling continues even when
+  // the source's status doesn't change between ticks (no React state update → no
+  // useEffect re-trigger). vibeKbSourcesRef/createdIdRef give the callback fresh
+  // state on every tick without stale closures.
+  //
+  // When a source transitions to a terminal-success status AND the agent already
+  // exists (createdId set), it is immediately attached via POST attach-agent.
+  // Re-runs whenever new sources are added to vibeKbSources so newly-added
+  // website sources start their own polling loop.
+  useEffect(() => {
+    const NON_TERMINAL    = new Set(["validating", "processing", "crawling"]);
+    const TERMINAL_OK     = new Set(["active", "ready", "partial"]);
+
+    // Check whether there is anything to poll before starting the loop
+    if (!vibeKbSources.some(s => NON_TERMINAL.has(s.status))) return;
+
+    const token = localStorage.getItem("voiceorch:session");
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    let active = true;
+    let tid: ReturnType<typeof setTimeout>;
+
+    async function pollOnce(): Promise<void> {
+      if (!active) return;
+
+      const currentSources = vibeKbSourcesRef.current;
+      const pending = currentSources.filter(s => NON_TERMINAL.has(s.status));
+      if (pending.length === 0) return; // all terminal — stop naturally
+
+      try {
+        const fetched = await Promise.all(
+          pending.map(async s => {
+            try {
+              const r = await fetch(`/api/knowledge-sources/${s.id}`, { headers: authHeaders });
+              if (r.ok) return (await r.json()) as { id: number; status: string };
+            } catch { /* transient network error — retry next tick */ }
+            return null;
+          })
+        );
+
+        if (!active) return;
+
+        // Apply status updates to state for any source whose status changed
+        const updates = fetched.filter(
+          (d): d is { id: number; status: string } =>
+            d != null && d.status !== currentSources.find(s => s.id === d.id)?.status
+        );
+        if (updates.length > 0) {
+          setVibeKbSources(prev => prev.map(s => {
+            const u = updates.find(x => x.id === s.id);
+            return u ? { ...s, status: u.status } : s;
+          }));
+          // Attach sources that just reached a terminal-success status
+          const agentId = createdIdRef.current;
+          if (agentId != null) {
+            void Promise.all(
+              updates
+                .filter(u => TERMINAL_OK.has(u.status))
+                .map(u => fetch(`/api/knowledge-sources/${u.id}/attach-agent/${agentId}`, {
+                  method: "POST", headers: authHeaders,
+                }).catch(() => {}))
+            );
+          }
+        }
+      } catch { /* non-fatal */ }
+
+      // Always reschedule as long as there are still non-terminal sources
+      if (active && vibeKbSourcesRef.current.some(s => NON_TERMINAL.has(s.status))) {
+        tid = setTimeout(pollOnce, 4_000);
+      }
+    }
+
+    tid = setTimeout(pollOnce, 4_000);
+    return () => { active = false; clearTimeout(tid); };
+  }, [vibeKbSources]); // re-run when new sources are added (starts fresh loop for new sources)
+
+  // ── On agent creation: attach any already-terminal Vibe KB sources ─────────
+  // Handles the case where a source finished crawling BEFORE the agent was saved.
+  useEffect(() => {
+    if (createdId == null) return;
+    const TERMINAL_OK = new Set(["active", "ready", "partial"]);
+    const terminal = vibeKbSourcesRef.current.filter(s => TERMINAL_OK.has(s.status));
+    if (!terminal.length) return;
+    const token = localStorage.getItem("voiceorch:session");
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    void Promise.all(
+      terminal.map(s => fetch(`/api/knowledge-sources/${s.id}/attach-agent/${createdId}`, {
+        method: "POST", headers: authHeaders,
+      }).catch(() => {}))
+    );
+  }, [createdId]);
 
   // ── Refine mode: load existing agent on mount ────────────────────────────
   useEffect(() => {
@@ -603,6 +707,7 @@ export default function VibePage() {
           selectedVoiceId: selectedVoiceIdRef.current,
           ...(refineId != null ? { refineAgentId: refineId } : {}),
           ...(refineId != null && refineBaseRef.current ? { refineBaseConfig: refineBaseRef.current } : {}),
+          ...(vibeKbSourceIdsRef.current.length > 0 ? { knowledgeSourceIds: vibeKbSourceIdsRef.current } : {}),
         }),
       });
 
@@ -692,6 +797,16 @@ export default function VibePage() {
 
             case "knowledge_base":
               setKbNotes(String(evt.notes ?? ""));
+              // Track the text KB source created during this phase on the server
+              if (typeof evt.kbSourceId === "number") {
+                const sid = evt.kbSourceId as number;
+                if (!vibeKbSourceIdsRef.current.includes(sid)) {
+                  vibeKbSourceIdsRef.current = [...vibeKbSourceIdsRef.current, sid];
+                  setVibeKbSources(prev => prev.find(s => s.id === sid)
+                    ? prev
+                    : [...prev, { id: sid, name: "Knowledge Base Notes", type: "text", status: "ready" }]);
+                }
+              }
               break;
 
             case "lang_pill":
@@ -865,6 +980,39 @@ export default function VibePage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
+  const handleUrlSubmit = useCallback(async () => {
+    const raw = urlInputValue.trim();
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    setUrlInputOpen(false);
+    setUrlInputValue("");
+    const token = localStorage.getItem("voiceorch:session");
+    const authHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    let sourceId: number | null = null;
+    try {
+      const r = await fetch("/api/knowledge-sources", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ type: "website", name: url, url }),
+      });
+      if (r.ok) {
+        const data = await r.json() as { id: number; name: string; type: string; status: string };
+        sourceId = data.id;
+        if (!vibeKbSourceIdsRef.current.includes(data.id)) {
+          vibeKbSourceIdsRef.current = [...vibeKbSourceIdsRef.current, data.id];
+          setVibeKbSources(prev => prev.find(s => s.id === data.id) ? prev : [...prev, { id: data.id, name: url, type: "website", status: data.status ?? "processing" }]);
+        }
+      }
+    } catch { /* non-fatal */ }
+    // If a source was created, fire a chat message so the AI knows about it
+    if (sourceId) {
+      send(`[Website Knowledge Source — ${url}]\n\nI've connected this website. Please crawl and index it for the agent's knowledge base.`);
+    }
+  }, [urlInputValue, send]);
+
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -882,37 +1030,43 @@ export default function VibePage() {
       return;
     }
 
-    if (isBinary) {
-      try {
-        const form = new FormData();
-        form.append("file", file);
-        const token = localStorage.getItem("voiceorch:session");
-        const res = await fetch("/api/knowledge-sources/extract-text", {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: form,
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "Upload failed" }));
-          alert((err as any).error ?? "Failed to extract text from the file.");
-          return;
-        }
-        const { text } = await res.json() as { text: string };
-        const content = text.slice(0, 12000);
-        send(`[Knowledge Base Upload — "${file.name}"]\n\n${content}`);
-      } catch {
-        alert("Failed to upload the file. Please try again.");
-      }
-      return;
-    }
+    const token = localStorage.getItem("voiceorch:session");
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = (ev.target?.result as string ?? "").slice(0, 12000);
-      const msg = `[Knowledge Base Upload — "${file.name}"]\n\n${content}`;
-      send(msg);
-    };
-    reader.readAsText(file);
+    // Show a pending card immediately while uploading
+    const tempId = Date.now(); // safe: DB IDs are small integers
+    setVibeKbSources(prev => [...prev, { id: tempId, name: file.name, type: "file", status: "processing" }]);
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("name", file.name);
+      const r = await fetch("/api/knowledge-sources/upload", {
+        method: "POST",
+        headers: authHeaders,
+        body: form,
+      });
+      if (r.ok) {
+        const data = await r.json() as { id: number; name: string; type: string; status?: string };
+        // Replace pending card with real source
+        setVibeKbSources(prev => [
+          ...prev.filter(s => s.id !== tempId),
+          { id: data.id, name: data.name ?? file.name, type: data.type ?? "file", status: data.status ?? "active" },
+        ]);
+        if (!vibeKbSourceIdsRef.current.includes(data.id)) {
+          vibeKbSourceIdsRef.current = [...vibeKbSourceIdsRef.current, data.id];
+        }
+        // Only notify the AI after confirmed indexing — no raw content injected into
+        // the prompt (avoids baking KB content into the generated system prompt).
+        send(`I've attached "${file.name}" as a knowledge base document. It has been indexed and will be retrieved automatically during calls.`);
+      } else {
+        setVibeKbSources(prev => prev.map(s => s.id === tempId ? { ...s, status: "failed" } : s));
+        send(`I tried to attach "${file.name}" but the upload failed. Please try again.`);
+      }
+    } catch {
+      setVibeKbSources(prev => prev.map(s => s.id === tempId ? { ...s, status: "failed" } : s));
+      send(`I tried to attach "${file.name}" but encountered an upload error. Please try again.`);
+    }
   }, [send]);
 
   const loadHistorySession = useCallback(async (id: number) => {
@@ -965,7 +1119,7 @@ export default function VibePage() {
 
   const hasRightContent = fields.length > 0 || selectedVoice.length > 0 || features.length > 0
     || vibeTools.length > 0 || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
-    || callFlowNotes.length > 0 || kbNotes.length > 0;
+    || callFlowNotes.length > 0 || kbNotes.length > 0 || vibeKbSources.length > 0;
 
   // Landing = no user message yet and not refine mode
   const chatStarted = messages.length > 1 || !!refineId || refineLoading;
@@ -991,6 +1145,42 @@ export default function VibePage() {
         )}
       />
       <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html,.pdf,.docx" className="hidden" onChange={handleFileUpload} />
+      {/* Website URL input popover */}
+      {urlInputOpen && (
+        <div className={cn(
+          "absolute flex items-center gap-1.5 z-20",
+          isLanding ? "right-24 bottom-4" : "right-20 bottom-2.5",
+        )}>
+          <Input
+            autoFocus
+            value={urlInputValue}
+            onChange={e => setUrlInputValue(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void handleUrlSubmit(); } if (e.key === "Escape") { setUrlInputOpen(false); setUrlInputValue(""); } }}
+            placeholder="https://example.com"
+            className="h-8 w-48 text-xs border-border/60 bg-background"
+          />
+          <button
+            onClick={() => void handleUrlSubmit()}
+            className="h-8 px-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+          >Add</button>
+          <button
+            onClick={() => { setUrlInputOpen(false); setUrlInputValue(""); }}
+            className="h-8 px-2 rounded-lg text-muted-foreground hover:bg-muted/60 text-xs transition-colors"
+          >✕</button>
+        </div>
+      )}
+      <button
+        onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
+        disabled={phase === "done" || phase === "building" || isThinking}
+        title="Add website URL for knowledge base"
+        className={cn(
+          "absolute flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30",
+          isLanding ? "right-24 bottom-4 h-9 w-9" : "right-20 bottom-2.5 h-8 w-8",
+          urlInputOpen && "text-primary",
+        )}
+      >
+        <Globe className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      </button>
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={phase === "done" || phase === "building" || isThinking}
@@ -1314,9 +1504,41 @@ export default function VibePage() {
               )}
 
               {/* Knowledge Base */}
-              {kbNotes && (
+              {(kbNotes || vibeKbSources.length > 0) && (
                 <Section title="Knowledge Base">
-                  <NoteCard icon={<BookOpen className="h-3.5 w-3.5" />} text={kbNotes} />
+                  {kbNotes && <NoteCard icon={<BookOpen className="h-3.5 w-3.5" />} text={kbNotes} />}
+                  {vibeKbSources.length > 0 && (
+                    <div className="space-y-1.5">
+                      {vibeKbSources.map(s => {
+                        const isNonTerminal = s.status === "validating" || s.status === "processing" || s.status === "crawling";
+                        const isFailed = s.status === "failed";
+                        const isWebsite = s.type === "website";
+                        return (
+                          <div key={s.id} className={cn(
+                            "flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5",
+                            isFailed ? "border-destructive/30 bg-destructive/5"
+                              : isNonTerminal ? "border-amber-500/30 bg-amber-500/5"
+                              : "border-emerald-500/30 bg-emerald-500/5",
+                          )}>
+                            {isWebsite
+                              ? <Globe className={cn("h-3.5 w-3.5 shrink-0", isFailed ? "text-destructive" : isNonTerminal ? "text-amber-500" : "text-emerald-500")} />
+                              : <FileText className={cn("h-3.5 w-3.5 shrink-0", isFailed ? "text-destructive" : isNonTerminal ? "text-amber-500" : "text-emerald-500")} />}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate">{s.name}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {isFailed ? "Failed to index" : isNonTerminal ? (s.status === "validating" ? "Validating URL…" : s.status === "crawling" ? "Crawling pages…" : "Processing…") : `Indexed · ${s.type}`}
+                              </p>
+                            </div>
+                            {isNonTerminal
+                              ? <Loader2 className="h-3.5 w-3.5 text-amber-500 animate-spin shrink-0" />
+                              : isFailed
+                              ? <span className="text-[10px] text-destructive font-medium shrink-0">✕</span>
+                              : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </Section>
               )}
 
