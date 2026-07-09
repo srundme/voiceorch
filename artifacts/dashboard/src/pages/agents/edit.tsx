@@ -1129,6 +1129,21 @@ export default function AgentEdit() {
               <CardDescription>Control per-stage response speed. Lower values cut latency; higher values improve reliability for slow speakers.</CardDescription>
             </CardHeader>
             <CardContent>
+              <FormField control={form.control} name="kbBakedOnly" render={({ field }) => (
+                <FormItem className="flex flex-row items-start gap-3 mb-5 p-3 rounded-lg border border-border/60 bg-muted/40">
+                  <FormControl>
+                    <input type="checkbox" className="mt-1 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                      checked={!!field.value}
+                      onChange={e => field.onChange(e.target.checked)} />
+                  </FormControl>
+                  <div>
+                    <FormLabel className="cursor-pointer font-medium">Skip per-turn KB retrieval (baked only)</FormLabel>
+                    <FormDescription className="text-[11px] mt-0.5">
+                      Skips the per-turn vector search before each LLM call — <strong>saves ~150–200ms</strong>. Use when your KB is small and already baked into the system prompt.
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )} />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <FormField control={form.control} name="asrEndpointingSilenceMs" render={({ field }) => (
                   <FormItem>
@@ -1211,21 +1226,6 @@ export default function AgentEdit() {
                       Playback speed multiplier. 1.0 = normal. <strong>1.1–1.2 sounds natural and slightly quicker</strong> — cuts perceived reply latency without sounding rushed. Only applied for Cartesia and ElevenLabs voices.
                     </FormDescription>
                     <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="kbBakedOnly" render={({ field }) => (
-                  <FormItem className="flex flex-row items-start gap-3 pt-1">
-                    <FormControl>
-                      <input type="checkbox" className="mt-1 h-4 w-4 rounded border-border accent-primary cursor-pointer"
-                        checked={!!field.value}
-                        onChange={e => field.onChange(e.target.checked)} />
-                    </FormControl>
-                    <div>
-                      <FormLabel className="cursor-pointer">Skip per-turn KB retrieval (baked only)</FormLabel>
-                      <FormDescription className="text-[11px]">
-                        When enabled, skips the per-turn vector search before each LLM call — <strong>saves ~150–200ms</strong>. Use when your KB is small and already baked into the system prompt. The baked KB is still injected at call start; only the per-turn similarity search is disabled.
-                      </FormDescription>
-                    </div>
                   </FormItem>
                 )} />
               </div>
