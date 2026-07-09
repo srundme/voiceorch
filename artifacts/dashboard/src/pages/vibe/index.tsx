@@ -266,7 +266,9 @@ export default function VibePage() {
               ? ((agent.ttsVoiceName as string) || `…${(agent.ttsVoice as string).slice(-8)}`)
               : "—",                                                                                         icon: "mic"      },
           { key: "llm",       label: "AI Brain",       value: (agent.llmModel as string) || "Managed",     icon: "cpu"      },
-          { key: "stt",       label: "Speech-to-Text", value: "Sarvam Saaras v3",                          icon: "ear"      },
+          { key: "stt",       label: "Speech-to-Text",
+            value: `Sarvam Saaras v3 · ${cfg.sarvamSttMode === "verbatim" ? "Verbatim" : cfg.sarvamSttMode === "transcribe" ? "Transcribe" : "Codemix"}`,
+                                                                                                              icon: "ear"      },
           { key: "tts",       label: "Voice Engine",   value: "Cartesia Sonic 3.5",                        icon: "speaker"  },
         ];
         if (agent.greetingMessage) {

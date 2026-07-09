@@ -1294,6 +1294,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 },
           stopSpeakingPlan:        { numWords: 1, voiceSeconds: 0.2, backOffSeconds: 1 },
           autoRedial:              { enabled: true, maxAttempts: 3 },
+          sarvamSttMode:           "codemix",
         };
         const [row] = await db.insert(agentsTable).values({
           userId:                   clerkId,
