@@ -8,8 +8,10 @@ import {
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
-  PlusCircle, History, PhoneIncoming, Info,
+  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing,
 } from "lucide-react";
+import { WebcallPanel } from "@/components/webcall-panel";
+import { OutboundCallDialog } from "@/components/outbound-call-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
@@ -177,6 +179,10 @@ export default function VibePage() {
   const [playingVoice,   setPlayingVoice]   = useState<string | null>(null);
   const [schedulingSetup, setSchedulingSetup] = useState<{ timezone: string } | null>(null);
   const [refineLoading,  setRefineLoading]  = useState(false);
+  const [lastSavedAgentId, setLastSavedAgentId] = useState<number | null>(null);
+  const [showTestCall,   setShowTestCall]   = useState(false);
+  const [savedTelephonyProvider, setSavedTelephonyProvider] = useState<string>("");
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
 
   const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
@@ -278,6 +284,7 @@ export default function VibePage() {
           });
         }
         if (assignedRow?.number) setSelectedNumber(assignedRow.number as string);
+        setSavedTelephonyProvider(String(agent.telephonyProvider ?? ""));
         setFields(panelFields);
 
         // Seed the notice dedupe so an already-multilingual agent doesn't get the
@@ -786,14 +793,27 @@ export default function VibePage() {
                       systemPrompt:           String(fresh.systemPrompt ?? "").slice(0, 3000),
                       greetingMessage:        fresh.greetingMessage ?? refineBaseRef.current.greetingMessage,
                     };
+                    setSavedTelephonyProvider(String(fresh.telephonyProvider ?? ""));
                     // Sync the System Prompt preview to the freshly saved prompt.
                     setPromptPreview(String(fresh.systemPrompt ?? ""));
+                    // Expose the test buttons now that a save has completed.
+                    setLastSavedAgentId(evt.agentId as number);
                     // Re-enable the chat input so the user can make a second refinement.
                     setPhase("idle");
                   })
                   .catch(() => { setPhase("idle"); });
               } else {
                 // New-agent creation: lock the composer as before.
+                // Fetch telephony provider for the Make a Call button.
+                fetch(`/api/agents/${evt.agentId as number}`, {
+                  headers: { Authorization: `Bearer ${getToken() ?? ""}` },
+                })
+                  .then(r => r.ok ? r.json() : null)
+                  .then((a: Record<string, unknown> | null) => {
+                    if (a) setSavedTelephonyProvider(String(a.telephonyProvider ?? ""));
+                  })
+                  .catch(() => {});
+                setLastSavedAgentId(evt.agentId as number);
                 setPhase("done");
               }
               break;
@@ -1209,7 +1229,8 @@ export default function VibePage() {
                 <div>
                   <p className="font-semibold text-sm leading-none">Agent Preview</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {!hasRightContent              ? "Waiting for your description…" :
+                    {showTestCall                  ? "Live test in progress" :
+                     !hasRightContent              ? "Waiting for your description…" :
                      phase === "building"          ? (statusMsg || "Configuring…") :
                      phase === "done"              ? "Ready to deploy" :
                      (refineId && phase === "idle") ? "Agent loaded — tell me what to change" :
@@ -1217,22 +1238,46 @@ export default function VibePage() {
                   </p>
                 </div>
               </div>
-              {phase === "done" && createdId && (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg"
-                    onClick={() => navigate(`/app/agents/${createdId}`)}>
-                    <Settings2 className="h-3 w-3" /> Edit
+              {lastSavedAgentId !== null && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant={showTestCall ? "default" : "outline"}
+                    className="h-7 gap-1.5 text-xs rounded-lg"
+                    disabled={isThinking && !showTestCall}
+                    onClick={() => setShowTestCall(v => !v)}
+                  >
+                    <Phone className="h-3 w-3" />
+                    {showTestCall ? "Close Test" : "Test Web Call"}
                   </Button>
-                  <Button size="sm" className="h-7 gap-1.5 text-xs rounded-lg"
-                    onClick={() => navigate(`/app/agents/${createdId}?webcall=1`)}>
-                    <Phone className="h-3 w-3" /> Try Call
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs rounded-lg"
+                    disabled={isThinking}
+                    onClick={() => setCallDialogOpen(true)}
+                  >
+                    <PhoneOutgoing className="h-3 w-3" /> Make a Call
                   </Button>
+                  {phase === "done" && (
+                    <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg"
+                      onClick={() => navigate(`/app/agents/${lastSavedAgentId}`)}>
+                      <Settings2 className="h-3 w-3" /> Edit
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-8 py-8">
-              {!hasRightContent ? (
+            <div className={cn("flex-1 min-h-0", showTestCall ? "flex flex-col overflow-hidden p-4" : "overflow-y-auto px-8 py-8")}>
+              {showTestCall ? (
+                <WebcallPanel
+                  agentId={lastSavedAgentId!}
+                  agentName={createdName || "Agent"}
+                  compact
+                  onClose={() => setShowTestCall(false)}
+                />
+              ) : !hasRightContent ? (
                 <EmptyState />
               ) : (
             <div className="max-w-2xl space-y-8">
@@ -1407,12 +1452,23 @@ export default function VibePage() {
 
               {/* Done */}
               {phase === "done" && createdId && (
-                <DoneCard name={createdName} id={createdId} navigate={navigate} isUpdate={refineId != null} />
+                <DoneCard name={createdName} id={createdId} navigate={navigate} isUpdate={refineId != null} onTestWebCall={() => setShowTestCall(true)} />
               )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Outbound telephony call dialog */}
+      {lastSavedAgentId !== null && (
+        <OutboundCallDialog
+          agentId={lastSavedAgentId}
+          agentName={createdName || "Agent"}
+          telephonyProvider={savedTelephonyProvider}
+          open={callDialogOpen}
+          onOpenChange={setCallDialogOpen}
+        />
+      )}
     </div>
   )}
 
@@ -1906,7 +1962,13 @@ function EmptyState() {
   );
 }
 
-function DoneCard({ name, id, navigate, isUpdate }: { name: string; id: number; navigate: (to: string) => void; isUpdate?: boolean }) {
+function DoneCard({ name, id, navigate, isUpdate, onTestWebCall }: {
+  name: string;
+  id: number;
+  navigate: (to: string) => void;
+  isUpdate?: boolean;
+  onTestWebCall: () => void;
+}) {
   return (
     <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-500">
       <div className="flex justify-center">
@@ -1919,9 +1981,8 @@ function DoneCard({ name, id, navigate, isUpdate }: { name: string; id: number; 
         <p className="text-xs text-muted-foreground mt-1">Providers configured · System prompt ready · Dispositions set</p>
       </div>
       <div className="flex flex-wrap gap-2 justify-center">
-        <Button size="sm" className="gap-1.5 rounded-xl"
-          onClick={() => navigate(`/app/agents/${id}?webcall=1`)}>
-          <Phone className="h-3.5 w-3.5" /> Make a call
+        <Button size="sm" className="gap-1.5 rounded-xl" onClick={onTestWebCall}>
+          <Phone className="h-3.5 w-3.5" /> Test Web Call
         </Button>
         <Button size="sm" variant="outline" className="gap-1.5 rounded-xl"
           onClick={() => navigate(`/app/agents/${id}`)}>

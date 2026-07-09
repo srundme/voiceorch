@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
-import { Link, useParams, useLocation } from "wouter";
+import { Link, useParams } from "wouter";
 import { format, parseISO } from "date-fns";
 import {
   ArrowLeft, Settings2, Activity, Phone, BarChart2, Clock,
@@ -16,7 +16,6 @@ import {
   getGetAgentQueryKey,
   useListCalls,
   getListCallsQueryKey,
-  useInitiateOutboundCall,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { DetailNav } from "@/components/detail-nav";
@@ -26,17 +25,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { OutboundCallDialog } from "@/components/outbound-call-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { formatApiError, isKycError, isDestinationUnverifiedError } from "@/lib/format-api-error";
-import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
-import { RecentNumbersList } from "@/components/recent-numbers-list";
-import { useRecentNumbers } from "@/hooks/use-recent-numbers";
 /* ── Caller Memory Tab ────────────────────────────────────────────────────── */
 
 interface CallerRow {
@@ -472,9 +462,9 @@ export default function AgentDetail() {
   const initialTab    = "overview";
   const [activeTab, setActiveTab] = useState(initialTab);
   const [callDialogOpen, setCallDialogOpen] = useState(false);
-  const [toNumber, setToNumber] = useState("");
-  const { toast } = useToast();
-  const { recentNumbers, recordNumber, removeNumber } = useRecentNumbers();
+  const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
+  const [agentCallPage, setAgentCallPage] = useState(1);
+  const [agentCallPageSize, setAgentCallPageSize] = useState(25);
 
   const { data: agent, isLoading: agentLoading } = useGetAgent(id, {
     query: { enabled: !!id, queryKey: getGetAgentQueryKey(id) }
@@ -483,41 +473,6 @@ export default function AgentDetail() {
   const { data: calls, isLoading: callsLoading } = useListCalls({ agentId: id }, {
     query: { enabled: !!id && activeTab === "calls", queryKey: getListCallsQueryKey({ agentId: id }) }
   });
-
-  const outboundCall = useInitiateOutboundCall();
-  const [, navigate] = useLocation();
-  const [otpDialogOpen, setOtpDialogOpen]       = useState(false);
-  const [pendingCallNumber, setPendingCallNumber] = useState("");
-  const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
-  const [agentCallPage, setAgentCallPage] = useState(1);
-  const [agentCallPageSize, setAgentCallPageSize] = useState(25);
-
-  function handleMakeCall(overrideNumber?: string) {
-    const dest = (overrideNumber ?? toNumber).trim();
-    if (!dest) return;
-    recordNumber(dest);
-    outboundCall.mutate(
-      { data: { agentId: id, toNumber: dest, webhookBaseUrl: window.location.origin } },
-      {
-        onSuccess: () => {
-          toast({ title: "Call initiated", description: `Dialing ${dest} — the agent will connect momentarily.` });
-          setCallDialogOpen(false);
-          setToNumber("");
-        },
-        onError: (err: unknown) => {
-          if (isKycError(err)) {
-            toast({ title: "Verification required", description: "Complete identity verification before making telephony calls.", variant: "destructive" });
-            navigate("/app/kyc");
-          } else if (isDestinationUnverifiedError(err)) {
-            setPendingCallNumber(dest);
-            setOtpDialogOpen(true);
-          } else {
-            toast({ title: "Call failed", description: formatApiError(err), variant: "destructive" });
-          }
-        },
-      }
-    );
-  }
 
   const formatDuration = (seconds?: number | null) => {
     if (!seconds) return "0s";
@@ -553,63 +508,12 @@ export default function AgentDetail() {
 
   return (
     <div className="flex-1 space-y-6 p-6 md:p-8 pt-6 h-full flex flex-col">
-      {/* Make a Call Dialog */}
-      <Dialog open={callDialogOpen} onOpenChange={setCallDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <PhoneOutgoing className="h-5 w-5 text-primary" />
-              Make a Phone Call
-            </DialogTitle>
-            <DialogDescription>
-              This will dial the number using your <span className="font-medium capitalize">{agent.telephonyProvider}</span> account.
-              The agent <span className="font-medium">{agent.name}</span> will handle the conversation.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="toNumber">Destination number (E.164 format)</Label>
-              <Input
-                id="toNumber"
-                placeholder="+1234567890"
-                value={toNumber}
-                onChange={e => setToNumber(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleMakeCall(); }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Include country code, e.g. <code className="font-mono bg-muted px-1 rounded">+14155552671</code>
-              </p>
-              <RecentNumbersList numbers={recentNumbers} onSelect={setToNumber} onRemove={removeNumber} />
-            </div>
-            <div className="rounded-md bg-muted/50 border p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">Before making a call, ensure:</p>
-              <p>• Your <span className="font-medium capitalize">{agent.telephonyProvider}</span> provider key is configured on the <Link href="/providers" className="underline">Providers page</Link></p>
-              {agent.telephonyProvider === "twilio" && <p>• Extra Config includes <code className="font-mono bg-muted px-1">accountSid</code> and <code className="font-mono bg-muted px-1">fromNumber</code></p>}
-              {agent.telephonyProvider === "plivo"  && <p>• Extra Config includes <code className="font-mono bg-muted px-1">authId</code> and <code className="font-mono bg-muted px-1">fromNumber</code></p>}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCallDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={() => handleMakeCall()}
-              disabled={!toNumber.trim() || outboundCall.isPending}
-              className="gap-2"
-            >
-              {outboundCall.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneOutgoing className="h-4 w-4" />}
-              {outboundCall.isPending ? "Dialing…" : "Call Now"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <DestinationOtpDialog
-        open={otpDialogOpen}
-        phoneNumber={pendingCallNumber}
-        onClose={() => setOtpDialogOpen(false)}
-        onVerified={() => {
-          setOtpDialogOpen(false);
-          handleMakeCall(pendingCallNumber);
-        }}
+      <OutboundCallDialog
+        agentId={id}
+        agentName={agent.name}
+        telephonyProvider={agent.telephonyProvider ?? ""}
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
       />
 
       <div className="flex items-center gap-4">
