@@ -111,6 +111,7 @@ export const agentFormSchema = z.object({
   ttsMinSentenceChars: z.number().min(5).max(200).optional(),
   linearDelayMs: z.number().min(0).max(2000).optional(),
   ttsSpeed: z.number().min(0.7).max(1.5).optional(),
+  kbBakedOnly: z.boolean().optional(),
 
   // Auto-redial on drop
   autoRedialEnabled:      z.boolean().optional(),

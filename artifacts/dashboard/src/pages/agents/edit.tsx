@@ -72,7 +72,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs,
     autoRedialEnabled, autoRedialMaxAttempts,
-    sarvamSttMode,
+    sarvamSttMode, kbBakedOnly,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -106,6 +106,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (preferredManagedNumber) agentConfig["preferredManagedNumber"] = preferredManagedNumber;
   if (asrEndpointingSilenceMs != null && asrEndpointingSilenceMs !== 300) agentConfig["asrEndpointingSilenceMs"] = asrEndpointingSilenceMs;
   if (sarvamSttMode) agentConfig["sarvamSttMode"] = sarvamSttMode;
+  if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
   if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   if (linearDelayMs != null && linearDelayMs > 0) agentConfig["incrementalDelay"] = linearDelayMs;
@@ -346,6 +347,7 @@ export default function AgentEdit() {
       llmMaxTokens: undefined,
       ttsMinSentenceChars: 15,
       linearDelayMs: 0,
+      kbBakedOnly: false,
       autoRedialEnabled: false,
       autoRedialMaxAttempts: 3,
     },
@@ -559,6 +561,7 @@ export default function AgentEdit() {
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
       ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
       linearDelayMs: ((agent as any).agentConfig?.incrementalDelay as number | undefined) ?? 0,
+      kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
       startSpeakingOnPunctuationSecs:   ((agent as any).agentConfig?.startSpeakingPlan?.onPunctuationSeconds as number | undefined)   ?? 0.1,
       startSpeakingOnNoPunctuationSecs: ((agent as any).agentConfig?.startSpeakingPlan?.onNoPunctuationSeconds as number | undefined) ?? 1.5,
@@ -1208,6 +1211,21 @@ export default function AgentEdit() {
                       Playback speed multiplier. 1.0 = normal. <strong>1.1–1.2 sounds natural and slightly quicker</strong> — cuts perceived reply latency without sounding rushed. Only applied for Cartesia and ElevenLabs voices.
                     </FormDescription>
                     <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="kbBakedOnly" render={({ field }) => (
+                  <FormItem className="flex flex-row items-start gap-3 pt-1">
+                    <FormControl>
+                      <input type="checkbox" className="mt-1 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+                        checked={!!field.value}
+                        onChange={e => field.onChange(e.target.checked)} />
+                    </FormControl>
+                    <div>
+                      <FormLabel className="cursor-pointer">Skip per-turn KB retrieval (baked only)</FormLabel>
+                      <FormDescription className="text-[11px]">
+                        When enabled, skips the per-turn vector search before each LLM call — <strong>saves ~150–200ms</strong>. Use when your KB is small and already baked into the system prompt. The baked KB is still injected at call start; only the per-turn similarity search is disabled.
+                      </FormDescription>
+                    </div>
                   </FormItem>
                 )} />
               </div>

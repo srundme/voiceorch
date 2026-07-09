@@ -4145,7 +4145,12 @@ export class OrchestrationPipeline {
     let kbContextPromise: Promise<string | null>;
     const kbPrefetch = this.kbPrefetchPromise;
     this.kbPrefetchPromise = null;
-    if (this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
+    if (this.agent.kbBakedOnly) {
+      // Per-turn KB retrieval is intentionally disabled — the KB is fully baked into
+      // the system prompt. Skip the embed+vector-search round-trip (~150-200ms saved).
+      logger.debug({ callId: this.config.callId }, "KB per-turn retrieval skipped (kbBakedOnly=true)");
+      kbContextPromise = Promise.resolve(null);
+    } else if (this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
       const budgetMs = Number(process.env["KB_TURN_RETRIEVAL_BUDGET_MS"] ?? 900);
       const live = retrieveKbContextMulti(this.agent.knowledgeSourceIds, transcript)
         .catch((err) => {

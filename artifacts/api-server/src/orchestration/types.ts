@@ -379,6 +379,13 @@ export interface AgentConfig {
   ttsMinSentenceChars: number;
   /** Per-agent Sarvam STT transcription mode: codemix | verbatim | transcribe. null = provider default. */
   sarvamSttMode: string | null;
+  /**
+   * When true, skip per-turn pgvector retrieval entirely — the KB is already baked into
+   * the system prompt (see KB_INJECT_MAX_CHARS). Saves ~150-200ms per turn by eliminating
+   * the embed+vector-search round-trip before each LLM call. Use when the KB is small/stable
+   * and the baked injection already covers it (source ID count is low, doc is < 4000 chars).
+   */
+  kbBakedOnly: boolean;
 }
 
 export interface ProviderKey {

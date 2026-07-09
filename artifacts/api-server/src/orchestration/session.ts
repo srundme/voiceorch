@@ -492,6 +492,7 @@ export async function createSession(params: {
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 15,
     sarvamSttMode: (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
+    kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
   agentConfig.sttConfig.endpointingSilenceMs = agentConfig.asrEndpointingSilenceMs;
