@@ -1,0 +1,70 @@
+Here's the paste-ready instruction block for Replit.
+
+---
+
+**Task: Fix false-positive name latching in caller-identity.ts**
+
+**File:** `lib/db/src/caller-identity.ts`
+
+**Context:** The real-time name-latching regex currently treats any `"I am ___"` / `"I'm ___"` utterance as a captured name and writes it as a ground-truth fact. This causes false positives — e.g., "I am sorry," "I'm not able to help," "I'm trying to reach someone" — getting stored as the caller's name. Fix this by adding a validation gate before the write, without changing the fact schema, supersession logic, or any other part of the memory pipeline.
+
+**Do not modify:** `caller_facts` schema, supersession/versioning logic, `loadCallerContext`, `updateCallerProfile`, post-call LLM extraction, episode/sentence storage, or any latch logic for non-name facts (e.g. language).
+
+**Implementation steps:**
+
+1. **Locate the existing name-latch regex(es)** in `caller-identity.ts` that currently match patterns like `"my name is (.+)"`, `"this is (.+)"`, `"call me (.+)"`, and `"i'?m (.+)"` / `"i am (.+)"`.
+
+2. **Split these into two tiers:**
+   - **Tier A** (keep exactly as-is, no gate needed): `"my name is ___"`, `"this is ___"`, `"call me ___"`
+   - **Tier B** (needs new validation before writing): `"i am ___"`, `"i'm ___"`
+
+3. **For Tier B matches, add a `validateNameCapture(capturedText: string, nextToken: string): boolean` function** that runs these checks in order and returns `false` (reject, do not write any fact) if any fail:
+
+   a. **Next-token check:** if `nextToken` (the word immediately following the captured span, lowercased) is in this set, reject:
+   ```
+   ['not', 'no', 'unable', 'unsure', 'just', 'really', 'so', 'very', 'still', 'also', 'trying', 'going', 'looking', 'calling']
+   ```
+
+   b. **Length check:** if the captured span has more than 2 words when split on whitespace, reject.
+
+   c. **Blocklist check:** lowercase and trim the captured span, then reject if it matches (exact match, not substring) any entry in:
+   ```
+   ['sorry', 'afraid', 'not able', 'unable', 'trying', 'calling', 'looking', 'going', 'done', 'sure', 'fine', 'okay', 'ok', 'glad', 'happy', 'confused', 'here', 'ready', 'sorry about that']
+   ```
+
+   d. If all checks pass, return `true`.
+
+4. **Wire the gate into the existing write path:** Tier B matches only proceed to the existing fact-write call if `validateNameCapture` returns `true`. Tier A matches bypass this gate entirely and write exactly as they do today.
+
+5. **Confidence values on write** (using the existing `confidence` field on `caller_facts` — no schema change):
+   - Tier A writes: `confidence = 0.95` (unchanged from current behavior)
+   - Tier B writes that pass the gate: `confidence = 0.55`
+
+6. **Do not add new tables, new columns (except the optional one below), or change how `supersededById` chaining works.** A Tier B fact that turns out wrong will already get corrected by the existing post-call LLM extraction step, since that step re-derives facts from full transcript context and supersedes on conflict — confirm this path is untouched.
+
+7. **Optional, non-blocking:** if convenient, add a `method` text column to `caller_facts` (`'regex_latch'` or `'llm_extraction'`) populated alongside `sourceCallId` at write time, purely for future QA querying. Skip if it risks touching read paths or migrations beyond a simple additive column.
+
+**Test cases to add (regression suite):**
+
+Must NOT latch as a name (should write no fact, or should be silently rejected):
+```
+"I am sorry"
+"I'm not able to help with that"
+"I am calling about my policy"
+"I'm trying to reach someone"
+"I am so confused right now"
+```
+
+Must still latch correctly:
+```
+"My name is Karthik"      -> Tier A, confidence 0.95
+"This is Priya speaking"  -> Tier A, confidence 0.95
+"I am Arjun"              -> Tier B, passes gate, confidence 0.55
+"I'm Divya"               -> Tier B, passes gate, confidence 0.55
+```
+
+**Acceptance criteria:**
+- All rejection test cases above result in no name fact written.
+- All valid test cases above still result in a name fact written, with correct confidence per tier.
+- No changes to any other fact type, table, or downstream pipeline step.
+- Existing calls/tests for Tier A patterns pass unchanged.
