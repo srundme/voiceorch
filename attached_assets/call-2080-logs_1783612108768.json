@@ -1,0 +1,360 @@
+[
+  {
+    "id": 140426,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-59",
+        "from_number": "webcall-user-email:karthiasc12@gmail.com",
+        "agent_name": "varun bro",
+        "caller_number": "webcall-user-email:karthiasc12@gmail.com",
+        "date": "Thursday, July 9, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: Anna  |  Calls: 25\n\nPrevious call summary: The caller, Anna, asked to speak in Tamil and then switched to English to continue discussing the Gala Fit program and earning Wellness Coins, but did not provide further details\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• has_galaxy_health_insurance_app: false\n• has_gala_fit_program: true\n• family_size: 12\n• interested_in: earning wellness coins\n• has_wellness_program: Gala Fit\n• aware_of_policy_details: true\n• has_galaxy_marvel_policy: true\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call "
+    },
+    "metadata": null
+  },
+  {
+    "id": 140428,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 59,
+      "agentName": "varun bro",
+      "asrProvider": "sarvam",
+      "llmProvider": "krutrim",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2080,
+      "sessionId": "live-2080",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-09T15:48:07.063Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 140427,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Anna",
+        "callCount": 25
+      },
+      "factCount": 9,
+      "facts": {
+        "language_pref": "tamil",
+        "name": "Anna",
+        "has_galaxy_health_insurance_app": "false",
+        "has_gala_fit_program": "true",
+        "family_size": "12",
+        "interested_in": "earning wellness coins",
+        "has_wellness_program": "Gala Fit",
+        "aware_of_policy_details": "true",
+        "has_galaxy_marvel_policy": "true"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 140430,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 140429,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "krutrim",
+      "model": "Qwen3-30B-A3B"
+    }
+  },
+  {
+    "id": 140431,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 140432,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.194Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "5cffd15c-5405-44c5-8c9e-152a82dd423e"
+    }
+  },
+  {
+    "id": 140433,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.195Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "c18bd60e1e8e",
+      "promptLength": 22215,
+      "preview": "=== CALLER MEMORY ===\nName: Anna  |  Calls: 25\n\nPrevious call summary: The caller, Anna, asked to speak in Tamil and then switched to English to continue discussing the Gala Fit program and earning We"
+    }
+  },
+  {
+    "id": 140435,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.435Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 140434,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.435Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 140436,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:07.988Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 553,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 5,
+      "firstByteMs": 256
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 553
+    }
+  },
+  {
+    "id": 140437,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:08.474Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 0,
+      "durationMs": 1039
+    }
+  },
+  {
+    "id": 140438,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:12.533Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 67,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140439,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:12.662Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "Qwen3-30B-A3B",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 140440,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:12.885Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "error",
+    "latencyMs": 232,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "error": "LLM error: 404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /v1/chat/completions</pre>\n</body>\n</html>",
+      "turnNumber": 1,
+      "errorMessage": "LLM error: 404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /v1/chat/completions</pre>\n</body>\n</html>"
+    }
+  },
+  {
+    "id": 140441,
+    "callId": 2080,
+    "agentId": 59,
+    "ts": "2026-07-09T15:48:12.892Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "error",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "failed",
+        "reasonLabel": "Call failed due to an error",
+        "component": "LLM",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": "LLM error: 404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /v1/chat/completions</pre>\n</body>\n</html>",
+        "expected": false,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Error",
+        "durationSeconds": 6,
+        "turns": 0,
+        "lastComponent": "LLM",
+        "lastUserTranscript": "Hello",
+        "lastAgentResponse": "Hello",
+        "recordingStatus": null,
+        "warningCount": 0,
+        "errorCount": 1,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 6,
+      "turns": 0,
+      "errorMessage": "LLM error: 404 <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /v1/chat/completions</pre>\n</body>\n</html>"
+    }
+  }
+]
