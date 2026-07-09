@@ -10,7 +10,7 @@ import {
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
-  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing,
+  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -235,6 +235,9 @@ export default function VibePage() {
   const [lastSavedAgentId, setLastSavedAgentId] = useState<number | null>(null);
   const [showTestCall,   setShowTestCall]   = useState(false);
   const [savedTelephonyProvider, setSavedTelephonyProvider] = useState<string>("");
+  const [postBuildStep, setPostBuildStep] = useState<"hype" | "rating" | null>(null);
+  const [vibeRating,   setVibeRating]   = useState(0);
+  const [vibeComment,  setVibeComment]  = useState("");
   const [callDialogOpen, setCallDialogOpen] = useState(false);
 
   const phaseRef    = useRef<string>("idle");
@@ -951,7 +954,11 @@ export default function VibePage() {
                 setLastSavedAgentId(evt.agentId as number);
                 // If scheduling was enabled, surface the Google Calendar connect panel
                 // as a full right-panel takeover so the user can connect Google right now
-                if (schedulingSetup) setShowCalPanel(true);
+                if (schedulingSetup) {
+                  setShowCalPanel(true);
+                } else {
+                  setPostBuildStep("hype");
+                }
                 setPhase("done");
               }
               break;
@@ -1453,12 +1460,14 @@ export default function VibePage() {
                 <div>
                   <p className="font-semibold text-sm leading-none">Agent Preview</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {showTestCall                  ? "Live test in progress" :
-                     !hasRightContent              ? "Waiting for your description…" :
-                     phase === "building"          ? (statusMsg || "Configuring…") :
-                     phase === "done"              ? "Ready to deploy" :
-                     (refineId && phase === "idle") ? "Agent loaded — tell me what to change" :
-                                                    "Building up as we chat"}
+                    {showTestCall                    ? "Live test in progress" :
+                     postBuildStep === "hype"        ? "Your agent is ready! 🎉" :
+                     postBuildStep === "rating"      ? "Launch your agent 🚀" :
+                     !hasRightContent               ? "Waiting for your description…" :
+                     phase === "building"            ? (statusMsg || "Configuring…") :
+                     phase === "done"               ? "Ready to deploy" :
+                     (refineId && phase === "idle")  ? "Agent loaded — tell me what to change" :
+                                                      "Building up as we chat"}
                   </p>
                 </div>
               </div>
@@ -1499,7 +1508,7 @@ export default function VibePage() {
                   agentId={lastSavedAgentId!}
                   agentName={createdName || "Agent"}
                   compact
-                  onClose={() => setShowTestCall(false)}
+                  onClose={() => { setShowTestCall(false); setPostBuildStep("rating"); }}
                 />
               ) : showKbPanel ? (
                 <VibeKbPanel
@@ -1524,7 +1533,29 @@ export default function VibePage() {
                 <VibeCalendarPanel
                   agentId={(lastSavedAgentId ?? createdId)!}
                   timezone={schedulingSetup.timezone}
-                  onDone={() => setShowCalPanel(false)}
+                  onDone={() => { setShowCalPanel(false); setPostBuildStep("hype"); }}
+                />
+              ) : postBuildStep === "hype" ? (
+                <HypePanel
+                  name={createdName}
+                  agentId={(lastSavedAgentId ?? createdId)!}
+                  fields={fields}
+                  selectedVoice={selectedVoice}
+                  onTest={() => setShowTestCall(true)}
+                  onSkip={() => setPostBuildStep("rating")}
+                  navigate={navigate}
+                />
+              ) : postBuildStep === "rating" ? (
+                <RatingPanel
+                  name={createdName}
+                  agentId={(lastSavedAgentId ?? createdId)!}
+                  rating={vibeRating}
+                  onRate={setVibeRating}
+                  comment={vibeComment}
+                  onComment={setVibeComment}
+                  onRefine={() => navigate(`/app/vibe?refine=${lastSavedAgentId ?? createdId}`)}
+                  onTestAgain={() => setShowTestCall(true)}
+                  onLaunch={() => navigate(`/app/agents/${lastSavedAgentId ?? createdId}`)}
                 />
               ) : !hasRightContent ? (
                 <EmptyState />
@@ -1698,8 +1729,8 @@ export default function VibePage() {
                 </Section>
               )}
 
-              {/* Done */}
-              {phase === "done" && createdId && (
+              {/* Done — only show in refine mode (new agents use hype/rating panels) */}
+              {phase === "done" && createdId && postBuildStep === null && (
                 <DoneCard name={createdName} id={createdId} navigate={navigate} isUpdate={refineId != null} onTestWebCall={() => setShowTestCall(true)} />
               )}
             </div>
@@ -2330,6 +2361,194 @@ function VibeCalendarPanel({
     </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  HypePanel — celebratory screen shown right after agent creation            */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function HypePanel({ name, fields, selectedVoice, onTest, onSkip, navigate, agentId }: {
+  name: string;
+  agentId: number;
+  fields: { key: string; label: string; value: string }[];
+  selectedVoice: string | null;
+  onTest: () => void;
+  onSkip: () => void;
+  navigate: (to: string) => void;
+}) {
+  const direction = fields.find(f => f.key === "direction")?.value;
+  const language  = fields.find(f => f.key === "language")?.value;
+  const initial   = (name || "A").charAt(0).toUpperCase();
+
+  const badges = [
+    direction && { label: direction === "inbound" ? "📞 Inbound" : "📤 Outbound" },
+    language  && { label: `🌐 ${language}` },
+    selectedVoice && { label: `🎙️ ${selectedVoice}` },
+  ].filter(Boolean) as { label: string }[];
+
+  return (
+    <div className="flex flex-col items-center text-center gap-6 py-10 px-6 max-w-md mx-auto animate-in fade-in zoom-in-95 duration-500">
+      {/* Pulse avatar */}
+      <div className="relative flex items-center justify-center">
+        <div className="absolute h-28 w-28 rounded-full bg-emerald-500/10 animate-ping" style={{ animationDuration: "2.5s" }} />
+        <div className="absolute h-20 w-20 rounded-full bg-emerald-500/15 animate-ping" style={{ animationDuration: "2s" }} />
+        <div className="relative h-16 w-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+          <span className="text-2xl font-bold text-white">{initial}</span>
+        </div>
+      </div>
+
+      {/* Headline */}
+      <div>
+        <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-1">Agent ready</p>
+        <h2 className="text-xl font-bold">Meet <span className="text-emerald-400">{name || "your agent"}</span>!</h2>
+        <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+          Your AI voice agent is live and configured. Hear it speak before you launch — this is the moment you've been building toward.
+        </p>
+      </div>
+
+      {/* Badges */}
+      {badges.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 justify-center">
+          {badges.map(b => (
+            <span key={b.label} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-muted/40 border border-border/60 text-muted-foreground">
+              {b.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Capability checklist */}
+      <div className="w-full rounded-xl border border-border/50 bg-muted/10 p-4 text-left space-y-2">
+        {[
+          "System prompt written and ready",
+          "Voice selected and configured",
+          "Call flow and dispositions set",
+          "Agent is live — test calls work now",
+        ].map(item => (
+          <div key={item} className="flex items-center gap-2.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="text-xs text-muted-foreground">{item}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* CTAs */}
+      <div className="flex flex-col gap-2 w-full">
+        <Button className="w-full gap-2 rounded-xl h-11 text-sm font-semibold" onClick={onTest}>
+          <Phone className="h-4 w-4" /> Hear it speak — Test Web Call
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs"
+            onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
+            <Sparkles className="h-3.5 w-3.5" /> Refine with AI
+          </Button>
+          <Button variant="ghost" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs text-muted-foreground"
+            onClick={onSkip}>
+            Skip to launch →
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  RatingPanel — 5-star review + launch CTA                                   */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function RatingPanel({ name, agentId, rating, onRate, comment, onComment, onRefine, onTestAgain, onLaunch }: {
+  name: string;
+  agentId: number;
+  rating: number;
+  onRate: (r: number) => void;
+  comment: string;
+  onComment: (c: string) => void;
+  onRefine: () => void;
+  onTestAgain: () => void;
+  onLaunch: () => void;
+}) {
+  const [hovered, setHovered] = useState(0);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleLaunch = () => {
+    setSubmitted(true);
+    onLaunch();
+  };
+
+  const starLabel = ["", "Poor", "Fair", "Good", "Great", "Amazing!"][Math.max(rating, hovered)] ?? "";
+
+  return (
+    <div className="flex flex-col items-center text-center gap-6 py-10 px-6 max-w-md mx-auto animate-in fade-in zoom-in-95 duration-500">
+      {/* Icon */}
+      <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+        <Rocket className="h-7 w-7 text-primary" />
+      </div>
+
+      {/* Headline */}
+      <div>
+        <h2 className="text-lg font-bold">Ready to launch <span className="text-primary">{name || "your agent"}</span>?</h2>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          Before you go — how was your Vibe Builder experience?
+        </p>
+      </div>
+
+      {/* Stars */}
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex gap-1.5">
+          {[1, 2, 3, 4, 5].map(n => (
+            <button
+              key={n}
+              onMouseEnter={() => setHovered(n)}
+              onMouseLeave={() => setHovered(0)}
+              onClick={() => onRate(n)}
+              className="transition-transform hover:scale-110"
+            >
+              <Star
+                className={cn(
+                  "h-8 w-8 transition-colors",
+                  n <= (hovered || rating) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30",
+                )}
+              />
+            </button>
+          ))}
+        </div>
+        <p className={cn("text-xs font-medium transition-opacity h-4", starLabel ? "opacity-100 text-amber-400" : "opacity-0")}>
+          {starLabel}
+        </p>
+      </div>
+
+      {/* Optional comment */}
+      <Textarea
+        value={comment}
+        onChange={e => onComment(e.target.value)}
+        placeholder="Any feedback? (optional)"
+        rows={2}
+        className="text-sm rounded-xl resize-none w-full"
+      />
+
+      {/* CTAs */}
+      <div className="flex flex-col gap-2 w-full">
+        <Button
+          className="w-full gap-2 rounded-xl h-11 text-sm font-semibold"
+          onClick={handleLaunch}
+          disabled={submitted}
+        >
+          <Rocket className="h-4 w-4" />
+          {submitted ? "Launching…" : `Launch ${name || "Agent"}`}
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs" onClick={onTestAgain}>
+            <Phone className="h-3.5 w-3.5" /> Test again
+          </Button>
+          <Button variant="ghost" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs text-muted-foreground" onClick={onRefine}>
+            <Sparkles className="h-3.5 w-3.5" /> Make changes
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
 function DoneCard({ name, id, navigate, isUpdate, onTestWebCall }: {
   name: string;
