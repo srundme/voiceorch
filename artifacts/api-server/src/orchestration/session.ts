@@ -269,6 +269,26 @@ export async function createSession(params: {
     "it": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese",
     "ko": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
   };
+  // Script directive for non-Latin languages — tells weaker models to write in
+  // native Unicode script, not romanized form (Tanglish, Hinglish-script, etc.).
+  const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
+    "ta-IN": "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters.",
+    "ta":    "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters.",
+    "hi-IN": "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters.",
+    "hi":    "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters.",
+    "te-IN": "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
+    "te":    "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
+    "kn-IN": "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
+    "kn":    "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
+    "ml-IN": "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
+    "ml":    "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
+    "mr-IN": "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
+    "mr":    "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
+    "bn-IN": "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
+    "bn":    "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
+    "gu-IN": "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
+    "gu":    "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
+  };
   const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
   const nowForCtx = new Date();
   const dateCtxParts = nowForCtx.toLocaleDateString("en-IN", {
@@ -292,12 +312,13 @@ export async function createSession(params: {
     const agentLang = agent.asrLanguage ?? agent.language;
     if (agentLang) {
       const langName = LANG_NAMES[agentLang] ?? agentLang;
+      const scriptNote = LANG_SCRIPT_DIRECTIVE[agentLang] ?? "";
       if (isMultilingual) {
         // Auto-detect mode: follow the caller's language; switch seamlessly when they do.
-        effectiveSystemPrompt += `\n\n[LANGUAGE RULE] Your primary language is ${langName}. Always follow the caller's language — if they speak Tamil, reply in Tamil; if they switch to English, reply in English; if they mix languages (e.g. Hinglish), match their mix naturally. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — keep all proper nouns (brand names, product names, company names, people's names) EXACTLY as written in your instructions; never translate or transliterate them.`;
+        effectiveSystemPrompt += `\n\n[LANGUAGE RULE] Your primary language is ${langName}. Always follow the caller's language — if they speak Tamil, reply in Tamil; if they switch to English, reply in English; if they mix languages (e.g. Hinglish), match their mix naturally. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — keep all proper nouns (brand names, product names, company names, people's names) EXACTLY as written in your instructions; never translate or transliterate them.${scriptNote ? " " + scriptNote : ""}`;
       } else {
         // Strict mode: single language, no switching.
-        effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
+        effectiveSystemPrompt += `\n\n[STRICT LANGUAGE RULE] You MUST respond ONLY in ${langName} at ALL times. Never switch to any other language under any circumstances, even if the caller speaks a different language. Always reply in ${langName} regardless of what language the caller uses. REGISTER — always speak in natural, everyday colloquial spoken ${langName}, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your ${langName} speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and "ONLY in ${langName}" does NOT mean avoiding these everyday English loanwords. EXCEPTION — keep all proper nouns (brand names, product names, company names, and people's names) EXACTLY as written in your instructions; never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.${scriptNote ? " " + scriptNote : ""}`;
       }
     }
   }

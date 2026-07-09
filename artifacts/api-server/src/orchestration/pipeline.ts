@@ -219,6 +219,26 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
   "ar-EG": "Arabic", "ru-RU": "Russian",
 };
 
+/**
+ * For non-Latin-script languages, append an explicit directive telling the LLM
+ * to write in the native Unicode script — NOT in romanized/transliterated form.
+ * Weaker models (e.g. Qwen on Krutrim) default to Tanglish, Hinglish-script, etc.
+ * when the language rule only says "Respond in Tamil/Hindi/…".
+ */
+const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
+  "ta-IN": "CRITICAL: Write ALL Tamil words in Tamil Unicode script (e.g. வணக்கம், நன்றி, சரி). NEVER romanize Tamil into English/Latin letters — writing 'vanakkam', 'nandri', 'seri' instead of Tamil script is WRONG.",
+  "hi-IN": "CRITICAL: Write ALL Hindi words in Devanagari Unicode script (e.g. नमस्ते, धन्यवाद, ठीक है). NEVER romanize Hindi into English/Latin letters — writing 'namaste', 'shukriya' instead of Devanagari is WRONG.",
+  "te-IN": "CRITICAL: Write ALL Telugu words in Telugu Unicode script (e.g. నమస్కారం, ధన్యవాదాలు). NEVER romanize Telugu into English/Latin letters.",
+  "kn-IN": "CRITICAL: Write ALL Kannada words in Kannada Unicode script (e.g. ನಮಸ್ಕಾರ, ಧನ್ಯವಾದ). NEVER romanize Kannada into English/Latin letters.",
+  "ml-IN": "CRITICAL: Write ALL Malayalam words in Malayalam Unicode script (e.g. നമസ്കാരം, നന്ദി). NEVER romanize Malayalam into English/Latin letters.",
+  "mr-IN": "CRITICAL: Write ALL Marathi words in Devanagari Unicode script (e.g. नमस्कार, धन्यवाद). NEVER romanize Marathi into English/Latin letters.",
+  "bn-IN": "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
+  "gu-IN": "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
+  "pa-IN": "CRITICAL: Write ALL Punjabi words in Gurmukhi Unicode script (e.g. ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਧੰਨਵਾਦ). NEVER romanize Punjabi into English/Latin letters.",
+  "or-IN": "CRITICAL: Write ALL Odia words in Odia Unicode script (e.g. ନମସ୍କାର, ଧନ୍ୟବାଦ). NEVER romanize Odia into English/Latin letters.",
+  "ur-IN": "CRITICAL: Write ALL Urdu words in Urdu/Nastaliq Unicode script (e.g. سلام, شکریہ). NEVER romanize Urdu into English/Latin letters.",
+};
+
 const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so the
                                           // caller can barge in within ~3s of the greeting
                                           // start even if the estimated greeting is long —
@@ -2172,6 +2192,17 @@ export class OrchestrationPipeline {
           `Never translate, localize, or transliterate them, even when part of a name resembles a common ${langName} word.`;
       }
     }
+
+    // Append Unicode script directive for non-Latin languages so weaker models
+    // write actual script characters instead of romanizing (Tanglish, Hinglish-script, etc.).
+    if (langGuard) {
+      const effectiveLang = (this.requestedLangLatch && this.requestedLangLatch !== "en-IN" && this.requestedLangLatch !== "en-US")
+        ? this.requestedLangLatch
+        : (this.currentLang ?? "");
+      const scriptNote = LANG_SCRIPT_DIRECTIVE[effectiveLang];
+      if (scriptNote) langGuard += " " + scriptNote;
+    }
+
     return langGuard;
   }
 
