@@ -367,7 +367,7 @@ function AppRoutes() {
         <Route path="/app/providers" component={ProvidersList} />
         <Route path="/app/wallet" component={WalletPage} />
         <Route path="/app/memory" component={MemoryPage} />
-        <Route path="/app/activity" component={() => <Redirect to="/app/calls" />} />
+        <Route path="/app/activity" component={ActivityPage} />
         <Route path="/app/phone-numbers" component={PhoneNumbersPage} />
         <Route path="/app/connections" component={ConnectionsPage} />
         <Route path="/app/webhooks" component={WebhooksPage} />

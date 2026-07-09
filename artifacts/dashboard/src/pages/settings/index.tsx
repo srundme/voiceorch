@@ -8,7 +8,7 @@ import {
   User, KeyRound,
   Terminal, Webhook, Phone, Sparkles, Mic2,
   Wallet, BarChart3, Layers, CreditCard,
-  Shield, LogIn, ShieldCheck, ScrollText,
+  Shield, ScrollText,
   Trash2, HelpCircle, BookOpen, LifeBuoy,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -587,7 +587,6 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
           { icon: Wallet, label: "Wallet", href: "/app/wallet" },
           { icon: BarChart3, label: "Usage", href: "/app/usage" },
           { icon: Users, label: "Concurrent Call Slots", onClick: onOpenGeneral },
-          { icon: CreditCard, label: "Plan & Subscription", disabled: true, badge: "Coming soon" },
         ]}
       />
       <CategoryCard
@@ -596,9 +595,7 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
         description="Secure your account and manage sessions."
         iconClassName="bg-rose-500/10 text-rose-500"
         links={[
-          { icon: LogIn, label: "Sessions", disabled: true, badge: "Coming soon" },
-          { icon: ShieldCheck, label: "2FA", disabled: true, badge: "Coming soon" },
-          { icon: ScrollText, label: "Audit Logs", disabled: true, badge: "Coming soon" },
+          { icon: ScrollText, label: "Audit Logs", href: "/app/activity" },
         ]}
       />
     </div>
@@ -618,10 +615,6 @@ function DangerZoneCard() {
           <div className="flex flex-col divide-y divide-border/50 border-t border-border/50">
             <div className="flex items-center justify-between py-2.5">
               <span className="text-sm text-destructive/70">Delete Workspace</span>
-              <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-muted-foreground/60">Coming soon</span>
-            </div>
-            <div className="flex items-center justify-between py-2.5">
-              <span className="text-sm text-destructive/70">Delete Account</span>
               <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-muted-foreground/60">Coming soon</span>
             </div>
           </div>
