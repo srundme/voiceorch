@@ -176,7 +176,7 @@ function StatusBadge({ status }: { status: string }) {
   const cfg = configs[status] ?? configs.pending;
 
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-md border min-w-[90px] justify-center ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-md border min-w-[100px] justify-center ${cfg.bg} ${cfg.text} ${cfg.border}`}>
       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot}`} />
       {cfg.label}
     </span>
@@ -216,15 +216,15 @@ function PhoneCell({ number }: { number?: string | null }) {
 /* ── Mini Stat Card ──────────────────────────────────────────────────────── */
 function MiniStat({ label, value, icon, trend }: { label: string; value: string; icon: React.ReactNode; trend?: string }) {
   return (
-    <Card className="h-full border border-border bg-elevated/40 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-primary/30 transition-all duration-200">
-      <CardContent className="h-full p-4 flex items-center gap-3.5">
-        <div className="h-10 w-10 rounded-lg bg-elevated border border-border flex items-center justify-center shrink-0">
+    <Card className="h-full border border-border bg-elevated/40 shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-primary/40 transition-all duration-300">
+      <CardContent className="h-full p-5 flex items-center gap-4">
+        <div className="h-12 w-12 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">{label}</p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <p className="text-xl font-bold text-foreground leading-tight tracking-tight">{value}</p>
+          <p className="text-[11px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{label}</p>
+          <div className="flex items-center gap-1.5 mt-1">
+            <p className="text-2xl font-bold text-foreground leading-tight tracking-tight">{value}</p>
             {trend && (
               <span className="text-[10px] text-emerald-500 flex items-center gap-0.5">
                 <TrendingUp className="h-3 w-3" />{trend}
@@ -453,10 +453,10 @@ export default function CallsList() {
     <TooltipProvider>
       <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <div className="flex items-start justify-between mb-4">
+        <div className="px-8 pt-8 pb-6 border-b border-border shrink-0">
+          <div className="flex items-start justify-between mb-6">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1.5">
                 <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
                   <Headphones className="h-3.5 w-3.5 text-primary/70" />
                 </div>
@@ -464,10 +464,10 @@ export default function CallsList() {
                   Voice Operations
                 </p>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground leading-tight">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground leading-tight">
                 Call Logs
               </h1>
-              <p className="text-sm mt-1.5 text-muted-foreground/50">
+              <p className="text-sm mt-2 text-muted-foreground/50">
                 Complete history of voice interactions with AI agents
               </p>
             </div>
@@ -475,7 +475,7 @@ export default function CallsList() {
 
           {/* Stats Row */}
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
               <MiniStat
                 label="Total Calls"
                 value={String(stats.total)}
@@ -504,14 +504,14 @@ export default function CallsList() {
             </div>
           )}
 
-          {/* Filters Bar — single nowrap row */}
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
-            <div className="relative shrink-0 w-[200px]">
+          {/* Filters Bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative shrink-0 w-full sm:w-[340px] lg:w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
               <Input
                 type="search"
                 placeholder="Search by number, agent, ID…"
-                className="pl-9 h-8 text-xs"
+                className="pl-9 h-9 text-xs"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -527,7 +527,7 @@ export default function CallsList() {
 
             <div className="shrink-0">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px] h-8 text-xs">
+                <SelectTrigger className="w-[150px] h-9 text-xs">
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -550,7 +550,7 @@ export default function CallsList() {
 
             <div className="shrink-0">
               <Select value={agentFilter} onValueChange={setAgentFilter}>
-                <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectTrigger className="w-[170px] h-9 text-xs">
                   <SelectValue placeholder="All agents" />
                 </SelectTrigger>
                 <SelectContent>
@@ -567,7 +567,7 @@ export default function CallsList() {
             <div className="shrink-0">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5">
                     <Calendar className="h-3.5 w-3.5" /> Date Range
                   </Button>
                 </PopoverTrigger>
@@ -601,7 +601,7 @@ export default function CallsList() {
 
             <div className="shrink-0">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[170px] h-8 text-xs">
+                <SelectTrigger className="w-[180px] h-9 text-xs">
                   <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
@@ -616,7 +616,7 @@ export default function CallsList() {
             </div>
 
             <div className="shrink-0">
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
+              <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5" onClick={handleExport} disabled={!filteredCalls.length}>
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
             </div>
@@ -626,7 +626,7 @@ export default function CallsList() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                  className="h-9 text-xs text-muted-foreground hover:text-foreground"
                   onClick={clearFilters}
                 >
                   <RefreshCw className="h-3 w-3 mr-1" /> Clear
@@ -637,37 +637,37 @@ export default function CallsList() {
         </div>
 
         {/* Table */}
-        <div ref={callsScrollRef} className="flex-1 overflow-auto px-6">
+        <div ref={callsScrollRef} className="flex-1 overflow-auto px-8 py-6">
           <div className="overflow-x-auto">
           <Table>
-            <TableHeader className="sticky top-0 z-10">
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[130px]">Date & Time</TableHead>
-                <TableHead className="w-[90px]">Call ID</TableHead>
-                <TableHead>Agent</TableHead>
-                <TableHead className="w-[130px]">From</TableHead>
-                <TableHead className="w-[130px]">To</TableHead>
-                <TableHead className="w-[120px]">Call Type</TableHead>
-                <TableHead className="w-[110px]">Status</TableHead>
-                <TableHead className="w-[80px]">Duration</TableHead>
-                <TableHead className="w-[70px]">Cost</TableHead>
-                <TableHead className="w-[48px] text-right">Actions</TableHead>
+                <TableHead className="w-[140px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Date & Time</TableHead>
+                <TableHead className="w-[90px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call ID</TableHead>
+                <TableHead className="py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Agent</TableHead>
+                <TableHead className="w-[140px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">From</TableHead>
+                <TableHead className="w-[140px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">To</TableHead>
+                <TableHead className="w-[130px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call Type</TableHead>
+                <TableHead className="w-[120px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
+                <TableHead className="w-[90px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Duration</TableHead>
+                <TableHead className="w-[80px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Cost</TableHead>
+                <TableHead className="w-[56px] py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {callsLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <TableRow key={i} className="h-12">
-                    <TableCell><Skeleton className="h-3 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-28" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-10" /></TableCell>
-                    <TableCell><Skeleton className="h-3 w-10" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-6 w-6 ml-auto rounded" /></TableCell>
+                  <TableRow key={i} className="h-16">
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-24" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-16" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-28" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-24" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-24" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-10" /></TableCell>
+                    <TableCell className="py-3.5"><Skeleton className="h-3 w-10" /></TableCell>
+                    <TableCell className="text-right py-3.5"><Skeleton className="h-6 w-6 ml-auto rounded" /></TableCell>
                   </TableRow>
                 ))
               ) : pagedCalls.length > 0 ? (
@@ -675,8 +675,8 @@ export default function CallsList() {
                   const costCents = (call as any).costCents ?? 0;
 
                   return (
-                    <TableRow key={call.id} className="group cursor-default h-12">
-                      <TableCell className="whitespace-nowrap">
+                    <TableRow key={call.id} className="group cursor-default h-16 hover:bg-elevated/40 transition-colors">
+                      <TableCell className="whitespace-nowrap py-3.5">
                         <div className="text-[11px] text-foreground/80 font-medium">
                           {format(parseISO(call.createdAt), "MMM d, yyyy")}
                         </div>
@@ -684,26 +684,26 @@ export default function CallsList() {
                           {format(parseISO(call.createdAt), "HH:mm:ss")}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-[10px] text-muted-foreground/40">
+                      <TableCell className="font-mono text-[10px] text-muted-foreground/40 py-3.5">
                         {getExecutionId(call)}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-6 w-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
-                            <Users className="h-3 w-3 text-muted-foreground/40" />
+                      <TableCell className="py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-7 w-7 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
+                            <Users className="h-3.5 w-3.5 text-muted-foreground/40" />
                           </div>
                           <span className="text-xs font-medium text-foreground/80">
                             {call.agentName}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3.5">
                         <PhoneCell number={call.fromNumber} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3.5">
                         <PhoneCell number={call.toNumber} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3.5">
                         {(() => {
                           const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
                           const isCampaign = !isWeb && (call as any).campaignId != null;
@@ -725,13 +725,13 @@ export default function CallsList() {
                           );
                         })()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3.5">
                         <StatusBadge status={call.status} />
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground/60">
+                      <TableCell className="font-mono text-xs text-muted-foreground/60 py-3.5">
                         {formatDuration(call.durationSeconds)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3.5">
                         <div className="flex flex-col gap-0.5">
                           {costCents > 0 ? (
                             <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
@@ -748,11 +748,11 @@ export default function CallsList() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right py-3.5">
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-6 w-6 opacity-100 transition-opacity"
+                          className="h-7 w-7 opacity-100 transition-opacity"
                           onClick={() => setSelectedCallId(call.id)}
                         >
                           <Eye className="h-3 w-3 text-muted-foreground/50" />
@@ -797,8 +797,8 @@ export default function CallsList() {
           </div>
 
           {/* Pagination */}
-          <div className="flex flex-wrap items-center justify-end gap-1.5 py-3">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground/60">
+          <div className="flex flex-wrap items-center justify-end gap-3 py-5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
               <span>Per page</span>
               <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
                 <SelectTrigger className="h-8 w-[70px] text-xs">
@@ -811,52 +811,56 @@ export default function CallsList() {
                 </SelectContent>
               </Select>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => goToPage(safePage - 1)}
-              disabled={safePage <= 1}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums">
-              Page {safePage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => goToPage(safePage + 1)}
-              disabled={safePage >= totalPages}
-              aria-label="Next page"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-            <Input
-              type="number"
-              min={1}
-              max={totalPages}
-              placeholder="#"
-              className="h-8 w-14 text-xs"
-              value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleJumpToPage();
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={handleJumpToPage}
-            >
-              Go
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => goToPage(safePage - 1)}
+                disabled={safePage <= 1}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums px-1">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => goToPage(safePage + 1)}
+                disabled={safePage >= totalPages}
+                aria-label="Next page"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={totalPages}
+                placeholder="#"
+                className="h-8 w-14 text-xs"
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleJumpToPage();
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={handleJumpToPage}
+              >
+                Go
+              </Button>
+            </div>
           </div>
         </div>
 
