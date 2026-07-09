@@ -2,7 +2,7 @@ const VBWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
     <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Vande Bharatam
+      Startup Singam 2026
     </span>
   </div>
 );
@@ -64,16 +64,16 @@ export default function Slide11() {
             display: "flex", flexDirection: "column", gap: "1.4vh",
           }}>
             <div style={{ fontSize: "0.78vw", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#FF6F00" }}>
-              Non-Monetary Ask from Vande Bharatam
+              Non-Monetary Ask from Startup Singam
             </div>
             <div style={{ fontSize: "1.05vw", color: "#C9D5F5", lineHeight: 1.62 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw", marginBottom: "0.8vh" }}>
                 <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
-                <span>Introductions to Adani Group portfolio companies for pilot deployments in BFSI and logistics.</span>
+                <span>Strategic mentorship from South India's SaaS leaders (Zoho, Freshworks ecosystem) to scale our B2B Enterprise Proxy API.</span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "0.7vw" }}>
                 <span style={{ color: "#FF6F00", flexShrink: 0, marginTop: "0.1vh" }}>→</span>
-                <span>SMB mentorship network to accelerate enterprise sales cycles and regulatory navigation.</span>
+                <span>Direct enterprise introductions to local BFSI and NBFC networks to accelerate our pilot deployments.</span>
               </div>
             </div>
           </div>

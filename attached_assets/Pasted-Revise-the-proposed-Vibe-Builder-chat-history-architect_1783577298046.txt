@@ -1,0 +1,43 @@
+Revise the proposed Vibe Builder chat-history architecture with this behavior:
+
+Previous conversations must be READ-ONLY history. Users must NOT be able to continue chatting or editing from an old conversation.
+
+Required UX:
+
+1. Show all previous Vibe Builder conversations for the agent in the conversation history/sidebar.
+
+2. When the user opens a previous conversation:
+   - Display the complete user and assistant message history.
+   - Treat the conversation as read-only.
+   - Hide or disable the chat input.
+   - Do not allow sending new messages from that historical conversation.
+   - Clearly provide a “New Chat” action to return to a fresh editable conversation.
+
+3. New Chat behavior:
+   - Start with an empty conversation history.
+   - Load the latest persisted agent configuration from the database.
+   - Vibe Builder must know the agent’s current name, system prompt, call flow, knowledge, language, provider/model, voice, STT/TTS, features, dispositions, and all other persisted configuration.
+   - All successfully applied changes from previous Vibe sessions must already be reflected because the latest agent DB state is the source of truth.
+   - Do NOT inject all old chat conversations into the new chat's LLM history.
+   - Old chats are only for user visibility/reference.
+
+4. When the user makes changes in the new chat:
+   - Apply changes against the latest current agent configuration.
+   - Preserve all unrelated existing prompt content and configurations.
+   - Persist successful changes to the agent.
+   - Save the new chat as a separate conversation session.
+   - Once the user leaves that chat and starts another New Chat, the previous session becomes part of read-only history.
+
+Important architecture rule:
+Historical conversations are immutable records for viewing only.
+The latest persisted agent configuration is the authoritative context for every new editable Vibe chat.
+
+Please update the architecture plan based on this requirement before implementing. Explain:
+1. how active editable sessions differ from historical read-only sessions,
+2. how the UI switches between History View and New Chat mode,
+3. when the input box is enabled or hidden,
+4. how a new chat receives the complete latest agent state,
+5. how sessions become read-only history,
+6. whether the previously proposed database schema and API routes need changes.
+
+Do not implement yet. First provide the revised plan.

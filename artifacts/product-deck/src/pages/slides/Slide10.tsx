@@ -2,7 +2,7 @@ const VBWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
     <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Vande Bharatam
+      Startup Singam 2026
     </span>
   </div>
 );
@@ -32,6 +32,7 @@ export default function Slide10() {
     { feature: "Inbound + outbound campaigns in one platform", snap: <Check />, vapi: <Part />, status: <Cross /> },
     { feature: "IRDAI / TRAI / DPDP built-in", snap: <Check />, vapi: <Cross />, status: <Cross /> },
     { feature: "Provider-agnostic STT / LLM / TTS (10+ models)", snap: <Check />, vapi: <Part />, status: <Cross /> },
+    { feature: "Cross-Session Historical Data Handover", snap: <Check />, vapi: <Cross />, status: <Cross /> },
   ];
 
   return (
@@ -60,7 +61,7 @@ export default function Slide10() {
               <tr style={{ background: "#F0F3FF" }}>
                 <th style={{ ...th, textAlign: "left" }}>Feature</th>
                 <th style={{ ...th, textAlign: "center", color: "#FF6F00" }}>SnapServe</th>
-                <th style={{ ...th, textAlign: "center" }}>Vapi · Retell · Bolna</th>
+                <th style={{ ...th, textAlign: "center" }}>Vapi · Retell · Bolna · Zen Voice</th>
                 <th style={{ ...th, textAlign: "center" }}>Status Quo (Human)</th>
               </tr>
             </thead>
@@ -94,6 +95,7 @@ export default function Slide10() {
             Every call enriches our caller knowledge graph. That data compounds — competitors who copy our pipeline still start from zero caller history.
             The Memory Proxy also lets other platforms (Vapi, Bolna, Retell) route through SnapServe for memory, creating a distribution network inside our competitors' ecosystems.
             This is not a feature — it is a structural moat that grows with usage.
+            While competitors can transfer a live call, our Memory Proxy pushes the user's complete historical knowledge graph to the human agent, ensuring deep customer empathy that stateless systems cannot fake.
           </div>
         </div>
       </div>

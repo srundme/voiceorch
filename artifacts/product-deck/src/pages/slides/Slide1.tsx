@@ -2,7 +2,7 @@ const VBWatermark = () => (
   <div style={{ position: "absolute", bottom: "2.8vh", left: "3vw", display: "flex", alignItems: "center", gap: "0.7vw" }}>
     <div style={{ width: "2.2vw", height: "0.3vh", background: "#FF6F00", borderRadius: "2px" }} />
     <span style={{ fontSize: "0.75vw", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#FF6F00", fontVariant: "small-caps", opacity: 0.85 }}>
-      Vande Bharatam
+      Startup Singam 2026
     </span>
   </div>
 );
@@ -49,7 +49,7 @@ export default function Slide1() {
         fontSize: "0.8vw", fontWeight: 600, letterSpacing: "0.18em",
         textTransform: "uppercase", color: "#FF6F00", opacity: 0.9,
       }}>
-        Vande Bharatam — 2026
+        Startup Singam 2026
       </div>
 
       <div style={{
