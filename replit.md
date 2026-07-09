@@ -102,6 +102,14 @@ Billing mode is resolved **dynamically** at call-end time in `minute-rates.ts �
 - Google routes: `GET /api/scheduling/google/connect` (redirect), `GET /api/scheduling/google/callback` (no auth — uses `state` param), `GET/DELETE /api/scheduling/google/connections`, `GET /api/scheduling/google/calendar-links`, `PATCH /api/scheduling/calendars/:id/google-connection`
 - Tokens encrypted at rest via `encryptKey`/`decryptKey`; auto-refresh on expiry
 
+## Knowledge Base (hybrid RAG)
+
+- Per-turn KB retrieval (`orchestration/kb-retrieval.ts`) is hybrid: pgvector cosine search (gemini-embedding-001, 768-dim) fused with PostgreSQL FTS via reciprocal-rank fusion. ANY vector failure (no pgvector, no Gemini key, embed timeout) falls back to pure FTS — the exact pre-vector behavior. `KB_EMBED_QUERY_TIMEOUT_MS` (default 1500) bounds the per-turn query embed.
+- Capability latch: migration 0045 soft-fails without pgvector; `probeKbVectorSupport()` at startup disables all vector paths when the `embedding` column is absent. Never `select()` on `knowledge_entries` — always explicit columns (vectors must not leak to the frontend; soft-failed DBs lack the column).
+- `embedding = NULL` is the single re-embed signal; one central worker (`kickKbEmbedWorker`) back-fills, guarded against concurrent content edits. `startKbEmbedMaintenance()` re-kicks every 10 min + sweeps sources stuck >15 min in processing to failed.
+- PDF uploads: 201 immediately (status=processing), then background Gemini multimodal extraction (semantic chunks, tables as markdown) with pdf-parse fallback.
+- Self-hosted compose uses `pgvector/pgvector:pg16` (drop-in); plain postgres still works, FTS-only.
+
 ## Supported providers
 
 - **ASR:** Deepgram, Azure, Whisper

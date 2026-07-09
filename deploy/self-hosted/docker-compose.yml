@@ -2,7 +2,11 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector-enabled Postgres 16 — required for KB semantic (vector) retrieval.
+    # Drop-in replacement for postgres:16; existing volumes are compatible.
+    # If you keep a plain postgres image, the app still works: the vector
+    # migration soft-fails and KB retrieval stays keyword (FTS) only.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: voiceorch

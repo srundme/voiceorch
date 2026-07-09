@@ -1,6 +1,7 @@
 import {
-  pgTable, text, serial, timestamp, integer, primaryKey,
+  pgTable, text, serial, timestamp, integer, primaryKey, vector, index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
@@ -27,8 +28,26 @@ export const knowledgeEntriesTable = pgTable("knowledge_entries", {
   title: text("title"),
   content: text("content").notNull(),
   keywords: text("keywords"),
+  /**
+   * Multilingual semantic embedding (gemini-embedding-001, MRL-truncated to 768
+   * dims and re-normalized). NULL = not yet embedded — the KB embed worker
+   * back-fills NULL rows; every content write must reset this to NULL.
+   * Column exists only when the pgvector extension is available (migration
+   * 0045 soft-fails without it); runtime code gates on isKbVectorReady().
+   */
+  embedding: vector("embedding", { dimensions: 768 }),
+  embeddingModel: text("embedding_model"),
+  embeddedAt: timestamp("embedded_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  embeddingHnsw: index("knowledge_entries_embedding_hnsw").using("hnsw", t.embedding.op("vector_cosine_ops")),
+  // FTS GIN index (originally migration 0044). Declared here too so
+  // drizzle-kit push doesn't drop it as an "unknown" index in dev.
+  ftsIdx: index("knowledge_entries_fts_idx").using(
+    "gin",
+    sql`to_tsvector('english', coalesce(${t.title}, '') || ' ' || ${t.content} || ' ' || coalesce(${t.keywords}, ''))`,
+  ),
+}));
 
 /* ── agent_knowledge_sources (M:N agent ↔ knowledge_source) ───────────────── */
 
@@ -46,7 +65,7 @@ export const insertKnowledgeSourceSchema = createInsertSchema(knowledgeSourcesTa
 });
 
 export const insertKnowledgeEntrySchema = createInsertSchema(knowledgeEntriesTable).omit({
-  id: true, createdAt: true,
+  id: true, createdAt: true, embedding: true, embeddingModel: true, embeddedAt: true,
 });
 
 export type KnowledgeSource = typeof knowledgeSourcesTable.$inferSelect;

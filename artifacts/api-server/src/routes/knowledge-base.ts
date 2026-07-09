@@ -3,7 +3,9 @@ import { eq, and, sql, inArray } from "drizzle-orm";
 import { db, knowledgeSourcesTable, knowledgeEntriesTable, platformSettingsTable, agentsTable, agentKnowledgeSourcesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
-import { ingestKbTextEntries } from "../services/kb-ingest.js";
+import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js";
+import { isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
+import { extractPdfChunksWithGemini } from "../services/kb-pdf-extract.js";
 import multer from "multer";
 import mammoth from "mammoth";
 import { createRequire } from "node:module";
@@ -14,6 +16,32 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
 });
+
+/**
+ * Explicit column set for every knowledge_entries SELECT/RETURNING in this
+ * router. NEVER select * / full-row returning on this table:
+ * (a) the fat `embedding` vector must not be shipped to API clients, and
+ * (b) on databases where the pgvector migration soft-failed the embedding
+ *     column doesn't exist, so referencing it would break every KB route.
+ */
+const entryCols = {
+  id: knowledgeEntriesTable.id,
+  sourceId: knowledgeEntriesTable.sourceId,
+  userId: knowledgeEntriesTable.userId,
+  title: knowledgeEntriesTable.title,
+  content: knowledgeEntriesTable.content,
+  keywords: knowledgeEntriesTable.keywords,
+  createdAt: knowledgeEntriesTable.createdAt,
+};
+type KbEntryRow = {
+  id: number;
+  sourceId: number;
+  userId: string;
+  title: string | null;
+  content: string;
+  keywords: string | null;
+  createdAt: Date;
+};
 
 /** Split extracted document text into reasonably-sized entry chunks. */
 function chunkText(text: string, maxChars = 4000): string[] {
@@ -290,7 +318,7 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
     .values({ userId, name: name.trim(), type, status })
     .returning();
 
-  const createdEntries: typeof knowledgeEntriesTable.$inferSelect[] = [];
+  const createdEntries: KbEntryRow[] = [];
 
   if (type === "website") {
     if (!url?.trim()) {
@@ -441,6 +469,7 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
         .set({ status: finalStatus, entryCount: successCount, updatedAt: new Date() })
         .where(eq(knowledgeSourcesTable.id, sourceId));
       logger.info({ sourceId, url: seedUrl, successCount, failCount, finalStatus }, "KB website crawl complete");
+      kickKbEmbedWorker();
     })().catch(err => {
       logger.warn({ err, sourceId }, "KB crawler: unhandled crawl error");
       db.update(knowledgeSourcesTable)
@@ -459,7 +488,7 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
       existingSourceId: source!.id,
     });
     // Populate createdEntries for the response (reload from DB to stay consistent)
-    const inserted = await db.select().from(knowledgeEntriesTable)
+    const inserted = await db.select(entryCols).from(knowledgeEntriesTable)
       .where(eq(knowledgeEntriesTable.sourceId, source!.id));
     createdEntries.push(...inserted);
     // source row was already created; result.entryCount drives the final status
@@ -495,35 +524,83 @@ router.post("/knowledge-sources/upload", requireAuth, upload.single("file"), asy
     .returning();
   const sourceId = source!.id;
 
-  try {
-    const text = await extractDocumentText(file);
+  /** Insert extracted entries + finalize source status. Shared by both paths. */
+  async function persistEntries(entries: KbEntryInput[], via: string): Promise<KbEntryRow[]> {
+    const created: KbEntryRow[] = [];
+    for (const e of entries) {
+      const [entry] = await db.insert(knowledgeEntriesTable).values({
+        sourceId,
+        userId,
+        title: e.title?.trim() || null,
+        content: e.content.trim(),
+        keywords: e.keywords?.trim() || null,
+      }).returning(entryCols);
+      created.push(entry!);
+    }
+    await db.update(knowledgeSourcesTable)
+      .set({ status: "ready", entryCount: created.length, updatedAt: new Date() })
+      .where(eq(knowledgeSourcesTable.id, sourceId));
+    logger.info({ sourceId, file: file!.originalname, entryCount: created.length, via }, "KB file upload processed");
+    kickKbEmbedWorker();
+    return created;
+  }
+
+  function legacyChunks(text: string): KbEntryInput[] {
     const chunks = chunkText(text);
-    if (!chunks.length) {
+    const baseTitle = file!.originalname;
+    return chunks.map((c, i) => ({
+      title: chunks.length > 1 ? `${baseTitle} (part ${i + 1})` : baseTitle,
+      content: c,
+    }));
+  }
+
+  const isPdf = ext === "pdf" || file.mimetype === "application/pdf";
+  if (isPdf) {
+    // PDFs go through Gemini multimodal understanding (text + tables + image
+    // descriptions), which can take tens of seconds — so this path is ASYNC:
+    // respond immediately with status "processing"; the dashboard already
+    // polls processing sources (website crawl uses the same lifecycle).
+    // Any Gemini failure falls back to the legacy pdf-parse extraction.
+    res.status(201).json({ ...source, entries: [] });
+    void (async () => {
+      try {
+        let entries = await extractPdfChunksWithGemini(file.buffer, file.originalname);
+        let via = "gemini-multimodal";
+        if (!entries?.length) {
+          via = "pdf-parse-fallback";
+          const text = await extractDocumentText(file);
+          entries = legacyChunks(text);
+        }
+        if (!entries.length) {
+          await db.update(knowledgeSourcesTable)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(knowledgeSourcesTable.id, sourceId));
+          logger.warn({ sourceId, file: file.originalname }, "KB PDF upload: no text extracted by either path");
+          return;
+        }
+        await persistEntries(entries, via);
+      } catch (err) {
+        logger.warn({ err, sourceId, file: file.originalname }, "KB PDF upload processing failed");
+        await db.update(knowledgeSourcesTable)
+          .set({ status: "failed", updatedAt: new Date() })
+          .where(eq(knowledgeSourcesTable.id, sourceId))
+          .catch(() => {});
+      }
+    })();
+    return;
+  }
+
+  // Non-PDF formats: fast local extraction, synchronous response (unchanged).
+  try {
+    const entries = legacyChunks(await extractDocumentText(file));
+    if (!entries.length) {
       await db.update(knowledgeSourcesTable)
         .set({ status: "failed", updatedAt: new Date() })
         .where(eq(knowledgeSourcesTable.id, sourceId));
       res.status(400).json({ error: "No text could be extracted from the document" });
       return;
     }
-
-    const baseTitle = file.originalname;
-    const createdEntries: typeof knowledgeEntriesTable.$inferSelect[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const [entry] = await db.insert(knowledgeEntriesTable).values({
-        sourceId,
-        userId,
-        title: chunks.length > 1 ? `${baseTitle} (part ${i + 1})` : baseTitle,
-        content: chunks[i]!,
-        keywords: null,
-      }).returning();
-      createdEntries.push(entry!);
-    }
-
-    await db.update(knowledgeSourcesTable)
-      .set({ status: "ready", entryCount: createdEntries.length, updatedAt: new Date() })
-      .where(eq(knowledgeSourcesTable.id, sourceId));
-
-    req.log.info({ sourceId, file: file.originalname, entryCount: createdEntries.length }, "KB file upload processed");
+    const createdEntries = await persistEntries(entries, "local-extract");
     const [refreshed] = await db.select().from(knowledgeSourcesTable).where(eq(knowledgeSourcesTable.id, sourceId));
     res.status(201).json({ ...refreshed, entries: createdEntries });
   } catch (err) {
@@ -571,7 +648,7 @@ router.get("/knowledge-sources/:id", requireAuth, async (req, res) => {
   if (!source) { res.status(404).json({ error: "Not found" }); return; }
 
   const entries = await db
-    .select()
+    .select(entryCols)
     .from(knowledgeEntriesTable)
     .where(eq(knowledgeEntriesTable.sourceId, id))
     .orderBy(sql`created_at ASC`);
@@ -630,9 +707,10 @@ router.post("/knowledge-sources/:id/entries", requireAuth, async (req, res) => {
     title: title?.trim() || null,
     content: content.trim(),
     keywords: keywords?.trim() || null,
-  }).returning();
+  }).returning(entryCols);
 
   await syncEntryCount(sourceId);
+  kickKbEmbedWorker();
   res.status(201).json(entry);
 });
 
@@ -655,15 +733,21 @@ router.patch("/knowledge-sources/:id/entries/:entryId", requireAuth, async (req,
       ...(title !== undefined ? { title: title.trim() || null } : {}),
       ...(content !== undefined ? { content: content.trim() } : {}),
       ...(keywords !== undefined ? { keywords: keywords.trim() || null } : {}),
+      // Content changed → stale vector must be dropped so the embed worker
+      // re-embeds. Gated: column may not exist on soft-failed-migration DBs.
+      ...(content !== undefined && isKbVectorReady()
+        ? { embedding: null, embeddingModel: null, embeddedAt: null }
+        : {}),
     })
     .where(and(
       eq(knowledgeEntriesTable.id, entryId),
       eq(knowledgeEntriesTable.sourceId, sourceId),
       eq(knowledgeEntriesTable.userId, userId),
     ))
-    .returning();
+    .returning(entryCols);
 
   if (!entry) { res.status(404).json({ error: "Not found" }); return; }
+  if (content !== undefined) kickKbEmbedWorker();
   res.json(entry);
 });
 
@@ -681,7 +765,7 @@ router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, async (req
       eq(knowledgeEntriesTable.sourceId, sourceId),
       eq(knowledgeEntriesTable.userId, userId),
     ))
-    .returning();
+    .returning({ id: knowledgeEntriesTable.id });
 
   if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
   await syncEntryCount(sourceId);
@@ -742,7 +826,7 @@ router.post("/knowledge-sources/:id/search", requireAuth, async (req, res) => {
 
   // Load ALL entries (up to 200) — Qwen reads everything directly, no keyword guessing
   const allEntries = await db
-    .select()
+    .select(entryCols)
     .from(knowledgeEntriesTable)
     .where(and(
       eq(knowledgeEntriesTable.sourceId, sourceId),

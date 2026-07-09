@@ -4103,10 +4103,43 @@ export class OrchestrationPipeline {
     const cacheBaseForTurn = systemPromptForTurn;
 
 
+    // KB context preference order (per-turn):
+    // 1. LIVE hybrid retrieval (vector + FTS) against the actual transcript —
+    //    this is what makes retrieval semantic/multilingual. It runs with a
+    //    hard time budget so a slow embed can never delay the turn.
+    // 2. The speech-start prefetch (query="" full dump) as fallback when the
+    //    live retrieval misses its budget, errors, or finds nothing.
+    // Previously the prefetch ALWAYS won when present, which made the query
+    // path effectively dead on live calls.
     let kbContextPromise: Promise<string | null>;
-    if (this.kbPrefetchPromise) {
-      kbContextPromise = this.kbPrefetchPromise;
-      this.kbPrefetchPromise = null;
+    const kbPrefetch = this.kbPrefetchPromise;
+    this.kbPrefetchPromise = null;
+    if (this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
+      const budgetMs = Number(process.env["KB_TURN_RETRIEVAL_BUDGET_MS"] ?? 900);
+      const live = retrieveKbContextMulti(this.agent.knowledgeSourceIds, transcript)
+        .catch((err) => {
+          logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — falling back to prefetch");
+          return null;
+        });
+      if (kbPrefetch) {
+        const TIMED_OUT = Symbol("kb-budget");
+        kbContextPromise = Promise.race([
+          live,
+          new Promise<typeof TIMED_OUT>((r) => setTimeout(() => r(TIMED_OUT), budgetMs)),
+        ]).then((res) => {
+          if (res === TIMED_OUT) {
+            logger.info({ callId: this.config.callId, budgetMs }, "KB live retrieval missed budget — using prefetch");
+            return kbPrefetch;
+          }
+          // Empty/failed live result → fall back to the prefetched full dump
+          // so a zero-hit query never LOSES context vs the old behavior.
+          return res || kbPrefetch;
+        });
+      } else {
+        kbContextPromise = live;
+      }
+    } else if (kbPrefetch) {
+      kbContextPromise = kbPrefetch;
       logger.debug({ callId: this.config.callId }, "KB context: using speech-start prefetch");
     } else if (this.agent.knowledgeSourceIds.length > 0) {
       kbContextPromise = retrieveKbContextMulti(this.agent.knowledgeSourceIds, transcript)

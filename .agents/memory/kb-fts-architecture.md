@@ -1,32 +1,34 @@
 ---
-name: KB FTS Architecture
-description: AI Knowledge system replaced with PostgreSQL Full Text Search — no embeddings, no pgvector
+name: KB Retrieval Architecture (hybrid vector + FTS)
+description: KB retrieval is now hybrid pgvector semantic search + PostgreSQL FTS fused via RRF, with a total-fallback capability latch; PDF ingest is Gemini multimodal with pdf-parse fallback
 ---
 
 ## Rule
-The AI Knowledge system uses PostgreSQL FTS (plainto_tsquery / ts_rank / GIN index). There are NO embeddings, no pgvector, no similarity calculations anywhere.
+KB per-turn retrieval (`orchestration/kb-retrieval.ts`) is HYBRID: pgvector cosine search over `gemini-embedding-001` vectors (768-dim MRL truncation, re-normalized) fused with PostgreSQL FTS (plainto_tsquery/ts_rank) via reciprocal-rank fusion. Vector and FTS run concurrently; ANY vector failure (latch off, no key, embed timeout, SQL error) degrades to pure FTS the same turn — exactly the pre-vector behavior. The dashboard test-panel search route deliberately stays Qwen-reads-all (no vectors).
 
-## Tables
-- `knowledge_sources` — id, user_id, name, type (faq/text/website), status, entry_count
-- `knowledge_entries` — id, source_id, user_id, title, content, keywords + GIN index on tsvector
+## The vectorReady capability latch (the fallback guarantee)
+- Migration 0045 soft-fails inside `DO $$` with a WARNING when pgvector is unavailable (e.g. self-hosted `postgres:16-alpine`), so `migrate()` never crashes.
+- `probeKbVectorSupport()` (services/kb-embeddings.ts) checks information_schema at startup for the actual `embedding` column; every embed/kick/vector path no-ops when the latch is false → FTS-only, zero regression.
+- **Because the column may not exist**, EVERY select/returning on `knowledge_entries` must use explicit columns (`entryCols`), never `select()` — `select *` would break all KB routes on a soft-failed DB, and vectors must never serialize to the frontend.
 
-## GIN Index
-```sql
-CREATE INDEX knowledge_entries_fts_idx ON knowledge_entries
-USING GIN (to_tsvector('english', coalesce(title, '') || ' ' || content || ' ' || coalesce(keywords, '')));
-```
+## Embedding worker convention
+- `embedding = NULL` is the single "needs embedding" signal. All content write paths reset it to NULL (gated on the latch) + `kickKbEmbedWorker()`. ONE central worker back-fills; no per-path embedding hooks.
+- Worker UPDATE is guarded on `embedding IS NULL AND content = <embedded content>` so a concurrent edit never gets a stale vector.
+- `startKbEmbedMaintenance()` (index.ts, after migrate): probe→kick, 10-min re-kick, plus a 15-min sweep marking sources stuck in processing/crawling/validating as failed (orphaned background PDF jobs).
+- **Watch item (poison batch):** worker always selects NULL rows in id order (limit 32); one persistently-failing row blocks all later rows (FTS still works). If "KB embed worker run failed" recurs in prod, add per-row error skipping.
+- Title/keyword-only edits don't reset the embedding (content-only trigger) — minor accepted staleness.
 
-## Agent linkage
-`agents.knowledge_base_id` (integer) points to `knowledge_sources.id`, kept for backward compat. Agents are now M:N with sources via the `agent_knowledge_sources` join table (composite PK, cascade FKs).
+## PDF ingestion (Gemini multimodal)
+- Upload route responds 201 immediately (`status: processing`), then background `extractPdfChunksWithGemini` (gemini-2.5-flash inlineData, ≤14MB, JSON response mode) → semantic chunks with title/keywords, tables preserved as markdown; falls back to legacy pdf-parse text chunking on any failure; total failure → status failed.
+- Delete-during-background-job is safe: cascade delete makes entry inserts throw FK, caught, status update no-ops.
 
-**Union-everywhere convention:** the effective attached-source set is always `join table ∪ legacy knowledge_base_id`. Any code that reads attached sources must compute this union — never trust the legacy column or the join table alone. This union is duplicated across routes (agents get/list/create/patch) AND all 3 orchestration paths (session.ts, pipeline.ts ×3 sites, webcall.ts via kb-retrieval `getAttachedSourceIds`/`retrieveKbContextMulti`). Old agents with stale IDs get empty context silently.
+## Tables / linkage (unchanged from FTS era)
+- `knowledge_sources` + `knowledge_entries` (now + embedding vector(768), embedding_model, embedded_at; HNSW index when pgvector present); GIN FTS index unchanged.
+- **Union-everywhere convention:** effective attached-source set is always `agent_knowledge_sources ∪ legacy agents.knowledge_base_id` — duplicated across routes AND all 3 orchestration paths.
 
-## Pipeline retrieval
-`orchestration/kb-retrieval.ts` → `retrieveKbContext(knowledgeSourceId, query, topK)` runs plainto_tsquery and returns top-K entries as a prompt-injectable string.
+## Env knobs
+`KB_EMBED_QUERY_TIMEOUT_MS` (default 1500) bounds the per-turn query embed. Self-hosted compose now ships `pgvector/pgvector:pg16` (drop-in for postgres:16; plain postgres still works, FTS-only).
 
-## Test panel search
-`POST /knowledge-sources/:id/search` → runs FTS, calls Gemini 1.5 Flash for LLM answer, returns `{ answer, matchedEntries[{ entry, rank, snippet }] }`.
+**Why:** multilingual (Tamil/Hinglish) callers paraphrase — FTS keyword matching missed semantically-equivalent queries ("money back guarantee" vs "refund policy"). gemini-embedding-001 (the earlier 404s were wrong model names / old API surface) is multilingual and works with the managed Gemini key.
 
-**Why:** Gemini embedding models returned 404 for all model names. FTS is simpler, faster, zero external dependency, and fully reliable.
-
-**How to apply:** Never add embedding calls to the KB system. If semantic search is needed later, add a separate flag-gated path rather than reverting the whole system.
+**How to apply:** never bypass the latch; never add `select()` on knowledge_entries; all new KB content write paths must reset embedding→NULL + kick the worker, nothing else.

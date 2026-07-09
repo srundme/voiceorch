@@ -1,6 +1,7 @@
 import { db, knowledgeSourcesTable, knowledgeEntriesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { isKbVectorReady, kickKbEmbedWorker } from "./kb-embeddings.js";
 
 export type KbEntryInput = { title?: string; content: string; keywords?: string };
 
@@ -84,6 +85,10 @@ export async function ingestKbTextEntries(params: IngestKbTextParams): Promise<I
             title: e.title?.trim() || null,
             content: e.content.trim(),
             keywords: e.keywords?.trim() || null,
+            // Content may have changed — reset the semantic vector so the
+            // embed worker re-embeds. Gated: on DBs without pgvector the
+            // embedding column doesn't exist and referencing it would error.
+            ...(isKbVectorReady() ? { embedding: null, embeddingModel: null, embeddedAt: null } : {}),
           })
           .where(eq(knowledgeEntriesTable.id, existing.id));
       } else {
@@ -113,6 +118,7 @@ export async function ingestKbTextEntries(params: IngestKbTextParams): Promise<I
       .where(eq(knowledgeSourcesTable.id, sourceId));
 
     logger.info({ sourceId, type, entryCount: upserted }, "KB text/FAQ source ingested");
+    kickKbEmbedWorker();
     return { sourceId, entryCount: upserted };
   } catch (err) {
     logger.warn({ err, sourceId }, "ingestKbTextEntries: failed");

@@ -316,6 +316,13 @@
       "when": 1785500000000,
       "tag": "0044_knowledge_fts_index",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1785600000000,
+      "tag": "0045_knowledge_vector_rag",
+      "breakpoints": true
     }
   ]
 }

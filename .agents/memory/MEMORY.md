@@ -21,7 +21,7 @@
 - [Sarvam STT WebSocket protocol](sarvam-stt-ws-protocol.md) — valid streaming models: saarika:v2.5 + saaras:v3 only; audio must be WAV-wrapped in AudioContent {data,encoding:"audio/wav",sample_rate}
 - [Sarvam STT fragment coalescing](sarvam-stt-fragment-coalescing.md) — looksIncomplete() lacked English bare-verb detection ("I want"→flushed early); STALL_BACKSTOP reprompt after 10s silence is expected, not a bug; codemix→Tamil-script mistranscription of English unresolved
 - [Gender service startup](gender-service-startup.md) — lazy-import librosa; top-level import blocks uvicorn port binding in production
-- [KB FTS Architecture](kb-fts-architecture.md) — AI Knowledge uses PostgreSQL FTS only; no embeddings/pgvector; knowledge_sources + knowledge_entries tables with GIN index
+- [KB retrieval architecture](kb-fts-architecture.md) — hybrid pgvector+FTS via RRF with vectorReady latch (total FTS fallback); explicit entryCols mandatory; embedding=NULL is the only re-embed signal
 - [Replit production inter-service networking](replit-production-networking.md) — localhost:80 (proxy) not available inside production container; localhost:PORT works for same-VM services
 - [Scheduling booking path triplication](booking-path-triplication.md) — gcal/email/webhook logic is inlined in 3 separate paths (agent tool-executor, public routes, authed routes); change all three
 - [drizzle-kit push gotchas](drizzle-push-gotchas.md) — long FK names truncate at 63 chars → push loops "Changes applied" forever; raw-SQL-only columns drift silently and get dropped
