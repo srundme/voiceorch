@@ -5845,6 +5845,7 @@ export class OrchestrationPipeline {
 
   close(): void {
     this.closed = true;
+    this.tts.close?.();
     if (this.ambientInterval) {
       clearInterval(this.ambientInterval);
       this.ambientInterval = null;

@@ -533,6 +533,9 @@ export interface TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal
   ): Promise<void>;
+  /** Optional teardown — close any persistent connections (e.g. WebSocket).
+   *  Called by the pipeline's close() when the call ends. */
+  close?(): void;
 }
 
 export type TelephonyProvider = "twilio" | "plivo" | "vobiz";
