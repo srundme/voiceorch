@@ -13,6 +13,7 @@ import { logActivity } from "../lib/activity.js";
 import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
 import { getActiveLayer } from "../services/system-prompt-template.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
+import { trackEvent } from "../services/track-event.js";
 
 const router = Router();
 
@@ -491,6 +492,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
   };
 
   const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
+  if (!isRefine) void trackEvent(clerkId, "vibe_started");
   // Holds the text KB source created during this turn's knowledge_base phase so the
   // build step can attach it even if the build fires on the same SSE stream.
   let sessionTextKbSourceId: number | undefined;
@@ -1624,6 +1626,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         : `Agent "${insertedAgent.name}" created via Vibe Builder`,
     });
 
+    void trackEvent(clerkId, isRefine ? "vibe_refined" : "vibe_completed", { agentId: insertedAgent.id });
     emit({ type: "created", agentId: insertedAgent.id, agentName: cfg.agentName });
     res.end();
 

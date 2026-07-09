@@ -28,6 +28,7 @@ import {
 } from "../services/email-templates.js";
 import { registerTransientKey } from "../services/rate-limit-cleanup.js";
 import { getLoginAuthUrl, exchangeLoginCode } from "../services/auth/google-login.js";
+import { trackEvent } from "../services/track-event.js";
 import { deriveRedirectUri, dashboardBase } from "../lib/oauth-redirect.js";
 
 const OTP_RATE_LIMIT_MAX = parseInt(process.env.OTP_RATE_LIMIT_MAX ?? "3", 10);
@@ -693,6 +694,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       });
 
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: new user registered");
+      void trackEvent(googleSub, "signup", { email: normalizedEmail });
 
       // Welcome email — fire-and-forget
       if (normalizedEmail) {
@@ -735,6 +737,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       return;
     } else {
       logger.info({ sub: googleSub, email: normalizedEmail }, "Google Sign-In: existing user signed in");
+      void trackEvent(googleSub, "login");
     }
 
     const token = createSessionToken({

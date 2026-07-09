@@ -749,6 +749,41 @@ export function useGrowthInactive() {
   });
 }
 
+export function useGrowthFunnelV2() {
+  return useQuery({
+    queryKey: ["admin", "growth", "funnel-v2"],
+    queryFn: () => adminFetch<any>("/growth/funnel-v2"),
+  });
+}
+
+export function useGrowthCohorts() {
+  return useQuery({
+    queryKey: ["admin", "growth", "cohorts"],
+    queryFn: () => adminFetch<any[]>("/growth/cohorts"),
+  });
+}
+
+export function useGrowthUserJourneys(stage = "all") {
+  return useQuery({
+    queryKey: ["admin", "growth", "user-journeys", stage],
+    queryFn: () => adminFetch<any[]>(`/growth/user-journeys?stage=${stage}`),
+  });
+}
+
+export function useGrowthDropoffReasons() {
+  return useQuery({
+    queryKey: ["admin", "growth", "dropoff-reasons"],
+    queryFn: () => adminFetch<any>("/growth/dropoff-reasons"),
+  });
+}
+
+export function useGrowthEventStats() {
+  return useQuery({
+    queryKey: ["admin", "growth", "event-stats"],
+    queryFn: () => adminFetch<any[]>("/growth/event-stats"),
+  });
+}
+
 // ── Ambient Sounds ────────────────────────────────────────────────────────────
 
 export interface AmbientSound {

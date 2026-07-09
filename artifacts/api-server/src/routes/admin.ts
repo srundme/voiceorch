@@ -568,6 +568,194 @@ router.get("/admin/growth/inactive", async (_req, res): Promise<void> => {
   }
 });
 
+// ─── Growth Analytics v2 ──────────────────────────────────────────────────────
+
+router.get("/admin/growth/funnel-v2", async (_req, res): Promise<void> => {
+  try {
+    const result = await pool.query(`
+      WITH
+        total           AS (SELECT COUNT(*)                                                          AS n FROM users),
+        has_agent       AS (SELECT COUNT(DISTINCT user_id)                                           AS n FROM agents),
+        has_provider    AS (SELECT COUNT(DISTINCT user_id)                                           AS n FROM providers),
+        has_telephony   AS (SELECT COUNT(DISTINCT user_id)                                           AS n FROM agents WHERE telephony_provider IS NOT NULL AND telephony_provider <> ''),
+        has_call        AS (SELECT COUNT(DISTINCT user_id)                                           AS n FROM calls),
+        has_5calls      AS (SELECT COUNT(*)                                                          AS n FROM (SELECT user_id FROM calls GROUP BY user_id HAVING COUNT(*) >= 5)  s),
+        has_20calls     AS (SELECT COUNT(*)                                                          AS n FROM (SELECT user_id FROM calls GROUP BY user_id HAVING COUNT(*) >= 20) s),
+        t2a             AS (SELECT AVG(EXTRACT(EPOCH FROM (a.first_agent - u.created_at)) / 3600)   AS hours
+                            FROM users u JOIN (SELECT user_id, MIN(created_at) AS first_agent FROM agents GROUP BY user_id) a ON a.user_id = u.clerk_id),
+        t2c             AS (SELECT AVG(EXTRACT(EPOCH FROM (c.first_call  - u.created_at)) / 3600)   AS hours
+                            FROM users u JOIN (SELECT user_id, MIN(created_at) AS first_call  FROM calls  GROUP BY user_id) c ON c.user_id = u.clerk_id),
+        new7d           AS (SELECT COUNT(*) AS n FROM users WHERE created_at > NOW() - INTERVAL '7 days'),
+        active7d        AS (SELECT COUNT(DISTINCT user_id) AS n FROM calls WHERE created_at > NOW() - INTERVAL '7 days'),
+        new30d          AS (SELECT COUNT(*) AS n FROM users WHERE created_at > NOW() - INTERVAL '30 days'),
+        active30d       AS (SELECT COUNT(DISTINCT user_id) AS n FROM calls WHERE created_at > NOW() - INTERVAL '30 days')
+      SELECT
+        total.n       AS total_users,
+        has_agent.n   AS users_with_agent,
+        has_provider.n AS users_with_provider,
+        has_telephony.n AS users_with_telephony,
+        has_call.n    AS users_with_call,
+        has_5calls.n  AS users_with_5_calls,
+        has_20calls.n AS users_with_20_calls,
+        ROUND(t2a.hours::numeric, 1) AS avg_hours_to_first_agent,
+        ROUND(t2c.hours::numeric, 1) AS avg_hours_to_first_call,
+        new7d.n       AS new_users_7d,
+        active7d.n    AS active_users_7d,
+        new30d.n      AS new_users_30d,
+        active30d.n   AS active_users_30d
+      FROM total, has_agent, has_provider, has_telephony, has_call, has_5calls, has_20calls, t2a, t2c, new7d, active7d, new30d, active30d
+    `);
+    res.json(result.rows[0] ?? {});
+  } catch (err) {
+    logger.error({ err }, "growth/funnel-v2 failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/growth/cohorts", async (_req, res): Promise<void> => {
+  try {
+    const result = await pool.query(`
+      WITH cohorts AS (
+        SELECT date_trunc('week', created_at)::date AS week, COUNT(*) AS signups
+        FROM users
+        WHERE created_at > NOW() - INTERVAL '13 weeks'
+        GROUP BY 1
+      ),
+      activations AS (
+        SELECT date_trunc('week', u.created_at)::date AS week, COUNT(DISTINCT c.user_id) AS activated
+        FROM users u
+        JOIN (SELECT user_id, MIN(created_at) AS first_call FROM calls GROUP BY user_id) c ON c.user_id = u.clerk_id
+        WHERE u.created_at > NOW() - INTERVAL '13 weeks'
+        GROUP BY 1
+      )
+      SELECT
+        c.week,
+        c.signups,
+        COALESCE(a.activated, 0) AS activated,
+        ROUND(COALESCE(a.activated, 0) * 100.0 / NULLIF(c.signups, 0), 1) AS activation_rate
+      FROM cohorts c
+      LEFT JOIN activations a ON a.week = c.week
+      ORDER BY c.week
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    logger.error({ err }, "growth/cohorts failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/growth/user-journeys", async (req, res): Promise<void> => {
+  try {
+    const stage = (req.query.stage as string) || "all";
+    const stageFilter = stage !== "all"
+      ? `HAVING CASE
+          WHEN COALESCE(c.call_count,0) >= 20 THEN 'power_user'
+          WHEN COALESCE(c.call_count,0) >= 5  THEN 'active'
+          WHEN COALESCE(c.call_count,0) >= 1  THEN 'made_call'
+          WHEN COALESCE(ta.has_tele, false)   THEN 'has_telephony'
+          WHEN COALESCE(p.provider_count,0) > 0 THEN 'has_provider'
+          WHEN COALESCE(a.agent_count,0) > 0  THEN 'has_agent'
+          ELSE 'signed_up'
+        END = $1`
+      : "";
+    const params = stage !== "all" ? [stage] : [];
+    const result = await pool.query(`
+      SELECT
+        u.clerk_id,
+        u.email,
+        u.name,
+        u.created_at,
+        ROUND(EXTRACT(EPOCH FROM (NOW() - u.created_at)) / 86400)::int AS days_since_signup,
+        COALESCE(a.agent_count, 0)    AS agent_count,
+        COALESCE(p.provider_count, 0) AS provider_count,
+        COALESCE(ta.has_tele, false)  AS has_telephony,
+        COALESCE(c.call_count, 0)     AS call_count,
+        c.last_call_at,
+        u.wallet_balance_cents,
+        CASE
+          WHEN COALESCE(c.call_count,0) >= 20  THEN 'power_user'
+          WHEN COALESCE(c.call_count,0) >= 5   THEN 'active'
+          WHEN COALESCE(c.call_count,0) >= 1   THEN 'made_call'
+          WHEN COALESCE(ta.has_tele, false)    THEN 'has_telephony'
+          WHEN COALESCE(p.provider_count,0) > 0 THEN 'has_provider'
+          WHEN COALESCE(a.agent_count,0) > 0   THEN 'has_agent'
+          ELSE 'signed_up'
+        END AS stage
+      FROM users u
+      LEFT JOIN (SELECT user_id, COUNT(*) AS agent_count FROM agents GROUP BY user_id) a ON a.user_id = u.clerk_id
+      LEFT JOIN (SELECT user_id, COUNT(*) AS provider_count FROM providers GROUP BY user_id) p ON p.user_id = u.clerk_id
+      LEFT JOIN (SELECT user_id, bool_or(telephony_provider IS NOT NULL AND telephony_provider <> '') AS has_tele FROM agents GROUP BY user_id) ta ON ta.user_id = u.clerk_id
+      LEFT JOIN (SELECT user_id, COUNT(*) AS call_count, MAX(created_at) AS last_call_at FROM calls GROUP BY user_id) c ON c.user_id = u.clerk_id
+      GROUP BY u.clerk_id, u.email, u.name, u.created_at, u.wallet_balance_cents,
+        a.agent_count, p.provider_count, ta.has_tele, c.call_count, c.last_call_at
+      ${stageFilter}
+      ORDER BY u.created_at DESC
+      LIMIT 300
+    `, params);
+    res.json(result.rows);
+  } catch (err) {
+    logger.error({ err }, "growth/user-journeys failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/growth/dropoff-reasons", async (_req, res): Promise<void> => {
+  try {
+    const result = await pool.query(`
+      WITH ud AS (
+        SELECT
+          u.clerk_id,
+          COALESCE(a.agent_count, 0) > 0                              AS has_agent,
+          COALESCE(p.provider_count, 0) > 0                           AS has_provider,
+          COALESCE(ta.has_tele, false)                                 AS has_telephony,
+          COALESCE(c.call_count, 0) > 0                               AS has_call,
+          COALESCE(c.call_count, 0) >= 5                              AS is_active,
+          COALESCE(vibe.vibe_count, 0) > 0                            AS used_vibe
+        FROM users u
+        LEFT JOIN (SELECT user_id, COUNT(*) AS agent_count    FROM agents    GROUP BY user_id) a  ON a.user_id  = u.clerk_id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS provider_count FROM providers GROUP BY user_id) p  ON p.user_id  = u.clerk_id
+        LEFT JOIN (SELECT user_id, bool_or(telephony_provider IS NOT NULL AND telephony_provider <> '') AS has_tele FROM agents GROUP BY user_id) ta ON ta.user_id = u.clerk_id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS call_count     FROM calls     GROUP BY user_id) c  ON c.user_id  = u.clerk_id
+        LEFT JOIN (SELECT user_id, COUNT(*) AS vibe_count FROM analytics_events WHERE event_name = 'vibe_started' GROUP BY user_id) vibe ON vibe.user_id = u.clerk_id
+      )
+      SELECT
+        COUNT(*)                                                 AS total,
+        COUNT(*) FILTER (WHERE NOT has_agent AND NOT used_vibe)  AS cold_dropoff,
+        COUNT(*) FILTER (WHERE NOT has_agent AND used_vibe)      AS vibe_abandoned,
+        COUNT(*) FILTER (WHERE has_agent AND NOT has_provider)   AS no_provider,
+        COUNT(*) FILTER (WHERE has_agent AND has_provider AND NOT has_telephony AND NOT has_call) AS no_telephony,
+        COUNT(*) FILTER (WHERE has_agent AND has_provider AND has_telephony AND NOT has_call)     AS configured_no_call,
+        COUNT(*) FILTER (WHERE has_call AND NOT is_active)       AS one_and_done,
+        COUNT(*) FILTER (WHERE is_active)                        AS active_users
+      FROM ud
+    `);
+    res.json(result.rows[0] ?? {});
+  } catch (err) {
+    logger.error({ err }, "growth/dropoff-reasons failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/admin/growth/event-stats", async (_req, res): Promise<void> => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        event_name,
+        COUNT(*)                                                                AS total,
+        COUNT(DISTINCT user_id)                                                 AS unique_users,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')         AS last_7d,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')       AS last_24h
+      FROM analytics_events
+      GROUP BY event_name
+      ORDER BY total DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    logger.error({ err }, "growth/event-stats failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // ─── Alert Notification Settings ─────────────────────────────────────────────
 
 const ALERT_NOTIFICATION_EMAIL_KEY = "alert_notification_email";

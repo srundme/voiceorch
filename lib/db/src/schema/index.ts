@@ -51,3 +51,4 @@ export * from "./book-progress";
 export * from "./book-exam";
 export * from "./book-interns";
 export * from "./vibe-chat";
+export * from "./analytics-events";
