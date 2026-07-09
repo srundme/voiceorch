@@ -5,6 +5,22 @@ interface ImpersonationData {
   sessionToken: string;
   name: string | null;
   email: string | null;
+  returnUrl?: string | null;
+}
+
+function resolveExitUrl(returnUrl: string | null | undefined): string {
+  if (returnUrl) {
+    try {
+      const parsed = new URL(returnUrl, window.location.origin);
+      if (parsed.origin === window.location.origin) {
+        return parsed.href;
+      }
+    } catch {
+      // fall through to base fallback
+    }
+  }
+  const adminBase = import.meta.env.DEV ? "/admin/" : "/admin-ui/";
+  return window.location.origin + adminBase;
 }
 
 function getImpersonation(): ImpersonationData | null {
@@ -43,7 +59,7 @@ export function ImpersonationBanner() {
       localStorage.removeItem("voiceorch:impersonation");
       localStorage.removeItem("voiceorch:session");
       queryClient.clear();
-      window.location.href = window.location.origin + "/admin";
+      window.location.href = resolveExitUrl(imp.returnUrl);
     }
   }
 

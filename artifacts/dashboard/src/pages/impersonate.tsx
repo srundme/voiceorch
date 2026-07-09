@@ -15,6 +15,7 @@ export default function ImpersonatePage() {
     const impToken = params.get("imp_token");
     const impName = params.get("imp_name");
     const impEmail = params.get("imp_email");
+    const returnTo = params.get("return_to");
 
     if (code && impToken) {
       fetch(`/api/impersonate/exchange?code=${encodeURIComponent(code)}`)
@@ -30,6 +31,7 @@ export default function ImpersonatePage() {
               sessionToken: impToken,
               name: impName ? decodeURIComponent(impName) : null,
               email: impEmail ? decodeURIComponent(impEmail) : null,
+              returnUrl: returnTo || null,
             }),
           );
           queryClient.clear();
