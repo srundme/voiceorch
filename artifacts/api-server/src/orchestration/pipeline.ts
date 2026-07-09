@@ -225,6 +225,24 @@ const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so
                                           // never lock the caller out of interrupting.
 
 /**
+ * One-shot note marking the opening-only caller-memory / resume directives as
+ * already satisfied. Appended to the volatile per-turn tail of the system prompt
+ * once the opener (greeting) exists in conversation history, so the LLM does not
+ * re-deliver the recognition/drop-acknowledgment the greeting already spoke.
+ * Deliberately preserves the persistent rules (NAME PRIORITY, DO NOT RE-ASK).
+ */
+const OPENING_ALREADY_DELIVERED_NOTE =
+  "[OPENING ALREADY DELIVERED] The opening line of this call has ALREADY been spoken " +
+  "(it is the first assistant message in the conversation). Any instruction above that tells you " +
+  "how to OPEN the call — greeting the caller by name, referencing prior context or memory in your " +
+  "opening, or acknowledging that a previous call dropped / got cut off — has already been fulfilled " +
+  "and MUST NOT be acted on again. Do NOT greet the caller again, do NOT re-introduce yourself, do NOT " +
+  "re-state that you remember them or summarize the previous call unprompted, and do NOT re-apologize " +
+  "for the dropped call. Simply respond to the caller's latest message and move the conversation forward. " +
+  "The NAME PRIORITY rule and the DO NOT RE-ASK KNOWN INFORMATION rule above remain in force for the " +
+  "entire call — keep using known details instead of re-asking, and switch names if the caller states their own.";
+
+/**
  * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
  * triggering a greeting generated against the full ~31k-token system prompt, adding
  * seconds of latency (and cost) before the first word. The opening line only needs the
@@ -4389,6 +4407,38 @@ export class OrchestrationPipeline {
         systemPromptForTurn += `\n\n${CONVERSATION_DISCIPLINE_BLOCK}`;
         logger.debug({ callId: this.config.callId, stage: stage.name, idx: this.currentStageIndex }, "Staged prompt active");
       }
+    }
+
+    // ── Opening-only directive neutralizer ────────────────────────────────────
+    // The caller-memory returning-caller directive ("Open by greeting them by
+    // name and naturally reference what you already know…"), the resume-from-drop
+    // directive ("Briefly acknowledge the interruption…") and the network-drop
+    // RESUME DIRECTIVE ("Open warmly and acknowledge the drop…") are phrased as
+    // OPENING instructions but live in the system prompt for the whole call. The
+    // greeting path (compact greeting LLM or static opener) already delivered
+    // that opening, so without this note the first real reply re-greets /
+    // re-references prior context / re-acknowledges the drop a second time.
+    //
+    // Once ANY assistant turn exists in the conversation history the opening has
+    // been spoken (covers the LLM greeting, static greeting, and the
+    // firstSpeaker=user case where the LLM's own first reply IS the opener), so
+    // append a one-shot note marking those opening-only directives as satisfied.
+    // The persistent rules (NAME PRIORITY, DO NOT RE-ASK KNOWN INFORMATION,
+    // memory FACTS) explicitly stay in force.
+    //
+    // Placement: AFTER the staged-prompt rebuild (so it survives the prompt
+    // replacement) and AFTER cacheBaseForTurn was captured (so the Gemini cached
+    // prefix stays byte-identical — this lives in the volatile per-turn tail).
+    // It is appended BEFORE the per-minute [CURRENT DATE & TIME] block and its
+    // text is constant, so once it first appears the prefix stays stable for
+    // OpenAI-style prompt caching (at most one cache-miss turn when it appears).
+    const hasOpeningOnlyDirective =
+      this.agent.systemPrompt.includes("THIS IS A RETURNING CALLER") ||
+      this.agent.systemPrompt.includes("RESUME, DO NOT RESTART") ||
+      this.agent.systemPrompt.includes("=== RESUME DIRECTIVE ===");
+    const openerAlreadySpoken = this.conversationHistory.some((t) => t.role === "assistant");
+    if (hasOpeningOnlyDirective && openerAlreadySpoken) {
+      systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
     }
 
     // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────
