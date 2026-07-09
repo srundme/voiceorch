@@ -29,31 +29,97 @@ function hashString(str: string): number {
 
 /**
  * Fallback-only gender bucket, derived purely from a voice's stable id.
- * Used ONLY when no real gender label is available for a voice (e.g. an
- * older `platform_listed_voices` row saved before gender was curated).
- * Both `voices.tsx` and `vibe/index.tsx` source their real gender label
- * from the same `platform_listed_voices.gender` column, so this fallback
- * is rarely hit — but when it is, it's still deterministic per voice id.
+ * Used ONLY when neither the description text nor the curated gender field
+ * yields an unambiguous signal. Still deterministic per voice id.
  */
 export function inferVoiceGender(voiceId: string): "male" | "female" {
   return hashString(voiceId) % 2 === 0 ? "male" : "female";
 }
 
-function normalizeGender(gender: string | null | undefined, voiceId: string): "male" | "female" {
-  const g = gender?.toLowerCase();
-  if (g === "male" || g === "female") return g;
-  return inferVoiceGender(voiceId);
+type AgeBucket = "young" | "middle" | "senior";
+
+/** Word-boundary regexes for gender cues actually seen in the catalog's
+ * description text, e.g. "Young Female — Gentle...", "Middle Aged Male -
+ * Bold...", "...female for professional...", "...male great for...". */
+const FEMALE_DESC_RE = /\b(female|woman|women|she\/her|actress)\b/i;
+const MALE_DESC_RE = /\b(male|man|men|he\/him|actor)\b/i;
+
+const YOUNG_DESC_RE = /\b(young|youthful|teen|youth)\b/i;
+const SENIOR_DESC_RE = /\b(senior|older|elder|elderly|mature|aged(?!\s+male|\s+female))\b|\bmiddle[\s-]?aged\b|\bold\b/i;
+// Note: "middle aged" is treated as its own senior-leaning-but-distinct bucket below.
+const MIDDLE_DESC_RE = /\bmiddle[\s-]?aged\b|\bmiddle[\s-]?age\b/i;
+
+/**
+ * Infers gender from a voice's free-text description, which reliably
+ * encodes real gender (and often age) even though the curated `gender`
+ * column is mostly "Neutral" in the catalog. Falls back to the curated
+ * `gender` field only if it is literally "male"/"female", and finally to
+ * the hash-based fallback. Never regresses voices that already resolve
+ * correctly via the curated field.
+ */
+export function inferVoiceGenderAndAge(
+  voiceId: string,
+  gender?: string | null,
+  description?: string | null,
+): { gender: "male" | "female"; age: AgeBucket | null } {
+  const desc = description ?? "";
+  const hasFemale = FEMALE_DESC_RE.test(desc);
+  const hasMale = MALE_DESC_RE.test(desc);
+
+  let resolvedGender: "male" | "female" | null = null;
+  if (hasFemale && !hasMale) resolvedGender = "female";
+  else if (hasMale && !hasFemale) resolvedGender = "male";
+
+  if (!resolvedGender) {
+    const curated = gender?.toLowerCase().trim();
+    if (curated === "male" || curated === "female") resolvedGender = curated;
+  }
+
+  if (!resolvedGender) resolvedGender = inferVoiceGender(voiceId);
+
+  let age: AgeBucket | null = null;
+  if (MIDDLE_DESC_RE.test(desc)) age = "middle";
+  else if (SENIOR_DESC_RE.test(desc)) age = "senior";
+  else if (YOUNG_DESC_RE.test(desc)) age = "young";
+
+  return { gender: resolvedGender, age };
+}
+
+/** Splits an 8-image pool into young/middle/senior thirds (3/3/2 split). */
+function ageSlice(pool: string[], age: AgeBucket): string[] {
+  const young = pool.slice(0, 3);
+  const middle = pool.slice(3, 6);
+  const senior = pool.slice(6, 8);
+  if (age === "young") return young.length ? young : pool;
+  if (age === "middle") return middle.length ? middle : pool;
+  return senior.length ? senior : pool;
 }
 
 /**
  * Deterministically maps a voice to one of a fixed set of bundled headshot
- * avatars: the real `gender` label picks the male/female pool (falling
- * back to an id-derived bucket only when no real label is present), and a
- * hash of the voice id picks the specific image within that pool. Same
- * voice id + gender always resolves to the exact same image, regardless of
- * list order, reloads, or which page renders it.
+ * avatars. Gender is resolved primarily from the voice's description text
+ * (reliable in this catalog), falling back to the curated `gender` field
+ * only when it's an unambiguous "male"/"female", and finally to an
+ * id-derived hash. When an age bucket is determinable from the description,
+ * the avatar is picked from an age-appropriate slice of that gender's pool;
+ * otherwise the full pool is used. Same voice id always resolves to the
+ * exact same image, regardless of list order, reloads, or which page
+ * renders it.
  */
-export function getVoiceAvatar(voiceId: string, gender?: string | null): string {
-  const pool = normalizeGender(gender, voiceId) === "female" ? FEMALE_AVATARS : MALE_AVATARS;
+export function getVoiceAvatar(voiceId: string, gender?: string | null, description?: string | null): string {
+  const { gender: resolvedGender, age } = inferVoiceGenderAndAge(voiceId, gender, description);
+  const fullPool = resolvedGender === "female" ? FEMALE_AVATARS : MALE_AVATARS;
+  const pool = age ? ageSlice(fullPool, age) : fullPool;
   return pool[hashString(voiceId) % pool.length]!;
+}
+
+/** Same gender resolution used by `getVoiceAvatar`, exposed for UI labels
+ * (e.g. the "Female"/"Male" pill on the Voices page) so the label and the
+ * avatar never disagree. */
+export function resolveVoiceGenderLabel(
+  voiceId: string,
+  gender?: string | null,
+  description?: string | null,
+): "Female" | "Male" {
+  return inferVoiceGenderAndAge(voiceId, gender, description).gender === "female" ? "Female" : "Male";
 }

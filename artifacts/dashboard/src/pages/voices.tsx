@@ -14,7 +14,7 @@ import {
 import { Mic2, Loader2, Search, Play, Square, AlertTriangle, Info, Star, ArrowUpDown, User } from "lucide-react";
 import { formatApiError } from "@/lib/format-api-error";
 import { cn } from "@/lib/utils";
-import { getVoiceAvatar, inferVoiceGender } from "@/lib/voice-avatars";
+import { getVoiceAvatar, resolveVoiceGenderLabel } from "@/lib/voice-avatars";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
@@ -39,10 +39,7 @@ interface Voice {
 
 const GENDER_OPTIONS = ["Female", "Male"] as const;
 function inferGender(voice: Voice): (typeof GENDER_OPTIONS)[number] {
-  const real = voice.gender?.toLowerCase();
-  if (real === "female") return "Female";
-  if (real === "male") return "Male";
-  return inferVoiceGender(voice.id) === "female" ? "Female" : "Male";
+  return resolveVoiceGenderLabel(voice.id, voice.gender, voice.description);
 }
 
 const ACCENT_BY_LANG_PREFIX: Record<string, string> = {
@@ -347,7 +344,7 @@ export default function VoicesPage() {
                   <CardContent className="p-5 flex flex-col gap-3 h-full">
                     <div className="flex items-start gap-3 pr-6">
                       <img
-                        src={getVoiceAvatar(voice.id, voice.gender)}
+                        src={getVoiceAvatar(voice.id, voice.gender, voice.description)}
                         alt=""
                         className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-border/60"
                       />

@@ -1825,7 +1825,7 @@ function VoicePill({ voice, isSelected, isPlaying, onPreview, onSelect }: {
     )}>
       {/* Headshot avatar */}
       <img
-        src={getVoiceAvatar(voice.voiceId, voice.gender)}
+        src={getVoiceAvatar(voice.voiceId, voice.gender, voice.description)}
         alt=""
         className="h-7 w-7 rounded-full object-cover shrink-0 ring-1 ring-border/60"
       />
