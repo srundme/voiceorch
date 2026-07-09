@@ -69,6 +69,7 @@ const NAV_PRIMARY = [
 ];
 
 const NAV_SETTINGS = [
+  { name: "Overview",      href: "/app/settings",      icon: Settings },
   { name: "Providers",     href: "/app/providers",     icon: Key },
   { name: "Voices",        href: "/app/voices",        icon: Mic2 },
   { name: "Phone Numbers", href: "/app/phone-numbers", icon: Phone },
@@ -77,7 +78,6 @@ const NAV_SETTINGS = [
   { name: "Webhooks",      href: "/app/webhooks",      icon: Webhook },
   { name: "Wallet",        href: "/app/wallet",        icon: Wallet },
   { name: "Usage",         href: "/app/usage",         icon: TrendingUp },
-  { name: "Overview",      href: "/app/settings",      icon: Settings },
 ];
 
 const ROUTE_TITLES: [string, string][] = [
@@ -274,7 +274,9 @@ function SidebarContent({
   onSearchOpen?: () => void;
 }) {
   const [location] = useLocation();
-  const isInSettings = NAV_SETTINGS.some(s => location.startsWith(s.href));
+  const isInSettings =
+    location.startsWith("/app/settings") ||
+    NAV_SETTINGS.some(s => location.startsWith(s.href));
 
   const [settingsOpen, setSettingsOpen] = useState(() => {
     try { return localStorage.getItem(LS_SETTINGS) === "true"; } catch { return false; }
