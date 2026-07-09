@@ -982,6 +982,9 @@ export class OrchestrationPipeline {
       this.agent.ttsProvider, ttsKey, this.agent.ttsVoice, this.agent.ttsModel,
       ttsExtraConfig, agentLanguage, this.agent.ttsSpeed
     );
+    // Pre-warm any persistent TTS connections (e.g. Cartesia WebSocket) so the
+    // greeting doesn't pay the TCP+TLS+WS handshake cost on its first synthesis.
+    this.tts.warmup?.();
 
     if (this.agent.noiseCancellationEnabled) {
       logger.info({ callId: config.callId }, "Noise cancellation enabled (audio worker pool)");

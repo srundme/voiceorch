@@ -536,6 +536,9 @@ export interface TTSAdapter {
   /** Optional teardown — close any persistent connections (e.g. WebSocket).
    *  Called by the pipeline's close() when the call ends. */
   close?(): void;
+  /** Optional pre-warm — open persistent connections before the first synthesis
+   *  request so the greeting doesn't pay the connection cost. Fire-and-forget. */
+  warmup?(): void;
 }
 
 export type TelephonyProvider = "twilio" | "plivo" | "vobiz";

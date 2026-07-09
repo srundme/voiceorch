@@ -94,6 +94,14 @@ export class CartesiaTTS implements TTSAdapter {
     this.language = lang.split("-")[0];
   }
 
+  /** Fire-and-forget WS pre-warm — called at session start so the greeting
+   *  doesn't pay the TCP+TLS+WS handshake cost on first synthesis. */
+  warmup(): void {
+    void this.getOrOpenWs().catch(() => {
+      // Failure here is fine — synthesizeStream will retry or fall back to REST.
+    });
+  }
+
   close(): void {
     this.wsFailedPermanently = true;
     if (this.ws) {
