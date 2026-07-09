@@ -1,0 +1,69 @@
+You are integrating my app with Zelto, a production analytics platform for
+voice and chat AI agents. Zelto ingests each finished conversation over one
+HTTP endpoint, then transcribes and analyzes it. Your task: add code to this
+codebase that POSTs every finished conversation to Zelto.
+
+Read these before writing code — they are the source of truth. If anything
+below conflicts with them, follow the docs:
+- Guide: https://docs.zelto.ai/docs/integrations/api-call-upload
+- API reference (full request shape + a playground to test a payload):
+  https://docs.zelto.ai/api-reference/agents/list-agents
+- If this editor has the Zelto MCP server connected, call the `read_docs`
+  tool with path `integrations/api-call-upload` for the current version.
+
+Contract:
+- POST https://api.zelto.ai/webhooks/calls
+- Headers: `Authorization: Bearer $ZELTO_API_KEY`, `X-Zelto-Provider: zelto`,
+  `Content-Type: application/json`. Read the key from the ZELTO_API_KEY
+  environment variable — never hardcode or log it.
+- Required: `call.externalId` (a stable, unique id for the conversation) plus
+  an agent reference — either `agent.externalId` (Zelto finds-or-creates the
+  agent; use a stable id per agent, not per conversation) or `agentId` (an
+  existing Zelto agent UUID). Everything else is optional.
+- Optional `version`: a label for the agent build or prompt revision behind the
+  conversation (e.g. `"v3"`). Zelto records it as the call's agent version so you
+  can segment analytics by version. Use a stable string per build — the same
+  string reuses a version, a new string starts one.
+- `transcript.turns[]` are `{ role, content }`; role is one of user,
+  assistant, system, tool.
+- Voice calls: also send call.startedAt / call.endedAt (ISO 8601),
+  call.recordingUrl (Zelto re-hosts the audio), and any of
+  call.durationSeconds, call.endedReason, call.cost,
+  call.customer.{number,name}, plus per-turn startSeconds / endSeconds.
+- Text or chat conversations: omit the audio/telephony fields (recordingUrl,
+  per-turn seconds, usually customer.number); record the channel in metadata.
+- Response: 200 `{ "received": true }` means accepted and queued — processing
+  is async, so a 200 is not "fully processed". A 4xx returns
+  `{ "error", "details"? }`: 401 = missing/invalid key, 400 = invalid JSON or
+  a field validation error (details names the offending fields).
+- Idempotency: call.externalId is the dedup key. Re-POSTing the same id
+  updates the conversation in place and never double-charges, so retries and
+  later enrichment re-sends are both safe.
+
+Minimal body:
+
+```json
+{
+  "agent": { "externalId": "support-bot", "name": "Support Bot" },
+  "call": { "externalId": "conv_01HXYZ" },
+  "transcript": {
+    "turns": [
+      { "role": "assistant", "content": "Hi, how can I help?" },
+      { "role": "user", "content": "I need to reschedule." }
+    ]
+  }
+}
+```
+
+Implementation:
+- Send each conversation once, right after it ends (e.g. an end-of-call or
+  end-of-session hook), built from data you already have.
+- Don't block the user-facing path: send from a background job/queue and
+  tolerate Zelto being briefly unavailable. On a non-200, log the status and
+  body and retry with backoff (safe, because externalId dedups).
+- Follow this codebase's existing conventions for HTTP, config, logging, and
+  async work. Add ZELTO_API_KEY to the env/config.
+
+Verify: set ZELTO_API_KEY, run one real conversation, and confirm it lands
+under Conversations in the Zelto dashboard within a few seconds. If it
+doesn't, check the POST response body for the reason.

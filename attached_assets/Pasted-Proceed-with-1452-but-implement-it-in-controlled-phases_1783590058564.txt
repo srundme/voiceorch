@@ -1,0 +1,36 @@
+Proceed with #1452, but implement it in controlled phases.
+
+Important:
+Do not rewrite the complete Knowledge Base architecture if the existing FAQ, Paste Text, and File Upload pipelines are already functional. Reuse and harden the existing ingestion services.
+
+Implementation order:
+1. Audit and verify the existing FAQ, Paste Text, File Upload, and Website ingestion paths.
+2. Fix the Website crawler and verify multi-page website ingestion independently.
+3. Verify knowledge_entries and search_vector indexing for all four source types.
+4. Verify runtime retrieval through the existing KB retrieval path before touching Vibe Builder.
+5. Then connect Vibe Builder to the same proven ingestion endpoints.
+6. Add real processing/crawling/ready/partial/failed status handling in Vibe UI.
+7. Attach successfully processed source IDs to agents created through Vibe Builder.
+8. Add Refine with AI support without replacing or deleting existing attached knowledge sources.
+9. Run end-to-end regression tests for both:
+   - Manual Knowledge flow
+   - Vibe Builder flow
+
+Critical safeguards:
+- Do not change the call pipeline.
+- Do not change LLM, STT, or TTS configuration behavior.
+- Do not remove or replace existing agent knowledge associations during Refine with AI.
+- Do not claim KB upload success until at least one indexed knowledge entry exists.
+- Do not bake full KB content into the system prompt.
+- Preserve existing working FAQ, Paste Text, and File Upload behavior while fixing and unifying the ingestion architecture.
+
+Before changing the database schema, inspect the current knowledge_sources.status column and existing migration conventions. Only add a migration if the current schema cannot represent the required lifecycle safely.
+
+After each phase, report:
+- files changed
+- behavior changed
+- tests performed
+- result
+- any regression risk
+
+Start with Phase 1: audit and verification. Do not implement later phases until the current ingestion paths and retrieval behavior are clearly understood.
