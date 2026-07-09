@@ -1,0 +1,56 @@
+Also analyze how selected/configured agent tools should be represented in the Vibe Builder Agent Preview panel.
+
+Current behavior:
+The Agent Preview on the right side already shows live agent configuration such as:
+- Agent name
+- Language
+- LLM / AI Brain
+- STT
+- TTS / Voice Engine
+- Voice
+- Knowledge Base
+- Existing feature configurations
+
+Required behavior:
+Add a Tools section to the Vibe Builder Agent Preview so users can see the tool configuration being built in real time.
+
+Expected behavior:
+1. When Vibe Builder detects a domain-specific requirement, show the relevant tool recommendations/configuration in the Agent Preview.
+
+2. For example, if the user is creating an appointment-booking agent, the right-side preview should show an Appointment & Scheduling Tools section containing the supported booking tools, such as:
+- Book Appointment
+- Check Availability
+- List Bookings
+- Reschedule Booking
+- Cancel Booking
+
+3. Clearly distinguish tool states such as:
+- Recommended / required for this agent use case
+- Selected and will be enabled
+- Not selected / disabled
+- Requires setup or dependency configuration
+
+4. If appointment booking is the agent's core purpose, identify the minimum required default tools based on the actual backend tool dependencies and show them as selected by default. Do not guess or hardcode dependencies before inspecting the existing tool architecture.
+
+5. When the user changes tool selection through the Vibe Builder conversation, update the right-side Agent Preview immediately.
+
+6. When the agent is created, the final persisted tool configuration must exactly match what was shown in the Vibe Builder preview.
+
+7. After creation, Agent → Tools must show the same tools enabled. The Vibe Preview and the persisted agent tool configuration must not diverge.
+
+8. If a selected tool requires Calendar connection, event type, scheduling configuration, or another dependency, show that setup state clearly in the preview.
+
+9. Investigate whether the preview can use the same tool registry, metadata, categories, labels, and dependency definitions as the existing Agent → Tools page instead of maintaining a separate hardcoded list.
+
+10. This should be designed generically so future tool categories can also appear dynamically in Vibe Builder.
+
+Analyze only first. Do not implement yet.
+
+Report:
+- How tool state should flow from Vibe conversation → temporary Vibe config → Agent Preview → persisted agent tools.
+- Which frontend state and streamed Vibe events would need to support tool updates.
+- How to ensure the preview always matches the final persisted configuration.
+- How recommended/default tools should be determined for domain-specific agents.
+- How dependency/setup status should be represented.
+- Which existing components or tool metadata can be reused from the Agent → Tools page.
+- The smallest safe implementation plan without affecting existing manual agent creation or tool behavior.

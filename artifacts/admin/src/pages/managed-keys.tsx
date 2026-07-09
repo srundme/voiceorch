@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   XCircle,
   FlaskConical,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -42,7 +43,7 @@ type KeyField = {
   placeholder: string;
 };
 
-type CategoryId = "llm" | "stt" | "tts" | "telephony";
+type CategoryId = "llm" | "stt" | "tts" | "telephony" | "integrations";
 
 type Category = {
   id: CategoryId;
@@ -217,6 +218,23 @@ const CATEGORIES: Category[] = [
         label: "VoBiz Auth Token",
         description: "Platform VoBiz auth token used for managed telephony.",
         placeholder: "vobiz-auth-token",
+      },
+    ],
+  },
+  {
+    id: "integrations",
+    title: "Integrations",
+    description: "Third-party monitoring and analytics integrations",
+    icon: Activity,
+    iconBg: "bg-rose-500/15",
+    iconColor: "text-rose-400",
+    itemLabel: "New Integration Key",
+    fields: [
+      {
+        key: "zelto_api_key",
+        label: "Zelto API Key",
+        description: "Zelto call monitoring — transcript and metadata are pushed to Zelto after each call ends. Rotate here without redeploying.",
+        placeholder: "zelto_...",
       },
     ],
   },

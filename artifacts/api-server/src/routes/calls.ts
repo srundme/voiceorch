@@ -1074,6 +1074,23 @@ router.patch("/calls/:id/end", requireAuth, async (req, res): Promise<void> => {
     writeCrmCallOutcome(call.id).catch(() => {});
   }).catch(() => {});
 
+  // Zelto call monitoring (fire-and-forget)
+  import("../services/zelto.js").then(({ pushCallToZelto }) => {
+    pushCallToZelto({
+      callId:           call.id,
+      agentId:          call.agentId,
+      status:           call.status ?? undefined,
+      direction:        (call as any).direction ?? "inbound",
+      fromNumber:       call.fromNumber ?? null,
+      toNumber:         call.toNumber ?? null,
+      durationSeconds,
+      transcript:       call.transcript ?? null,
+      callSummary:      (call as any).callSummary ?? null,
+      dispositionResult: (call as any).dispositionResult as Record<string, unknown> | null ?? null,
+      endedAt:          new Date().toISOString(),
+    }).catch(() => {});
+  }).catch(() => {});
+
   const enriched = await enrichCall(call);
   res.json(EndCallResponse.parse(enriched));
 });

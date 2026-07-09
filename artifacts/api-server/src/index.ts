@@ -385,6 +385,7 @@ server.listen(port, () => {
       void seedManagedKeyFromEnv("managed_gemini_key",   "GEMINI_API_KEY");
       void seedManagedKeyFromEnv("managed_together_key",   "TOGETHER_API_KEY");
       void seedManagedKeyFromEnv("managed_openrouter_key", "OPENROUTER_API_KEY");
+      void seedManagedKeyFromEnv("zelto_api_key",          "ZELTO_API_KEY");
       void migrateSaarikaToSaaras();
       startCallbackPoller();
       startSpikeChecker();

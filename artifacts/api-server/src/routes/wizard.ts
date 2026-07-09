@@ -727,6 +727,8 @@ const MANAGED_KEY_NAMES = [
   // Telephony
   "managed_vobiz_auth_id",
   "managed_vobiz_auth_token",
+  // Integrations
+  "zelto_api_key",
 ];
 
 router.get("/admin/managed-keys", requireAdmin, async (_req, res): Promise<void> => {

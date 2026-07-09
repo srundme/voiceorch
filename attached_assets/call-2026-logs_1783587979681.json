@@ -1,0 +1,872 @@
+[
+  {
+    "id": 136320,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 129,
+      "agentName": "Galaxy Final",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2026,
+      "sessionId": "live-2026",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-09T09:05:00.375Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 136322,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "918637416033",
+        "from_number": "917971442381",
+        "agent_name": "Galaxy Final",
+        "caller_number": "917971442381",
+        "date": "Thursday, July 9, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY HEALTH INSURANCE\n\nMobile App — Complete User Guide\n\nApp Version V.3.2.0\n\nA complete walkthrough of every section, screen, and feature\n\nJune 2026\n\n1. App Overview\n\nThe Galaxy Health Insurance mobile app (Version V.3.2.0) is the all-in-one self-service platform for policyholders. It gives you full access to your insurance policies, claims, healthcare services, wellness programs, and account manageme"
+    },
+    "metadata": null
+  },
+  {
+    "id": 136324,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "sourceIds": [
+        7
+      ],
+      "injected": true,
+      "preview": "Title: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY HEALTH INSURANCE\n\nMobile App — Complete User Guide\n\nApp Version V.3.2.0\n\nA complete walkthrough of every section, screen, and feature\n\nJune 2026\n\n1. App Overview\n\nThe Galaxy Health Insurance mobile app (Version V.3.2.0) is the all-in-one self-service platform for policyholders. It gives you full access to your insurance policies, claims, h"
+    },
+    "metadata": null
+  },
+  {
+    "id": 136321,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 136323,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 136326,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 136325,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "a8adc74b-c9c1-45e0-aae7-9a60ba64bbee"
+    }
+  },
+  {
+    "id": 136327,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:00.483Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "81ab2f33800d",
+      "promptLength": 38038,
+      "preview": "=== KNOWLEDGE BASE ===\n\nUse the following information to answer questions accurately. Always prefer this over your general training data.\n\n\n\nTitle: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY "
+    }
+  },
+  {
+    "id": 136328,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:01.359Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 136329,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:01.359Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 136330,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:02.006Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 652,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 5,
+      "firstByteMs": 325
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 652
+    }
+  },
+  {
+    "id": 136331,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:02.448Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 0,
+      "durationMs": 1089
+    }
+  },
+  {
+    "id": 136332,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:05.275Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 196,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136333,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:05.403Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136334,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:06.996Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1618,
+      "turnNumber": 1,
+      "durationMs": 1618
+    }
+  },
+  {
+    "id": 136335,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:06.999Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "வணக்கம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136337,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.020Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நா வர்ஷா பேசறேன், Galaxy Health Insurance-ல இருந்து."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136336,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.020Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க July ninth, two thousand twenty six Galaxy Marvel policy எடுத்திருந்தீங்க இல்லையா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136338,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.026Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1618,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "வணக்கம். நா வர்ஷா பேசறேன், Galaxy Health Insurance-ல இருந்து. நீங்க July ninth, two thousand twenty six Galaxy Marvel policy எடுத்திருந்தீங்க இல்லையா?"
+    },
+    "metadata": {
+      "inputTokens": 13457,
+      "outputTokens": 45,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136339,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.049Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136340,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.558Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 560,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 22754,
+      "textLength": 8,
+      "firstByteMs": 250
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 560
+    }
+  },
+  {
+    "id": 136341,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.933Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 917,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 52,
+      "firstByteMs": 295
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 917
+    }
+  },
+  {
+    "id": 136342,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.949Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 711,
+      "turnNumber": 1,
+      "durationMs": 900
+    }
+  },
+  {
+    "id": 136343,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:07.949Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136344,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:08.104Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1085,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 155874,
+      "textLength": 88,
+      "firstByteMs": 192
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1085
+    }
+  },
+  {
+    "id": 136346,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:10.956Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 1,
+      "durationMs": 3000
+    }
+  },
+  {
+    "id": 136345,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:10.956Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 136347,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:15.950Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4871,
+      "turnNumber": 1,
+      "durationMs": 5001
+    }
+  },
+  {
+    "id": 136348,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:18.292Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆமா ஆமா மேம்.",
+      "endDetectToFinalMs": 159,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136349,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:18.402Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136350,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.206Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 814,
+      "turnNumber": 2,
+      "durationMs": 814
+    }
+  },
+  {
+    "id": 136351,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.272Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "எங்க Galaxy குடும்பத்துக்கு உங்கள welcome பண்றதுல ரொம்ப சந்தோஷம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136352,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.273Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "இந்த கால் வந்து, security purpose க்காக ரெக்கார்ட் பண்றோம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136353,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.273Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஓகேவா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136354,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.283Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 814,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "எங்க Galaxy குடும்பத்துக்கு உங்கள welcome பண்றதுல ரொம்ப சந்தோஷம். இந்த கால் வந்து, security purpose க்காக ரெக்கார்ட் பண்றோம். ஓகேவா?"
+    },
+    "metadata": {
+      "inputTokens": 13538,
+      "outputTokens": 47,
+      "cachedTokens": 0,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136355,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.323Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136356,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:19.704Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 431,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 6,
+      "firstByteMs": 137
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 431
+    }
+  },
+  {
+    "id": 136357,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:20.125Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 854,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 109794,
+      "textLength": 59,
+      "firstByteMs": 140
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 854
+    }
+  },
+  {
+    "id": 136358,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:20.252Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 981,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117474,
+      "textLength": 65,
+      "firstByteMs": 269
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 981
+    }
+  },
+  {
+    "id": 136359,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:23.339Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3671,
+      "turnNumber": 2,
+      "durationMs": 4016
+    }
+  },
+  {
+    "id": 136360,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:23.339Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136362,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:26.843Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3431,
+      "turnNumber": 2,
+      "durationMs": 3501
+    }
+  },
+  {
+    "id": 136361,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:26.843Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 136363,
+    "callId": 2026,
+    "agentId": 129,
+    "ts": "2026-07-09T09:05:27.463Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 2,
+      "durationMs": 621
+    }
+  }
+]
