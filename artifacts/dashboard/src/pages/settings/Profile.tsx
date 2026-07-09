@@ -32,13 +32,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="px-8 py-2 max-w-[1000px] mx-auto space-y-8">
       <Link href="/app/settings">
         <a className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="h-4 w-4" /> Back to Settings
         </a>
       </Link>
-      <div>
+      <div className="space-y-1">
         <h2 className="text-2xl font-bold tracking-tight">Profile</h2>
         <p className="text-muted-foreground text-sm">Your basic account identity.</p>
       </div>
@@ -53,8 +53,8 @@ export default function ProfilePage() {
             Name and email are sourced from your sign-in account and can't be changed here.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5 max-w-sm">
-          <div className="flex items-center gap-4">
+        <CardContent className="space-y-8 max-w-md">
+          <div className="flex items-center gap-4 pb-2">
             <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center text-lg font-semibold shrink-0">
               {initialsFor(name, email)}
             </div>
@@ -64,31 +64,35 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-name">Name</Label>
-            <input
-              id="profile-name"
-              value={name ?? ""}
-              readOnly
-              disabled
-              className="flex h-9 w-full rounded-md border border-border/60 bg-muted/20 px-3 py-1 text-sm text-muted-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
-            />
+          <div className="space-y-6">
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-name">Name</Label>
+              <input
+                id="profile-name"
+                value={name ?? ""}
+                readOnly
+                disabled
+                className="flex h-9 w-full rounded-md border border-border/60 bg-muted/20 px-3 py-1 text-sm text-muted-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-email">Email</Label>
+              <input
+                id="profile-email"
+                value={email ?? ""}
+                readOnly
+                disabled
+                className="flex h-9 w-full rounded-md border border-border/60 bg-muted/20 px-3 py-1 text-sm text-muted-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+              />
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-email">Email</Label>
-            <input
-              id="profile-email"
-              value={email ?? ""}
-              readOnly
-              disabled
-              className="flex h-9 w-full rounded-md border border-border/60 bg-muted/20 px-3 py-1 text-sm text-muted-foreground shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
-            />
+          <div className="pt-2">
+            <Button onClick={handleSave} className="w-full sm:w-auto">
+              Save Changes
+            </Button>
           </div>
-
-          <Button onClick={handleSave} className="w-full sm:w-auto">
-            Save Changes
-          </Button>
         </CardContent>
       </Card>
     </div>
