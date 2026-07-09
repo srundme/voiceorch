@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, DollarSign, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, Wrench } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, Wrench } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -234,15 +234,29 @@ function AssignDialog({
   );
 
   function handleSave() {
+    const newAgentId = selectedAgentId === "none" ? null : parseInt(selectedAgentId, 10);
     assign.mutate(
+      { id: number.id, data: { agentId: newAgentId } },
       {
-        id: number.id,
-        data: { agentId: selectedAgentId === "none" ? null : parseInt(selectedAgentId, 10) },
-      },
-      {
-        onSuccess: () => {
+        onSuccess: async () => {
           queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
-          toast({ title: "Assignment updated" });
+          // Auto-wire the VoBiz inbound webhook whenever a number is assigned to an agent,
+          // so the user doesn't have to click the wrench separately.
+          if (newAgentId !== null) {
+            try {
+              const token = localStorage.getItem("voiceorch:session");
+              await fetch(`/api/phone-numbers/${number.id}/configure-webhook`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+              });
+            } catch {
+              // Non-fatal — number is assigned; webhook wiring can be retried via the wrench.
+            }
+          }
+          toast({ title: "Number assigned", description: newAgentId ? "Inbound routing wired automatically." : "Number unassigned." });
           onClose();
         },
         onError: (err: unknown) => toast({ title: "Error", variant: "destructive", description: formatApiError(err) }),
@@ -887,13 +901,6 @@ export default function PhoneNumbersPage() {
                     </div>
                   )}
                 </div>
-
-                {(n.monthlyRateCents ?? 0) > 0 && (
-                  <div className="flex items-center gap-0.5 text-xs text-muted-foreground shrink-0">
-                    <DollarSign className="h-3 w-3" />
-                    <span>{((n.monthlyRateCents ?? 0) / 100).toFixed(2)}/mo</span>
-                  </div>
-                )}
 
                 <div className="flex items-center gap-2 shrink-0">
                   {n.agentId && (
