@@ -77,7 +77,7 @@ const NAV_SETTINGS = [
   { name: "Webhooks",      href: "/app/webhooks",      icon: Webhook },
   { name: "Wallet",        href: "/app/wallet",        icon: Wallet },
   { name: "Usage",         href: "/app/usage",         icon: TrendingUp },
-  { name: "General",       href: "/app/settings",      icon: Settings },
+  { name: "Overview",      href: "/app/settings",      icon: Settings },
 ];
 
 const ROUTE_TITLES: [string, string][] = [

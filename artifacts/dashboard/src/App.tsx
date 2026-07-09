@@ -23,6 +23,7 @@ import CallDetail from "@/pages/calls/[id]";
 import ProvidersList from "@/pages/providers/index";
 import Settings from "@/pages/settings/index";
 import ConferencingPage from "@/pages/settings/Conferencing";
+import ProfilePage from "@/pages/settings/Profile";
 import KnowledgeBasePage from "@/pages/knowledge-base";
 import WalletPage from "@/pages/wallet";
 import ActivityPage from "@/pages/activity";
@@ -385,6 +386,7 @@ function AppRoutes() {
         <Route path="/app/scheduling/conferencing" component={SchedulingConferencingPage} />
         <Route path="/app/scheduling" component={SchedulingPage} />
         <Route path="/app/settings" component={Settings} />
+        <Route path="/app/settings/profile" component={ProfilePage} />
         <Route path="/app/usage" component={UsagePage} />
         <Route path="/app/kyc" component={KycPage} />
         <Route path="/app/api-keys" component={ApiKeysPage} />

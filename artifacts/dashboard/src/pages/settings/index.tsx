@@ -5,7 +5,7 @@ import {
   Copy, Check, Key, ChevronRight, ChevronLeft,
   Plus, Eye, EyeOff, Users, Timer,
   Sun, Moon, Monitor, Palette, Lock,
-  User, Building2, UserPlus, KeyRound,
+  User, KeyRound,
   Terminal, Webhook, Phone, Sparkles, Mic2,
   Wallet, BarChart3, Layers, CreditCard,
   Shield, LogIn, ShieldCheck, ScrollText,
@@ -541,12 +541,10 @@ function CategoryGrid({ onOpenGeneral }: { onOpenGeneral: () => void }) {
       <CategoryCard
         icon={User}
         title="Account"
-        description="Manage your profile, organization and team members."
+        description="Manage your profile and password."
         iconClassName="bg-violet-500/10 text-violet-500"
         links={[
-          { icon: User, label: "Profile", disabled: true, badge: "Coming soon" },
-          { icon: Building2, label: "Organization", disabled: true, badge: "Coming soon" },
-          { icon: UserPlus, label: "Team Members", disabled: true, badge: "Coming soon" },
+          { icon: User, label: "Profile", href: "/app/settings/profile" },
           { icon: Lock, label: "Change Password", onClick: onOpenGeneral },
         ]}
       />
@@ -673,7 +671,8 @@ export default function SettingsPage() {
           <>
             <div>
               <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-              <p className="text-muted-foreground">Manage your account, integrations, preferences and billing.</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mt-1">Overview</p>
+              <p className="text-muted-foreground mt-1">Manage your account, integrations, preferences and billing.</p>
             </div>
             <QuickOverview />
             <CategoryGrid onOpenGeneral={() => setView("general")} />
