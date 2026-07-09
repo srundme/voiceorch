@@ -655,13 +655,19 @@ router.patch("/phone-numbers/:id/assign", requireAuth, async (req, res): Promise
 
   if (!row) { res.status(404).json({ error: "Phone number not found" }); return; }
 
-  // Whenever a number becomes an agent's inbound number, it also becomes that
-  // agent's outbound caller ID automatically — inbound and outbound should stay
-  // the same number unless the user explicitly picks a different one later.
+  // Whenever a number becomes an agent's inbound number, also set inboundPhoneNumberId
+  // (so the agent page shows it correctly) and outboundPhoneNumberId (same number is
+  // used for outbound caller ID unless the user overrides it later).
+  // When unassigning (agentId === null) clear the previous agent's inbound reference.
   if (body.data.agentId) {
     await db.update(agentsTable)
-      .set({ outboundPhoneNumberId: row.id })
+      .set({ inboundPhoneNumberId: row.id, outboundPhoneNumberId: row.id })
       .where(and(eq(agentsTable.id, body.data.agentId), eq(agentsTable.userId, clerkId)));
+  } else {
+    // Clear inboundPhoneNumberId on whichever agent previously held this number.
+    await db.update(agentsTable)
+      .set({ inboundPhoneNumberId: null })
+      .where(and(eq(agentsTable.inboundPhoneNumberId, row.id), eq(agentsTable.userId, clerkId)));
   }
 
   await logActivity({
