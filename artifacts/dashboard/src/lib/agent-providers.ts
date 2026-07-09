@@ -9,7 +9,7 @@ export const LLM_PROVIDERS = [
   { value: "qwen",      label: "Qwen (via Groq)" },
   { value: "groq",      label: "Groq" },
   { value: "sarvam",    label: "Sarvam" },
-  { value: "together",  label: "Together AI (Qwen3.6 / Qwen3.5)" },
+  { value: "together",  label: "Together AI (Qwen3.6 / MiniMax M3)" },
   { value: "openrouter", label: "OpenRouter (Qwen3.5 / Qwen3.6)" },
 ];
 
@@ -51,6 +51,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   together: [
     { value: "Qwen/Qwen3.6-35B-A3B",   label: "Qwen3.6 35B-A3B — fast, low cost (recommended)" },
     { value: "Qwen/Qwen3.5-397B-A17B", label: "Qwen3.5 397B-A17B — best quality, agentic use" },
+    { value: "MiniMaxAI/MiniMax-M3",   label: "MiniMax M3 — multilingual, strong Tamil/Indic (BYOP)" },
   ],
   openrouter: [
     { value: "qwen/qwen3.6-35b-a3b",   label: "Qwen3.6 35B-A3B — ~203ms, ~$0.0023/min (recommended, fastest)" },

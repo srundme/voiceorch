@@ -4,19 +4,28 @@ import { toOpenAIMessages } from "./openai-messages.js";
 
 /**
  * Together AI — OpenAI-compatible gateway to open-weight models.
- * Used as the managed LLM provider for Qwen3.6 and Qwen3.5 model family.
  * Platform provides a managed_together_key so users on the managed plan
- * can access these models without supplying their own API key.
+ * can access Qwen3.x models without supplying their own API key.
+ * BYOP users can add their own Together AI key to access additional models
+ * such as MiniMax M3.
  *
- * Models: Qwen/Qwen3.6-35B-A3B (fast), Qwen/Qwen3.5-397B-A17B (quality)
+ * Models: Qwen/Qwen3.6-35B-A3B, Qwen/Qwen3.5-397B-A17B, MiniMaxAI/MiniMax-M3
  * Endpoint: https://api.together.xyz/v1
  *
- * Tool calling: both models support native tool/function calling.
+ * Tool calling: Qwen3.x and MiniMax M3 all support native function calling.
  */
 
 const DEFAULT_MODEL = "Qwen/Qwen3.6-35B-A3B";
 
 const TOOL_CAPABLE_MODELS = new Set([
+  "Qwen/Qwen3.6-35B-A3B",
+  "Qwen/Qwen3.5-397B-A17B",
+  "MiniMaxAI/MiniMax-M3",
+]);
+
+// Only Qwen3.x models accept the Together-specific `reasoning` suppression field.
+// Sending it to other models (e.g. MiniMax) may cause a 400 error.
+const REASONING_FIELD_MODELS = new Set([
   "Qwen/Qwen3.6-35B-A3B",
   "Qwen/Qwen3.5-397B-A17B",
 ]);
@@ -74,13 +83,14 @@ export class TogetherLLM implements LLMAdapter {
     const toolChoice = togetherTools ? (hasSchedulingTools ? "required" : "auto") : undefined;
 
     // Disable reasoning/thinking tokens — they add latency before first spoken word
-    // and are never useful for a real-time voice call. Cast to any because the
-    // OpenAI SDK types don't expose the Together AI-specific `reasoning` field.
+    // and are never useful for a real-time voice call. Only send the Together-specific
+    // `reasoning` field to models that accept it; sending it to others (e.g. MiniMax)
+    // returns a 400. Cast to any because the OpenAI SDK types don't expose this field.
     const reqBody: any = {
       model:          this.model,
       stream:         true,
       stream_options: { include_usage: true },
-      reasoning:      { effort: "none" },
+      ...(REASONING_FIELD_MODELS.has(this.model) ? { reasoning: { effort: "none" } } : {}),
       messages: [
         { role: "system", content: systemPrompt },
         ...toOpenAIMessages(messages),
