@@ -1,0 +1,328 @@
+I want a comprehensive audit of all the third-party providers, integrations, and infrastructure currently used in SnapServe AI.
+
+Please inspect the actual codebase, configuration files, environment variables, and integration services. Do not make assumptions—only list what is currently implemented.
+
+---
+
+# 1. AI Providers
+
+List all AI providers currently integrated into SnapServe.
+
+Categorize them as:
+
+## LLM Providers
+
+For each provider, include:
+
+- Provider Name
+- Models currently supported
+- Where it is used
+- Current implementation status
+- Fallback support
+- Streaming support
+
+Examples:
+
+- OpenAI
+- Gemini
+- Claude
+- Sarvam
+- Groq
+- DeepSeek
+- Together AI
+- Ollama
+- OpenRouter
+
+---
+
+## TTS Providers
+
+List every Text-to-Speech provider.
+
+Include:
+
+- Provider Name
+- Voices supported
+- Streaming support
+- Languages
+- Current implementation status
+
+Examples:
+
+- ElevenLabs
+- Cartesia
+- Sarvam
+- Azure
+- Google
+- Amazon Polly
+
+---
+
+## STT Providers
+
+List every Speech-to-Text provider.
+
+Include:
+
+- Streaming support
+- Supported languages
+- Current implementation
+
+Examples:
+
+- Deepgram
+- Sarvam
+- AssemblyAI
+- Google
+- Azure
+- Whisper
+
+---
+
+## Telephony Providers
+
+List every telephony provider currently integrated.
+
+Examples:
+
+- Twilio
+- Plivo
+- Exotel
+- Knowlarity
+- VoBiz
+- Telnyx
+- SignalWire
+
+Explain:
+
+- Which one is currently active
+- Inbound support
+- Outbound support
+- Recording
+- Call Transfer
+- SIP support
+
+---
+
+# 2. Current Integrations
+
+List every external integration currently available.
+
+Examples:
+
+CRM
+
+- Zoho CRM
+- HubSpot
+- Salesforce
+- Pipedrive
+- Freshsales
+
+Communication
+
+- Gmail
+- Outlook
+- Slack
+- Microsoft Teams
+- WhatsApp
+
+Calendar
+
+- Google Calendar
+- Outlook Calendar
+- CalDAV
+
+Authentication
+
+- Google OAuth
+- Microsoft OAuth
+
+Storage
+
+- S3
+- Cloudinary
+- GCS
+
+Payments
+
+- Stripe
+- Razorpay
+
+Others
+
+Please list everything implemented.
+
+---
+
+# 3. Future Integration Opportunities
+
+Based on our AI Voice platform, recommend high-value integrations that would improve:
+
+- Sales conversion
+- Customer satisfaction
+- Operational efficiency
+- Automation
+- Enterprise adoption
+
+Examples:
+
+CRM
+
+- Salesforce
+- HubSpot
+- Zoho
+- Freshworks
+- Pipedrive
+
+Marketing
+
+- Meta Lead Ads
+- Google Lead Forms
+- LinkedIn Lead Gen
+- TikTok Lead Ads
+
+Communication
+
+- WhatsApp Business
+- Slack
+- Microsoft Teams
+- Discord
+
+Scheduling
+
+- Calendly
+- Cal.com
+- Outlook Calendar
+
+Helpdesk
+
+- Zendesk
+- Freshdesk
+- Intercom
+
+Knowledge Base
+
+- Notion
+- Confluence
+- Google Drive
+- SharePoint
+
+Support
+
+- Jira
+- Linear
+- ClickUp
+- Asana
+
+Commerce
+
+- Shopify
+- WooCommerce
+- Magento
+
+Payments
+
+- Stripe
+- Razorpay
+
+Identity
+
+- Auth0
+- Clerk
+- Okta
+
+---
+
+# 4. Prioritize the Integrations
+
+Rank every suggested integration using:
+
+- Customer Demand
+- Business Value
+- Enterprise Importance
+- Ease of Implementation
+- Competitive Advantage
+
+Classify each as:
+
+- Must Have
+- High Priority
+- Medium Priority
+- Nice to Have
+
+---
+
+# 5. Which Integrations Reduce Sales Cycle?
+
+Recommend integrations that help businesses close deals faster.
+
+For example:
+
+- CRM synchronization
+- Instant lead capture
+- Calendar booking
+- Proposal generation
+- Payment collection
+- WhatsApp follow-up
+- Email automation
+- E-signature
+
+Explain why each improves conversion.
+
+---
+
+# 6. Which Integrations Improve Customer Satisfaction?
+
+Recommend integrations that improve customer experience.
+
+Examples:
+
+- CRM history
+- Ticketing systems
+- Knowledge base
+- Order tracking
+- WhatsApp updates
+- Customer feedback
+- CSAT
+- NPS
+- Live agent handoff
+
+Explain the business impact.
+
+---
+
+# 7. Build a Long-Term Integration Strategy
+
+Suggest a roadmap for making SnapServe the central AI Voice platform that connects with every major business system.
+
+Group recommendations into:
+
+### Sales
+
+### Marketing
+
+### Customer Support
+
+### Operations
+
+### HR
+
+### Healthcare
+
+### Finance
+
+### Real Estate
+
+### Education
+
+---
+
+# Deliverables
+
+Please provide:
+
+1. A complete list of all providers currently implemented.
+2. A complete list of all existing integrations.
+3. Missing integrations.
+4. A prioritized roadmap.
+5. Recommendations that will create the strongest competitive advantage for SnapServe AI.
