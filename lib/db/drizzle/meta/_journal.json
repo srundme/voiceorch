@@ -302,6 +302,13 @@
       "when": 1785300000000,
       "tag": "0042_phone_number_renewal_and_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1785400000000,
+      "tag": "0043_tts_voice_name_and_vibe_chat",
+      "breakpoints": true
     }
   ]
 }
