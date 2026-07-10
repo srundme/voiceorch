@@ -1,0 +1,220 @@
+You are a Senior Frontend Engineer and Product Designer.
+
+Your task is to redesign the Command Center dashboard into a polished enterprise-grade SaaS experience while preserving all existing functionality and data.
+
+IMPORTANT:
+- Do NOT change the data flow, APIs, backend, or business logic.
+- Do NOT remove any existing metrics or features.
+- Improve only the UI/UX, visual hierarchy, spacing, animations, and empty states.
+- Keep the existing dark SnapServe design language.
+
+==================================================
+1. METRIC CARDS
+==================================================
+
+Redesign the top metric cards:
+
+- Active Agents
+- Calls Today
+- Success Rate
+- Avg STT Latency
+- Providers
+
+Improvements:
+- Increase visual hierarchy.
+- Larger metric values.
+- Better spacing.
+- More subtle icon containers.
+- Consistent card height.
+- Rounded corners remain unchanged.
+- Slight hover elevation (translateY -2px).
+- Border becomes slightly brighter on hover.
+- Smooth 180ms transition.
+
+Animate numbers on first load:
+- Count up animation.
+- Duration around 700ms.
+- Do not repeat on every render.
+
+==================================================
+2. PIPELINE LATENCY BAR
+==================================================
+
+Improve the Pipeline P50 section.
+
+Current layout is visually flat.
+
+Keep the same metrics but:
+
+- Better spacing
+- Better typography
+- Stronger color hierarchy
+- Small colored indicators
+- Easier scanning
+
+Do not add charts.
+
+==================================================
+3. RECENT CALLS TABLE
+==================================================
+
+Redesign the Recent Calls table.
+
+Keep every column.
+
+Improve:
+
+- Row height
+- Padding
+- Hover state
+- Better badge styling
+- Better typography
+- Consistent alignment
+
+Status badges should look premium.
+
+Completed:
+soft green badge
+
+No Pickup:
+neutral gray badge
+
+Rows should highlight slightly on hover.
+
+==================================================
+4. PROVIDER HEALTH
+==================================================
+
+The current empty state feels unfinished.
+
+Instead show a premium empty state:
+
+Title:
+Provider Health
+
+Body:
+"No providers connected yet."
+
+Add a muted helper line explaining that providers can be configured from Settings.
+
+No unnecessary illustrations.
+
+==================================================
+5. AGENTS PANEL
+==================================================
+
+Improve the Active Agents widget.
+
+Instead of a plain list,
+
+show:
+
+Agent Name
+
+Draft / Active badge
+
+Last updated time (if available)
+
+Improve spacing and hierarchy.
+
+==================================================
+6. SYSTEM EVENT LOG
+==================================================
+
+Improve readability.
+
+Increase row height.
+
+Improve timestamp styling.
+
+Better spacing.
+
+Subtle hover state.
+
+Keep the existing functionality.
+
+==================================================
+7. AUTO REFRESH
+==================================================
+
+Replace the plain
+
+"auto-refresh 10s"
+
+with
+
+● Live
+
+Refreshing every 10s
+
+Use a tiny animated green status dot.
+
+Very subtle.
+
+==================================================
+8. MICRO INTERACTIONS
+==================================================
+
+Cards:
+hover elevation
+
+Table rows:
+soft highlight
+
+Badges:
+soft fade
+
+Buttons:
+smooth hover
+
+No flashy animations.
+
+==================================================
+9. DESIGN RULES
+==================================================
+
+No gradients.
+
+No glassmorphism.
+
+No heavy shadows.
+
+No glow.
+
+No neon.
+
+Keep everything minimal.
+
+Think:
+
+Linear
+
+Stripe Dashboard
+
+Vercel
+
+Cursor
+
+Notion
+
+==================================================
+10. ACCEPTANCE CRITERIA
+==================================================
+
+✓ Existing functionality unchanged
+
+✓ No API changes
+
+✓ No backend changes
+
+✓ Improved spacing
+
+✓ Better typography
+
+✓ Premium hover states
+
+✓ Better empty states
+
+✓ Enterprise SaaS appearance
+
+Focus on polish, clarity, and production-quality UI rather than adding new features.
