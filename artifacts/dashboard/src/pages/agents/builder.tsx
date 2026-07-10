@@ -4831,40 +4831,40 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         transition={{ duration: 0.25, ease: "easeOut" }}
         className="flex flex-col gap-6 px-6 py-4 border-b border-border/60 shrink-0"
       >
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col min-w-0">
+        <div className="flex flex-col min-w-0">
+          <button
+            type="button"
+            onClick={() => navigate("/app/agents")}
+            className="self-start text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← Agents
+          </button>
+          <div className="flex items-center gap-2 min-w-0 mt-2">
+            <h1
+              className="text-[32px] lg:text-[40px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
+              title={agent.name}
+            >
+              {agent.name}
+            </h1>
             <button
               type="button"
-              onClick={() => navigate("/app/agents")}
-              className="self-start text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
+              className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Rename agent"
+              aria-label="Rename agent"
             >
-              ← Agents
+              <Pencil className="h-4 w-4" />
             </button>
-            <div className="flex items-center gap-2 min-w-0 mt-2">
-              <h1
-                className="text-[32px] lg:text-[40px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
-                title={agent.name}
-              >
-                {agent.name}
-              </h1>
-              <button
-                type="button"
-                onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title="Rename agent"
-                aria-label="Rename agent"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground mt-1.5">
-              <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
-              <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
-              <span className="text-muted-foreground/40">•</span>
-              <span>Agent #{String(agent.id).padStart(4, "0")}</span>
-              <span className="text-muted-foreground/40">•</span>
-              <span>{(agent as any).totalCalls ?? 0} Calls</span>
-            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
+            <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
+            <span className="text-muted-foreground/40">•</span>
+            <span>Agent #{String(agent.id).padStart(4, "0")}</span>
+            <span className="text-muted-foreground/40">•</span>
+            <span>{(agent as any).totalCalls ?? 0} Calls</span>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
