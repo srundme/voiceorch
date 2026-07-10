@@ -342,13 +342,13 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
               {isByop ? "BYOP" : "Managed"}
             </span>
 
-            <div className="flex flex-col items-center text-center gap-2.5">
+            <div className="flex flex-col items-start text-left gap-3">
               {/* Label + value */}
-              <div className="flex flex-col items-center gap-0.5">
+              <div className="flex flex-col items-start gap-1.5">
                 <span className="text-[12px] text-muted-foreground">Estimated Cost / Minute</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-[28px] font-semibold text-foreground leading-none tabular-nums cursor-default">
+                    <span className="text-[30px] font-semibold text-foreground leading-none tabular-nums cursor-default">
                       ${totalPerMin.toFixed(3)}
                     </span>
                   </TooltipTrigger>
@@ -368,7 +368,7 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
                 </Tooltip>
               </div>
 
-              {/* Thin centered bar */}
+              {/* Thin left-aligned bar */}
               <div className="h-1.5 w-[240px] rounded-full bg-muted/50 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary transition-all duration-150"
@@ -377,7 +377,7 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
               </div>
 
               {/* Provider breakdown row */}
-              <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+              <div className="flex flex-wrap justify-start gap-x-4 gap-y-1">
                 {segments.map(seg => (
                   <div key={seg.key} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
                     <span className="w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
