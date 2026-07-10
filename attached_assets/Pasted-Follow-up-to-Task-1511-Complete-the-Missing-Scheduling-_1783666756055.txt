@@ -1,0 +1,33 @@
+Follow-up to Task #1511 — Complete the Missing Scheduling Popup Flow
+
+Task #1511 is partially working. Preserve these completed changes:
+
+* A basic Calendar record is created for the new agent, but it remains incomplete until the user configures it.
+* Availability remains empty until the user manually configures it.
+* No default “Quick Chat” Event Type is created.
+
+Remaining issue: After creating a scheduling-enabled agent in Vibe Builder, the scheduling setup UI is still not visibly opening as a popup over the Vibe Builder page.
+
+Use the attached screenshots as the exact UI reference. Reuse the existing Scheduling components shown in the screenshots. Do not create duplicate forms and do not navigate away from Vibe Builder.
+
+Required visible popup sequence:
+
+Google Account → Calendar → Availability → Event Type → return to the same Vibe Builder conversation
+
+The first popup must open automatically after the agent is created. The Vibe Builder page must remain visible underneath it. After the user explicitly completes and saves each step, close the current popup and automatically open the next one.
+
+Important requirements:
+
+* The Agent Preview “Scheduling Setup” checklist is only a progress indicator and step launcher. It is not the popup itself.
+* In the Google step, the user must explicitly select an existing Google account or connect a new one for this agent.
+* In the Calendar step, open and configure the existing basic Calendar record for this agent; do not create an unrelated duplicate calendar.
+* Availability must be manually configured by the user.
+* Event Type must be created and configured by the user. Do not restore automatic “Quick Chat” creation.
+
+Inspect the existing #1511 implementation first. Do not redo the backend changes that are already working. Focus only on fixing the missing frontend popup trigger, visible popup rendering over Vibe Builder, correct record scoping, and automatic sequential progression.
+
+Runtime-test with a brand-new scheduling-enabled Vibe agent and verify this exact visible flow:
+
+Agent created → Google popup → Calendar popup → Availability popup → Event Type popup → back to the same Vibe Builder conversation.
+
+Do not mark the task complete based only on code inspection, typecheck, or build success. Verify the actual visible popup sequence at runtime.
