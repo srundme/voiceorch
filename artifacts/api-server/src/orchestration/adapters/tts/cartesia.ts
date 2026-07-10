@@ -30,6 +30,18 @@ const CARTESIA_BASE_URL = (process.env["CARTESIA_BASE_URL"] ?? "https://api-indi
 /** wss:// equivalent of CARTESIA_BASE_URL for the WebSocket endpoint. */
 const CARTESIA_WS_BASE = CARTESIA_BASE_URL.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
 
+/**
+ * Detects Cartesia's "invalid voice controls" family of errors (400s caused by
+ * an `__experimental_controls.emotion` value the API no longer accepts, e.g.
+ * "invalid emotion level: medium" after Cartesia deprecated/renamed levels).
+ * Used to trigger a one-time same-sentence retry with emotion controls
+ * stripped, instead of letting the error propagate and end the call.
+ */
+function isInvalidVoiceControlsError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /invalid voice controls|invalid emotion/i.test(msg);
+}
+
 async function fetchWithRetry(
   url: string,
   init: RequestInit,
@@ -373,12 +385,34 @@ export class CartesiaTTS implements TTSAdapter {
         return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal, emotions);
       } catch (err) {
         if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
-        this.wsFailedPermanently = true;
+        // Cartesia rejected the emotion/voice controls for this sentence — retry
+        // once on the same WS with plain (no-emotion) voice controls instead of
+        // aborting the whole call. See isInvalidVoiceControlsError.
+        if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
+          try {
+            const ws = await this.getOrOpenWs();
+            return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal, undefined);
+          } catch (retryErr) {
+            if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
+            this.wsFailedPermanently = true;
+          }
+        } else {
+          this.wsFailedPermanently = true;
+        }
       }
     }
     // WS permanently failed — fall back to REST (no prosody continuity for
-    // this sentence, but at least audio is produced).
-    return this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+    // this sentence, but at least audio is produced). Also strips emotions if
+    // Cartesia already rejected them once above.
+    try {
+      return await this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+    } catch (err) {
+      if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
+      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
+        return this.synthesizeViaRest(text, onChunk, onDone, signal, undefined);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -507,18 +541,31 @@ export class CartesiaTTS implements TTSAdapter {
 
   async synthesize(text: string, emotions?: string[]): Promise<{ audio: Buffer; characters: number }> {
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
-    const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
-      method: "POST",
-      headers: this.restHeaders,
-      body: this.buildRestBody(safeText, emotions),
-    });
+    const doRequest = async (withEmotions?: string[]): Promise<{ audio: Buffer; characters: number }> => {
+      const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
+        method: "POST",
+        headers: this.restHeaders,
+        body: this.buildRestBody(safeText, withEmotions),
+      });
 
-    if (!resp.ok) {
-      const err = await resp.text();
-      throw new Error(`Cartesia TTS error ${resp.status}: ${err}`);
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Cartesia TTS error ${resp.status}: ${errText}`);
+      }
+
+      return { audio: Buffer.from(await resp.arrayBuffer()), characters: safeText.length };
+    };
+
+    try {
+      return await doRequest(emotions);
+    } catch (err) {
+      // Cartesia rejected the emotion/voice controls — retry once without them
+      // instead of failing the whole call for a single sentence's styling.
+      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
+        return doRequest(undefined);
+      }
+      throw err;
     }
-
-    return { audio: Buffer.from(await resp.arrayBuffer()), characters: safeText.length };
   }
 
   async synthesizeStream(
@@ -534,9 +581,29 @@ export class CartesiaTTS implements TTSAdapter {
         return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal, emotions);
       } catch (err) {
         if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
-        this.wsFailedPermanently = true;
+        // Cartesia rejected the emotion/voice controls — retry once on the same
+        // WS with plain (no-emotion) voice controls before falling back to REST.
+        if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
+          try {
+            const ws = await this.getOrOpenWs();
+            return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal, undefined);
+          } catch (retryErr) {
+            if (signal?.aborted || (retryErr instanceof DOMException && retryErr.name === "AbortError")) throw retryErr;
+            this.wsFailedPermanently = true;
+          }
+        } else {
+          this.wsFailedPermanently = true;
+        }
       }
     }
-    return this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+    try {
+      return await this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
+    } catch (err) {
+      if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
+      if (emotions && emotions.length > 0 && isInvalidVoiceControlsError(err)) {
+        return this.synthesizeViaRest(text, onChunk, onDone, signal, undefined);
+      }
+      throw err;
+    }
   }
 }

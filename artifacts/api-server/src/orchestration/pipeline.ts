@@ -4130,9 +4130,14 @@ export class OrchestrationPipeline {
           try {
             await this.playJob(job);
           } catch (err) {
+            // A single sentence's TTS request failing (e.g. Cartesia rejecting a
+            // voice/emotion control, a transient network blip) must not end the
+            // whole call — the adapters already retry recoverable cases (see
+            // CartesiaTTS's invalid-voice-controls retry); anything that still
+            // reaches here is treated as "skip this sentence" so the agent keeps
+            // listening/responding instead of hanging up on the caller.
             const reason = toReadableError(err, "TTS error");
             logger.error({ callId: this.config.callId, err, text: job.text.slice(0, 40) }, reason);
-            this.config.onFatalError?.(reason);
           }
           if (this.bargeInRequested) break;
           // Max-duration graceful stop: the current sentence has finished playing,
@@ -6335,6 +6340,13 @@ function extractEmotionTag(text: string): { emotion: string | null; text: string
  * array format. Returns an empty array for `calm` (explicit neutral reset) or
  * any unrecognised value (safe no-op — Cartesia omits the controls block when
  * the array is empty, preserving current behaviour for unknown values).
+ *
+ * Only `low`/`high` levels are used — Cartesia has rejected `medium` with
+ * "invalid emotion level: medium" in production (voice/API-version dependent
+ * level support). Even so, the Cartesia TTS adapter independently retries any
+ * "invalid voice controls"/"invalid emotion" 400 with controls stripped, so a
+ * level Cartesia stops accepting in the future degrades to plain speech for
+ * that sentence instead of ending the call.
  */
 function mapEmotionToCartesia(value: string): string[] {
   switch (value) {
@@ -6342,7 +6354,7 @@ function mapEmotionToCartesia(value: string): string[] {
     case "sympathetic":  return ["sadness:low", "positivity:low"];
     case "calm":         return [];
     case "curious":      return ["curiosity:high"];
-    case "content":      return ["positivity:medium"];
+    case "content":      return ["positivity:low"];
     case "sad":          return ["sadness:high"];
     default:             return [];
   }
