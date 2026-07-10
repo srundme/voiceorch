@@ -74,6 +74,7 @@ import {
   filterVoicesForLanguage, isVoiceCompatibleWithLanguage,
 } from "@/lib/agent-providers";
 import { useMinuteRatesMap, useUserProviderNames, computeAgentRateCents } from "@/hooks/use-minute-rates";
+import { computePipelineCost } from "@/lib/provider-pricing";
 import { DestinationOtpDialog } from "@/components/destination-otp-dialog";
 import { RecentNumbersList } from "@/components/recent-numbers-list";
 import { useRecentNumbers } from "@/hooks/use-recent-numbers";
@@ -306,6 +307,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const asrProvider           = form.watch("asrProvider");
   const llmProvider           = form.watch("llmProvider");
   const ttsProvider           = form.watch("ttsProvider");
+  const telephonyProvider     = form.watch("telephonyProvider") ?? "vobiz";
   const asrModel              = form.watch("asrModel");
   const llmModel              = form.watch("llmModel");
   const ttsVoice              = form.watch("ttsVoice");
@@ -479,6 +481,97 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               </div>
             </button>
           </div>
+
+          {/* ── Per-minute cost breakdown ────────────────────────────────────── */}
+          {(() => {
+            const agentProviders = [asrProvider, llmProvider, ttsProvider].filter(Boolean).map((p: string) => p.toLowerCase());
+            const isByop = agentProviders.some(p => userProviderNames.has(p));
+            const billingMode = isByop ? "byop" : "managed";
+            const snapserveCents = rateMap.get(billingMode) ?? (billingMode === "managed" ? 5 : 3.5);
+            const snapservePerMin = snapserveCents / 100;
+            const pipe = computePipelineCost(asrProvider ?? "sarvam", llmProvider ?? "groq", llmModel, ttsProvider ?? "cartesia", telephonyProvider ?? "vobiz");
+
+            const providerRows: { label: string; name: string; cost: number }[] = [
+              { label: "Transcriber (ASR)", name: asrProvider ?? "—", cost: pipe.asr.costPerMin },
+              { label: "LLM",               name: llmProvider ?? "—", cost: pipe.llm.costPerMin },
+              { label: "Voice (TTS)",        name: ttsProvider ?? "—", cost: pipe.tts.costPerMin },
+              { label: "Telephony",          name: telephonyProvider ?? "—", cost: pipe.telephony.costPerMin },
+            ];
+
+            const totalEstimate = isByop
+              ? snapservePerMin + providerRows.reduce((s, r) => s + r.cost, 0)
+              : snapservePerMin;
+
+            return (
+              <div className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
+                {/* Header row */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
+                      {isByop ? "Your Total Cost" : "SnapServe Charges"}
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-bold tabular-nums tracking-tight">
+                        ${totalEstimate.toFixed(3)}
+                      </span>
+                      <span className="text-sm text-muted-foreground">/ min</span>
+                    </div>
+                    {isByop && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Platform fee ${snapservePerMin.toFixed(3)} + estimated provider costs
+                      </p>
+                    )}
+                    {!isByop && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Flat rate — all provider keys included
+                      </p>
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+                    isByop
+                      ? "bg-green-500/10 text-green-400 border-green-500/25"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                  }`}>
+                    {isByop ? "BYOP" : "Managed"}
+                  </span>
+                </div>
+
+                {/* Breakdown rows */}
+                <div className="border-t border-border/40 px-4 py-3 space-y-2">
+                  {/* SnapServe platform fee (always shown) */}
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" />
+                      <span className="text-muted-foreground">SnapServe platform</span>
+                    </div>
+                    <span className="font-semibold tabular-nums">${snapservePerMin.toFixed(3)}/min</span>
+                  </div>
+
+                  {/* Provider breakdown — always shown for transparency */}
+                  {providerRows.map(row => (
+                    <div key={row.label} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-muted-foreground/30 shrink-0" />
+                        <span className="text-muted-foreground">{row.label}</span>
+                        <span className="text-muted-foreground/50 capitalize">{row.name}</span>
+                      </div>
+                      <span className={`tabular-nums ${isByop ? "font-medium" : "text-muted-foreground/60"}`}>
+                        ~${row.cost.toFixed(4)}/min{!isByop && <span className="ml-1 text-[10px]">(covered)</span>}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Total line for BYOP */}
+                  {isByop && (
+                    <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40 mt-1">
+                      <span className="font-semibold">Estimated total</span>
+                      <span className="font-bold tabular-nums">${totalEstimate.toFixed(4)}/min</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-2.5">
