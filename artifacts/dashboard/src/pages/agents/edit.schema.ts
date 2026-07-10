@@ -49,6 +49,7 @@ export const agentFormSchema = z.object({
   bargeInEnabled:         z.boolean().optional(),
   bargeInEnergyThreshold: z.number().min(100).max(5000).optional(),
   bargeInMinFrames:       z.number().min(1).max(20).optional(),
+  micSensitivity:         z.enum(["low", "normal", "high"]).optional(),
   timezone:               z.string().optional(),
   autoSwitchToEnglish:    z.boolean().optional(),
   languageAutoDetect:     z.boolean().optional(),

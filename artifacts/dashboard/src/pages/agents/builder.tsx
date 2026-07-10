@@ -2431,6 +2431,24 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                     </FormItem>
                   );
                 }} />
+                <FormField control={form.control} name="micSensitivity" render={({ field }) => (
+                  <FormItem className="space-y-0">
+                    <FormLabel className="text-[12px] font-medium text-foreground/90">Mic Sensitivity</FormLabel>
+                    <Select value={field.value ?? "normal"} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="h-9 text-[12px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Low — filter noisy rooms</SelectItem>
+                        <SelectItem value="normal">Normal — default</SelectItem>
+                        <SelectItem value="high">High — catch soft replies</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed">Scales the noise gate, VAD, and barge-in thresholds together. Advanced sliders above override this when changed from default.</p>
+                  </FormItem>
+                )} />
               </div>
             )}
 
@@ -4602,7 +4620,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0, promptVariables: [],
       vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 200,
-      bargeInMinFrames: 4, timezone: "", machineDetectionMode: "disabled",
+      bargeInMinFrames: 4, micSensitivity: "normal", timezone: "", machineDetectionMode: "disabled",
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
@@ -4667,6 +4685,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       bargeInEnabled:           (agent as any).agentConfig?.bargeInEnabled ?? true,
       bargeInEnergyThreshold:   (agent as any).agentConfig?.bargeInEnergyThreshold ?? 1200,
       bargeInMinFrames:         (agent as any).agentConfig?.bargeInMinFrames ?? 4,
+      micSensitivity:           ((agent as any).agentConfig?.micSensitivity ?? "normal") as AgentFormValues["micSensitivity"],
       timezone:                 (agent as any).agentConfig?.timezone ?? "",
       machineDetectionMode:     ((agent as any).agentConfig?.machineDetectionMode ?? "disabled") as AgentFormValues["machineDetectionMode"],
       voicemailAction:          ((agent as any).agentConfig?.voicemailAction ?? "hangup") as AgentFormValues["voicemailAction"],
@@ -4740,6 +4759,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         bargeInEnabled:           "advanced",
         bargeInEnergyThreshold:   "advanced",
         bargeInMinFrames:         "advanced",
+        micSensitivity:           "advanced",
         timezone:                 "advanced",
         autoRedialEnabled:        "advanced",
         autoRedialMaxAttempts:    "advanced",

@@ -72,7 +72,7 @@ export type { AgentFormValues } from "./edit.schema";
 
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
-    webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames,
+    webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
     timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
@@ -102,6 +102,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (bargeInEnabled === false) agentConfig["bargeInEnabled"] = false;
   if (bargeInEnergyThreshold != null && bargeInEnergyThreshold !== 1200) agentConfig["bargeInEnergyThreshold"] = bargeInEnergyThreshold;
   if (bargeInMinFrames != null && bargeInMinFrames !== 4) agentConfig["bargeInMinFrames"] = bargeInMinFrames;
+  if (micSensitivity != null) agentConfig["micSensitivity"] = micSensitivity;
   if (timezone) agentConfig["timezone"] = timezone;
   agentConfig["autoSwitchToEnglish"] = !!autoSwitchToEnglish;
   agentConfig["languageAutoDetect"] = !!languageAutoDetect;
@@ -341,7 +342,7 @@ export default function AgentEdit() {
       language: "en-US", asrLanguage: "", backchannelingEnabled: true, backchannelingFrequency: 0.5,
       webhookUrl: "", webhookSecret: "", noiseCancellationEnabled: true,
       ambientNoiseEnabled: false, ambientNoiseTrack: "", ambientNoiseVolume: 1.0,
-      promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4,
+      promptVariables: [], vadSilenceMs: 350, bargeInEnabled: true, bargeInEnergyThreshold: 1200, bargeInMinFrames: 4, micSensitivity: "normal",
       timezone: "",
       autoSwitchToEnglish: false,
       machineDetectionMode: "disabled", voicemailAction: "hangup",
@@ -554,6 +555,7 @@ export default function AgentEdit() {
       bargeInEnabled:           ((agent as any).agentConfig?.bargeInEnabled as boolean | undefined) ?? true,
       bargeInEnergyThreshold:   ((agent as any).agentConfig?.bargeInEnergyThreshold as number | undefined) ?? 1200,
       bargeInMinFrames:         ((agent as any).agentConfig?.bargeInMinFrames as number | undefined) ?? 4,
+      micSensitivity:           (((agent as any).agentConfig?.micSensitivity as AgentFormValues["micSensitivity"] | undefined) ?? "normal"),
       timezone:                 ((agent as any).agentConfig?.timezone as string | undefined) ?? "",
       autoSwitchToEnglish:      ((agent as any).agentConfig?.autoSwitchToEnglish as boolean | undefined) ?? false,
       languageAutoDetect:       ((agent as any).agentConfig?.languageAutoDetect as boolean | undefined) ?? false,
@@ -1438,6 +1440,25 @@ export default function AgentEdit() {
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">Consecutive speech frames to trigger barge-in. Default: 4 (~80 ms)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="micSensitivity" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mic Sensitivity</FormLabel>
+                    <Select value={field.value ?? "normal"} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Low — filter noisy rooms</SelectItem>
+                        <SelectItem value="normal">Normal — default</SelectItem>
+                        <SelectItem value="high">High — catch soft replies</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-[11px]">Scales the noise gate, VAD, and barge-in thresholds together. Low filters out nearby background talkers most aggressively; High catches quieter caller replies but lets more noise through. Advanced thresholds above override this when set.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

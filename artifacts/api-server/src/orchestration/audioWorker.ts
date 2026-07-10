@@ -24,6 +24,7 @@ import {
 } from "./audio.js";
 
 const VAD_THRESHOLD = 100;
+const GATE_RATIO_DEFAULT = 4.0;
 
 interface ProcessMulaw {
   id: string;
@@ -31,6 +32,9 @@ interface ProcessMulaw {
   callId: string;
   data: ArrayBuffer;
   noiseCancel: boolean;
+  /** Per-agent Mic Sensitivity thresholds (see mic-sensitivity.ts). Optional for backward compat. */
+  gateRatio?: number;
+  vadThreshold?: number;
 }
 
 interface ProcessPcm8k {
@@ -39,6 +43,8 @@ interface ProcessPcm8k {
   callId: string;
   data: ArrayBuffer;
   noiseCancel: boolean;
+  gateRatio?: number;
+  vadThreshold?: number;
 }
 
 interface DestroySession {
@@ -51,10 +57,12 @@ type InMsg = ProcessMulaw | ProcessPcm8k | DestroySession;
 // Per-session NoiseCanceller instances (keyed by callId string)
 const noiseCancellers = new Map<string, NoiseCanceller>();
 
-function getNoiseCanceller(callId: string): NoiseCanceller {
+function getNoiseCanceller(callId: string, gateRatio: number): NoiseCanceller {
   let nc = noiseCancellers.get(callId);
   if (!nc) {
-    nc = new NoiseCanceller();
+    // gateRatio is fixed at creation (per-call state) — set on the FIRST chunk
+    // of the call, which always carries the agent's resolved sensitivity.
+    nc = new NoiseCanceller(gateRatio);
     noiseCancellers.set(callId, nc);
   }
   return nc;
@@ -70,7 +78,7 @@ parentPort!.on("message", (msg: InMsg) => {
     return;
   }
 
-  const { id, callId, noiseCancel } = msg;
+  const { id, callId, noiseCancel, gateRatio, vadThreshold } = msg;
 
   let pcm8k =
     msg.type === "PROCESS_MULAW"
@@ -78,11 +86,11 @@ parentPort!.on("message", (msg: InMsg) => {
       : Buffer.from(msg.data);
 
   if (noiseCancel) {
-    pcm8k = getNoiseCanceller(callId).process(pcm8k);
+    pcm8k = getNoiseCanceller(callId, gateRatio ?? GATE_RATIO_DEFAULT).process(pcm8k);
   }
 
   const pcm16k = upsample8to16(pcm8k);
-  const hasSpeech = hasSpeechEnergy(pcm8k, VAD_THRESHOLD);
+  const hasSpeech = hasSpeechEnergy(pcm8k, vadThreshold ?? VAD_THRESHOLD);
 
   const pcm8kAb  = toTransferable(pcm8k);
   const pcm16kAb = toTransferable(pcm16k);

@@ -186,6 +186,13 @@ export class NoiseCanceller {
   private noiseFloor      = 0.0;
   private calibFrameCount = 0;
   private hangoverFrames  = 0;
+  /** Per-agent "Mic Sensitivity" lever (see mic-sensitivity.ts). Defaults to the
+   *  original hardcoded ratio so agents without the setting are unaffected. */
+  private readonly gateRatio: number;
+
+  constructor(gateRatio: number = GATE_RATIO) {
+    this.gateRatio = gateRatio;
+  }
 
   process(pcm8k: Buffer): Buffer {
     const samples = new Int16Array(pcm8k.buffer, pcm8k.byteOffset, pcm8k.length / 2);
@@ -212,7 +219,7 @@ export class NoiseCanceller {
         continue;
       }
 
-      if (energy < this.noiseFloor * GATE_RATIO) {
+      if (energy < this.noiseFloor * this.gateRatio) {
         if (this.hangoverFrames > 0) {
           // Hangover: a speech frame occurred recently — keep the gate open so
           // brief dips inside/around a short utterance aren't clipped. The

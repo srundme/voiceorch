@@ -65,13 +65,15 @@ class AudioWorkerThread {
     type: "PROCESS_MULAW" | "PROCESS_PCM8K",
     callId: string,
     data: Buffer,
-    noiseCancel: boolean
+    noiseCancel: boolean,
+    gateRatio: number,
+    vadThreshold: number,
   ): Promise<AudioProcessResult> {
     return new Promise((resolve, reject) => {
       const id = randomBytes(8).toString("hex");
       this.pending.set(id, { resolve, reject });
       const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-      this.worker.postMessage({ id, type, callId, data: ab, noiseCancel }, [ab]);
+      this.worker.postMessage({ id, type, callId, data: ab, noiseCancel, gateRatio, vadThreshold }, [ab]);
     });
   }
 
@@ -143,20 +145,24 @@ function workerFor(callId: string): AudioWorkerThread {
 export function processAudioIn(
   callId: string,
   mulawChunk: Buffer,
-  noiseCancel: boolean
+  noiseCancel: boolean,
+  gateRatio: number = GATE_RATIO_DEFAULT,
+  vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   // Fallback: if pool is not yet initialised (e.g. in tests), process inline
-  if (!ready) return processInline(mulawChunk, noiseCancel);
-  return workerFor(callId).process("PROCESS_MULAW", callId, mulawChunk, noiseCancel);
+  if (!ready) return processInline(mulawChunk, noiseCancel, false, gateRatio, vadThreshold);
+  return workerFor(callId).process("PROCESS_MULAW", callId, mulawChunk, noiseCancel, gateRatio, vadThreshold);
 }
 
 export function processRawPcm8kIn(
   callId: string,
   pcm8k: Buffer,
-  noiseCancel: boolean
+  noiseCancel: boolean,
+  gateRatio: number = GATE_RATIO_DEFAULT,
+  vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
-  if (!ready) return processInline(pcm8k, noiseCancel, true);
-  return workerFor(callId).process("PROCESS_PCM8K", callId, pcm8k, noiseCancel);
+  if (!ready) return processInline(pcm8k, noiseCancel, true, gateRatio, vadThreshold);
+  return workerFor(callId).process("PROCESS_PCM8K", callId, pcm8k, noiseCancel, gateRatio, vadThreshold);
 }
 
 export function destroyAudioSession(callId: string): void {
@@ -176,22 +182,25 @@ import {
 } from "./audio.js";
 
 const VAD_THRESHOLD = 100;
+const GATE_RATIO_DEFAULT = 4.0;
 const fallbackNc = new Map<string, NoiseCanceller>();
 
 async function processInline(
   data: Buffer,
   noiseCancel: boolean,
-  alreadyPcm = false
+  alreadyPcm = false,
+  gateRatio: number = GATE_RATIO_DEFAULT,
+  vadThreshold: number = VAD_THRESHOLD,
 ): Promise<AudioProcessResult> {
   let pcm8k = alreadyPcm ? data : decodeMulaw(data);
   if (noiseCancel) {
     let nc = fallbackNc.get("default");
-    if (!nc) { nc = new NoiseCanceller(); fallbackNc.set("default", nc); }
+    if (!nc) { nc = new NoiseCanceller(gateRatio); fallbackNc.set("default", nc); }
     pcm8k = nc.process(pcm8k);
   }
   return {
     pcm8k,
     pcm16k: upsample8to16(pcm8k),
-    hasSpeech: hasSpeechEnergy(pcm8k, VAD_THRESHOLD),
+    hasSpeech: hasSpeechEnergy(pcm8k, vadThreshold),
   };
 }

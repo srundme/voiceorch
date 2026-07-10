@@ -13,6 +13,7 @@ import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
+import { resolveMicSensitivity, getMicSensitivityThresholds, type MicSensitivityThresholds } from "./mic-sensitivity.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
@@ -627,6 +628,8 @@ export class OrchestrationPipeline {
   private readonly bargeInEnergyThreshold: number;
   private readonly bargeInMinFrames: number;
   private readonly bargeInEchoGraceMs: number;
+  // Mic Sensitivity — resolved gate ratio / VAD floor / barge-in defaults (mic-sensitivity.ts)
+  private readonly micThresholds: MicSensitivityThresholds;
   // True when an explicit Stop Speaking Plan is configured. When set, the
   // plan-derived bargeInMinFrames is authoritative and the non-UI
   // wordsForInterruption×20 floor must NOT override the configured sensitivity.
@@ -915,6 +918,15 @@ export class OrchestrationPipeline {
     this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
+    // Mic Sensitivity — one lever that scales the noise gate ratio, the
+    // hasSpeechEnergy() VAD floor, and (when not already overridden by an
+    // explicit bargeInEnergyThreshold) the barge-in bars. See mic-sensitivity.ts.
+    // "normal" keeps the webcall AEC cap on the env-tunable knob exactly as
+    // before micSensitivity existed; only "low"/"high" scale it.
+    const resolvedSensitivity = resolveMicSensitivity(config.agentConfig.micSensitivity);
+    this.micThresholds = resolvedSensitivity === "normal"
+      ? { ...getMicSensitivityThresholds("normal"), webcallAecThreshold: BARGE_IN_WEBCALL_AEC_THRESHOLD }
+      : getMicSensitivityThresholds(resolvedSensitivity);
     // P1-J: Stop Speaking Plan overrides barge-in params when configured
     this.stopSpeakingPlanConfigured = !!config.agentConfig.stopSpeakingPlan;
     if (config.agentConfig.stopSpeakingPlan) {
@@ -1602,7 +1614,7 @@ export class OrchestrationPipeline {
     this.recording.addCallerChunk(pcm8k);
     // Voice-intelligence tap — runs outside the main audio pipeline
     this.config.callerAudioTap?.(pcm8k);
-    processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled)
+    processAudioIn(callId, mulawChunk, this.agent.noiseCancellationEnabled, this.micThresholds.gateRatio, this.micThresholds.vadThreshold)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (mulaw)"));
   }
@@ -1673,7 +1685,7 @@ export class OrchestrationPipeline {
     // consume it in handleProcessedAudio — the AMD/voicemail branches above
     // return before processing and must never leave it stranded in the queue.
     if (nativePcm16k) this.nativePcm16kQueue.push(nativePcm16k);
-    processRawPcm8kIn(callId, pcm8k, nc)
+    processRawPcm8kIn(callId, pcm8k, nc, this.micThresholds.gateRatio, this.micThresholds.vadThreshold)
       .then((result) => this.handleProcessedAudio(result))
       .catch((err) => logger.error({ callId: this.config.callId, err }, "Audio worker error (pcm8k)"));
   }
@@ -1805,8 +1817,11 @@ export class OrchestrationPipeline {
     // bar (default 1200) is unnecessary. Lower to BARGE_IN_WEBCALL_AEC_THRESHOLD so a
     // normal-volume browser mic can actually trigger a barge-in. A user-configured
     // bargeInEnergyThreshold that is already lower than the AEC threshold is honoured.
-    if (isWebcallStreaming && effectiveThreshold > BARGE_IN_WEBCALL_AEC_THRESHOLD) {
-      effectiveThreshold = BARGE_IN_WEBCALL_AEC_THRESHOLD;
+    // Mic Sensitivity moves this cap too: "normal" reproduces the env-tunable
+    // BARGE_IN_WEBCALL_AEC_THRESHOLD default exactly; "low"/"high" scale it.
+    const webcallAecThreshold = this.micThresholds.webcallAecThreshold;
+    if (isWebcallStreaming && effectiveThreshold > webcallAecThreshold) {
+      effectiveThreshold = webcallAecThreshold;
     }
 
     // Periodic diagnostic so the exact echo/voice/threshold numbers for a line are

@@ -12,6 +12,7 @@ import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
+import { resolveMicSensitivity, getMicSensitivityThresholds } from "./mic-sensitivity.js";
 import type { AgentConfig, AgentTool, TelephonyProvider, SessionTransport, PipelineMetrics } from "./types.js";
 import { logger } from "../lib/logger.js";
 import {
@@ -476,9 +477,14 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // P1-D: VAD / Barge-in tuning (defaults match the hardcoded pipeline constants)
     vadSilenceMs:           (agentCfg["vadSilenceMs"]           as number  | undefined) ?? 350,
     bargeInEnabled:         (agentCfg["bargeInEnabled"]         as boolean | undefined) ?? true,
-    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined) ?? 1200,
+    // bargeInEnergyThreshold's default (when not explicitly overridden) tracks
+    // micSensitivity so "Low"/"High" actually move the barge-in bar, not just
+    // the noise gate / VAD floor. An explicit override always wins.
+    bargeInEnergyThreshold: (agentCfg["bargeInEnergyThreshold"] as number  | undefined)
+      ?? getMicSensitivityThresholds(resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined)).bargeInEnergyThreshold,
     bargeInMinFrames:       (agentCfg["bargeInMinFrames"]       as number  | undefined) ?? 4,
     bargeInEchoGraceMs:     (agentCfg["bargeInEchoGraceMs"]    as number  | undefined) ?? 600,
+    micSensitivity:         resolveMicSensitivity(agentCfg["micSensitivity"] as string | undefined),
     // P1-E: Agent timezone
     timezone: agentTimezone,
     // Call recording

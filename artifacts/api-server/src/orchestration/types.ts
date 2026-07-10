@@ -316,6 +316,10 @@ export interface AgentConfig {
   bargeInEnergyThreshold: number;
   bargeInMinFrames: number;
   bargeInEchoGraceMs: number;
+  /** "Mic Sensitivity" — single lever scaling the noise gate ratio, VAD floor, and
+   *  barge-in energy bars together. "low" filters quiet background talkers more
+   *  aggressively; "high" catches quieter genuine caller replies. See mic-sensitivity.ts. */
+  micSensitivity: "low" | "normal" | "high";
 
   // P1-E: Agent timezone (used for date/time context in system prompt)
   timezone: string;
