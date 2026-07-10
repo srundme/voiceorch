@@ -189,8 +189,8 @@ describe("TurnSafetyNet", () => {
 
 describe("recoveryReprompt", () => {
   it("returns a language-specific reprompt and falls back to English", () => {
-    expect(recoveryReprompt("ta")).toContain("மீண்டும்");
-    expect(recoveryReprompt("ta-IN")).toContain("மீண்டும்"); // BCP-47 prefix stripped
+    expect(recoveryReprompt("ta")).toContain("மறுபடி");
+    expect(recoveryReprompt("ta-IN")).toContain("மறுபடி"); // BCP-47 prefix stripped
     expect(recoveryReprompt("hi")).toContain("दोबारा");
     expect(recoveryReprompt("zz")).toBe(recoveryReprompt("en")); // unknown → English
     expect(recoveryReprompt(null)).toBe(recoveryReprompt("en"));

@@ -137,6 +137,30 @@ async function callBatchEmbed(
 
 const queryCache = new Map<string, number[]>();
 
+/* Rolling query-embed latency stats: keeps the last N latencies and logs
+ * p50/p90/p99 every STATS_LOG_EVERY embeds, so the per-turn retrieval budget
+ * (KB_TURN_RETRIEVAL_BUDGET_SKIPFTS_MS — chosen from these numbers) can be
+ * re-validated from production logs instead of one-off measurement scripts. */
+const EMBED_LATENCY_WINDOW = 200;
+const EMBED_STATS_LOG_EVERY = 25;
+const embedLatencies: number[] = [];
+let embedCount = 0;
+
+function recordEmbedLatency(ms: number, ok: boolean): void {
+  embedLatencies.push(ms);
+  if (embedLatencies.length > EMBED_LATENCY_WINDOW) embedLatencies.shift();
+  embedCount++;
+  logger.debug({ evt: "kb_query_embed", latencyMs: ms, ok }, "KB query embed");
+  if (embedCount % EMBED_STATS_LOG_EVERY === 0) {
+    const sorted = [...embedLatencies].sort((a, b) => a - b);
+    const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+    logger.info(
+      { evt: "kb_embed_latency_stats", n: sorted.length, totalEmbeds: embedCount, p50: pct(50), p90: pct(90), p99: pct(99), max: sorted[sorted.length - 1] },
+      "KB query-embed latency stats (rolling window)",
+    );
+  }
+}
+
 /**
  * Embed a retrieval query. Never throws — returns null on ANY failure
  * (no key, timeout, API error, latch off) so the caller falls back to FTS.
@@ -153,9 +177,11 @@ export async function embedKbQuery(query: string): Promise<number[] | null> {
     queryCache.set(cacheKey, hit);
     return hit;
   }
+  const t0 = Date.now();
   try {
     const vecs = await callBatchEmbed([text], "RETRIEVAL_QUERY", EMBED_QUERY_TIMEOUT_MS);
     const vec = vecs?.[0];
+    recordEmbedLatency(Date.now() - t0, !!vec);
     if (!vec) return null;
     queryCache.set(cacheKey, vec);
     if (queryCache.size > QUERY_CACHE_MAX) {
@@ -164,6 +190,7 @@ export async function embedKbQuery(query: string): Promise<number[] | null> {
     }
     return vec;
   } catch (err) {
+    recordEmbedLatency(Date.now() - t0, false);
     logger.warn({ err: String(err) }, "KB query embedding failed — falling back to FTS");
     return null;
   }

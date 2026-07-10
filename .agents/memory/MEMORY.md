@@ -111,3 +111,4 @@
 - [Unicode script directive for Indic LLMs](unicode-script-directive.md) — weak models (Krutrim Qwen/Gemma) default to Tanglish/romanized output; LANG_SCRIPT_DIRECTIVE appended to both pipeline.ts buildLangGuard() and session.ts static rules
 - [Scheduling wizard ListCalendars field](scheduling-wizard-calendar-fields.md) — ListCalendars response has `connectedGoogleEmail` not `googleCalendarConnectionId`; wizard must use this to detect Google linkage
 - [KB pinned summary + precedence](kb-pinned-summary-precedence.md) — system prompt FIRST, KB appended with disclaimer; pinned entries lead every dump; inner prefetch budget must stay < outer race
+- [KB multi-source fair budgeting](kb-fair-dump-budgeting.md) — capped KB dump/baked blocks must budget per-source with rollover, never post-hoc slice; vector-only (skipFts) retrieval budget must be measured, not guessed

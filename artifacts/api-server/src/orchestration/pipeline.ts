@@ -20,7 +20,7 @@ import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
-import { retrieveKbContext, retrieveKbContextMultiEx, type KbRetrievalResult } from "./kb-retrieval.js";
+import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
 import { performance } from "perf_hooks";
 import {
@@ -4187,6 +4187,10 @@ export class OrchestrationPipeline {
     // Previously the prefetch ALWAYS won when present, which made the query
     // path effectively dead on live calls.
     let kbContextPromise: Promise<KbRetrievalResult | null>;
+    // Outer KB race window for THIS turn — scales up on skipFts (vector-only)
+    // turns so the wider inner budget can actually elapse and surface the
+    // prefetch fallback (see below where the inner budget is resolved).
+    let kbOuterRaceMs = KB_CONTEXT_RACE_MS;
     const kbPrefetch = this.kbPrefetchPromise;
     this.kbPrefetchPromise = null;
     // Relabel a prefetch result as source:"prefetch" when it WINS the turn, so
@@ -4199,14 +4203,22 @@ export class OrchestrationPipeline {
       logger.debug({ callId: this.config.callId }, "KB per-turn retrieval skipped (kbBakedOnly=true)");
       kbContextPromise = Promise.resolve(null);
     } else if (this.agent.knowledgeSourceIds.length > 0 && transcript.trim().length > 0) {
-      // Inner budget: how long the live query retrieval gets before we settle
-      // for the speech-start prefetch instead. Must stay BELOW the outer
-      // KB_CONTEXT_RACE_MS (300) or the prefetch fallback can never surface —
-      // the outer race would abandon KB context before this budget elapses.
-      const budgetMs = Number(process.env["KB_TURN_RETRIEVAL_BUDGET_MS"] ?? 200);
       // Pure non-Latin transcripts (e.g. Tamil-only) skip English-config FTS
       // and go vector-only; code-mixed transcripts keep the hybrid path.
       const skipFts = isPureNonLatinQuery(transcript);
+      // Inner budget: how long the live query retrieval gets before we settle
+      // for the speech-start prefetch instead. skipFts (vector-only) turns get
+      // a wider, MEASURED budget (default 800ms ≈ Tamil embed p90 + margin —
+      // see resolveKbTurnBudgetMs) because the query embed alone takes
+      // ~500-550ms; the old flat 200ms meant the semantic path lost to the
+      // truncated dump on every Tamil turn (call 2159). Must stay BELOW the
+      // outer race (kbOuterRaceMs below scales with this budget) or the
+      // prefetch fallback can never surface.
+      const budgetMs = resolveKbTurnBudgetMs(skipFts);
+      // Outer race must exceed the inner budget; when the inner budget elapses
+      // the (already-resolved) prefetch surfaces almost immediately, so the
+      // worst-case turn stall stays ≈ budgetMs even on skipFts turns.
+      kbOuterRaceMs = Math.max(KB_CONTEXT_RACE_MS, budgetMs + 100);
       const live = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts })
         .catch((err) => {
           logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — falling back to prefetch");
@@ -4299,7 +4311,7 @@ export class OrchestrationPipeline {
       const safeKb: Promise<KbRetrievalResult | null> = kbContextPromise.catch(() => null);
       let kbRaceTimer: ReturnType<typeof setTimeout> | null = null;
       const kbTimeout = new Promise<null>((resolve) => {
-        kbRaceTimer = setTimeout(() => { kbRaceTimer = null; resolve(null); }, KB_CONTEXT_RACE_MS);
+        kbRaceTimer = setTimeout(() => { kbRaceTimer = null; resolve(null); }, kbOuterRaceMs);
       });
       kbResult = await Promise.race([safeKb, kbTimeout]);
       if (kbRaceTimer) clearTimeout(kbRaceTimer);
@@ -4308,7 +4320,7 @@ export class OrchestrationPipeline {
       // its value is intentionally discarded (the turn already proceeded without it).
       void safeKb.catch(() => null);
       if (kbResult === null) {
-        logger.debug({ callId: this.config.callId, raceMs: KB_CONTEXT_RACE_MS }, "KB context: race timed out or empty — proceeding without context");
+        logger.debug({ callId: this.config.callId, raceMs: kbOuterRaceMs }, "KB context: race timed out or empty — proceeding without context");
       }
     }
     const kbContext = kbResult?.text || null;
@@ -4328,8 +4340,13 @@ export class OrchestrationPipeline {
           hit,
           source,
           contextChars: kbContext?.length ?? 0,
+          // Source attribution (multi-KB starvation diagnosis): which attached
+          // sources actually contributed entries to this turn's context, and
+          // whether a dump/prefetch block was cut by the char budget.
+          ...(kbResult?.contributingSourceIds ? { contributingSourceIds: kbResult.contributingSourceIds } : {}),
+          ...(kbResult?.truncated !== undefined ? { truncated: kbResult.truncated } : {}),
           ...(kbResult?.cached ? { cached: true } : {}),
-          ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: KB_CONTEXT_RACE_MS } : {}),
+          ...(kbRaceTimedOut ? { raceTimedOut: true, raceMs: kbOuterRaceMs } : {}),
         },
       });
     }
