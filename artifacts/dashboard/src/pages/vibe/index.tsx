@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { getVoiceAvatar } from "@/lib/voice-avatars";
@@ -223,6 +224,17 @@ export default function VibePage() {
   const queryClient      = useQueryClient();
   const { toast }        = useToast();
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [spotlight, setSpotlight] = useState({ x: 50, y: 35, active: false });
+  const landingRef = useRef<HTMLDivElement>(null);
+  const handleLandingMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = landingRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setSpotlight({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+      active: true,
+    });
+  }, []);
   const refineId = useMemo(() => {
     try {
       const v = new URLSearchParams(window.location.search).get("refine");
@@ -1190,9 +1202,9 @@ export default function VibePage() {
         disabled={phase === "done" || phase === "building"}
         rows={isLanding ? 4 : 3}
         className={cn(
-          "resize-none pr-20 bg-muted/20 border-border/50 placeholder:text-muted-foreground/40 transition-all",
+          "resize-none pr-20 bg-muted/20 border-border/50 placeholder:text-muted-foreground/40 transition-all duration-200",
           isLanding
-            ? "text-base rounded-2xl px-5 pt-5 pb-14 shadow-lg focus-visible:ring-1 focus-visible:ring-primary/40 border-border/60"
+            ? "text-base rounded-2xl px-5 pt-5 pb-14 shadow-lg focus-visible:ring-1 focus-visible:ring-primary/40 border-border/60 hover:border-border hover:shadow-xl"
             : "text-sm pr-20 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50",
         )}
       />
@@ -1249,9 +1261,11 @@ export default function VibePage() {
         onClick={() => send()}
         disabled={!canSend}
         className={cn(
-          "absolute transition-all",
+          "absolute transition-all duration-200",
           isLanding ? "right-4 bottom-4 h-9 w-9 rounded-xl" : "right-2.5 bottom-2.5 h-8 w-8 rounded-lg",
-          canSend ? "bg-primary hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground",
+          canSend
+            ? cn("bg-primary hover:bg-primary/90 shadow-sm", isLanding && "hover:scale-105 hover:rotate-6")
+            : "bg-muted text-muted-foreground",
         )}
       >
         {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />}
@@ -1265,7 +1279,12 @@ export default function VibePage() {
 
       {/* ══ Landing view — before first message ════════════════════════════ */}
       {!chatStarted && (
-        <div className="relative flex flex-col h-full overflow-hidden">
+        <div
+          ref={landingRef}
+          onMouseMove={handleLandingMouseMove}
+          onMouseLeave={() => setSpotlight(s => ({ ...s, active: false }))}
+          className="relative flex flex-col h-full overflow-hidden"
+        >
           {/* Ambient background — glow + grid texture, so the page reads as designed, not empty */}
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_10%,transparent_75%)]" />
@@ -1274,6 +1293,14 @@ export default function VibePage() {
               isThinking ? "bg-primary/22 opacity-100" : "bg-primary/11 opacity-90",
             )} />
             <div className="absolute left-1/2 top-[30%] h-[310px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/11 blur-[80px]" />
+            {/* Cursor-following spotlight — very low intensity, no visible edge */}
+            <div
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{
+                opacity: spotlight.active ? 1 : 0,
+                background: `radial-gradient(circle 420px at ${spotlight.x}% ${spotlight.y}%, rgba(255,255,255,0.05), transparent 70%)`,
+              }}
+            />
           </div>
 
           {/* Back button */}
@@ -1288,8 +1315,13 @@ export default function VibePage() {
 
           {/* Centered content */}
           <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-16">
-            {/* Animated logo */}
-            <div className="relative mb-8">
+            {/* Animated logo — one-time entrance on mount */}
+            <motion.div
+              className="relative mb-8"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            >
               <div className={cn(
                 "h-[72px] w-[72px] rounded-[22px] border flex items-center justify-center overflow-hidden p-3.5 transition-all duration-500 bg-gradient-to-b from-muted/60 to-muted/10 backdrop-blur-sm",
                 isThinking
@@ -1301,7 +1333,7 @@ export default function VibePage() {
               {isThinking && (
                 <div className="absolute inset-0 rounded-[22px] border-2 border-primary/40 animate-ping" />
               )}
-            </div>
+            </motion.div>
 
             {/* Title */}
             <h1 className="text-4xl font-semibold tracking-tight mb-3 text-center bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
@@ -1332,8 +1364,8 @@ export default function VibePage() {
                       onClick={() => send(s.message)}
                       className={cn(
                         "px-3.5 py-1.5 rounded-full text-xs font-medium border border-border/50 bg-muted/15 text-muted-foreground",
-                        "hover:text-foreground hover:border-primary/40 hover:bg-primary/8 hover:shadow-[0_0_16px_rgba(var(--primary)/0.15)] hover:-translate-y-0.5",
-                        "transition-all duration-200",
+                        "hover:text-foreground hover:border-primary/40 hover:bg-primary/8 hover:-translate-y-[2px]",
+                        "transition-all duration-[175ms]",
                       )}
                     >
                       {s.label}
