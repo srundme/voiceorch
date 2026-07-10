@@ -1,0 +1,171 @@
+UI/UX REFINEMENT ONLY.
+
+Redesign the Agents page header and remove redundant Agent Name duplication while preserving ALL existing functionality.
+
+IMPORTANT
+
+- UI/UX changes ONLY.
+- Do NOT modify backend logic.
+- Do NOT modify APIs.
+- Do NOT modify routing.
+- Do NOT modify state management.
+- Do NOT remove any existing functionality.
+- Do NOT break agent rename functionality.
+- Do NOT redesign the overall page layout.
+- Only improve hierarchy, spacing and visual consistency.
+
+────────────────────────────────────────
+1. REMOVE REDUNDANT AGENT NAME SECTION
+────────────────────────────────────────
+
+The active agent name is already displayed in the page header.
+
+Therefore the full-width "Agent Name" section below the tabs is redundant.
+
+Remove completely:
+
+• AGENT NAME heading
+• Agent Name input/card
+• Empty spacing left by that section
+
+After removing it:
+
+• Move the Transcriber / Model / Voice cards directly below the navigation tabs.
+• Maintain consistent spacing (24–32px).
+• Do not leave any unnecessary whitespace.
+
+If the removed Agent Name field currently supports renaming:
+
+• Preserve the functionality.
+• Do NOT keep the full-width field.
+• Add a small pencil (Edit) icon beside the page title.
+• Clicking it should open the existing premium Dialog component.
+
+Rename Dialog:
+
+Title:
+Rename Agent
+
+Description:
+Update the display name of this agent.
+
+Contents:
+
+- Agent Name input
+- Cancel
+- Save
+
+Reuse the existing Dialog component already used throughout the dashboard.
+
+────────────────────────────────────────
+2. REDESIGN PAGE HEADER
+────────────────────────────────────────
+
+The current header feels visually flat.
+
+Create a proper enterprise SaaS page header.
+
+LEFT SIDE
+
+Row 1
+
+← Back
+
+Mouse
+
+Row 2
+
+Agent #0146 • Active • 0 Calls
+
+Requirements:
+
+• Agent name should be the primary title.
+• Agent metadata should appear below it.
+• Use smaller muted typography.
+• Show a small green status dot before "Active".
+• Do NOT repeat the agent name anywhere else on the page.
+
+RIGHT SIDE
+
+Keep:
+
+✨ Refine with AI
+
+Save
+
+Publish
+
+Call
+
+Web Call
+
+More menu
+
+Requirements:
+
+• Group them into one clean action cluster.
+• Maintain consistent spacing (12–16px).
+• Save remains the primary action.
+• Publish remains secondary.
+• Everything vertically centered.
+
+────────────────────────────────────────
+3. SPACING
+────────────────────────────────────────
+
+Increase top and bottom breathing room.
+
+Reduce unnecessary empty horizontal space.
+
+Align the header perfectly with the content below.
+
+────────────────────────────────────────
+4. TYPOGRAPHY
+────────────────────────────────────────
+
+Agent Name
+
+22px
+
+Semibold
+
+Metadata
+
+13px
+
+Muted gray
+
+Buttons remain unchanged.
+
+────────────────────────────────────────
+5. VISUAL STYLE
+────────────────────────────────────────
+
+Follow the existing premium dark SaaS theme.
+
+No gradients.
+
+No bright colors.
+
+No unnecessary borders.
+
+Keep the design minimal, clean and enterprise-grade.
+
+Match products like:
+
+• Stripe
+• Linear
+• Vercel
+• OpenAI Console
+• Anthropic Console
+
+────────────────────────────────────────
+GOAL
+────────────────────────────────────────
+
+1. Remove duplicate information.
+2. Improve header hierarchy.
+3. Keep rename functionality through a compact modal.
+4. Move configuration cards upward.
+5. Make the page feel like a premium enterprise SaaS dashboard.
+6. Preserve every existing feature and functionality.
