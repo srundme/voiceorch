@@ -1,0 +1,206 @@
+Refine the Conversation, System Instructions, and Knowledge sections to achieve a premium enterprise SaaS appearance while preserving all existing functionality.
+
+IMPORTANT
+
+- UI/UX changes ONLY.
+- Do NOT modify backend logic.
+- Do NOT modify APIs.
+- Do NOT modify validation.
+- Do NOT modify business logic.
+- Do NOT modify field names.
+- Keep all existing functionality exactly as it is.
+
+────────────────────────────────────────
+1. Conversation
+────────────────────────────────────────
+
+Improve the visual hierarchy.
+
+Section Title:
+Conversation
+
+Below the title add a muted description:
+
+"Configure how your AI agent starts and responds during conversations."
+
+Increase spacing between:
+- Title
+- Description
+- First Message field
+
+Keep the existing functionality.
+
+For the "Assistant speaks first" dropdown:
+
+- Keep it on the same row as the "First Message" label.
+- Right-align it.
+- Match the height of all other inputs.
+- Align it perfectly with the textarea below.
+
+Reduce unnecessary whitespace while maintaining comfortable spacing.
+
+────────────────────────────────────────
+2. System Instructions
+────────────────────────────────────────
+
+Keep only ONE section heading.
+
+Remove the duplicate "System Prompt" heading.
+
+Use:
+
+System Instructions
+
+Below it add the description:
+
+"Define the AI's behavior, personality and response guidelines."
+
+Move the "✨ Generate" button into the section header.
+
+Layout:
+
+System Instructions                                  ✨ Generate
+
+Define the AI's behavior, personality and response guidelines.
+
+[ Textarea ]
+
+The Generate button should:
+
+- Be right aligned
+- Small ghost button
+- Height around 34px
+- Rounded corners
+- Subtle border
+- Neutral dark background
+- No gradients
+- No bright colors
+
+Increase spacing between:
+
+Description
+
+↓
+
+Textarea
+
+Improve textarea readability:
+
+- Slightly increase internal padding
+- Increase line height
+- Keep existing functionality unchanged
+
+────────────────────────────────────────
+3. Knowledge
+────────────────────────────────────────
+
+Improve the hierarchy.
+
+Section Title:
+
+Knowledge
+
+Below it add:
+
+"Attach documents or knowledge sources that your AI agent can search during conversations."
+
+Keep the Sources dropdown exactly as it is.
+
+Increase spacing between:
+
+Description
+
+↓
+
+Sources dropdown
+
+↓
+
+Helper text
+
+Improve helper text readability using muted typography.
+
+────────────────────────────────────────
+4. Consistency
+────────────────────────────────────────
+
+Conversation
+
+↓
+
+System Instructions
+
+↓
+
+Knowledge
+
+must all share:
+
+- identical spacing
+- identical heading size
+- identical description style
+- identical left alignment
+- identical section padding
+
+Everything should align to one vertical grid.
+
+────────────────────────────────────────
+5. Typography
+────────────────────────────────────────
+
+Section Title
+
+18px
+Semibold
+
+Description
+
+13px
+Muted gray
+
+Labels
+
+13px
+Medium
+
+Inputs
+
+48px height
+
+Textarea
+
+14px radius
+
+Subtle border
+
+Dark background
+
+────────────────────────────────────────
+6. Design Goal
+────────────────────────────────────────
+
+Match the design quality of:
+
+- Stripe
+- Linear
+- Vercel
+- Anthropic Console
+- OpenAI Playground
+
+Minimal.
+
+Balanced.
+
+Professional.
+
+Enterprise SaaS.
+
+No unnecessary colors.
+
+No gradients.
+
+No visual clutter.
+
+Only improve spacing, hierarchy, alignment, and typography.
+
+Do NOT change any existing functionality.
