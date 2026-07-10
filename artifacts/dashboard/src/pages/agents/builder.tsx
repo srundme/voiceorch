@@ -524,11 +524,21 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 {/* Stacked bar */}
                 <div className="h-2.5 rounded-full overflow-hidden flex gap-px">
                   {segments.filter(s => s.cost > 0).map(seg => (
-                    <div
-                      key={seg.key}
-                      style={{ flex: seg.cost / totalPerMin, backgroundColor: seg.color }}
-                      className="min-w-[2px]"
-                    />
+                    <Tooltip key={seg.key}>
+                      <TooltipTrigger asChild>
+                        <div
+                          style={{ flex: seg.cost / totalPerMin, backgroundColor: seg.color }}
+                          className="min-w-[2px] cursor-default"
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        <span className="font-semibold">{seg.label}</span>
+                        {seg.provider && seg.provider !== "SnapServe" && (
+                          <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
+                        )}
+                        <span className="ml-2 tabular-nums">${seg.cost.toFixed(4)}/min</span>
+                      </TooltipContent>
+                    </Tooltip>
                   ))}
                 </div>
 
