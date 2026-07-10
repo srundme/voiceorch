@@ -13,6 +13,7 @@ import {
   Upload, Archive, Info, AlertCircle, Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
@@ -4824,61 +4825,77 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   return (
     <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 px-6 py-3 border-b border-border/60 shrink-0">
-        <div className="flex flex-col gap-1.5 min-w-0">
-          <DetailNav backTo="/app/agents" backLabel="Back to Agents" />
-          <div className="flex items-center gap-1.5 min-w-0">
-            <h1 className="text-[22px] font-semibold leading-tight truncate max-w-[420px]" title={agent.name}>
-              {agent.name}
-            </h1>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="flex flex-col gap-6 px-6 py-4 border-b border-border/60 shrink-0"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col min-w-0">
             <button
               type="button"
-              onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-              className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title="Rename agent"
-              aria-label="Rename agent"
+              onClick={() => navigate("/app/agents")}
+              className="self-start text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              ← Agents
             </button>
+            <div className="flex items-center gap-2 min-w-0 mt-2">
+              <h1
+                className="text-[32px] lg:text-[40px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
+                title={agent.name}
+              >
+                {agent.name}
+              </h1>
+              <button
+                type="button"
+                onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
+                className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title="Rename agent"
+                aria-label="Rename agent"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground mt-1.5">
+              <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
+              <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
+              <span className="text-muted-foreground/40">•</span>
+              <span>Agent #{String(agent.id).padStart(4, "0")}</span>
+              <span className="text-muted-foreground/40">•</span>
+              <span>{(agent as any).totalCalls ?? 0} Calls</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-            <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
-            <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>Agent #{String(agent.id).padStart(4, "0")}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>{(agent as any).totalCalls ?? 0} Calls</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
+              <Sparkles className="h-3.5 w-3.5" /> Refine with AI
+            </Button>
+            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={updateAgent.isPending} title={!isDirty ? "No unsaved changes" : undefined}>
+              <Save className="h-3.5 w-3.5" />
+              {updateAgent.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setPublishModalOpen(true)}>
+              <Upload className="h-3.5 w-3.5" /> Publish
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setCallDialog(true)}>
+              <Phone className="h-3.5 w-3.5" /> Call
+            </Button>
+            <Button size="sm" variant={showWebcall ? "default" : "outline"} className="h-7 text-xs gap-1.5" onClick={() => setShowWebcall(v => !v)}>
+              <Mic className="h-3.5 w-3.5" /> Web Call
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
+                  <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Agent
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
-            <Sparkles className="h-3.5 w-3.5" /> Refine with AI
-          </Button>
-          <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={updateAgent.isPending} title={!isDirty ? "No unsaved changes" : undefined}>
-            <Save className="h-3.5 w-3.5" />
-            {updateAgent.isPending ? "Saving…" : "Save"}
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setPublishModalOpen(true)}>
-            <Upload className="h-3.5 w-3.5" /> Publish
-          </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setCallDialog(true)}>
-            <Phone className="h-3.5 w-3.5" /> Call
-          </Button>
-          <Button size="sm" variant={showWebcall ? "default" : "outline"} className="h-7 text-xs gap-1.5" onClick={() => setShowWebcall(v => !v)}>
-            <Mic className="h-3.5 w-3.5" /> Web Call
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Agent
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+      </motion.div>
 
       {/* Rename Agent dialog */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
