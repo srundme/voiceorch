@@ -907,3 +907,52 @@ export function useVobizWalletStatus() {
     refetchInterval: 5 * 60 * 1000, // refresh every 5 minutes
   });
 }
+
+// ─── Platform Emails ──────────────────────────────────────────────────────────
+
+export function usePlatformEmails(params: { page?: number; userId?: string; search?: string } = {}) {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.userId) qs.set("userId", params.userId);
+  if (params.search) qs.set("search", params.search);
+  return useQuery({
+    queryKey: ["admin", "emails", params],
+    queryFn: () => adminFetch<any>(`/emails?${qs.toString()}`),
+  });
+}
+
+export function usePlatformEmailDetail(id: number | null) {
+  return useQuery({
+    queryKey: ["admin", "emails", id],
+    queryFn: () => adminFetch<any>(`/emails/${id}`),
+    enabled: id !== null,
+  });
+}
+
+export function useSendEmailToUser(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { subject: string; htmlBody: string; emailType?: string }) =>
+      adminFetch<any>(`/users/${clerkId}/send-email`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "emails"] });
+    },
+  });
+}
+
+export function useSendManualEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { toEmail: string; toUserId?: string; toName?: string; subject: string; htmlBody: string; emailType?: string }) =>
+      adminFetch<any>("/emails/send", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "emails"] });
+    },
+  });
+}

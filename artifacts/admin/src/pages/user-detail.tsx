@@ -17,6 +17,8 @@ import {
   useAdminCreateAgent,
   useImpersonateUser,
   useUserAuditLogs,
+  useSendEmailToUser,
+  usePlatformEmails,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -33,12 +35,12 @@ import {
 } from "@/components/ui/table";
 import {
   ArrowLeft, Wallet, PhoneCall, Bot, Activity, Zap, ShieldAlert, LogIn,
-  ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Pencil, Plus,
+  ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Pencil, Plus, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 
-type Tab = "overview" | "agents" | "providers" | "calls" | "wallet" | "audit";
+type Tab = "overview" | "agents" | "providers" | "calls" | "wallet" | "audit" | "emails";
 
 function StatusBadge({ status }: { status?: string }) {
   if (status === "suspended") return <Badge variant="destructive">Suspended</Badge>;
@@ -63,7 +65,15 @@ export default function UserDetail() {
   const deleteAgent = useAdminDeleteAgent(clerkId || "");
   const createAgent = useAdminCreateAgent(clerkId || "");
   const impersonate = useImpersonateUser();
+  const sendEmailToUser = useSendEmailToUser(clerkId || "");
   const [, setLocation] = useLocation();
+
+  // Email state
+  const [emailModal, setEmailModal] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailsPage, setEmailsPage] = useState(1);
+  const userEmails = usePlatformEmails({ userId: clerkId || "", page: emailsPage });
 
   // Dialog states
   const [concurrentModal, setConcurrentModal] = useState(false);
@@ -177,6 +187,26 @@ export default function UserDetail() {
   const isSuspended = user.status === "suspended";
   const isDeleted = user.status === "deleted";
 
+  const handleSendEmail = () => {
+    if (!emailSubject || !emailBody) {
+      toast({ title: "Subject and body required", variant: "destructive" }); return;
+    }
+    const htmlBody = emailBody.includes("<") ? emailBody : emailBody.split("\n").map(l => `<p>${l}</p>`).join("");
+    sendEmailToUser.mutate(
+      { subject: emailSubject, htmlBody, emailType: "manual" },
+      {
+        onSuccess: () => {
+          toast({ title: "Email sent successfully" });
+          setEmailModal(false);
+          setEmailSubject("");
+          setEmailBody("");
+          userEmails.refetch();
+        },
+        onError: (e) => toast({ title: "Failed to send email", description: formatApiError(e), variant: "destructive" }),
+      },
+    );
+  };
+
   const TABS: { key: Tab; label: string; icon: any }[] = [
     { key: "overview", label: "Overview", icon: Activity },
     { key: "agents", label: "Agents", icon: Bot },
@@ -184,6 +214,7 @@ export default function UserDetail() {
     { key: "calls", label: "Calls", icon: PhoneCall },
     { key: "wallet", label: "Wallet", icon: Wallet },
     { key: "audit", label: "Audit", icon: ClipboardList },
+    { key: "emails", label: "Emails", icon: Mail },
   ];
 
   return (
@@ -214,6 +245,16 @@ export default function UserDetail() {
           </Button>
           <Button size="sm" variant="outline" onClick={() => { setProfileEmail(user.email || ""); setProfileName(user.name || ""); setProfileModal(true); }}>
             Edit Profile
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { setEmailSubject(""); setEmailBody(""); setEmailModal(true); }}
+            disabled={!user.email}
+            className="gap-1.5"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            Send Email
           </Button>
           {!isSuspended && !isDeleted && (
             <Button size="sm" variant="destructive" onClick={() => setSuspendModal(true)} className="gap-1.5">
@@ -621,7 +662,90 @@ export default function UserDetail() {
         </div>
       )}
 
+      {/* ── Emails Tab ────────────────────────────────────────────── */}
+      {tab === "emails" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">{userEmails.data?.total ?? 0} emails sent to this user</span>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setEmailSubject(""); setEmailBody(""); setEmailModal(true); }}>
+              <Mail className="h-3.5 w-3.5" /> Send Email
+            </Button>
+          </div>
+          <div className="border border-border rounded-lg bg-card overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[140px]">Date</TableHead>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Sent By</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {userEmails.isLoading ? (
+                  <TableRow><TableCell colSpan={5} className="text-center h-20 animate-pulse text-muted-foreground">Loading…</TableCell></TableRow>
+                ) : (userEmails.data?.data ?? []).length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center h-20 text-muted-foreground">No emails sent to this user yet.</TableCell></TableRow>
+                ) : (
+                  (userEmails.data?.data ?? []).map((row: any) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">{format(new Date(row.sentAt), "MMM d HH:mm")}</TableCell>
+                      <TableCell className="text-sm">{row.subject}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-[10px]">{row.emailType}</Badge></TableCell>
+                      <TableCell>
+                        {row.status === "sent"
+                          ? <span className="text-emerald-400 text-xs">✓ Sent</span>
+                          : <span className="text-destructive text-xs">✗ Failed</span>}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{row.sentBy}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <PaginationBar
+            page={emailsPage}
+            total={userEmails.data?.total ?? 0}
+            pageSize={userEmails.data?.pageSize ?? 50}
+            onPage={setEmailsPage}
+          />
+        </div>
+      )}
+
       {/* ── Dialogs ──────────────────────────────────────────────── */}
+
+      {/* Send Email */}
+      <Dialog open={emailModal} onOpenChange={setEmailModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Send Email to {user.email}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1.5">
+              <Label>Subject</Label>
+              <Input placeholder="Subject…" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Body <span className="text-muted-foreground text-xs">(plain text or HTML)</span></Label>
+              <Textarea
+                placeholder={`Hi ${user.name ?? "there"},\n\nYour message here…`}
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                className="min-h-[160px] font-mono text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailModal(false)}>Cancel</Button>
+            <Button onClick={handleSendEmail} disabled={sendEmailToUser.isPending} className="gap-1.5">
+              <Mail className="h-3.5 w-3.5" />
+              {sendEmailToUser.isPending ? "Sending…" : "Send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Concurrent limit */}
       <Dialog open={concurrentModal} onOpenChange={setConcurrentModal}>

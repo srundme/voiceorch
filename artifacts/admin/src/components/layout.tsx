@@ -24,6 +24,7 @@ import {
   GraduationCap,
   Layers,
   Rocket,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/settings",       label: "Settings",         icon: Settings },
     { href: "/dpdp",           label: "DPDP Erasure",     icon: ShieldX },
     { href: "/deployments",    label: "Deployments",      icon: Rocket },
+    { href: "/emails",         label: "Emails",            icon: Mail },
     { href: "/book-interns",     label: "Book Interns",     icon: GraduationCap, section: "Engineering Programme" },
     { href: "/family/companies", label: "Companies",      icon: Building2,  section: "Family Insurance" },
     { href: "/family/agents",    label: "AI Agents",      icon: ShieldCheck },

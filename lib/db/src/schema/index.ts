@@ -53,3 +53,4 @@ export * from "./book-interns";
 export * from "./vibe-chat";
 export * from "./analytics-events";
 export * from "./deployment-events";
+export * from "./platform-emails";
