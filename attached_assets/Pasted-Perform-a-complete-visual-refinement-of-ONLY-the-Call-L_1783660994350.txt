@@ -1,0 +1,120 @@
+Perform a complete visual refinement of ONLY the Call Logs table section. Ignore any previous spacing/layout rules if necessary. The goal is to make the table look like a premium enterprise SaaS product (Stripe, Linear, Vercel, Supabase, Clerk).
+
+IMPORTANT:
+- UI/UX changes ONLY.
+- Do NOT modify backend logic, API calls, routing, filters, pagination logic, search behavior, export functionality, state management, or business logic.
+- Preserve every existing feature exactly as it works today.
+
+The current table looks too spread out with excessive horizontal gaps between columns. The rows feel disconnected and the layout wastes too much empty space. Rework the table so it feels compact, balanced, premium, and easier to scan.
+
+TABLE CONTAINER
+- Wrap the entire table inside a premium card container.
+- Background slightly lighter than the page.
+- 16px border radius.
+- Soft 1px border.
+- Subtle shadow.
+- 24px internal padding.
+- Header and pagination should visually belong to the same container.
+
+COLUMN LAYOUT
+Completely rebalance the column widths instead of using oversized fixed widths.
+
+Priority:
+Date & Time → compact
+Call ID → compact
+Agent → medium
+From → wide
+To → wide
+Call Type → compact
+Status → compact
+Duration → compact
+Cost → compact
+Actions → very compact
+
+There should be NO large empty gap anywhere in the table.
+
+Allow "From" and "To" to consume the remaining horizontal space while keeping all other columns compact.
+
+Reduce unnecessary whitespace between:
+- To ↔ Call Type
+- Status ↔ Duration
+- Cost ↔ Actions
+
+Everything should feel visually balanced.
+
+ROWS
+- Increase row height to about 64px.
+- Vertically center every item.
+- Consistent horizontal padding for every cell.
+- Better spacing between avatar, text, and badges.
+- Smooth hover background.
+- Softer row separators.
+
+TABLE HEADER
+- Place the header inside the same card.
+- Slightly different background from rows.
+- Sticky while scrolling.
+- Small uppercase labels.
+- Medium font weight.
+- Better letter spacing.
+- Align perfectly with the body columns.
+
+CELL ALIGNMENT
+Date:
+Display date and time with consistent spacing.
+
+Agent:
+Keep avatar close to the name with about 10px spacing.
+
+From / To:
+Use the available width before truncating.
+Truncate only when absolutely necessary.
+
+Call Type:
+Centered premium outlined badge.
+
+Status:
+Premium rounded badge with comfortable padding.
+
+Duration:
+Center aligned.
+
+Cost:
+Right aligned.
+
+Actions:
+Center aligned with a larger clickable area.
+
+PAGINATION
+Keep existing functionality.
+
+Only redesign the appearance:
+- Place inside the table card footer.
+- Better spacing.
+- Cleaner alignment.
+- Modern outlined controls.
+- Remove the feeling of floating controls.
+
+SPACING
+Reduce excessive whitespace throughout the table.
+
+Every column should be visually close enough to be readable while never looking cramped.
+
+The table should occupy the available width efficiently instead of leaving large empty spaces.
+
+VISUAL STYLE
+Match modern SaaS dashboards:
+- Stripe
+- Linear
+- Vercel
+- Supabase
+- Clerk
+
+The result should feel compact, premium, elegant, and professionally designed.
+
+Before finishing, compare the old and new layouts and ensure:
+- Empty horizontal gaps are eliminated.
+- Column spacing is balanced.
+- Rows look denser and easier to scan.
+- The table appears as one polished component instead of loose elements.
+- No functionality or behavior has changed.
