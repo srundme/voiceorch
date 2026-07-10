@@ -1,0 +1,181 @@
+Redesign the entire Agents → Prompt page into a modern enterprise AI prompt editor while preserving all existing functionality.
+
+IMPORTANT
+
+- UI/UX changes ONLY.
+- Do NOT modify APIs.
+- Do NOT modify prompts.
+- Do NOT modify backend.
+- Do NOT change agent behavior.
+- Keep all existing features working exactly as before.
+
+GOAL
+
+The page should feel similar to ChatGPT Workspace, Claude Projects, Cursor Composer, OpenAI Playground, and Vercel AI.
+
+---------------------------------------
+LAYOUT
+---------------------------------------
+
+Create clear visual hierarchy using sections.
+
+1. Conversation
+
+Contains:
+- First Message
+- Assistant Speaks First selector
+
+2. System Instructions
+
+Contains:
+- System Prompt editor
+- Generate button
+
+3. Knowledge
+
+Contains:
+- Knowledge selector
+- Attached source information
+
+Each section should be separated using generous spacing instead of heavy borders.
+
+---------------------------------------
+FIRST MESSAGE
+---------------------------------------
+
+Convert the First Message into a compact chat-style editor.
+
+Height:
+72-80px
+
+Rounded:
+14px
+
+Placeholder should remain unchanged.
+
+The selector "Assistant speaks first" should align perfectly with the top of the editor.
+
+---------------------------------------
+SYSTEM PROMPT
+---------------------------------------
+
+Transform the textarea into a premium prompt editor.
+
+Requirements:
+
+- Minimum height 260px
+- Comfortable internal padding
+- Larger line-height
+- Monospace font
+- Better cursor spacing
+- Smooth focus border
+- Subtle background difference from page
+
+Do not use bright outlines.
+
+---------------------------------------
+GENERATE BUTTON
+---------------------------------------
+
+Place Generate inside the editor header.
+
+Layout:
+
+System Prompt                     Generate
+
+NOT floating on the right side.
+
+Generate should appear as a ghost button.
+
+---------------------------------------
+KNOWLEDGE SECTION
+---------------------------------------
+
+Use a clean card.
+
+Dropdown on top.
+
+Description below.
+
+Improve spacing.
+
+---------------------------------------
+INPUTS
+---------------------------------------
+
+Every input must have:
+
+Height:
+48px
+
+Radius:
+12px
+
+Consistent padding
+
+Consistent typography
+
+---------------------------------------
+VISUAL STYLE
+---------------------------------------
+
+No gradients.
+
+No glowing borders.
+
+No colorful backgrounds.
+
+No unnecessary animations.
+
+Use only neutral grayscale surfaces.
+
+---------------------------------------
+SPACING
+---------------------------------------
+
+24px between sections
+
+16px inside cards
+
+Consistent left alignment
+
+Consistent vertical rhythm
+
+---------------------------------------
+TYPOGRAPHY
+---------------------------------------
+
+Section Title:
+18px
+Semibold
+
+Labels:
+13px
+
+Descriptions:
+Muted gray
+
+Editor Text:
+15px
+
+---------------------------------------
+ANIMATIONS
+---------------------------------------
+
+Use only subtle hover and focus transitions.
+
+No scaling.
+
+No bouncing.
+
+---------------------------------------
+DO NOT CHANGE
+
+- Backend
+- Prompt logic
+- Generate logic
+- Existing functionality
+- Existing data
+- Existing APIs
+
+Only improve visual hierarchy, spacing, typography, alignment, editor experience, and overall premium SaaS appearance.

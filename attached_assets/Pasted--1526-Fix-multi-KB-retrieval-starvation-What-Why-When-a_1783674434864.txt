@@ -1,0 +1,24 @@
+#1526 - Fix multi-KB retrieval starvation
+What & Why
+When an agent has two knowledge sources attached, only the first one ever reaches the LLM. Call 2159 proves it: all 8 turns used the prefetch full-dump fallback (identical 7,972 chars), truncated at 8,000 chars in pinned-then-insertion order — source 1 (Galaxy App User Guide) consumes the whole budget and source 2 is silently cut off. The call-start baked block has the same single-source starvation under its 4,000-char non-Gemini cap. Additionally, on pure-Tamil calls the live semantic retrieval goes vector-only, but the query embed is allowed up to 1,500ms (KB_EMBED_QUERY_TIMEOUT_MS) while the per-turn live budget is only 200ms (KB_TURN_RETRIEVAL_BUDGET_MS) — so the query-aware path that could actually find the second source almost never wins, and the truncated dump is used every turn. Result: the agent can't answer questions covered by the second KB and falls back to its scripted flow.
+Done looks like
+
+With two or more KB sources attached, every source contributes entries to the per-turn prefetch dump and the call-start baked block, even under the char caps.
+Cap allocation scales with source count and rolls over unused budget: if source A only has 1,200 chars of actual content, source B gets the remainder instead of budget going to waste.
+Pinned-entry contention is resolved fairly too — one source's pinned entries can't crowd out another source's pinned entries; pinned budget is source-aware, not global-insertion-order.
+On pure-Tamil (non-Latin) turns, live semantic retrieval has a realistic, measured chance to complete and win the turn instead of always losing to the dump fallback.
+Call execution log shows which source IDs actually contributed entries to the injected KB context, plus whether the dump was truncated — this class of bug should be diagnosable from the log alone, no code spelunking required.
+A programmatic replay of call 2159's Tamil questions against the retrieval layer (not just a manual test call) returns content from source 29, not deflections.
+
+Out of scope
+
+Changing the agent's LLM model or system-prompt flow design.
+Transliteration/alias handling for product names spoken in Tamil script (e.g. "த்ரீ சிக்ஸ்டி" → "360") — follow-up ticket.
+Dashboard/UI changes.
+
+Steps
+
+Fair multi-source dumping. Default to a per-source char cap (total budget ÷ number of attached sources) rather than round-robin-by-entry — entry-level round-robin can still starve a source whose entries are just bigger. Implement rollover: if a source's actual content is smaller than its allocated cap, redistribute the leftover to the other source(s) before truncating anyone. Apply the same logic to pinned entries specifically, not just the general pool — pinned-first-by-global-order is the same bug in miniature. Keep single-source behavior byte-identical to today.
+Measure before changing the vector-retrieval budget. Don't guess at new timeout numbers. First, instrument actual embed-completion latency across a sample of real Tamil calls (or replay call 2159 + a few others) and log p50/p90/p99. Pick the turn budget for skipFts (pure non-Latin) turns off that data — e.g. p90 + margin — and only widen the budget for that skipFts path, not globally. Optionally warm the embed earlier by kicking it off from streaming STT partials instead of waiting for the final transcript, and consider caching repeated query embeddings. Non-negotiable: the turn must never stall waiting on a slow embed — dump fallback stays as the safety net.
+Source-attribution logging. Extend the per-turn KB Context execution-log event and the call-start Knowledge event to include contributingSourceIds and a truncated: boolean (or per-source truncated flags) so starvation is visible in the log without re-deriving it from char counts by hand.
+Tests + verification. Unit test the fair-dump interleaving (2 sources tight cap → both represented; 3 sources; one source thinner than its cap → rollover works; pinned-entry contention across sources). Unit test the skipFts budget logic against the measured latency data from step 2. Build a regression test that replays call 2159's actual Tamil turns through the retrieval layer and asserts source 29 content shows up. Run repo typecheck. Push to GitHub per repo convention.
