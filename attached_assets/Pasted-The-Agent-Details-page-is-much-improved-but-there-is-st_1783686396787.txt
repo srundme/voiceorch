@@ -1,0 +1,86 @@
+The Agent Details page is much improved, but there is still unnecessary vertical spacing in the header.
+
+Please make the following refinements.
+
+==================================================
+1. MAKE THE HEADER MORE COMPACT
+==================================================
+
+Reduce the overall header height by approximately 20–25%.
+
+Reduce vertical spacing between:
+
+• Breadcrumb → Agent Name
+• Agent Name → Metadata
+• Metadata → Estimated Cost Card
+
+Recommended spacing:
+
+Breadcrumb → Title: 4px
+Title → Metadata: 4px
+Metadata → Cost Card: 12px
+
+Reduce top and bottom padding of the header container.
+
+Do NOT reduce readability.
+
+==================================================
+2. MOVE THE ESTIMATED COST CARD UP
+==================================================
+
+The Estimated Cost card currently sits too far below the header.
+
+Move it closer so it feels visually connected to the agent information.
+
+There should only be a small gap (around 12px) between:
+
+● Inactive • Agent #0146 • 0 Calls
+
+and
+
+Estimated Cost / Minute
+
+Do not change the width or styling of the card.
+
+Only adjust positioning and spacing.
+
+==================================================
+3. KEEP THE VISUAL HIERARCHY
+==================================================
+
+The order should remain:
+
+← Agents
+
+Mouse ✏️
+
+● Inactive • Agent #0146 • 0 Calls
+
+Estimated Cost Card
+
+Overview Tabs
+
+==================================================
+4. DO NOT CHANGE
+==================================================
+
+- Typography
+- Button styles
+- Functionality
+- Responsive behavior
+
+Only optimize spacing and layout.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+✓ Header is approximately 20–25% shorter.
+
+✓ Estimated Cost card is positioned closer to the header.
+
+✓ Less wasted vertical space.
+
+✓ The page feels more compact and premium.
+
+✓ Matches the layout quality of modern enterprise SaaS dashboards such as Linear, Vercel, and Stripe.
