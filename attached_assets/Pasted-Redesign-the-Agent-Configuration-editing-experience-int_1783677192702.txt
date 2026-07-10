@@ -1,0 +1,293 @@
+Redesign the Agent Configuration editing experience into a premium modal-based workflow.
+
+IMPORTANT
+
+- UI/UX changes ONLY.
+- Do NOT modify backend logic.
+- Do NOT change APIs.
+- Do NOT modify provider integrations.
+- Do NOT change agent functionality.
+- Do NOT change data flow.
+- Only redesign how configuration is edited.
+
+--------------------------------------------------
+GOAL
+--------------------------------------------------
+
+Replace the large inline configuration sections:
+
+- Transcriber Configuration
+- Model Configuration
+- Voice Configuration
+
+with modern enterprise edit dialogs.
+
+The main Overview page should remain clean and compact.
+
+--------------------------------------------------
+OVERVIEW PAGE
+--------------------------------------------------
+
+Keep the existing summary cards:
+
+• Transcriber
+• Model
+• Voice
+
+These cards become the primary entry point for editing.
+
+Each card should display:
+
+- Small muted uppercase label
+- Current selection
+- Provider
+- Optional metadata
+
+Add a subtle Edit icon in the top-right.
+
+The card itself should also be clickable.
+
+No extra buttons.
+
+--------------------------------------------------
+EDIT DIALOG
+--------------------------------------------------
+
+Clicking a card opens a centered modal.
+
+Width:
+680px (desktop)
+
+Max width:
+720px
+
+Border radius:
+16px
+
+Padding:
+24px
+
+Background:
+Neutral dark surface
+
+Border:
+1px subtle gray
+
+Soft shadow only.
+
+No glow.
+
+No gradients.
+
+--------------------------------------------------
+HEADER
+--------------------------------------------------
+
+Example:
+
+Edit Voice
+
+Update the voice configuration for this agent.
+
+Top-right:
+
+Close (X)
+
+--------------------------------------------------
+BODY
+--------------------------------------------------
+
+Display existing controls exactly as they work today.
+
+Example:
+
+Provider
+
+[ Dropdown ]
+
+Voice
+
+[ Dropdown ]
+
+Model
+
+[ Dropdown ]
+
+Preview Voice button
+
+(if available)
+
+Nothing changes functionally.
+
+Only presentation changes.
+
+--------------------------------------------------
+MODEL DIALOG
+--------------------------------------------------
+
+Provider
+
+Model
+
+Temperature slider
+
+Other existing controls
+
+--------------------------------------------------
+TRANSCRIBER DIALOG
+--------------------------------------------------
+
+Language
+
+Provider
+
+Model
+
+STT Mode
+
+Auto Detect toggle
+
+All current controls remain unchanged.
+
+--------------------------------------------------
+FOOTER
+--------------------------------------------------
+
+Bottom sticky footer:
+
+Cancel
+
+Save Changes
+
+Primary button:
+
+Save Changes
+
+Secondary:
+
+Cancel
+
+Buttons right aligned.
+
+--------------------------------------------------
+ANIMATION
+--------------------------------------------------
+
+Background:
+
+Dark overlay
+
+Opacity:
+~55%
+
+Blur:
+4px
+
+Dialog animation:
+
+Fade
+
+Scale
+
+95%
+
+↓
+
+100%
+
+Duration:
+
+150ms
+
+Ease-out
+
+--------------------------------------------------
+BEHAVIOR
+--------------------------------------------------
+
+Click outside
+
+ESC
+
+Close icon
+
+should dismiss the dialog if there are no unsaved changes.
+
+Warn only if edits were made.
+
+--------------------------------------------------
+OVERVIEW PAGE AFTER CHANGE
+--------------------------------------------------
+
+Remove the large inline configuration forms completely.
+
+After the summary cards, continue directly to:
+
+Using managed API keys
+
+Conversation
+
+Prompt
+
+Knowledge
+
+etc.
+
+This keeps the page compact and significantly reduces scrolling.
+
+--------------------------------------------------
+VISUAL STYLE
+--------------------------------------------------
+
+Reference:
+
+Stripe Dashboard
+
+Linear
+
+Vercel
+
+GitHub Settings
+
+OpenAI
+
+Clerk
+
+Minimal
+
+Clean
+
+Enterprise
+
+Professional
+
+No colorful UI.
+
+No unnecessary icons.
+
+No gradients.
+
+No glassmorphism.
+
+No oversized buttons.
+
+No flashy animations.
+
+--------------------------------------------------
+DO NOT CHANGE
+
+Backend
+
+Providers
+
+API calls
+
+Validation
+
+Existing controls
+
+Business logic
+
+Agent behavior
+
+Only replace inline configuration sections with premium edit dialogs while preserving all existing functionality.
