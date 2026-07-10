@@ -1,0 +1,29 @@
+Investigation only — do not change code yet.
+
+We need to verify the correct architecture for the Vibe Builder scheduling setup flow.
+
+The required behavior is:
+
+During the Vibe conversation, detect from the user’s requirements whether the agent needs scheduling or appointment-booking capabilities. If scheduling is needed, the Vibe chat should acknowledge this and trigger the scheduling setup flow at the appropriate point in the conversation.
+
+The Vibe Builder page must remain visible underneath while the existing Scheduling UIs open as popup overlays in this sequence:
+
+Google Account → Calendar → Availability → Event Type
+
+After the user completes the scheduling setup, close the popup and automatically resume the same Vibe conversation from where it stopped. The completed scheduling configuration must then be associated with the agent being created or edited.
+
+Use the attached screenshots as the visual reference for the existing UIs.
+
+Before implementing, inspect the current code and report:
+
+1. At what point does Vibe currently detect that the requested agent needs scheduling?
+2. Can the popup flow start at that point, or does the current database structure require an agent ID before Calendar/Availability/Event Type configuration can begin?
+3. If an agent ID is required, what is the smallest safe architecture: draft agent creation, temporary setup state, or another existing mechanism?
+4. Trace the exact desired runtime flow from scheduling intent detection → chat acknowledgement → popup trigger → Google → Calendar → Availability → Event Type → resume Vibe conversation.
+5. For each popup step, identify the exact existing component that can be reused directly.
+6. Identify any component that cannot be embedded directly because of routing or page-level dependencies, and identify the reusable inner component instead.
+7. Explain why the current SchedulingWizard is not producing this behavior.
+8. Confirm how Google OAuth returns control to the same Vibe Builder session.
+9. Recommend the smallest reliable implementation that reuses existing UI and does not duplicate forms.
+
+Do not implement yet. Report findings from the actual current codebase first.
