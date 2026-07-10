@@ -17,7 +17,7 @@ import { OutboundCallDialog } from "@/components/outbound-call-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
-import { getListAgentsQueryKey, useListAgents } from "@workspace/api-client-react";
+import { getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import VibeSchedulingWizard from "./SchedulingWizard";
 
@@ -222,7 +222,6 @@ export default function VibePage() {
   const [, navigate]     = useLocation();
   const queryClient      = useQueryClient();
   const { toast }        = useToast();
-  const { data: recentAgentsData } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const refineId = useMemo(() => {
     try {
@@ -1187,7 +1186,7 @@ export default function VibePage() {
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKey}
-        placeholder={phase === "done" ? "Your agent is ready! ✓" : "Describe your agent or ask anything…"}
+        placeholder={phase === "done" ? "Your agent is ready! ✓" : "Describe the AI voice agent you want to build…"}
         disabled={phase === "done" || phase === "building"}
         rows={isLanding ? 4 : 3}
         className={cn(
@@ -1384,35 +1383,10 @@ export default function VibePage() {
               </div>
             )}
 
-            {/* Recent agents */}
-            {!isThinking && (recentAgentsData?.length ?? 0) > 0 && (
-              <div className="mt-10 w-full max-w-2xl">
-                <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-widest text-center mb-3">
-                  Recent Agents
-                </p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {[...(recentAgentsData ?? [])]
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                    .slice(0, 3)
-                    .map(agent => (
-                      <button
-                        key={agent.id}
-                        onClick={() => navigate(`/app/agents/${agent.id}`)}
-                        className="flex flex-col items-start gap-1 rounded-xl border border-border/50 bg-muted/10 backdrop-blur-sm px-3.5 py-3 text-left hover:border-primary/35 hover:bg-muted/25 transition-all duration-200"
-                      >
-                        <p className="text-xs font-semibold text-foreground truncate w-full">{agent.name}</p>
-                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                          <span className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            agent.status === "active" ? "bg-emerald-500" : agent.status === "inactive" ? "bg-muted-foreground/40" : "bg-amber-500",
-                          )} />
-                          <span className="capitalize">{agent.status}</span>
-                          {agent.asrLanguage && <span className="text-muted-foreground/50">· {agent.asrLanguage}</span>}
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              </div>
+            {!isThinking && (
+              <p className="mt-10 text-center text-xs text-muted-foreground/50">
+                50+ Languages • Real-time Voice • Enterprise Ready • Knowledge Powered
+              </p>
             )}
           </div>
         </div>
