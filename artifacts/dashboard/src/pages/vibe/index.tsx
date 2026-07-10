@@ -883,9 +883,12 @@ export default function VibePage() {
               });
               break;
 
-            case "scheduling_setup":
-              setSchedulingSetup({ timezone: String(evt.timezone ?? "Asia/Kolkata") });
+            case "scheduling_setup": {
+              const ss = { timezone: String(evt.timezone ?? "Asia/Kolkata") };
+              schedulingSetupRef.current = ss; // sync — so `created` handler sees it in the same tick
+              setSchedulingSetup(ss);
               break;
+            }
 
             case "prompt_stream":
               setPromptPreview(prev => prev + (evt.delta as string));
