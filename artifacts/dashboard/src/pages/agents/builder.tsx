@@ -4824,7 +4824,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   return (
     <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-border/60 shrink-0">
+      <div className="flex items-start justify-between gap-4 px-6 py-3 border-b border-border/60 shrink-0">
         <div className="flex flex-col gap-1.5 min-w-0">
           <DetailNav backTo="/app/agents" backLabel="Back to Agents" />
           <div className="flex items-center gap-1.5 min-w-0">
@@ -4850,7 +4850,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             <span>{(agent as any).totalCalls ?? 0} Calls</span>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0 pt-1">
+        <div className="flex items-center gap-3 shrink-0">
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
             <Sparkles className="h-3.5 w-3.5" /> Refine with AI
           </Button>
