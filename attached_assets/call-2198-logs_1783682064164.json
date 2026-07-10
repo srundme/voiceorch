@@ -1,0 +1,1343 @@
+[
+  {
+    "id": 152480,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 163,
+      "agentName": "Benicia",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "6e71e947-da7a-47bf-85eb-f202f53f3ee8"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2198,
+      "sessionId": "live-2198",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-10T11:11:48.901Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 152484,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 152481,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 152482,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-163",
+        "from_number": "webcall-user-102021117291594012372",
+        "agent_name": "Benicia",
+        "caller_number": "webcall-user-102021117291594012372",
+        "date": "Friday, July 10, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "# Agent Identity & Role  \nYou are **Benicia**, a voice assistant for **Bens Clinic**. Your role is to book appointments for new patients by calling customers to confirm available time slots, checking clinic availability, and finalizing bookings. You handle both inbound and outbound calls in **English (India)**.  \n\n---\n\n# Language & Communication Style  \n- Speak in casual, colloquial **English (India)**, using local idioms and business terms (e.g., \"slot\", \"book\", \"confirm\").  \n- Avoid formal or scripted phrasing. Use warmth and clarity to build trust.  \n- Never mention pricing or costs. If ask"
+    },
+    "metadata": null
+  },
+  {
+    "id": 152485,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 152486,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "6e71e947-da7a-47bf-85eb-f202f53f3ee8"
+    }
+  },
+  {
+    "id": 152483,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.916Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "b157370c8930",
+      "promptLength": 9930,
+      "preview": "# Agent Identity & Role  \nYou are **Benicia**, a voice assistant for **Bens Clinic**. Your role is to book appointments for new patients by calling customers to confirm available time slots, checking "
+    }
+  },
+  {
+    "id": 152487,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.917Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 152488,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:48.918Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 152489,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:49.837Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 924,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 6,
+      "firstByteMs": 617
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 924
+    }
+  },
+  {
+    "id": 152490,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:50.312Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 0,
+      "durationMs": 1398
+    }
+  },
+  {
+    "id": 152491,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:51.524Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello",
+      "endDetectToFinalMs": 103,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152492,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:51.651Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE — ABSOLUTE RULE] You MUST respond ONLY in English. This applies to EVERY reply without exception — including when you are confused, do not understand a word, encounter an unfamiliar name, or the caller speaks in another language. Never switch to English or any other language under any circumstances. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into your English speech is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages, and \"ONLY in English\" does NOT mean avoiding these everyday English loanwords. EXCEPTION —",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "book_appointment",
+        "check_availability",
+        "list_bookings",
+        "reschedule_booking",
+        "cancel_booking",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152493,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:52.417Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "onToolCall Invoked",
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "",
+        "timezone": "Asia/Kolkata"
+      },
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152495,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:52.418Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 779,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "[calling tool: check_availability]"
+    },
+    "metadata": {
+      "inputTokens": 6136,
+      "outputTokens": 17,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152494,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:52.418Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "One moment…"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152496,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:52.467Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152497,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.098Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 682,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 35554,
+      "textLength": 11,
+      "firstByteMs": 287
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 682
+    }
+  },
+  {
+    "id": 152498,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.577Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 200,
+      "configuredThreshold": 200,
+      "echoFloor": 0,
+      "currentRms": 0,
+      "turnNumber": 1,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 152499,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.587Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152500,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.587Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 1111,
+      "turnNumber": 1,
+      "durationMs": 1118,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 152501,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.587Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "check_availability",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152502,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.607Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Tool Executed",
+      "tool": "check_availability",
+      "result": "available_slots: count=64, event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\", next=\"2026-07-13T09:00:00+05:30 (Mon Jul 13 at 9:00 AM); 2026-07-13T09:15:00+05:30 (Mon Jul 13 at 9:15 AM); 2026-07-13T09:30:00+05:30 (Mon Jul 13 at 9:30 AM); 2026-07-13T09:45:00+05:30 (Mon Jul 13 at 9:45 AM); 2026-07-13T10:00:00+05:30 (Mon Jul 13 at 10:00 AM)\"",
+      "turnNumber": 1,
+      "durationMs": 19
+    }
+  },
+  {
+    "id": 152503,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.607Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "available_slots: count=64, event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\", next=\"2026-07-13T09:00:00+05:30 (Mon Jul 13 at 9:00 AM); 2026-07-13T09:15:00+05:30 (Mon Jul 13 at 9:15 AM); 2026-07-13T09:30:00+05:30 (Mon Jul 13 at 9:30 AM); 2026-07-13T09:45:00+05:30 (Mon Jul 13 at 9:45 AM); 2026-07-13T10:00:00+05:30 (Mon Jul 13 at 10:00 AM)\"",
+      "turnNumber": 1,
+      "durationMs": 19
+    }
+  },
+  {
+    "id": 152504,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:53.607Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 19,
+    "requestPayload": {
+      "tool": "check_availability"
+    },
+    "responsePayload": {
+      "result": "available_slots: count=64, event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\", next=\"2026-07-13T09:00:00+05:30 (Mon Jul 13 at 9:00 AM); 2026-07-13T09:15:00+05:30 (Mon Jul 13 at 9:15 AM); 2026-07-13T09:30:00+05:30 (Mon Jul 13 at 9:30 AM); 2026-07-13T09:45:00+05:30 (Mon Jul 13 at 9:45 AM); 2026-07-13T10:00:00+05:30 (Mon Jul 13 at 10:00 AM)\""
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 19
+    }
+  },
+  {
+    "id": 152505,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.138Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "onToolCall Invoked",
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-07-13",
+        "timezone": "Asia/Kolkata"
+      },
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152507,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.138Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-07-13",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152506,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.138Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "check_availability",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152508,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.152Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Tool Executed",
+      "tool": "check_availability",
+      "result": "available_slots: count=96, event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\", next=\"2026-07-13T09:00:00+05:30 (Mon Jul 13 at 9:00 AM); 2026-07-13T09:15:00+05:30 (Mon Jul 13 at 9:15 AM); 2026-07-13T09:30:00+05:30 (Mon Jul 13 at 9:30 AM); 2026-07-13T09:45:00+05:30 (Mon Jul 13 at 9:45 AM); 2026-07-13T10:00:00+05:30 (Mon Jul 13 at 10:00 AM)\"",
+      "turnNumber": 1,
+      "durationMs": 12
+    }
+  },
+  {
+    "id": 152509,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.152Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "available_slots: count=96, event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\", next=\"2026-07-13T09:00:00+05:30 (Mon Jul 13 at 9:00 AM); 2026-07-13T09:15:00+05:30 (Mon Jul 13 at 9:15 AM); 2026-07-13T09:30:00+05:30 (Mon Jul 13 at 9:30 AM); 2026-07-13T09:45:00+05:30 (Mon Jul 13 at 9:45 AM); 2026-07-13T10:00:00+05:30 (Mon Jul 13 at 10:00 AM)\"",
+      "turnNumber": 1,
+      "durationMs": 12
+    }
+  },
+  {
+    "id": 152510,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.152Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 13,
+    "requestPayload": {
+      "tool": "check_availability"
+    },
+    "responsePayload": {
+      "result": "available_slots: count=96, event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\", next=\"2026-07-13T09:00:00+05:30 (Mon Jul 13 at 9:00 AM); 2026-07-13T09:15:00+05:30 (Mon Jul 13 at 9:15 AM); 2026-07-13T09:30:00+05:30 (Mon Jul 13 at 9:30 AM); 2026-07-13T09:45:00+05:30 (Mon Jul 13 at 9:45 AM); 2026-07-13T10:00:00+05:30 (Mon Jul 13 at 10:00 AM)\""
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 13
+    }
+  },
+  {
+    "id": 152511,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.622Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-07-13T09:00:00+05:30",
+        "timezone": "Asia/Kolkata"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152513,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.622Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "onToolCall Invoked",
+      "tool": "check_availability",
+      "args": {
+        "preferred_date": "2026-07-13T09:00:00+05:30",
+        "timezone": "Asia/Kolkata"
+      },
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152512,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.622Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "check_availability",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152514,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.636Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Tool Executed",
+      "tool": "check_availability",
+      "result": "requested_slot_available: slot=\"2026-07-13T09:00:00+05:30\", label=\"Mon Jul 13 at 9:00 AM\", event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\"",
+      "turnNumber": 1,
+      "durationMs": 12
+    }
+  },
+  {
+    "id": 152515,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.636Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 13,
+    "requestPayload": {
+      "tool": "check_availability"
+    },
+    "responsePayload": {
+      "result": "requested_slot_available: slot=\"2026-07-13T09:00:00+05:30\", label=\"Mon Jul 13 at 9:00 AM\", event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\""
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 13
+    }
+  },
+  {
+    "id": 152516,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:54.636Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "requested_slot_available: slot=\"2026-07-13T09:00:00+05:30\", label=\"Mon Jul 13 at 9:00 AM\", event=\"virtual meet\", duration_mins=15, timezone=\"Asia/Kolkata\"",
+      "turnNumber": 1,
+      "durationMs": 13
+    }
+  },
+  {
+    "id": 152518,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:55.192Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "onToolCall Invoked",
+      "tool": "book_appointment",
+      "args": {
+        "attendee_email": "test@example.com",
+        "attendee_name": "Test User",
+        "meeting_type": "google_meet",
+        "preferred_date": "2026-07-13T09:00:00+05:30"
+      },
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152517,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:55.192Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "book_appointment",
+      "args": {
+        "attendee_email": "test@example.com",
+        "attendee_name": "Test User",
+        "meeting_type": "google_meet",
+        "preferred_date": "2026-07-13T09:00:00+05:30"
+      }
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152519,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:55.192Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "book_appointment",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152520,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:55.204Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Request"
+    },
+    "responsePayload": {
+      "attendeeName": "Test User",
+      "attendeeEmail": "test@example.com",
+      "preferredRaw": "2026-07-13T09:00:00+05:30",
+      "eventTypeName": "virtual meet",
+      "calendarTimezone": "Asia/Kolkata",
+      "availableSlotsFound": 96
+    },
+    "metadata": null
+  },
+  {
+    "id": 152521,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:55.216Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Availability Applied"
+    },
+    "responsePayload": {
+      "bookingId": 87,
+      "slotStart": "2026-07-13T03:30:00.000Z",
+      "slotEnd": "2026-07-13T03:45:00.000Z",
+      "slotFormatted": "Monday, July 13th at 9:00 AM GMT+5:30",
+      "status": "confirmed",
+      "attendeeEmail": "test@example.com",
+      "attendeeName": "Test User"
+    },
+    "metadata": null
+  },
+  {
+    "id": 152522,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:57.456Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Meet Link Generated"
+    },
+    "responsePayload": {
+      "meetLink": "https://meet.google.com/aaf-zuwc-cxr",
+      "googleEventId": "s10bmf5mmnai7p0tapfkk82om8",
+      "bookingId": 87
+    },
+    "metadata": null
+  },
+  {
+    "id": 152523,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:57.456Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Calendar Event Created"
+    },
+    "responsePayload": {
+      "googleEventId": "s10bmf5mmnai7p0tapfkk82om8",
+      "connectionId": "ee8bf289-39ac-4ddb-bacc-97cbfd75a7af",
+      "bookingId": 87,
+      "hasMeetLink": true,
+      "calendarSyncStatus": "synced"
+    },
+    "metadata": null
+  },
+  {
+    "id": 152524,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:57.456Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Booking Confirmed"
+    },
+    "responsePayload": {
+      "bookingId": 87,
+      "eventTypeName": "virtual meet",
+      "slot": "Monday, July 13th at 9:00 AM GMT+5:30",
+      "attendeeName": "Test User",
+      "attendeeEmail": "test@example.com",
+      "status": "confirmed",
+      "meetLink": "https://meet.google.com/aaf-zuwc-cxr",
+      "googleEventId": "s10bmf5mmnai7p0tapfkk82om8"
+    },
+    "metadata": null
+  },
+  {
+    "id": 152525,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:57.456Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Tool Executed",
+      "tool": "book_appointment",
+      "result": "booking_confirmed: event=\"virtual meet\", slot=\"Monday, July 13th at 9:00 AM GMT+5:30\", booking_id=87, attendee=\"Test User\", email=\"test@example.com\", status=\"confirmed\", meet_link=\"https://meet.google.com/aaf-zuwc-cxr\"",
+      "turnNumber": 1,
+      "durationMs": 2264
+    }
+  },
+  {
+    "id": 152526,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:57.456Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "booking_confirmed: event=\"virtual meet\", slot=\"Monday, July 13th at 9:00 AM GMT+5:30\", booking_id=87, attendee=\"Test User\", email=\"test@example.com\", status=\"confirmed\", meet_link=\"https://meet.google.com/aaf-zuwc-cxr\"",
+      "turnNumber": 1,
+      "durationMs": 2264
+    }
+  },
+  {
+    "id": 152527,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:57.456Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2264,
+    "requestPayload": {
+      "tool": "book_appointment"
+    },
+    "responsePayload": {
+      "result": "booking_confirmed: event=\"virtual meet\", slot=\"Monday, July 13th at 9:00 AM GMT+5:30\", booking_id=87, attendee=\"Test User\", email=\"test@example.com\", status=\"confirmed\", meet_link=\"https://meet.google.com/aaf-zuwc-cxr\""
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2264
+    }
+  },
+  {
+    "id": 152529,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "onToolCall Invoked",
+      "tool": "end_call",
+      "args": null,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152534,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "tool": "end_call",
+      "args": null
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152528,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Started",
+      "tool": "end_call",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152532,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Thank you for calling. Have a great day. Goodbye!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152533,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Tool Executed",
+      "tool": "end_call",
+      "result": "(no reply needed — tool completed directly)",
+      "turnNumber": 1,
+      "durationMs": 2
+    }
+  },
+  {
+    "id": 152531,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Execution Completed",
+      "result": "(no reply needed — tool completed directly)",
+      "turnNumber": 1,
+      "durationMs": 2
+    }
+  },
+  {
+    "id": 152530,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.218Z",
+    "component": "Tool",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 2,
+    "requestPayload": {
+      "tool": "end_call"
+    },
+    "responsePayload": {
+      "result": "(no reply needed — tool completed directly)"
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 2
+    }
+  },
+  {
+    "id": 152535,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:11:58.268Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 52,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 49,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 52
+    }
+  },
+  {
+    "id": 152536,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:01.944Z",
+    "component": "Booking",
+    "provider": "VoiceOrch",
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": {
+      "step": "Invitation Sent"
+    },
+    "responsePayload": {
+      "attendeeEmail": "test@example.com",
+      "hostEmail": "beniciaalwin2005@gmail.com",
+      "bookingId": 87,
+      "meetLink": "https://meet.google.com/aaf-zuwc-cxr"
+    },
+    "metadata": null
+  },
+  {
+    "id": 152546,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:08.219Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152547,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:08.219Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 1,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 152548,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:08.270Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 52,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 54,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 52
+    }
+  },
+  {
+    "id": 152612,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:18.220Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 1,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 152611,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:18.220Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152613,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:18.270Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 52,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 54,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 52
+    }
+  },
+  {
+    "id": 152638,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:28.221Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Since I can't hear you, I'll end the call now. Thank you, goodbye!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 152640,
+    "callId": 2198,
+    "agentId": 163,
+    "ts": "2026-07-10T11:12:28.271Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 51,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 66,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 51
+    }
+  }
+]
