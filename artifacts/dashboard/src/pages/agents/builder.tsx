@@ -803,74 +803,91 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             </AgentConfigPanel>
           )}
 
-          {/* ── First Message ────────────────────────────────────────────────── */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">First Message</span>
-              <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-                <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                  <SelectTrigger className="h-8 w-48 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="assistant" className="text-xs">Assistant speaks first</SelectItem>
-                    <SelectItem value="user" className="text-xs">User speaks first</SelectItem>
-                  </SelectContent>
-                </Select>
+          {/* ── Conversation ─────────────────────────────────────────────────── */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-[18px] font-semibold text-foreground leading-none">Conversation</h3>
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <Label className="text-[13px] font-medium text-foreground/90 pt-3">First Message</Label>
+                <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+                  <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
+                    <SelectTrigger className="h-12 w-56 rounded-xl text-[13px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
+                      <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )} />
+              </div>
+              <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <FormControl>
+                    <Textarea
+                      className="min-h-[76px] max-h-[76px] text-[15px] leading-relaxed resize-none rounded-2xl border-border/60 bg-muted/20 px-4 py-3 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/25"
+                      placeholder="Hello, how can I help?"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px]" />
+                </FormItem>
               )} />
             </div>
-            <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-              <FormItem className="space-y-0">
-                <FormControl>
-                  <Textarea className="min-h-[72px] text-sm resize-none" placeholder="Hello, how can I help?" {...field} />
-                </FormControl>
-                <FormMessage className="text-[10px]" />
-              </FormItem>
-            )} />
           </div>
 
-          {/* ── System Prompt ────────────────────────────────────────────────── */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">System Prompt</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 text-[10px] px-2 gap-1 text-primary hover:bg-primary/5"
-                onClick={() => setGenerateOpen(true)}
-              >
-                <Sparkles className="w-2.5 h-2.5" />
-                Generate
-              </Button>
+          {/* ── System Instructions ──────────────────────────────────────────── */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-[18px] font-semibold text-foreground leading-none">System Instructions</h3>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                <Label className="text-[13px] font-medium text-foreground/90">System Prompt</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] px-2.5 gap-1.5 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors"
+                  onClick={() => setGenerateOpen(true)}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Generate
+                </Button>
+              </div>
+              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <FormControl>
+                    <Textarea
+                      className="min-h-[260px] text-[15px] resize-none font-mono leading-[1.7] rounded-none border-0 bg-transparent px-4 py-3.5 shadow-none focus-visible:ring-0"
+                      placeholder="You are a helpful voice assistant…"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px] px-4 pb-2" />
+                </FormItem>
+              )} />
             </div>
-            <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-              <FormItem className="space-y-0">
-                <FormControl>
-                  <Textarea className="min-h-[220px] text-sm resize-none font-mono leading-relaxed" placeholder="You are a helpful voice assistant…" {...field} />
-                </FormControl>
-                <FormMessage className="text-[10px]" />
-              </FormItem>
-            )} />
           </div>
 
-          {/* ── Agent Knowledge ──────────────────────────────────────────────── */}
-          <div className="space-y-2">
-            <span className="text-sm font-semibold">Agent Knowledge</span>
-            <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
-              <FormItem className="space-y-0">
-                <FormControl>
-                  <KnowledgeSourceMultiSelect
-                    value={(field.value ?? []) as number[]}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormDescription className="text-[10px] mt-1.5">
-                  Attached sources are searched during live calls and relevant entries are injected into the agent's context.
-                </FormDescription>
-                <FormMessage className="text-[10px]" />
-              </FormItem>
-            )} />
+          {/* ── Knowledge ────────────────────────────────────────────────────── */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-[18px] font-semibold text-foreground leading-none">Knowledge</h3>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-3">
+              <Label className="text-[13px] font-medium text-foreground/90">Sources</Label>
+              <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <FormControl>
+                    <KnowledgeSourceMultiSelect
+                      value={(field.value ?? []) as number[]}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-[12px] text-muted-foreground mt-2 leading-relaxed">
+                    Attached sources are searched during live calls and relevant entries are injected into the agent's context.
+                  </FormDescription>
+                  <FormMessage className="text-[10px]" />
+                </FormItem>
+              )} />
+            </div>
           </div>
 
         </div>
