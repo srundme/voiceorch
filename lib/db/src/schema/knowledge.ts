@@ -1,5 +1,5 @@
 import {
-  pgTable, text, serial, timestamp, integer, primaryKey, vector, index,
+  pgTable, text, serial, timestamp, integer, primaryKey, vector, index, boolean,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -38,6 +38,13 @@ export const knowledgeEntriesTable = pgTable("knowledge_entries", {
   embedding: vector("embedding", { dimensions: 768 }),
   embeddingModel: text("embedding_model"),
   embeddedAt: timestamp("embedded_at", { withTimezone: true }),
+  /**
+   * Pinned entries sort FIRST in full-dump injection paths (dumpEntries in
+   * kb-retrieval.ts): the call-start baked block and the per-turn prefetch
+   * fallback both lead with pinned content (e.g. a curated KB summary) before
+   * regular insertion-order entries. Shipped via migration 0048.
+   */
+  pinned: boolean("pinned").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   embeddingHnsw: index("knowledge_entries_embedding_hnsw").using("hnsw", t.embedding.op("vector_cosine_ops")),

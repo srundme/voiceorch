@@ -337,6 +337,13 @@
       "when": 1785710000000,
       "tag": "0047_deployment_events",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1785720000000,
+      "tag": "0048_knowledge_entry_pinned",
+      "breakpoints": true
     }
   ]
 }

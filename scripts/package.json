@@ -16,6 +16,7 @@
     "loadtest-calls": "tsx ./src/loadtest-calls.ts",
     "loadtest-api": "tsx ./src/loadtest-api.ts",
     "sync-to-github": "tsx ./src/sync-to-github.ts",
+    "seed-galaxy-kb-summary": "tsx ./src/seed-galaxy-kb-summary.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

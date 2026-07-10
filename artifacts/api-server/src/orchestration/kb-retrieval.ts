@@ -1,5 +1,5 @@
 import { db, knowledgeEntriesTable, agentKnowledgeSourcesTable } from "@workspace/db";
-import { eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { embedKbQuery, isKbVectorReady } from "../services/kb-embeddings.js";
 
@@ -112,7 +112,72 @@ function rrfMerge(listA: EntryRow[], listB: EntryRow[], topK: number): EntryRow[
 /* ── Public API ──────────────────────────────────────────────────────────── */
 
 /**
- * Per-turn retrieval across MULTIPLE sources (pipeline use).
+ * How a per-turn KB retrieval result was produced (for execution-log
+ * diagnostics). "prefetch" is assigned by the pipeline when the speech-start
+ * full dump wins the turn over the live query retrieval.
+ */
+export type KbRetrievalSource = "hybrid" | "fts" | "vector" | "dump" | "prefetch" | "none";
+
+export interface KbRetrievalResult {
+  /** Prompt-injectable context block ("" = no hit). */
+  text: string;
+  source: KbRetrievalSource;
+  latencyMs: number;
+  /** True when served from the in-memory query cache (source reflects the original lookup). */
+  cached?: boolean;
+}
+
+export interface KbRetrievalOpts {
+  /**
+   * Skip PostgreSQL FTS and use vector search only. Set for pure non-Latin
+   * queries (e.g. Tamil-only): the 'english' FTS config cannot stem/tokenize
+   * them usefully, so FTS is wasted latency and rank noise there. Code-mixed
+   * queries (Tamil script + English words) must keep FTS.
+   */
+  skipFts?: boolean;
+  /**
+   * Character cap applied ONLY to the empty-query full-dump path (prefetch
+   * fallback). Undefined = no cap (call-start baked injection keeps its own
+   * separate capping in session.ts).
+   */
+  dumpMaxChars?: number;
+}
+
+/* ── In-memory LRU cache for repeated queries ────────────────────────────────
+ * Keyed by sorted sourceIds + normalized query text (lowercased, trimmed) —
+ * NOT query alone, so agents with different KB attachments can never see each
+ * other's cached context. 10-minute TTL; LRU eviction at the size cap.
+ * `skipFts` is deterministic from the query text, so it need not be in the key.
+ */
+const KB_QUERY_CACHE_TTL_MS = 10 * 60 * 1000;
+const KB_QUERY_CACHE_MAX = 500;
+const kbQueryCache = new Map<string, { text: string; source: KbRetrievalSource; expiresAt: number }>();
+
+function kbCacheGet(key: string): { text: string; source: KbRetrievalSource } | null {
+  const hit = kbQueryCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    kbQueryCache.delete(key);
+    return null;
+  }
+  // LRU touch: re-insert so Map iteration order reflects recency.
+  kbQueryCache.delete(key);
+  kbQueryCache.set(key, hit);
+  return { text: hit.text, source: hit.source };
+}
+
+function kbCacheSet(key: string, text: string, source: KbRetrievalSource): void {
+  if (kbQueryCache.size >= KB_QUERY_CACHE_MAX) {
+    // Evict least-recently-used (first key in insertion/recency order).
+    const oldest = kbQueryCache.keys().next().value;
+    if (oldest !== undefined) kbQueryCache.delete(oldest);
+  }
+  kbQueryCache.set(key, { text, source, expiresAt: Date.now() + KB_QUERY_CACHE_TTL_MS });
+}
+
+/**
+ * Per-turn retrieval across MULTIPLE sources (pipeline use) with result
+ * metadata for execution-log diagnostics.
  *
  * Strategy:
  * - Non-empty `query`: HYBRID retrieval — semantic vector search (pgvector
@@ -120,42 +185,73 @@ function rrfMerge(listA: EntryRow[], listB: EntryRow[], topK: number): EntryRow[
  *   PostgreSQL FTS via reciprocal-rank fusion. Vector search degrades to []
  *   on any failure (latch off, no key, embed timeout), leaving pure FTS —
  *   i.e. exactly the pre-vector behavior. A total DB failure returns "".
- * - Empty `query` (prefetch/full-dump): entries in insertion order up to
- *   MAX_KB_ENTRIES, unchanged from the pre-vector behavior.
+ *   Repeated queries within 10 minutes are served from an in-memory cache.
+ * - Empty `query` (prefetch/full-dump): entries with pinned first, then
+ *   insertion order, up to MAX_KB_ENTRIES (optionally char-capped via
+ *   `dumpMaxChars` — used by the per-turn prefetch fallback only).
+ */
+export async function retrieveKbContextMultiEx(
+  sourceIds: number[],
+  query: string,
+  topK = 50,
+  opts: KbRetrievalOpts = {},
+): Promise<KbRetrievalResult> {
+  const t0 = Date.now();
+  const unique = Array.from(new Set(sourceIds.filter((n) => Number.isInteger(n))));
+  if (!unique.length) return { text: "", source: "none", latencyMs: Date.now() - t0 };
+  const q = query.trim();
+  const cap = Math.min(Math.max(topK, 10), MAX_KB_ENTRIES);
+
+  if (!q) {
+    const text = await dumpEntries(unique, MAX_KB_ENTRIES, opts.dumpMaxChars);
+    return { text, source: text ? "dump" : "none", latencyMs: Date.now() - t0 };
+  }
+
+  const cacheKey = `${[...unique].sort((a, b) => a - b).join(",")}::${q.toLowerCase()}`;
+  const cachedHit = kbCacheGet(cacheKey);
+  if (cachedHit) {
+    return { text: cachedHit.text, source: cachedHit.source, latencyMs: Date.now() - t0, cached: true };
+  }
+
+  try {
+    // Vector + FTS run concurrently; vector failure yields [] (pure FTS).
+    // skipFts (pure non-Latin query) goes straight to vector-only.
+    const [vecRows, ftsRows] = await Promise.all([
+      vectorSearch(unique, q, VECTOR_TOP_K).catch((err) => {
+        logger.warn({ err: String(err), sourceIds: unique }, "KB vector search failed — FTS-only this turn");
+        return [] as EntryRow[];
+      }),
+      opts.skipFts ? Promise.resolve([] as EntryRow[]) : ftsSearch(unique, q, cap),
+    ]);
+    const merged = rrfMerge(vecRows, ftsRows, cap);
+    const source: KbRetrievalSource =
+      vecRows.length && ftsRows.length ? "hybrid"
+      : vecRows.length ? "vector"
+      : ftsRows.length ? "fts"
+      : "none";
+    logger.info(
+      { sourceIds: unique, mode: source, skipFts: opts.skipFts === true, vecHits: vecRows.length, ftsHits: ftsRows.length, merged: merged.length, ms: Date.now() - t0 },
+      "KB retrieval",
+    );
+    const text = merged.length ? formatEntries(merged) : "";
+    kbCacheSet(cacheKey, text, source);
+    return { text, source, latencyMs: Date.now() - t0 };
+  } catch (err) {
+    logger.warn({ err, sourceIds: unique }, "KB context load failed");
+    return { text: "", source: "none", latencyMs: Date.now() - t0 };
+  }
+}
+
+/**
+ * Back-compat string variant (delegates to retrieveKbContextMultiEx).
  */
 export async function retrieveKbContextMulti(
   sourceIds: number[],
   query: string,
   topK = 50,
 ): Promise<string> {
-  const unique = Array.from(new Set(sourceIds.filter((n) => Number.isInteger(n))));
-  if (!unique.length) return "";
-  const q = query.trim();
-  const cap = Math.min(Math.max(topK, 10), MAX_KB_ENTRIES);
-
-  if (!q) return dumpEntries(unique, MAX_KB_ENTRIES);
-
-  const t0 = Date.now();
-  try {
-    // Vector + FTS run concurrently; vector failure yields [] (pure FTS).
-    const [vecRows, ftsRows] = await Promise.all([
-      vectorSearch(unique, q, VECTOR_TOP_K).catch((err) => {
-        logger.warn({ err: String(err), sourceIds: unique }, "KB vector search failed — FTS-only this turn");
-        return [] as EntryRow[];
-      }),
-      ftsSearch(unique, q, cap),
-    ]);
-    const merged = rrfMerge(vecRows, ftsRows, cap);
-    logger.info(
-      { sourceIds: unique, mode: vecRows.length ? "hybrid" : "fts", vecHits: vecRows.length, ftsHits: ftsRows.length, merged: merged.length, ms: Date.now() - t0 },
-      "KB retrieval",
-    );
-    if (!merged.length) return "";
-    return formatEntries(merged);
-  } catch (err) {
-    logger.warn({ err, sourceIds: unique }, "KB context load failed");
-    return "";
-  }
+  const res = await retrieveKbContextMultiEx(sourceIds, query, topK);
+  return res.text;
 }
 
 /**
@@ -170,24 +266,56 @@ export async function retrieveKbContext(
   return retrieveKbContextMulti([knowledgeSourceId], query, topK);
 }
 
-/** Full-dump helper (insertion order, capped). */
-async function dumpEntries(sourceIds: number[], cap: number): Promise<string> {
+/**
+ * Full-dump helper: pinned entries first, then insertion order, capped at
+ * `cap` entries. Optional `maxChars` truncates the FORMATTED block on an
+ * entry/newline boundary — used ONLY by the per-turn prefetch fallback
+ * (pipeline.ts passes 8000); the call-start baked path passes no cap and
+ * keeps its own separate 4,000-char handling in session.ts.
+ */
+async function dumpEntries(sourceIds: number[], cap: number, maxChars?: number): Promise<string> {
+  let entries: EntryRow[];
   try {
-    const entries = await db
+    entries = await db
       .select(entryCols)
       .from(knowledgeEntriesTable)
       .where(inArray(knowledgeEntriesTable.sourceId, sourceIds))
-      .orderBy(knowledgeEntriesTable.id)
+      .orderBy(desc(knowledgeEntriesTable.pinned), knowledgeEntriesTable.id)
       .limit(cap);
-    if (!entries.length) return "";
-    if (entries.length >= MAX_KB_ENTRIES) {
-      logger.warn({ sourceIds, cap: MAX_KB_ENTRIES }, "KB entries capped at MAX_KB_ENTRIES");
-    }
-    return formatEntries(entries);
   } catch (err) {
-    logger.warn({ err, sourceIds }, "KB context load failed");
-    return "";
+    // Deploy-order resilience: if migration 0048 has not been applied yet the
+    // `pinned` column doesn't exist and the ordered query errors. Retry with
+    // the legacy insertion-order query so KB injection never goes dark during
+    // the deploy→migrate window.
+    logger.warn({ err, sourceIds }, "KB dump with pinned ordering failed — retrying without pinned (migration 0048 applied?)");
+    try {
+      entries = await db
+        .select(entryCols)
+        .from(knowledgeEntriesTable)
+        .where(inArray(knowledgeEntriesTable.sourceId, sourceIds))
+        .orderBy(knowledgeEntriesTable.id)
+        .limit(cap);
+    } catch (err2) {
+      logger.warn({ err: err2, sourceIds }, "KB context load failed");
+      return "";
+    }
   }
+  if (!entries.length) return "";
+  if (entries.length >= MAX_KB_ENTRIES) {
+    logger.warn({ sourceIds, cap: MAX_KB_ENTRIES }, "KB entries capped at MAX_KB_ENTRIES");
+  }
+  let text = formatEntries(entries);
+  if (maxChars !== undefined && Number.isFinite(maxChars) && maxChars > 0 && text.length > maxChars) {
+    // Prefer cutting at an entry separator, else a newline, else hard cut —
+    // never mid-word if avoidable. Pinned entries sort first, so the curated
+    // summary always survives the cut.
+    const sepIdx = text.lastIndexOf("\n\n---\n\n", maxChars);
+    const nlIdx = text.lastIndexOf("\n", maxChars);
+    const cut = sepIdx > maxChars * 0.5 ? sepIdx : nlIdx > maxChars * 0.5 ? nlIdx : maxChars;
+    logger.info({ sourceIds, maxChars, originalChars: text.length, keptChars: cut }, "KB dump truncated to maxChars");
+    text = text.slice(0, cut);
+  }
+  return text;
 }
 
 /**
