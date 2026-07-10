@@ -113,3 +113,4 @@
 - [KB pinned summary + precedence](kb-pinned-summary-precedence.md) — system prompt FIRST, KB appended with disclaimer; pinned entries lead every dump; inner prefetch budget must stay < outer race
 - [KB multi-source fair budgeting](kb-fair-dump-budgeting.md) — capped KB dump/baked blocks must budget per-source with rollover, never post-hoc slice; vector-only (skipFts) retrieval budget must be measured, not guessed
 - [Provider-scoped KB entry leak](kb-provider-scoped-entry-leak.md) — an auto-generated entry for one provider leaks to every agent sharing the source unless excludeTitles is threaded through every retrieval path + cache key; also needs event-driven kicks, not sweep-only
+- [Silence watchdog near-miss diagnostics](silence-watchdog-nearmiss-diagnostics.md) — watchdog already resets on partials+energy on both call paths; near-misses re-armed silently with no log trail until onNearMiss was added

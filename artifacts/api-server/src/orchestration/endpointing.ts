@@ -395,6 +395,14 @@ export interface SilenceWatchdogOptions {
   onReprompt: () => void;
   /** Caller stayed silent through all check-ins — end the call. */
   onGiveUp: () => void;
+  /**
+   * Diagnostic hook fired every time the timer expires and is re-armed WITHOUT
+   * a reprompt/give-up (i.e. a "near-miss" — the caller/agent was active enough
+   * to avoid the hangup path). Lets the pipeline log whether energy/partials
+   * were seen in the trailing window so a false hangup elsewhere is
+   * diagnosable directly from call logs instead of requiring code spelunking.
+   */
+  onNearMiss?: (info: { cause: "busy" | "recent_speech_energy"; msSinceLastSpeech: number | null; rearmedForMs: number }) => void;
   /** Clock override for tests. */
   now?: () => number;
 }
@@ -444,6 +452,7 @@ export class SilenceWatchdog {
     const { timeoutMs } = this.opts;
     // Agent is mid-speech / mid-turn — not caller abandonment. Re-arm in full.
     if (this.opts.isBusy?.()) {
+      this.opts.onNearMiss?.({ cause: "busy", msSinceLastSpeech: null, rearmedForMs: timeoutMs });
       this.arm(timeoutMs);
       return;
     }
@@ -451,7 +460,9 @@ export class SilenceWatchdog {
     // gone quiet without partials) — re-arm for the remaining share.
     const sinceSpeech = this.now() - this.lastSpeechAt;
     if (this.lastSpeechAt > 0 && sinceSpeech < timeoutMs) {
-      this.arm(timeoutMs - sinceSpeech);
+      const rearmedForMs = timeoutMs - sinceSpeech;
+      this.opts.onNearMiss?.({ cause: "recent_speech_energy", msSinceLastSpeech: sinceSpeech, rearmedForMs });
+      this.arm(rearmedForMs);
       return;
     }
     // Legitimate silence. Check in audibly before giving up.

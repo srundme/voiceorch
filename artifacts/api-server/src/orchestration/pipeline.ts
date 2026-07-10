@@ -2792,6 +2792,16 @@ export class OrchestrationPipeline {
           logger.info({ callId: this.config.callId }, "Silence timeout — ending call");
           void this.playInactivityMessageAndEnd();
         },
+        // Diagnostic-only: the watchdog was about to expire but re-armed instead
+        // (agent busy, or raw caller speech energy was seen recently). Logged so a
+        // false hangup elsewhere is diagnosable directly from call logs — without
+        // this, a near-miss leaves no trace at all.
+        onNearMiss: (info) => {
+          logger.info(
+            { callId: this.config.callId, ...info },
+            "Silence watchdog near-miss — re-armed instead of expiring",
+          );
+        },
       });
     }
     this.silenceWatchdog.reset();

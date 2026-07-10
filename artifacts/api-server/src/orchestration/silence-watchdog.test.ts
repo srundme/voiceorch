@@ -116,6 +116,49 @@ describe("SilenceWatchdog", () => {
     expect(onGiveUp).not.toHaveBeenCalled();
   });
 
+  it("fires onNearMiss with cause=recent_speech_energy on a speech-driven re-arm", () => {
+    const onNearMiss = vi.fn();
+    const { wd } = makeWatchdog({ onNearMiss });
+    wd.reset();
+
+    vi.advanceTimersByTime(8_000);
+    wd.onSpeechEnergy();
+    vi.advanceTimersByTime(2_000);
+
+    expect(onNearMiss).toHaveBeenCalledTimes(1);
+    expect(onNearMiss).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: "recent_speech_energy", msSinceLastSpeech: 2_000, rearmedForMs: 8_000 }),
+    );
+    wd.clear();
+  });
+
+  it("fires onNearMiss with cause=busy while the agent is speaking/processing", () => {
+    const onNearMiss = vi.fn();
+    let busy = true;
+    const { wd } = makeWatchdog({ isBusy: () => busy, onNearMiss });
+    wd.reset();
+
+    vi.advanceTimersByTime(TIMEOUT);
+    expect(onNearMiss).toHaveBeenCalledTimes(1);
+    expect(onNearMiss).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: "busy", msSinceLastSpeech: null, rearmedForMs: TIMEOUT }),
+    );
+
+    busy = false;
+    wd.clear();
+  });
+
+  it("does not fire onNearMiss on a genuine expiry (reprompt or give-up)", () => {
+    const onNearMiss = vi.fn();
+    const { wd } = makeWatchdog({ onNearMiss });
+    wd.reset();
+
+    vi.advanceTimersByTime(TIMEOUT);
+    vi.advanceTimersByTime(TIMEOUT);
+    expect(onNearMiss).not.toHaveBeenCalled();
+    wd.clear();
+  });
+
   it("honors maxReprompts", () => {
     const { wd, onReprompt, onGiveUp } = makeWatchdog({ maxReprompts: 2 });
     wd.reset();
