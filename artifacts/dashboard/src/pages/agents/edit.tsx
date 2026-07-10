@@ -608,7 +608,7 @@ export default function AgentEdit() {
   // discarding, and Cancel can restore the pre-edit values.
   type PipelineSection = "transcriber" | "model" | "voice";
   const SECTION_FIELDS: Record<PipelineSection, (keyof AgentFormValues)[]> = {
-    transcriber: ["asrProvider", "asrModel"],
+    transcriber: ["asrProvider", "asrModel", "languageAutoDetect"],
     model: ["llmProvider", "llmModel", "temperature"],
     voice: ["ttsProvider", "ttsModel", "ttsVoice"],
   };
@@ -1088,6 +1088,18 @@ export default function AgentEdit() {
                 <FormMessage />
               </FormItem>
             )} />
+            <div className="flex items-center justify-between border-t pt-4 mt-2">
+              <div>
+                <p className="text-xs font-medium">Auto-detect Language</p>
+                <p className="text-[11px] text-muted-foreground">Follow caller's language mid-call — off enforces a single language</p>
+              </div>
+              <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
+                <Switch
+                  checked={field.value ?? false}
+                  onCheckedChange={(v) => field.onChange(v)}
+                />
+              )} />
+            </div>
           </EditConfigDialog>
 
           {/* ── Model dialog ── */}
