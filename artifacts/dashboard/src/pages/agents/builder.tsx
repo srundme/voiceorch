@@ -804,9 +804,14 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           )}
 
           {/* ── Conversation ─────────────────────────────────────────────────── */}
-          <div className="space-y-4">
-            <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground mb-5">Conversation</h3>
-            <div className="space-y-4">
+          <div className="space-y-4 pt-8">
+            <div className="space-y-1 mb-5">
+              <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">Conversation</h3>
+              <p className="text-[12px] text-muted-foreground/70 leading-relaxed">
+                Configure how your agent starts and responds during conversations.
+              </p>
+            </div>
+            <div className="space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <Label className="text-[13px] font-medium text-foreground/90 pt-3.5">First Message</Label>
                 <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
@@ -870,7 +875,12 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
           {/* ── Knowledge ────────────────────────────────────────────────────── */}
           <div className="space-y-4 pt-6">
-            <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground mb-5">Knowledge</h3>
+            <div className="space-y-1 mb-5">
+              <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">Knowledge</h3>
+              <p className="text-[12px] text-muted-foreground/70 leading-relaxed">
+                Attach documents or knowledge sources that your agent can search during conversations.
+              </p>
+            </div>
             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-4">
               <Label className="text-[13px] font-medium text-foreground/90">Sources</Label>
               <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
@@ -881,7 +891,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       onChange={field.onChange}
                     />
                   </FormControl>
-                  <FormDescription className="text-[12px] text-muted-foreground mt-3 leading-relaxed">
+                  <FormDescription className="text-[12px] text-muted-foreground/80 mt-3 leading-relaxed">
                     Attached sources are searched during live calls and relevant entries are injected into the agent's context.
                   </FormDescription>
                   <FormMessage className="text-[10px]" />
