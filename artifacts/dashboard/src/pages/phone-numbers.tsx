@@ -805,13 +805,15 @@ export default function PhoneNumbersPage() {
         <Phone className="w-5 h-5 text-foreground" />
         <h1 className="font-semibold text-foreground text-lg">Phone Numbers</h1>
         <span className="text-xs text-muted-foreground ml-auto">Powered by Aitel</span>
-        <Button
-          size="sm"
-          className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
-          onClick={handleGetNumber}
-        >
-          <Plus className="h-3.5 w-3.5" /> Get Number
-        </Button>
+        {numbers && numbers.length > 0 && (
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 bg-black/85 hover:bg-black/90 text-foreground"
+            onClick={handleGetNumber}
+          >
+            <Plus className="h-3.5 w-3.5" /> Get Number
+          </Button>
+        )}
       </div>
 
       <div className="p-6 max-w-4xl mx-auto space-y-4">
@@ -843,7 +845,7 @@ export default function PhoneNumbersPage() {
             <Phone className="w-12 h-12 mb-4 opacity-30" />
             <p className="text-sm mb-3">No phone numbers yet.</p>
             <Button size="sm" className="gap-1.5 bg-black/85 hover:bg-black/90 text-foreground" onClick={handleGetNumber}>
-              <Plus className="h-3.5 w-3.5" /> Get your first number
+              <Plus className="h-3.5 w-3.5" /> Get Your First Number
             </Button>
           </div>
         ) : (
