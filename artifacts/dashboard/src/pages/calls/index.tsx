@@ -638,228 +638,228 @@ export default function CallsList() {
 
         {/* Table */}
         <div ref={callsScrollRef} className="flex-1 overflow-auto px-8 py-6">
-          <div className="overflow-x-auto">
-          <Table className="table-fixed">
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[110px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Date & Time</TableHead>
-                <TableHead className="w-[72px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call ID</TableHead>
-                <TableHead className="w-[15%] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Agent</TableHead>
-                <TableHead className="w-[20%] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">From</TableHead>
-                <TableHead className="w-[20%] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">To</TableHead>
-                <TableHead className="w-[110px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Call Type</TableHead>
-                <TableHead className="w-[100px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
-                <TableHead className="w-[76px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Duration</TableHead>
-                <TableHead className="w-[72px] py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Cost</TableHead>
-                <TableHead className="w-[48px] py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {callsLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <TableRow key={i} className="h-16">
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-20" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-14" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-28" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-32" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-32" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-5 w-20 rounded-md" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-5 w-16 rounded-md" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-10" /></TableCell>
-                    <TableCell className="py-3.5"><Skeleton className="h-3 w-10" /></TableCell>
-                    <TableCell className="text-right py-3.5"><Skeleton className="h-6 w-6 ml-auto rounded" /></TableCell>
-                  </TableRow>
-                ))
-              ) : pagedCalls.length > 0 ? (
-                pagedCalls.map((call) => {
-                  const costCents = (call as any).costCents ?? 0;
+          <div className="rounded-2xl border border-border bg-elevated/40 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-elevated/95 backdrop-blur supports-[backdrop-filter]:bg-elevated/80">
+                <TableRow className="hover:bg-transparent border-b border-border">
+                  <TableHead className="w-[104px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Date & Time</TableHead>
+                  <TableHead className="w-[68px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Call ID</TableHead>
+                  <TableHead className="w-[160px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Agent</TableHead>
+                  <TableHead className="py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">From</TableHead>
+                  <TableHead className="py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
+                  <TableHead className="w-[118px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Call Type</TableHead>
+                  <TableHead className="w-[112px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Status</TableHead>
+                  <TableHead className="w-[72px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Duration</TableHead>
+                  <TableHead className="w-[80px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-right">Cost</TableHead>
+                  <TableHead className="w-[64px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {callsLoading ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <TableRow key={i} className="h-16 border-b border-border/60">
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-20" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-14" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-28" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-32" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-32" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-5 w-20 rounded-full mx-auto" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-5 w-16 rounded-full mx-auto" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 mx-auto" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 ml-auto" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-6 w-6 mx-auto rounded" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : pagedCalls.length > 0 ? (
+                  pagedCalls.map((call) => {
+                    const costCents = (call as any).costCents ?? 0;
 
-                  return (
-                    <TableRow key={call.id} className="group cursor-default h-16 hover:bg-elevated/40 transition-colors">
-                      <TableCell className="whitespace-nowrap py-3.5">
-                        <div className="text-[11px] text-foreground/80 font-medium">
-                          {format(parseISO(call.createdAt), "MMM d, yyyy")}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground/40 font-mono">
-                          {format(parseISO(call.createdAt), "HH:mm:ss")}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-[10px] text-muted-foreground/40 py-3.5">
-                        {getExecutionId(call)}
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-7 w-7 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
-                            <Users className="h-3.5 w-3.5 text-muted-foreground/40" />
+                    return (
+                      <TableRow key={call.id} className="group cursor-default h-16 border-b border-border/60 last:border-0 hover:bg-elevated/70 transition-colors">
+                        <TableCell className="whitespace-nowrap px-4 py-0 align-middle">
+                          <div className="text-[11px] text-foreground/80 font-medium">
+                            {format(parseISO(call.createdAt), "MMM d, yyyy")}
                           </div>
-                          <span className="text-xs font-medium text-foreground/80">
-                            {call.agentName}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <PhoneCell number={call.fromNumber} />
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <PhoneCell number={call.toNumber} />
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        {(() => {
-                          const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
-                          const isCampaign = !isWeb && (call as any).campaignId != null;
-                          const icon = isWeb ? <Globe className="h-3 w-3" /> : isCampaign ? <Megaphone className="h-3 w-3" /> : <Phone className="h-3 w-3" />;
-                          const label = isWeb ? "Web Call" : isCampaign ? "Campaign" : "Live Call";
-                          const direction: "inbound" | "outbound" = isWeb ? "outbound" : (call.direction ?? "inbound");
-                          return (
-                            <span className="inline-flex items-center gap-1">
-                              {direction === "outbound" ? (
-                                <ArrowUpRight className="h-3 w-3 text-foreground/50" />
-                              ) : (
-                                <ArrowDownLeft className="h-3 w-3 text-foreground/50" />
-                              )}
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+                          <div className="text-[10px] text-muted-foreground/40 font-mono">
+                            {format(parseISO(call.createdAt), "HH:mm:ss")}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-[10px] text-muted-foreground/40 px-4 py-0 align-middle">
+                          {getExecutionId(call)}
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-md bg-elevated border border-border flex items-center justify-center shrink-0">
+                              <Users className="h-3 w-3 text-muted-foreground/40" />
+                            </div>
+                            <span className="text-xs font-medium text-foreground/80 truncate">
+                              {call.agentName}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle max-w-0">
+                          <PhoneCell number={call.fromNumber} />
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle max-w-0">
+                          <PhoneCell number={call.toNumber} />
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle text-center">
+                          {(() => {
+                            const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
+                            const isCampaign = !isWeb && (call as any).campaignId != null;
+                            const icon = isWeb ? <Globe className="h-3 w-3" /> : isCampaign ? <Megaphone className="h-3 w-3" /> : <Phone className="h-3 w-3" />;
+                            const label = isWeb ? "Web Call" : isCampaign ? "Campaign" : "Live Call";
+                            const direction: "inbound" | "outbound" = isWeb ? "outbound" : (call.direction ?? "inbound");
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-elevated text-foreground/70 border border-border">
+                                {direction === "outbound" ? (
+                                  <ArrowUpRight className="h-3 w-3 text-foreground/50 shrink-0" />
+                                ) : (
+                                  <ArrowDownLeft className="h-3 w-3 text-foreground/50 shrink-0" />
+                                )}
                                 {icon}
                                 {label}
                               </span>
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <StatusBadge status={call.status} />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground/60 py-3.5">
-                        {formatDuration(call.durationSeconds)}
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <div className="flex flex-col gap-0.5">
-                          {costCents > 0 ? (
-                            <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
-                              <DollarSign className="h-2.5 w-2.5" />
-                              {(costCents / 100).toFixed(3)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/25 text-[10px]">—</span>
-                          )}
-                          {((call as any).tokensSaved ?? 0) > 0 && (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1 rounded bg-amber-500/15 text-amber-400">
-                              ↓{((call as any).tokensSaved as number).toLocaleString()} tok saved
-                            </span>
-                          )}
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle text-center">
+                          <StatusBadge status={call.status} />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground/60 px-4 py-0 align-middle text-center">
+                          {formatDuration(call.durationSeconds)}
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle text-right">
+                          <div className="flex flex-col gap-0.5 items-end">
+                            {costCents > 0 ? (
+                              <span className="flex items-center gap-0.5 text-[10px] font-mono text-muted-foreground/50">
+                                <DollarSign className="h-2.5 w-2.5" />
+                                {(costCents / 100).toFixed(3)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/25 text-[10px]">—</span>
+                            )}
+                            {((call as any).tokensSaved ?? 0) > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1 rounded bg-amber-500/15 text-amber-400">
+                                ↓{((call as any).tokensSaved as number).toLocaleString()} tok saved
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-0 align-middle text-center">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 opacity-100 transition-opacity"
+                            onClick={() => setSelectedCallId(call.id)}
+                          >
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-64 text-center border-0">
+                      <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
+                        <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center">
+                          <Phone className="h-6 w-6" />
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right py-3.5">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 opacity-100 transition-opacity"
-                          onClick={() => setSelectedCallId(call.id)}
-                        >
-                          <Eye className="h-3 w-3 text-muted-foreground/50" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={10} className="h-64 text-center border-0">
-                    <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
-                      <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center">
-                        <Phone className="h-6 w-6" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground/40">
+                            No calls found
+                          </p>
+                          <p className="text-xs text-muted-foreground/30 mt-0.5">
+                            {hasActiveFilters
+                              ? "Try adjusting your filters"
+                              : "Calls will appear once your agents start making them"}
+                          </p>
+                        </div>
+                        {hasActiveFilters && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs mt-1"
+                            onClick={clearFilters}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" /> Clear Filters
+                          </Button>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground/40">
-                          No calls found
-                        </p>
-                        <p className="text-xs text-muted-foreground/30 mt-0.5">
-                          {hasActiveFilters
-                            ? "Try adjusting your filters"
-                            : "Calls will appear once your agents start making them"}
-                        </p>
-                      </div>
-                      {hasActiveFilters && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs mt-1"
-                          onClick={clearFilters}
-                        >
-                          <RefreshCw className="h-3 w-3 mr-1" /> Clear Filters
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            </div>
 
-          {/* Pagination */}
-          <div className="flex flex-wrap items-center justify-end gap-3 py-5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
-              <span>Per page</span>
-              <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
-                <SelectTrigger className="h-8 w-[70px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[25, 50, 100, 200].map(s => (
-                    <SelectItem key={s} value={String(s)}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => goToPage(safePage - 1)}
-                disabled={safePage <= 1}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-              <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums px-1">
-                Page {safePage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => goToPage(safePage + 1)}
-                disabled={safePage >= totalPages}
-                aria-label="Next page"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                max={totalPages}
-                placeholder="#"
-                className="h-8 w-14 text-xs"
-                value={pageInput}
-                onChange={(e) => setPageInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleJumpToPage();
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={handleJumpToPage}
-              >
-                Go
-              </Button>
+            {/* Pagination footer */}
+            <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-3.5 border-t border-border bg-elevated/60">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+                <span>Per page</span>
+                <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="h-8 w-[70px] text-xs rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[25, 50, 100, 200].map(s => (
+                      <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  onClick={() => goToPage(safePage - 1)}
+                  disabled={safePage <= 1}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-xs text-muted-foreground/70 whitespace-nowrap tabular-nums px-2">
+                  Page {safePage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  onClick={() => goToPage(safePage + 1)}
+                  disabled={safePage >= totalPages}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  placeholder="#"
+                  className="h-8 w-14 text-xs rounded-lg"
+                  value={pageInput}
+                  onChange={(e) => setPageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleJumpToPage();
+                    }
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs rounded-lg"
+                  onClick={handleJumpToPage}
+                >
+                  Go
+                </Button>
+              </div>
             </div>
           </div>
         </div>
