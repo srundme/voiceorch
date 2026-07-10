@@ -331,52 +331,61 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
           { key: "platform",  label: "Platform",     provider: "SnapServe",       cost: platformSlice,            color: "#6366f1" },
         ];
 
-        return (
-          <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3.5 space-y-3">
-            {/* Header */}
-            <div className="flex items-center gap-2">
-              <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground">
-                Cost per min:{" "}
-                <span className="font-bold text-foreground">~ ${totalPerMin.toFixed(3)}</span>
-                {!isByop && <span className="text-[10.5px] text-muted-foreground ml-1">(flat, all keys included)</span>}
-              </span>
-              <span className={`ml-auto text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 ${
-                isByop ? "bg-green-500/10 text-green-400 border-green-500/25" : "bg-amber-500/10 text-amber-400 border-amber-500/25"
-              }`}>
-                {isByop ? "BYOP" : "Managed"}
-              </span>
-            </div>
+        const breakdown = segments.filter(s => s.cost > 0);
+        const primary = breakdown.reduce((max, s) => (s.cost > max.cost ? s : max), breakdown[0] ?? segments[0]);
+        const primaryPct = totalPerMin > 0 ? Math.min(100, Math.max(4, (primary?.cost ?? 0) / totalPerMin * 100)) : 0;
 
-            {/* Stacked bar */}
-            <div className="h-2.5 rounded-full overflow-hidden flex gap-px">
-              {segments.filter(s => s.cost > 0).map(seg => (
-                <Tooltip key={seg.key}>
+        return (
+          <div className="group relative rounded-2xl border border-border/50 bg-card/60 px-6 py-[18px] shadow-sm transition-shadow duration-150 hover:shadow-md">
+            {/* Managed/BYOP pill */}
+            <span className="absolute top-3 right-4 text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground">
+              {isByop ? "BYOP" : "Managed"}
+            </span>
+
+            <div className="flex flex-col items-center text-center gap-2.5">
+              {/* Label + value */}
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[12px] text-muted-foreground">Estimated Cost / Minute</span>
+                <Tooltip>
                   <TooltipTrigger asChild>
-                    <div
-                      style={{ flex: seg.cost / totalPerMin, backgroundColor: seg.color }}
-                      className="min-w-[2px] cursor-default"
-                    />
+                    <span className="text-[28px] font-semibold text-foreground leading-none tabular-nums cursor-default">
+                      ${totalPerMin.toFixed(3)}
+                    </span>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">
-                    <span className="font-semibold">{seg.label}</span>
-                    {seg.provider && seg.provider !== "SnapServe" && (
-                      <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
-                    )}
-                    <span className="ml-2 tabular-nums">${seg.cost.toFixed(4)}/min</span>
+                  <TooltipContent side="bottom" className="text-xs space-y-1">
+                    {breakdown.map(seg => (
+                      <div key={seg.key} className="flex items-center justify-between gap-3">
+                        <span className="font-medium">
+                          {seg.label}
+                          {seg.provider && seg.provider !== "SnapServe" && (
+                            <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
+                          )}
+                        </span>
+                        <span className="tabular-nums">${seg.cost.toFixed(4)}/min</span>
+                      </div>
+                    ))}
                   </TooltipContent>
                 </Tooltip>
-              ))}
-            </div>
+              </div>
 
-            {/* Legend */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {segments.map(seg => (
-                <div key={seg.key} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
-                  <span>{seg.label}</span>
-                </div>
-              ))}
+              {/* Thin centered bar */}
+              <div className="h-1.5 w-[240px] rounded-full bg-muted/50 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-150"
+                  style={{ width: `${primaryPct}%` }}
+                />
+              </div>
+
+              {/* Provider breakdown row */}
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                {segments.map(seg => (
+                  <div key={seg.key} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                    <span>{seg.label}</span>
+                    <span className="tabular-nums text-muted-foreground/80">${seg.cost.toFixed(3)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         );
