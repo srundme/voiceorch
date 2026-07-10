@@ -1,0 +1,292 @@
+Perform a complete UI/UX refinement of the Providers page to achieve the visual quality of enterprise SaaS products such as Stripe, Linear, Vercel, Clerk, and Notion.
+
+IMPORTANT
+- UI/UX changes ONLY.
+- Do NOT modify backend logic, APIs, dialogs, routing, state management, provider connections, database, or functionality.
+- Preserve every existing feature exactly as it is.
+
+==================================================
+DESIGN LANGUAGE (MANDATORY)
+==================================================
+
+The page must feel clean, minimal, mature, and enterprise-grade.
+
+Avoid:
+- Colorful UI
+- Large empty spaces
+- Oversized cards
+- Decorative gradients
+- Heavy shadows
+- Gaming-style effects
+
+Instead:
+- Monochrome dark interface
+- Excellent spacing
+- Strong typography hierarchy
+- Perfect alignment
+- Subtle borders
+- Compact layout
+- High information density
+
+If any visual decision feels decorative rather than functional, choose the simpler option.
+
+==================================================
+PAGE LAYOUT
+==================================================
+
+• Reduce overall vertical whitespace.
+• Keep approximately 40px page padding.
+• Constrain content inside a centered container (~1400px max width).
+• Reduce space between page header and provider grid.
+• Improve overall information density.
+
+==================================================
+HEADER
+==================================================
+
+Keep:
+
+BUILD
+Providers
+Subtitle
+
+Improve:
+
+• Stronger typography hierarchy.
+• Better spacing.
+• Vertically align everything perfectly.
+• Reduce unnecessary whitespace.
+
+Move Add Provider button so it aligns perfectly with the page title.
+
+Button:
+
+• Height 38–40px
+• Border radius 12px
+• Single subtle primary accent
+• No bright white button
+• Premium hover only
+
+==================================================
+PROVIDER GRID
+==================================================
+
+Keep 2-column layout.
+
+Improve:
+
+• Reduce vertical spacing between rows.
+• Equal card heights.
+• Better alignment.
+• Consistent spacing.
+
+Cards should show more information without scrolling.
+
+==================================================
+CARD SIZE
+==================================================
+
+Current cards are oversized.
+
+Reduce:
+
+• Overall card height by approximately 25%.
+• Internal padding to around 20–24px.
+• Empty state height significantly.
+
+The page should feel denser like Stripe or Linear.
+
+==================================================
+CARD HEADER
+==================================================
+
+Reduce visual scale.
+
+Icon container:
+
+Current is too large.
+
+Reduce to around 36px.
+
+Title:
+
+Slightly smaller.
+
+Subtitle:
+
+Smaller and more muted.
+
+Counter badge:
+
+Keep compact.
+
+Improve spacing and typography.
+
+==================================================
+EMPTY STATE
+==================================================
+
+Current empty state occupies too much space.
+
+Reduce:
+
+• Icon size.
+• Vertical spacing.
+• Description spacing.
+• Overall empty state height.
+
+Everything should remain vertically centered.
+
+==================================================
+CONNECT BUTTON
+==================================================
+
+Current button is visually too dominant.
+
+Reduce:
+
+• Height to around 36px.
+• Horizontal padding.
+• Overall visual weight.
+
+Use:
+
+Premium outlined style.
+
+Subtle hover.
+
+No bright white filled button.
+
+==================================================
+ICONS
+==================================================
+
+Avoid colorful icon backgrounds.
+
+Replace blue, purple, green, and orange circles with neutral dark circular containers.
+
+Icons should be monochrome.
+
+Use accent colors only for:
+
+• Success
+• Error
+• Active state
+• Primary CTA
+
+==================================================
+BORDERS
+==================================================
+
+Use subtle borders only.
+
+Approximately:
+
+rgba(255,255,255,0.06)
+
+Avoid thick borders.
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Strengthen hierarchy.
+
+Title:
+
+18px
+
+Semibold
+
+Subtitle:
+
+13px
+
+Muted
+
+Empty state title:
+
+16px
+
+Semibold
+
+Description:
+
+13px
+
+Muted
+
+Buttons:
+
+14px Medium
+
+==================================================
+HOVER
+==================================================
+
+Use premium micro interactions.
+
+Card hover:
+
+• Slight lift (1–2px)
+• Border slightly brighter
+• Background 2% lighter
+
+Button hover:
+
+• Slight elevation
+• Softer background transition
+
+Transition:
+
+150–180ms
+
+==================================================
+ALIGNMENT
+==================================================
+
+This page must have pixel-perfect alignment.
+
+Verify:
+
+• Every card starts on the same baseline.
+• Icons align perfectly.
+• Titles align perfectly.
+• Buttons align perfectly.
+• Counter badges align perfectly.
+• Equal spacing everywhere.
+
+Nothing should feel visually off.
+
+==================================================
+RESPONSIVE
+==================================================
+
+Desktop:
+
+2-column layout.
+
+Tablet:
+
+Wrap naturally.
+
+Mobile:
+
+Single column.
+
+==================================================
+FINAL QUALITY CHECK
+==================================================
+
+Before finishing, verify:
+
+✓ No oversized components.
+✓ No excessive empty space.
+✓ No unnecessary colors.
+✓ No inconsistent spacing.
+✓ No misaligned elements.
+✓ No decorative effects.
+✓ Enterprise SaaS appearance.
+✓ Information density similar to Stripe, Linear, Vercel, and Clerk.
+
+The final Providers page should feel compact, refined, elegant, perfectly aligned, and premium while preserving all existing functionality.
