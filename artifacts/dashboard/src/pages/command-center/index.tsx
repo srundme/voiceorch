@@ -1,8 +1,9 @@
 import { useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
 import {
   Terminal, RefreshCw, Activity, Zap, CheckCircle2, XCircle,
   Clock, AlertTriangle, Server, Key, Layers, Bot,
-  Cpu, Radio, AudioWaveform, Phone, BarChart3,
+  Cpu, Radio, AudioWaveform, Phone, BarChart3, Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getExecutionId } from "@/lib/execution-id";
@@ -52,18 +53,24 @@ function fmtDuration(s: number | null | undefined): string {
 
 function statusColors(status: string) {
   const map: Record<string, string> = {
-    completed:   "bg-emerald-500/15 text-emerald-400",
-    active:      "bg-emerald-500/15 text-emerald-400",
-    calling:     "bg-blue-500/15 text-blue-400 animate-pulse",
-    connected:   "bg-blue-500/15 text-blue-400",
-    failed:      "bg-red-500/15 text-red-400",
-    error:       "bg-red-500/15 text-red-400",
-    transferred: "bg-purple-500/15 text-purple-400",
-    pending:     "bg-zinc-700 text-zinc-400",
-    queued:      "bg-zinc-700 text-zinc-400",
-    inactive:    "bg-zinc-700 text-zinc-500",
+    completed:   "bg-emerald-500/15 text-emerald-400 ring-1 ring-inset ring-emerald-500/20",
+    active:      "bg-emerald-500/15 text-emerald-400 ring-1 ring-inset ring-emerald-500/20",
+    calling:     "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/20 animate-pulse",
+    connected:   "bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/20",
+    failed:      "bg-red-500/15 text-red-400 ring-1 ring-inset ring-red-500/20",
+    error:       "bg-red-500/15 text-red-400 ring-1 ring-inset ring-red-500/20",
+    transferred: "bg-purple-500/15 text-purple-400 ring-1 ring-inset ring-purple-500/20",
+    pending:     "bg-zinc-700/50 text-zinc-400 ring-1 ring-inset ring-zinc-600/30",
+    queued:      "bg-zinc-700/50 text-zinc-400 ring-1 ring-inset ring-zinc-600/30",
+    no_pickup:   "bg-zinc-700/50 text-zinc-400 ring-1 ring-inset ring-zinc-600/30",
+    inactive:    "bg-zinc-700/50 text-zinc-500 ring-1 ring-inset ring-zinc-600/30",
   };
-  return map[status] ?? "bg-zinc-800 text-zinc-400";
+  return map[status] ?? "bg-zinc-800 text-zinc-400 ring-1 ring-inset ring-zinc-700/40";
+}
+
+function statusLabel(status: string): string {
+  if (status === "no_pickup") return "No Pickup";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function eventDot(eventType: string) {
@@ -85,35 +92,93 @@ const PROVIDER_TYPE_LABEL: Record<string, string> = {
   asr: "ASR", llm: "LLM", tts: "TTS", telephony: "Telephony", orchestration: "Orch",
 };
 
+/* ── Live indicator ───────────────────────────────────────────────────────── */
+
+function LiveIndicator({ isFetching }: { isFetching: boolean }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-muted-foreground/40">
+      {isFetching && <RefreshCw className="w-3 h-3 animate-spin" />}
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+      </span>
+      <span className="font-mono">Live</span>
+      <span className="text-muted-foreground/25">·</span>
+      <span className="font-mono">Refreshing every 10s</span>
+    </div>
+  );
+}
+
+/* ── Count-up numeric value (animates once on first mount, static thereafter) */
+
+function useCountUp(target: number, active: boolean, durationMs = 700) {
+  const [display, setDisplay] = useState(active ? 0 : target);
+  const hasAnimated = useRef(false);
+
+  useEffect(() => {
+    if (!active || hasAnimated.current) {
+      setDisplay(target);
+      return;
+    }
+    hasAnimated.current = true;
+    const start = performance.now();
+    const from = 0;
+    let raf: number;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(from + (target - from) * eased));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+      else setDisplay(target);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (hasAnimated.current) setDisplay(target);
+  }, [target]);
+
+  return display;
+}
+
 /* ── KPI Card ──────────────────────────────────────────────────────────────── */
 
 function KpiCard({
-  label, value, sub, icon: Icon, color, href, loading,
+  label, value, sub, icon: Icon, color, href, loading, countUp,
 }: {
   label: string; value: string | number; sub?: string;
   icon: React.ElementType; color: string; href?: string; loading?: boolean;
+  countUp?: boolean;
 }) {
   const [, navigate] = useLocation();
+  const numericValue = typeof value === "number" ? value : null;
+  const animated = useCountUp(numericValue ?? 0, !!countUp && numericValue != null && !loading);
+  const displayValue = numericValue != null ? animated : value;
+
   return (
     <button
       onClick={() => href && navigate(href)}
       className={cn(
-        "group flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-left transition-all",
-        href ? "cursor-pointer hover:border-border/70 hover:bg-accent/20" : "cursor-default",
+        "group flex h-[104px] flex-col justify-between gap-3 rounded-xl border border-border/60 bg-card px-4 py-3.5 text-left transition-all duration-[180ms] ease-out",
+        href
+          ? "cursor-pointer hover:-translate-y-0.5 hover:border-border hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.35)]"
+          : "cursor-default hover:border-border/60",
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold tracking-[0.09em] uppercase text-muted-foreground/50">{label}</span>
-        <div className={cn("rounded-md p-1.5 opacity-80", color.replace("text-", "bg-").replace("-400", "-500/15"))}>
+        <span className="text-[10px] font-semibold tracking-[0.09em] uppercase text-muted-foreground/45">{label}</span>
+        <div className={cn("rounded-lg p-1.5 opacity-90 transition-colors", color.replace("text-", "bg-").replace("-400", "-500/10"))}>
           <Icon className={cn("w-3.5 h-3.5", color)} />
         </div>
       </div>
       {loading ? (
-        <div className="h-7 w-20 rounded animate-pulse bg-muted" />
+        <div className="h-8 w-24 rounded-md animate-pulse bg-muted" />
       ) : (
         <div className="flex items-baseline gap-2">
-          <span className="text-[26px] font-bold tabular-nums leading-none text-foreground">{value}</span>
-          {sub && <span className="text-[11px] text-muted-foreground/50 leading-none">{sub}</span>}
+          <span className="text-[28px] font-bold tabular-nums leading-none text-foreground tracking-tight">{displayValue}</span>
+          {sub && <span className="text-[11px] text-muted-foreground/45 leading-none">{sub}</span>}
         </div>
       )}
     </button>
@@ -128,6 +193,11 @@ function LatencyBadge({ ms }: { ms: number | null | undefined }) {
   return <span className={cn("text-[11px] font-mono tabular-nums", color)}>{fmtMs(ms)}</span>;
 }
 
+function stageDotColor(ms: number | null | undefined) {
+  if (ms == null) return "bg-zinc-700";
+  return ms < 400 ? "bg-emerald-400" : ms < 900 ? "bg-amber-400" : "bg-red-400";
+}
+
 /* ── Provider group row ────────────────────────────────────────────────────── */
 
 function ProviderRow({ providers }: { providers: ProviderConfig[] }) {
@@ -135,7 +205,7 @@ function ProviderRow({ providers }: { providers: ProviderConfig[] }) {
   const Icon = PROVIDER_TYPE_ICON[providers[0].providerType] ?? Server;
   const label = PROVIDER_TYPE_LABEL[providers[0].providerType] ?? providers[0].providerType;
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+    <div className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0">
       <div className="flex items-center gap-1.5 w-20 shrink-0">
         <Icon className="w-3 h-3 text-muted-foreground/40" />
         <span className="text-[11px] font-semibold text-muted-foreground/60">{label}</span>
@@ -166,16 +236,23 @@ function AgentRow({ agent }: { agent: Agent }) {
   const [, navigate] = useLocation();
   return (
     <div
-      className="flex items-center gap-2.5 py-1.5 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-0"
+      className="flex items-center gap-2.5 py-2 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-1 -mx-1 rounded-md"
       onClick={() => navigate(`/app/agents/${agent.id}`)}
     >
       <span className={cn(
         "inline-block w-1.5 h-1.5 rounded-full shrink-0",
         agent.status === "active" ? "bg-emerald-400" : "bg-zinc-600",
       )} />
-      <span className="text-[11px] text-foreground/70 truncate flex-1">{agent.name}</span>
-      <span className={cn("text-[10px] px-1.5 py-0.5 rounded", statusColors(agent.status))}>
-        {agent.status}
+      <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+        <span className="text-[11px] text-foreground/75 truncate leading-tight">{agent.name}</span>
+        {agent.updatedAt && (
+          <span className="text-[10px] text-muted-foreground/30 leading-tight">
+            Updated {relativeTime(agent.updatedAt)}
+          </span>
+        )}
+      </div>
+      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0", statusColors(agent.status))}>
+        {agent.status === "active" ? "Active" : "Draft"}
       </span>
     </div>
   );
@@ -231,36 +308,38 @@ export default function CommandCenterPage() {
             <p className="text-[11px] text-muted-foreground/40 leading-tight mt-0.5">Developer operations console</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/30">
-          {isFetching && <RefreshCw className="w-3 h-3 animate-spin" />}
-          <span className="font-mono">auto-refresh 10s</span>
-        </div>
+        <LiveIndicator isFetching={isFetching} />
       </div>
 
       {/* ── KPI Row ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`/ ${s?.totalAgents ?? 0}`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} />
-        <KpiCard label="Calls Today"     value={s?.callsToday ?? 0}                                        icon={Activity} color="text-blue-400"    href="/app/calls"    loading={isLoading} />
+        <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`/ ${s?.totalAgents ?? 0}`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} countUp />
+        <KpiCard label="Calls Today"     value={s?.callsToday ?? 0}                                        icon={Activity} color="text-blue-400"    href="/app/calls"    loading={isLoading} countUp />
         <KpiCard label="Success Rate"    value={s ? `${s.successRate.toFixed(1)}%` : "—"}                  icon={CheckCircle2} color="text-green-400"                    loading={isLoading} />
         <KpiCard label="Avg STT Latency" value={avgStt != null ? fmtMs(avgStt) : "—"}                      icon={Zap}      color="text-amber-400"                        loading={callsQ.isLoading} />
-        <KpiCard label="Providers"       value={allProviders.filter(p => p.isActive).length} sub="active"  icon={Key}      color="text-violet-400" href="/app/providers" loading={providers.isLoading} />
+        <KpiCard label="Providers"       value={allProviders.filter(p => p.isActive).length} sub="active"  icon={Key}      color="text-violet-400" href="/app/providers" loading={providers.isLoading} countUp />
       </div>
 
       {/* ── Latency strip ───────────────────────────────────────────────────── */}
       {(avgStt != null || avgLlm != null || avgTts != null) && (
-        <div className="flex items-center gap-6 px-4 py-2.5 rounded-lg border border-border bg-muted/20 text-[11px]">
-          <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">Pipeline P50 (last {callsWithLatency.length} calls)</span>
+        <div className="flex items-center gap-7 px-4 py-3 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
+          <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">
+            Pipeline P50 <span className="text-muted-foreground/25 normal-case font-normal tracking-normal">· last {callsWithLatency.length} calls</span>
+          </span>
           <div className="flex items-center gap-1.5">
+            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", stageDotColor(avgStt))} />
             <AudioWaveform className="w-3 h-3 text-muted-foreground/30" />
             <span className="text-muted-foreground/50">STT</span>
             <LatencyBadge ms={avgStt} />
           </div>
           <div className="flex items-center gap-1.5">
+            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", stageDotColor(avgLlm))} />
             <Cpu className="w-3 h-3 text-muted-foreground/30" />
             <span className="text-muted-foreground/50">LLM TTFT</span>
             <LatencyBadge ms={avgLlm} />
           </div>
           <div className="flex items-center gap-1.5">
+            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", stageDotColor(avgTts))} />
             <Radio className="w-3 h-3 text-muted-foreground/30" />
             <span className="text-muted-foreground/50">TTS First Chunk</span>
             <LatencyBadge ms={avgTts} />
@@ -288,9 +367,9 @@ export default function CommandCenterPage() {
             </button>
           </div>
 
-          <div className="rounded-xl border border-border overflow-hidden">
+          <div className="rounded-xl border border-border/60 overflow-hidden">
             {/* header */}
-            <div className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 border-b border-border bg-muted/30 px-3 py-2">
+            <div className="grid grid-cols-[140px_1fr_84px_64px_64px_64px_56px_64px] gap-0 border-b border-border/60 bg-muted/30 px-4 py-2.5">
               {["Exec ID", "Agent", "Status", "STT", "LLM", "TTS", "Dur", "Cost"].map(h => (
                 <span key={h} className="text-[10px] font-semibold tracking-[0.07em] uppercase text-muted-foreground/35 truncate">
                   {h}
@@ -301,7 +380,7 @@ export default function CommandCenterPage() {
             <div className="divide-y divide-border/40 max-h-[460px] overflow-y-auto">
               {callsQ.isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 px-3 py-2.5">
+                  <div key={i} className="grid grid-cols-[140px_1fr_84px_64px_64px_64px_56px_64px] gap-0 px-4 py-3">
                     {Array.from({ length: 8 }).map((_, j) => (
                       <div key={j} className="h-3 rounded animate-pulse bg-muted w-4/5" />
                     ))}
@@ -316,7 +395,7 @@ export default function CommandCenterPage() {
                 recentCalls.map(call => (
                   <div
                     key={call.id}
-                    className="grid grid-cols-[140px_1fr_72px_64px_64px_64px_56px_64px] gap-0 px-3 py-2.5 hover:bg-accent/20 transition-colors cursor-pointer"
+                    className="grid grid-cols-[140px_1fr_84px_64px_64px_64px_56px_64px] gap-0 px-4 py-3 hover:bg-accent/25 transition-colors duration-150 cursor-pointer"
                     onClick={() => navigate(`/app/calls/${call.id}`)}
                   >
                     {/* Exec ID */}
@@ -327,8 +406,8 @@ export default function CommandCenterPage() {
                     <p className="text-[11px] text-foreground/70 truncate pr-2 self-center">{call.agentName}</p>
                     {/* Status */}
                     <div className="self-center pr-1">
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusColors(call.status))}>
-                        {call.status}
+                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", statusColors(call.status))}>
+                        {statusLabel(call.status)}
                       </span>
                     </div>
                     {/* STT */}
@@ -358,11 +437,11 @@ export default function CommandCenterPage() {
               <span className="text-[12px] font-semibold text-foreground/80">System Event Log</span>
               {activity.isFetching && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground/30" />}
             </div>
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="divide-y divide-border/40 max-h-[220px] overflow-y-auto">
+            <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+              <div className="divide-y divide-border/40 max-h-[240px] overflow-y-auto">
                 {activity.isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+                    <div key={i} className="flex items-center gap-3 px-4 py-3">
                       <div className="h-3 w-12 rounded animate-pulse bg-muted shrink-0" />
                       <div className="h-3 rounded animate-pulse bg-muted flex-1" />
                     </div>
@@ -373,8 +452,8 @@ export default function CommandCenterPage() {
                   </div>
                 ) : (
                   events.map(ev => (
-                    <div key={ev.id} className="flex items-center gap-3 px-4 py-2 hover:bg-accent/20 transition-colors">
-                      <span className="text-[10px] font-mono text-muted-foreground/30 shrink-0 w-16">
+                    <div key={ev.id} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors duration-150">
+                      <span className="text-[10px] font-mono tabular-nums text-muted-foreground/35 shrink-0 w-16">
                         {shortTime(ev.createdAt)}
                       </span>
                       <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", eventDot(ev.eventType))} />
@@ -394,7 +473,7 @@ export default function CommandCenterPage() {
         <div className="flex flex-col gap-4 w-64 shrink-0">
 
           {/* Provider Health */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2">
+          <div className="rounded-xl border border-border/60 bg-card p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 mb-1">
               <Layers className="w-3.5 h-3.5 text-muted-foreground/40" />
               <span className="text-[12px] font-semibold text-foreground/80">Provider Health</span>
@@ -404,9 +483,12 @@ export default function CommandCenterPage() {
                 <div key={i} className="h-4 rounded animate-pulse bg-muted" />
               ))
             ) : allProviders.length === 0 ? (
-              <div className="flex items-center gap-2 py-3 text-muted-foreground/30 text-[11px]">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                No providers configured
+              <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+                <AlertTriangle className="w-5 h-5 text-muted-foreground/25 mb-1" />
+                <p className="text-[12px] font-medium text-foreground/60">No providers connected yet.</p>
+                <p className="text-[11px] text-muted-foreground/35 leading-snug">
+                  Connect an ASR, LLM, or TTS provider in Settings to get started.
+                </p>
               </div>
             ) : (
               groupOrder
@@ -423,7 +505,7 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Agent Status */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2">
+          <div className="rounded-xl border border-border/60 bg-card p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <Bot className="w-3.5 h-3.5 text-muted-foreground/40" />
@@ -441,7 +523,10 @@ export default function CommandCenterPage() {
                   <div key={i} className="h-4 rounded animate-pulse bg-muted my-1.5" />
                 ))
               ) : allAgents.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground/30 py-2">No agents yet</p>
+                <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+                  <Inbox className="w-5 h-5 text-muted-foreground/25 mb-1" />
+                  <p className="text-[12px] font-medium text-foreground/60">No agents yet</p>
+                </div>
               ) : (
                 allAgents.map(a => <AgentRow key={a.id} agent={a} />)
               )}
