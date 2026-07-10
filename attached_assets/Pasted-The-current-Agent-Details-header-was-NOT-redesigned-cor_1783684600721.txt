@@ -1,0 +1,176 @@
+The current Agent Details header was NOT redesigned correctly.
+
+Do NOT adjust only CSS.
+This requires refactoring the React component layout (JSX) if necessary.
+
+The goal is to redesign the entire header into a clean, modern enterprise SaaS layout similar to Linear, Vercel, Stripe, Notion or Cursor.
+
+==================================================
+REMOVE
+==================================================
+
+• Remove the standalone back arrow icon.
+• Remove the current header layout completely.
+• Do not keep the current spacing or positioning.
+• Do not simply move existing elements with CSS.
+
+==================================================
+NEW HEADER STRUCTURE
+==================================================
+
+Top Left
+
+← Agents
+
+(Mouse should NOT appear on this same row.)
+
+Below the breadcrumb:
+
+Mouse  (editable)
+
+Below the title:
+
+● Inactive
+Agent #0146
+0 Calls
+
+Display these as muted metadata with bullet separators.
+
+Example:
+
+● Inactive • Agent #0146 • 0 Calls
+
+==================================================
+RIGHT SIDE
+==================================================
+
+Keep all existing actions:
+
+Refine with AI
+Save
+Publish
+Call
+Web Call
+More
+
+These should remain fully functional.
+
+Align them vertically with the title block.
+
+==================================================
+LAYOUT
+==================================================
+
+Use a responsive two-column layout.
+
+LEFT COLUMN
+------------
+← Agents
+
+Mouse ✏️
+
+● Inactive • Agent #0146 • 0 Calls
+
+RIGHT COLUMN
+-------------
+Refine with AI
+Save
+Publish
+Call
+Web Call
+More
+
+Everything should be vertically centered.
+
+==================================================
+SPACING
+==================================================
+
+Breadcrumb → Title
+8px
+
+Title → Metadata
+6px
+
+Metadata → Estimated Cost Card
+24px
+
+Add more breathing room than the current design.
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+Breadcrumb
+12px
+Medium
+Muted text
+
+Agent Name
+40px desktop
+32px laptop
+Bold
+
+Metadata
+13px
+Muted
+
+==================================================
+BUTTONS
+==================================================
+
+Keep existing functionality.
+
+Use consistent spacing (12–16px).
+
+Buttons should be vertically aligned.
+
+==================================================
+ANIMATION
+==================================================
+
+Header fades in:
+
+opacity 0 → 1
+
+translateY 8px → 0
+
+Duration:
+250ms
+
+No flashy animations.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT only edit CSS.
+
+Refactor the JSX/component hierarchy if necessary.
+
+Actually replace the current implementation.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+✓ Standalone back arrow removed.
+
+✓ Breadcrumb shows:
+← Agents
+
+✓ Agent name appears below breadcrumb.
+
+✓ Metadata appears below title.
+
+✓ Right-side actions remain aligned.
+
+✓ Estimated Cost card starts below the new header.
+
+✓ Visual hierarchy feels premium.
+
+✓ Matches enterprise SaaS products like Linear, Vercel and Notion.
+
+✓ Existing functionality remains unchanged.
+
+Only consider this task complete if the entire header layout has been rebuilt—not merely restyled.
