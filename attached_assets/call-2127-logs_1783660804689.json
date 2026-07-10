@@ -1,0 +1,2748 @@
+[
+  {
+    "id": 143639,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 36,
+      "agentName": "infant snapserve agent",
+      "asrProvider": "sarvam",
+      "llmProvider": "groq",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "2344e62d-2b68-4873-9ede-9fa64f6ec889"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2127,
+      "sessionId": "live-2127",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-10T05:17:55.241Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 143642,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Karthik",
+        "callCount": 27
+      },
+      "factCount": 7,
+      "facts": {
+        "location_of_agent": "SnapServe office",
+        "interested_in": "demo",
+        "preferred_time": "4 PM",
+        "demo_duration": "10-15 minutes",
+        "time_zone": "asia/kolkata",
+        "language_pref": "english",
+        "name": "Karthik"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 143640,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "916383653279",
+        "from_number": "917971543255",
+        "agent_name": "infant snapserve agent",
+        "caller_number": "917971543255",
+        "date": "Friday, July 10, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: Karthik  |  Calls: 27  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller reconnected with the agent to finalize a demo booking at 4 PM, and the agent confirmed the demo schedule. The demo was previously booked for 4 PM, and a calendar invite would be sent to the caller. The agent reviewed the demo details with the caller.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• location_of_agent: SnapServe office\n• interested_in: demo\n• preferred_time: 4 PM\n• demo_duration: 10-15 minutes\n• time_zone: asia/kolkata\n\nLAST EXCHANGES BEFORE THE CALL DROPPED (resume from here):\nYou: "
+    },
+    "metadata": null
+  },
+  {
+    "id": 143643,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 143644,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile"
+    }
+  },
+  {
+    "id": 143641,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "2344e62d-2b68-4873-9ede-9fa64f6ec889"
+    }
+  },
+  {
+    "id": 143645,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 143646,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.284Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "9613ab62b00b",
+      "promptLength": 9049,
+      "preview": "=== CALLER MEMORY ===\nName: Karthik  |  Calls: 27  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller reconnected with the agent to finalize a demo booking at 4 PM, and the agent confirmed the"
+    }
+  },
+  {
+    "id": 143647,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.545Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry we got cut off earlier, Karthik, let's get back to your demo scheduled for 4 PM today."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 143648,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:55.545Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 143649,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:17:57.118Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1574,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 168674,
+      "textLength": 92,
+      "firstByteMs": 290
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1574
+    }
+  },
+  {
+    "id": 143650,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:01.239Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5271,
+      "turnNumber": 0,
+      "durationMs": 5694
+    }
+  },
+  {
+    "id": 143651,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:04.723Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Can you just",
+      "endDetectToFinalMs": 98,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 143653,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:04.824Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I didn't hear that clearly. Could you say that once more?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 143652,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:04.824Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 143654,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:05.866Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1042,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 79074,
+      "textLength": 57,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 1042
+    }
+  },
+  {
+    "id": 143655,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:05.900Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 3,
+      "effectiveMinFrames": 3,
+      "effectiveThreshold": 2500,
+      "configuredThreshold": 200,
+      "echoFloor": 4642,
+      "currentRms": 16570,
+      "turnNumber": 1,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 143656,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:05.912Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2471,
+      "turnNumber": 1,
+      "durationMs": 1088,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 143657,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:06.487Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "tell me about",
+      "endDetectToFinalMs": 139,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 143658,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:06.587Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Pardon? Could you repeat that for me?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 143659,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:06.588Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 143660,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:07.373Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 787,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 58594,
+      "textLength": 37,
+      "firstByteMs": 268
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 787
+    }
+  },
+  {
+    "id": 143661,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:08.716Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1831,
+      "turnNumber": 2,
+      "durationMs": 2129
+    }
+  },
+  {
+    "id": 143662,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:12.563Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "What is it all about?",
+      "endDetectToFinalMs": 100,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143663,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:12.666Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143664,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.121Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 458,
+      "turnNumber": 3,
+      "durationMs": 458
+    }
+  },
+  {
+    "id": 143665,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.165Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "You're asking what the demo is all about."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143666,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.215Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143667,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.217Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "The demo is a 10-15 minute showcase of our product"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143668,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.249Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 458,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "You're asking what the demo is all about. The demo is a 10-15 minute showcase of our product, where we'll walk you through its features and how it can benefit your business."
+    },
+    "metadata": {
+      "inputTokens": 3947,
+      "outputTokens": 41,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143669,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.249Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "where we'll walk you through its features and how it can benefit your business."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143670,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:13.814Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 650,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 66274,
+      "textLength": 41,
+      "firstByteMs": 145
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 650
+    }
+  },
+  {
+    "id": 143671,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:14.068Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 853,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 50,
+      "firstByteMs": 167
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 853
+    }
+  },
+  {
+    "id": 143672,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:14.439Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1187,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117474,
+      "textLength": 79,
+      "firstByteMs": 289
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1187
+    }
+  },
+  {
+    "id": 143673,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:15.393Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2071,
+      "turnNumber": 3,
+      "durationMs": 2177
+    }
+  },
+  {
+    "id": 143674,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:15.393Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143675,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:18.773Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 3,
+      "durationMs": 3380
+    }
+  },
+  {
+    "id": 143676,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:18.773Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 143686,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:22.493Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3671,
+      "turnNumber": 3,
+      "durationMs": 3720
+    }
+  },
+  {
+    "id": 143691,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:25.614Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Okay",
+      "endDetectToFinalMs": 70,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143692,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:25.716Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143693,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:26.071Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 357,
+      "turnNumber": 4,
+      "durationMs": 357
+    }
+  },
+  {
+    "id": 143694,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:26.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I'm glad you're interested in learning more."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143695,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:26.186Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 357,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "I'm glad you're interested in learning more. Is there anything specific you'd like to see or learn about during the demo?"
+    },
+    "metadata": {
+      "inputTokens": 3992,
+      "outputTokens": 27,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143696,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:26.186Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Is there anything specific you'd like to see or learn about during the demo?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143697,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:26.186Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143698,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:26.790Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 655,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 44,
+      "firstByteMs": 140
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 655
+    }
+  },
+  {
+    "id": 143699,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:27.052Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 867,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117474,
+      "textLength": 76,
+      "firstByteMs": 130
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 867
+    }
+  },
+  {
+    "id": 143700,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:28.499Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 4,
+      "durationMs": 2312
+    }
+  },
+  {
+    "id": 143701,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:28.499Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 143702,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:32.238Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3671,
+      "turnNumber": 4,
+      "durationMs": 3740
+    }
+  },
+  {
+    "id": 143705,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.041Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Okay.",
+      "endDetectToFinalMs": 92,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 143706,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.139Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in English. Respond in English. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken English, the way real people talk in casual conversation; NEVER use formal, literary, or boo",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 143707,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.584Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 445,
+      "turnNumber": 5,
+      "durationMs": 445
+    }
+  },
+  {
+    "id": 143708,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.641Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "So we're all set for the 4 PM demo then."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 143709,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.664Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 445,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "So we're all set for the 4 PM demo then. Is there anything else I can help you with before we hang up?"
+    },
+    "metadata": {
+      "inputTokens": 4016,
+      "outputTokens": 28,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 143710,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.664Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Is there anything else I can help you with before we hang up?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 143711,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:33.691Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 143717,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:34.425Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 761,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 61,
+      "firstByteMs": 154
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 761
+    }
+  },
+  {
+    "id": 143718,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:34.460Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 820,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 40,
+      "firstByteMs": 179
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 820
+    }
+  },
+  {
+    "id": 143721,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:35.312Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 3,
+      "effectiveMinFrames": 3,
+      "effectiveThreshold": 2500,
+      "configuredThreshold": 200,
+      "echoFloor": 4642,
+      "currentRms": 10757,
+      "turnNumber": 5,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 143722,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:35.324Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2151,
+      "turnNumber": 5,
+      "durationMs": 1632,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 143723,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:37.008Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Bye Hindi mein",
+      "endDetectToFinalMs": 120,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 143725,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:37.113Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I'm sorry — could you say that again, please?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 143724,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:37.113Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 143728,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:37.835Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 724,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 45,
+      "firstByteMs": 173
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 724
+    }
+  },
+  {
+    "id": 143729,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:39.461Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 6,
+      "durationMs": 2353
+    }
+  },
+  {
+    "id": 143757,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:48.674Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "भैया हिंदी",
+      "endDetectToFinalMs": 83,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143758,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:48.776Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Hindi. Respond ONLY in Hindi for this entire response, and keep responding in Hindi unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Hindi. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Hindi is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 14,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143759,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:49.238Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 463,
+      "turnNumber": 7,
+      "durationMs": 463
+    }
+  },
+  {
+    "id": 143760,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:49.335Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आप हिंदी में बात करना चाहते हैं, ठीक है!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143761,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:49.386Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143762,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:49.391Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 463,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "आप हिंदी में बात करना चाहते हैं, ठीक है! क्या आपको डेमो के बारे में कोई और जानकारी चाहिए?"
+    },
+    "metadata": {
+      "inputTokens": 4065,
+      "outputTokens": 48,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143763,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:49.391Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको डेमो के बारे में कोई और जानकारी चाहिए?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143764,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:50.023Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 688,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 73954,
+      "textLength": 40,
+      "firstByteMs": 134
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 688
+    }
+  },
+  {
+    "id": 143765,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:50.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 745,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 48,
+      "firstByteMs": 133
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 745
+    }
+  },
+  {
+    "id": 143768,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:51.792Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2311,
+      "turnNumber": 7,
+      "durationMs": 2407
+    }
+  },
+  {
+    "id": 143769,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:51.793Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 143770,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:54.552Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2711,
+      "turnNumber": 7,
+      "durationMs": 2760
+    }
+  },
+  {
+    "id": 143772,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:57.965Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "हाँ सही है।",
+      "endDetectToFinalMs": 131,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143773,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:58.064Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Hindi. Respond ONLY in Hindi for this entire response, and keep responding in Hindi unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Hindi. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Hindi is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 16,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143774,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:58.416Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 353,
+      "turnNumber": 8,
+      "durationMs": 353
+    }
+  },
+  {
+    "id": 143775,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:58.516Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "अब हमारी बातचीत पूरी हो गई है"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143776,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:58.561Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 353,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "अब हमारी बातचीत पूरी हो गई है, क्या मैं आपको कॉल के अंत की पुष्टि कर सकता हूँ?"
+    },
+    "metadata": {
+      "inputTokens": 4162,
+      "outputTokens": 42,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143777,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:58.562Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या मैं आपको कॉल के अंत की पुष्टि कर सकता हूँ?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143778,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:58.567Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143779,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:59.273Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 713,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 47,
+      "firstByteMs": 129
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 713
+    }
+  },
+  {
+    "id": 143780,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:18:59.290Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 775,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 63714,
+      "textLength": 29,
+      "firstByteMs": 184
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 775
+    }
+  },
+  {
+    "id": 143784,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:00.683Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1991,
+      "turnNumber": 8,
+      "durationMs": 2116
+    }
+  },
+  {
+    "id": 143783,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:00.683Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 143794,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:03.263Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2551,
+      "turnNumber": 8,
+      "durationMs": 2580
+    }
+  },
+  {
+    "id": 143795,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:09.627Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "तो 3:00 और",
+      "endDetectToFinalMs": 71,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143796,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:09.729Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Hindi. Respond ONLY in Hindi for this entire response, and keep responding in Hindi unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Hindi. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Hindi is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 18,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143797,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:10.205Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 477,
+      "turnNumber": 9,
+      "durationMs": 477
+    }
+  },
+  {
+    "id": 143800,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:10.298Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आप 3:00 बजे के बारे में कुछ कहना चाहते हैं"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143801,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:10.340Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 477,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "आप 3:00 बजे के बारे में कुछ कहना चाहते हैं, क्या यह आपके लिए एक वैकल्पिक समय है?"
+    },
+    "metadata": {
+      "inputTokens": 4200,
+      "outputTokens": 41,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143802,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:10.341Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या यह आपके लिए एक वैकल्पिक समय है?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143803,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:10.348Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143804,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:11.054Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 757,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 84194,
+      "textLength": 42,
+      "firstByteMs": 152
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 757
+    }
+  },
+  {
+    "id": 143805,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:11.125Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 785,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 36,
+      "firstByteMs": 145
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 785
+    }
+  },
+  {
+    "id": 143806,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:13.134Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2631,
+      "turnNumber": 9,
+      "durationMs": 2786
+    }
+  },
+  {
+    "id": 143807,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:13.134Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 143810,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:15.334Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 9,
+      "durationMs": 2200
+    }
+  },
+  {
+    "id": 143811,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.134Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "फल करो।",
+      "endDetectToFinalMs": 123,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143813,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.236Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Hindi. Respond ONLY in Hindi for this entire response, and keep responding in Hindi unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Hindi. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Hindi is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 20,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143814,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.737Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 504,
+      "turnNumber": 10,
+      "durationMs": 504
+    }
+  },
+  {
+    "id": 143815,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.826Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "मैं समझता हूँ, आप 3:00 बजे का समय देख रहे हैं"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143816,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.871Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 504,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "मैं समझता हूँ, आप 3:00 बजे का समय देख रहे हैं, क्या यह आपके लिए डेमो के लिए उपयुक्त समय होगा?"
+    },
+    "metadata": {
+      "inputTokens": 4253,
+      "outputTokens": 48,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143817,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.871Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या यह आपके लिए डेमो के लिए उपयुक्त समय होगा?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143818,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:16.876Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143819,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:17.606Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 736,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 46,
+      "firstByteMs": 146
+    },
+    "metadata": {
+      "turnNumber": 10,
+      "durationMs": 736
+    }
+  },
+  {
+    "id": 143820,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:17.735Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 909,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89314,
+      "textLength": 45,
+      "firstByteMs": 165
+    },
+    "metadata": {
+      "turnNumber": 10,
+      "durationMs": 909
+    }
+  },
+  {
+    "id": 143821,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:19.893Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2791,
+      "turnNumber": 10,
+      "durationMs": 3017
+    }
+  },
+  {
+    "id": 143822,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:19.893Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143823,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:21.076Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 3,
+      "effectiveMinFrames": 3,
+      "effectiveThreshold": 2500,
+      "configuredThreshold": 200,
+      "echoFloor": 2154,
+      "currentRms": 12403,
+      "turnNumber": 10,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 143824,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:21.094Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2551,
+      "turnNumber": 10,
+      "durationMs": 1200,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 143831,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:31.094Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 10,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 143830,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:31.094Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप दोबारा कह सकते हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 10
+    }
+  },
+  {
+    "id": 143832,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:31.144Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 51,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 0,
+      "textLength": 59,
+      "firstByteMs": null
+    },
+    "metadata": {
+      "turnNumber": 10,
+      "durationMs": 51
+    }
+  },
+  {
+    "id": 143844,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:37.709Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Hello जी जी",
+      "endDetectToFinalMs": 81,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143845,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:37.811Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "llama-3.3-70b-versatile",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Hindi. Respond ONLY in Hindi for this entire response, and keep responding in Hindi unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Hindi. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Hindi is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 22,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143847,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:38.364Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 555,
+      "turnNumber": 11,
+      "durationMs": 555
+    }
+  },
+  {
+    "id": 143848,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:38.512Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आप हिंदी से अचानक अंग्रेजी में \"हैलो\" कहकर बात शुरू कर रहे हैं"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143849,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:38.560Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143850,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:38.624Z",
+    "component": "LLM",
+    "provider": "groq",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 555,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "आप हिंदी से अचानक अंग्रेजी में \"हैलो\" कहकर बात शुरू कर रहे हैं, क्या आपको लगता है कि हमारी बातचीत को अंग्रेजी में जारी रखना बेहतर होगा?"
+    },
+    "metadata": {
+      "inputTokens": 4322,
+      "outputTokens": 72,
+      "cachedTokens": 0,
+      "model": "llama-3.3-70b-versatile",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143851,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:38.624Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आपको लगता है कि हमारी बातचीत को अंग्रेजी में जारी रखना बेहतर होगा?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143852,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:39.466Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 958,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112354,
+      "textLength": 62,
+      "firstByteMs": 175
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 958
+    }
+  },
+  {
+    "id": 143853,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:39.641Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1017,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 122594,
+      "textLength": 71,
+      "firstByteMs": 257
+    },
+    "metadata": {
+      "turnNumber": 11,
+      "durationMs": 1017
+    }
+  },
+  {
+    "id": 143856,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:42.207Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 11
+    }
+  },
+  {
+    "id": 143855,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:42.207Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3511,
+      "turnNumber": 11,
+      "durationMs": 3647
+    }
+  },
+  {
+    "id": 143857,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:46.166Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3831,
+      "turnNumber": 11,
+      "durationMs": 3959
+    }
+  },
+  {
+    "id": 143858,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:49.379Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 143859,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:49.496Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2127"
+    }
+  },
+  {
+    "id": 143860,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:49.496Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2127"
+    }
+  },
+  {
+    "id": 143861,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:49.515Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 114,
+        "turns": 8,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "Hello जी जी",
+        "lastAgentResponse": "आप हिंदी से अचानक अंग्रेजी में \"हैलो\" कहकर बात शुरू कर रहे हैं, क्या आपको लगता है कि हमारी बातचीत को अंग्रेजी में जारी रखना बेहतर होगा?",
+        "recordingStatus": "saved",
+        "warningCount": 7,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 114,
+      "turns": 8,
+      "avgSttMs": 0,
+      "avgLlmMs": 452,
+      "avgTtsMs": 700
+    }
+  },
+  {
+    "id": 143864,
+    "callId": 2127,
+    "agentId": 36,
+    "ts": "2026-07-10T05:19:50.164Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
