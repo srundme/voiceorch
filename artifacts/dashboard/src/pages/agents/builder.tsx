@@ -15,6 +15,7 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WebcallPanel } from "@/components/webcall-panel";
+import { AgentConfigCard, AgentConfigPanel } from "@/components/agent-config-card";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -522,59 +523,32 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           {/* ── Three provider cards ─────────────────────────────────────────── */}
           <div className="grid grid-cols-3 gap-3">
 
-            {/* TRANSCRIBER */}
-            <button type="button" onClick={() => toggle("transcriber")}
-              className={cn(
-                "relative text-left rounded-xl border p-4 cursor-pointer transition-all hover:border-blue-400/40",
-                openCard === "transcriber"
-                  ? "border-blue-400/50 bg-blue-950/20 shadow-[0_0_0_1px_rgba(96,165,250,0.2)]"
-                  : "border-border/60 bg-card/50"
-              )}>
-              <Pencil className="absolute top-3 right-3 h-3 w-3 text-muted-foreground/40" />
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" /> Transcriber
-              </div>
-              <div className="text-sm font-medium truncate leading-snug">{langLabel || "—"}</div>
-              <div className="text-[11px] text-muted-foreground mt-1 truncate">
-                {asrLabel}{asrModel ? ` · ${asrModel}` : ""}
-              </div>
-            </button>
+            <AgentConfigCard
+              icon={<Mic />}
+              label="Transcriber"
+              value={langLabel}
+              subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+              active={openCard === "transcriber"}
+              onClick={() => toggle("transcriber")}
+            />
 
-            {/* MODEL */}
-            <button type="button" onClick={() => toggle("model")}
-              className={cn(
-                "relative text-left rounded-xl border p-4 cursor-pointer transition-all hover:border-purple-400/40",
-                openCard === "model"
-                  ? "border-purple-400/50 bg-purple-950/20 shadow-[0_0_0_1px_rgba(192,132,252,0.2)]"
-                  : "border-border/60 bg-card/50"
-              )}>
-              <Pencil className="absolute top-3 right-3 h-3 w-3 text-muted-foreground/40" />
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-400 mb-2.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" /> Model
-              </div>
-              <div className="text-sm font-medium truncate leading-snug">{llmModelLabel || llmLabel || "—"}</div>
-              <div className="text-[11px] text-muted-foreground mt-1 truncate">{llmLabel}</div>
-            </button>
+            <AgentConfigCard
+              icon={<Brain />}
+              label="Model"
+              value={llmModelLabel || llmLabel}
+              subtext={llmLabel}
+              active={openCard === "model"}
+              onClick={() => toggle("model")}
+            />
 
-            {/* VOICE */}
-            <button type="button" onClick={() => toggle("voice")}
-              className={cn(
-                "relative text-left rounded-xl border p-4 cursor-pointer transition-all hover:border-green-400/40",
-                openCard === "voice"
-                  ? "border-green-400/50 bg-green-950/20 shadow-[0_0_0_1px_rgba(74,222,128,0.2)]"
-                  : "border-border/60 bg-card/50"
-              )}>
-              <Pencil className="absolute top-3 right-3 h-3 w-3 text-muted-foreground/40" />
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-green-400 mb-2.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" /> Voice
-              </div>
-              <div className="text-sm font-medium truncate leading-snug">
-                {ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel || "—"}
-              </div>
-              <div className="text-[11px] text-muted-foreground mt-1 truncate">
-                {ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}
-              </div>
-            </button>
+            <AgentConfigCard
+              icon={<Volume2 />}
+              label="Voice"
+              value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
+              subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
+              active={openCard === "voice"}
+              onClick={() => toggle("voice")}
+            />
           </div>
 
 
@@ -671,8 +645,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
           {/* ── Inline config for selected card ─────────────────────────────── */}
           {openCard === "transcriber" && (
-            <div className="rounded-xl border border-blue-400/30 bg-blue-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Transcriber Configuration</div>
+            <AgentConfigPanel icon={<Mic />} title="Transcriber Configuration">
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="language" render={({ field }) => (
                   <FormItem className="space-y-1">
@@ -717,22 +690,21 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   )} />
                 )}
               </div>
-              <div className="flex items-center justify-between border-t border-blue-400/10 pt-2 mt-1">
+              <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
                 <div>
-                  <p className="text-[10px] font-medium text-blue-100/80">Auto-detect Language</p>
-                  <p className="text-[9px] text-blue-300/50">Follow caller's language mid-call — off enforces a single language</p>
+                  <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
+                  <p className="text-[9px] text-muted-foreground">Follow caller's language mid-call — off enforces a single language</p>
                 </div>
                 <Switch
                   checked={langAutoDetect}
                   onCheckedChange={(v) => form.setValue("languageAutoDetect", v, { shouldDirty: true })}
                 />
               </div>
-            </div>
+            </AgentConfigPanel>
           )}
 
           {openCard === "model" && (
-            <div className="rounded-xl border border-purple-400/30 bg-purple-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-purple-400">Model Configuration</div>
+            <AgentConfigPanel icon={<Brain />} title="Model Configuration">
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="llmProvider" render={({ field }) => (
                   <FormItem className="space-y-1">
@@ -764,12 +736,11 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   <div className="flex justify-between text-[9px] text-muted-foreground"><span>0</span><span>2</span></div>
                 </FormItem>
               )} />
-            </div>
+            </AgentConfigPanel>
           )}
 
           {openCard === "voice" && (
-            <div className="rounded-xl border border-green-400/30 bg-green-950/10 p-4 space-y-3 animate-in slide-in-from-top-1 duration-150">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-green-400">Voice Configuration</div>
+            <AgentConfigPanel icon={<Volume2 />} title="Voice Configuration">
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                   <FormItem className="space-y-1">
@@ -829,7 +800,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   )} />
                 )}
               </div>
-            </div>
+            </AgentConfigPanel>
           )}
 
           {/* ── First Message ────────────────────────────────────────────────── */}
@@ -1953,8 +1924,8 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {toolType === "webhook"
-                        ? <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-400"><Webhook className="h-3 w-3" />Custom Function</span>
-                        : <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-400"><PhoneForwarded className="h-3 w-3" />Call Transfer</span>
+                        ? <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"><Webhook className="h-3 w-3" />Custom Function</span>
+                        : <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"><PhoneForwarded className="h-3 w-3" />Call Transfer</span>
                       }
                     </div>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => remove(index)}>
