@@ -558,15 +558,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
       <div className="relative flex-1 overflow-y-auto min-w-0 border-r border-border/50">
         <div className="p-5 space-y-5">
 
-          {/* Agent name */}
-          <FormField control={form.control} name="name" render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="text-[10px] text-muted-foreground uppercase tracking-widest">Agent Name</FormLabel>
-              <FormControl><Input className="h-9 text-sm font-medium" {...field} /></FormControl>
-              <FormMessage className="text-[10px]" />
-            </FormItem>
-          )} />
-
           {/* ── Three provider cards ─────────────────────────────────────────── */}
           <div className="grid grid-cols-3 gap-3">
 
@@ -4809,7 +4800,13 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
   const [showWebcall, setShowWebcall] = useState(() => _autoWebcall);
   const isDirty   = form.formState.isDirty;
-  const nameValue = form.watch("name");
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const handleRenameSave = () => {
+    form.setValue("name", renameValue, { shouldDirty: true });
+    setRenameDialogOpen(false);
+    void onSave();
+  };
 
   if (isLoading) {
     return (
@@ -4827,23 +4824,33 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   return (
     <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border/60 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-border/60 shrink-0">
+        <div className="flex flex-col gap-1.5 min-w-0">
           <DetailNav backTo="/app/agents" backLabel="Back to Agents" />
-          <div className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
-          <input
-            className="text-base font-semibold bg-transparent outline-none border-b border-transparent hover:border-muted-foreground/30 focus:border-primary transition-colors min-w-0 max-w-[220px] truncate cursor-text"
-            value={nameValue ?? agent.name}
-            onChange={e => form.setValue("name", e.target.value, { shouldDirty: true })}
-            onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur(); void onSave(); } }}
-            onBlur={() => { if (isDirty) void onSave(); }}
-            title="Click to rename"
-            aria-label="Agent name"
-          />
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-mono shrink-0">#{String(agent.id).padStart(4, "0")}</Badge>
-          <span className="text-xs text-muted-foreground">{(agent as any).totalCalls ?? 0} calls</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h1 className="text-[22px] font-semibold leading-tight truncate max-w-[420px]" title={agent.name}>
+              {agent.name}
+            </h1>
+            <button
+              type="button"
+              onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
+              className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Rename agent"
+              aria-label="Rename agent"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
+            <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>Agent #{String(agent.id).padStart(4, "0")}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>{(agent as any).totalCalls ?? 0} Calls</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 shrink-0 pt-1">
           <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
             <Sparkles className="h-3.5 w-3.5" /> Refine with AI
           </Button>
@@ -4872,6 +4879,31 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Rename Agent dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Rename Agent</DialogTitle>
+            <DialogDescription>Update the display name of this agent.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="rename-agent-input" className="text-xs text-muted-foreground">Agent Name</Label>
+            <Input
+              id="rename-agent-input"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleRenameSave(); } }}
+              className="h-9"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleRenameSave}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {showWebcall && (
         <div className="fixed bottom-4 right-4 z-50 w-[420px] h-[560px] flex flex-col shadow-2xl rounded-2xl overflow-hidden">
