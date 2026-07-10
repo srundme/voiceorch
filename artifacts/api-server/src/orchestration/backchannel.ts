@@ -12,13 +12,11 @@
 // into the real LLM response or annoy the caller.
 
 const BACKCHANNEL_FILLERS: Record<string, string[]> = {
-  // Tamil — everyday spoken acknowledgments
+  // Tamil — kept intentionally minimal. Only "okay" and "சரி" (seri) sound
+  // natural in sparing use; the rest ("ஆமா", "அப்படியா", "ஓ", "hmm") were
+  // overused and made the agent sound scripted/repetitive.
   "ta": [
-    "ஆமா",       // yeah / yes (very casual)
-    "சரி",        // okay / right
-    "hmm",        // natural filler (kept in English — standard in Tamil speech)
-    "அப்படியா",  // I see / is that so
-    "ஓ",          // oh
+    "சரி",        // okay / right (seri)
     "okay",       // universal
   ],
 
@@ -101,9 +99,24 @@ export function getBackchannelFillers(language: string | null | undefined): stri
   return BACKCHANNEL_FILLERS[base] ?? [];
 }
 
-/** Pick one random filler for the language, or null when none is available. */
-export function pickBackchannelFiller(language: string | null | undefined): string | null {
+/**
+ * Pick one random filler for the language, or null when none is available.
+ *
+ * When `lastPhrase` is provided and the pool has more than one option, the
+ * same phrase is never picked twice in a row — avoids the robotic feel of
+ * hearing e.g. "okay" back-to-back on consecutive turns.
+ */
+export function pickBackchannelFiller(
+  language: string | null | undefined,
+  lastPhrase?: string | null,
+): string | null {
   const pool = getBackchannelFillers(language);
   if (pool.length === 0) return null;
-  return pool[Math.floor(Math.random() * pool.length)]!;
+  if (pool.length === 1) return pool[0]!;
+  let choices = pool;
+  if (lastPhrase) {
+    const filtered = pool.filter((p) => p !== lastPhrase);
+    if (filtered.length > 0) choices = filtered;
+  }
+  return choices[Math.floor(Math.random() * choices.length)]!;
 }

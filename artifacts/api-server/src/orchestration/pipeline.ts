@@ -666,6 +666,8 @@ export class OrchestrationPipeline {
   private answerGapLogged = false;
   // Count of filler phrases played due to slow LLM response (>800 ms to first token)
   private fillerPlayedCount = 0;
+  // Last backchannel/dead-air filler phrase spoken, so we never repeat it back-to-back.
+  private lastFillerPhrase: string | null = null;
 
   // ── Per-turn latency instrumentation (monotonic via performance.now()) ─────
   private turnIndex = 0;
@@ -2243,6 +2245,16 @@ export class OrchestrationPipeline {
         : (this.currentLang ?? "");
       const scriptNote = LANG_SCRIPT_DIRECTIVE[effectiveLang];
       if (scriptNote) langGuard += " " + scriptNote;
+
+      // Constrain LLM-generated acknowledgment fillers — models otherwise larden
+      // every reply with a translated "got it" / "I see" / "oh I see" style opener,
+      // which sounds scripted and repetitive over a whole call (Tamil especially:
+      // only "okay"/"seri" sound natural, and even those should be used sparingly).
+      langGuard +=
+        ` [ACKNOWLEDGMENT FILLERS] Keep acknowledgment fillers minimal — most replies should have NONE at all. ` +
+        `When one is genuinely natural, keep it to a single short word ("okay"${effectiveLang.startsWith("ta") ? ` or "சரி" (seri)` : ""}) ` +
+        `and never stack multiple fillers or use verbose translated phrases like "I see", "oh I see", "understood", or "got it" in the target language. ` +
+        `Do not open consecutive replies with a filler.`;
     }
 
     return langGuard;
@@ -4305,13 +4317,19 @@ export class OrchestrationPipeline {
     // first agent word.
     let backchanneledThisTurn = false;
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
-      const freq = this.agent.backchannelingFrequency ?? 0.5;
+      // Tamil's trimmed pool ("okay"/"seri" only) sounds natural in sparing use
+      // but robotic if it fires on most turns — dampen the effective frequency
+      // for Tamil specifically, on top of the agent-configured base frequency.
+      const fillerLang = this.agent.sttConfig.language;
+      const isTamil = (fillerLang ?? "").toLowerCase().split(/[-_]/)[0] === "ta";
+      const baseFreq = this.agent.backchannelingFrequency ?? 0.5;
+      const freq = isTamil ? Math.min(baseFreq, 0.25) : baseFreq;
       if (Math.random() < freq) {
         // Strict, language-based fillers only — no cross-language fallback.
-        const fillerLang = this.agent.sttConfig.language;
         const pool = getBackchannelFillers(fillerLang);
         if (pool.length > 0) {
-          const phrase = pool[Math.floor(Math.random() * pool.length)]!;
+          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase)!;
+          this.lastFillerPhrase = phrase;
           logger.info(
             {
               callId: this.config.callId,
@@ -4679,7 +4697,7 @@ export class OrchestrationPipeline {
           // Strict, language-based fillers only — no hardcoded English fallback.
           const fillerLang = this.agent.sttConfig.language;
           const pool = getBackchannelFillers(fillerLang);
-          const phrase = pickBackchannelFiller(fillerLang);
+          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase);
           if (!phrase) {
             logger.info(
               {
@@ -4706,6 +4724,7 @@ export class OrchestrationPipeline {
             "Dead-air filler enqueued (language-aware, LLM > 800 ms)",
           );
           enqueue(phrase);
+          this.lastFillerPhrase = phrase;
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
         }
