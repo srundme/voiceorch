@@ -1,0 +1,57 @@
+#1519 - Improve KB retrieval reliability (targeted tuning)
+What & Why
+On call 2143 (agent 129 "Galaxy Final", Krutrim gemma, Sarvam STT, Tamil), per-turn knowledge-base retrieval never reached the LLM — the agent hallucinated app names and doctor hours instead of using KB facts. Root causes: the outer per-turn KB wait (200ms) is shorter than the embed call (300–800ms), the prefetch fallback's inner budget (900ms) is larger than the outer wait so the fallback is structurally dead, and the baked injection is the first 4,000 chars of one doc. This task applies targeted, low-risk tuning changes WITHOUT restructuring the core lookup mechanism.
+
+Do NOT change the overall architecture: keep the Promise.all bundling of FTS + vector search and the baked-injection approach. Do NOT modify any embedding API endpoint or model configuration, or the overall call-start injection flow.
+
+Done looks like
+A Knowledge event appears in the call execution log on EVERY turn with hit/miss, source, latency, and injected context size.
+Turns are served by the curated pinned summary and/or a capped (~8k chars) fallback dump — never the full 40–60k-char KB dump.
+Doctor-hours and wellness-section questions get correct, KB-sourced answers (24x7 teleconsultation; Wellness Coins → Repository → 'Explore Now'), not invented content — unless the agent's system prompt explicitly overrides them, in which case the system prompt wins.
+Tamil-only queries skip FTS (vector only); code-mixed queries still run FTS.
+The call-start baked injection remains capped at its existing 4,000 chars, unaffected.
+Out of scope
+Restructuring the Promise.all race logic or the prefetch design.
+Changing embedding provider/model/endpoints.
+Raising the 4,000-char baked cap.
+Running the migration or seeding script against production (post-deploy owner step — see Deployment boundary).
+Steps
+Raise the per-turn KB wait time (pipeline.ts) — Change KB_CONTEXT_RACE_MS from 200 to 300.
+
+Fix the prefetch fallback's internal wait budget (pipeline.ts) — Set the prefetch fallback's internal wait budget to 200ms — it must be LOWER than the outer KB_CONTEXT_RACE_MS (300ms). Confirm: inner (200ms) < outer (300ms).
+
+Cap the prefetch fallback dump size — scoped to the fallback path only (kb-retrieval.ts) — Do NOT apply a cap globally inside dumpEntries. Add an optional maxChars parameter to dumpEntries, defaulting to undefined (no cap = current behavior). Pass maxChars: 8000 only at the per-turn prefetch fallback call site in pipeline.ts. The call-start injection path (buildKnowledgeBaseBlock, including webcall start) must call dumpEntries with no cap — it keeps its own separate 4,000-char handling in session.ts, unaffected. If possible, prioritize which entries fill the 8k budget (most relevant / same section-coverage priority as the curated summary; pinned entries first) — but the hard cap alone is the critical fix even without smart prioritization. This is required because lowering the inner budget activates the fallback on nearly every turn — without the cap it would inject the full 40–60k-char KB into the prompt on most turns.
+
+Add per-turn Knowledge hit/miss logging (pipeline.ts) — Wherever kbContext is resolved (or times out to null), log an event into the CALL EXECUTION LOG (not just server logs) with: turn number, hit (true/false), source (fts / vector / prefetch / none), latencyMs, contextChars (size of KB context actually injected that turn). Must appear as a "Knowledge" event on every turn, detailed enough to confirm the fallback cap is holding in real calls.
+
+Language-based routing shortcut (pipeline.ts) — If the query is non-Latin script (e.g., Tamil) AND contains no Latin-script tokens, skip FTS and go straight to vector search. If code-mixed (Tamil script + English words like "claim", "app"), still run FTS as normal — do not skip it.
+
+Curated 4,000-char baked summary covering every section (session.ts) — Keep the 4,000-char cap as-is. Replace the "first 4,000 characters of the App Guide" behavior with a manually curated summary covering EVERY major section: Navigation, My Policies, My Claims, Doctor/Labs/Hospital/Pharmacy rules (including the 24x7 teleconsultation fact and the shared-benefit-pool rule), Wellness Tab, Feature Cards — 2-4 sentences each. This task INCLUDES drafting the actual summary content from the two source documents (attached_assets/Galaxy_Health_Insurance_Knowledge_Base_1783664153271.pdf and attached_assets/Galaxy_App_User_Guide_1783664126391.docx) — do not ship the mechanism with placeholder content. Flag in code comments that this summary needs manual review whenever source KB docs change. Per step 9a below, frame the summary as general/default reference info, explicitly subordinate to whatever the system prompt defines for a given agent.
+
+Ship the pinned flag as a real migration — Add the pinned column to knowledge entries via a proper migration file with a fresh when timestamp, following this repo's existing migration convention (see Notes — out-of-order or missing migrations silently break or 500 in production). Do not just edit the schema in dev. At injection time, sort pinned entries first, ahead of regular insertion-order entries.
+
+Deliver the curated summary as production data — The curated summary is production data, not just code. Deliver: (a) an idempotent seeding script that inserts/upserts the pinned summary entry for the Galaxy agent's sourceIds, AND (b) a paste-ready fallback version of the entry with manual steps via the existing admin/dashboard KB entry flow, in case the script path isn't usable.
+
+Enforce system prompt precedence over KB content (session.ts / pipeline.ts) — The agent's system prompt (agent-specific configuration — custom app names, custom hours, custom flows) is the source of truth and always takes priority over KB content. KB content (baked summary, fallback dump, live retrieval) is fallback reference only — used for topics the system prompt does NOT already define; it must never override or contradict the system prompt. Add this instruction line at the top of every injected KB block (both the baked summary and the fallback dump): "The following is reference knowledge base content. If any detail here conflicts with instructions already given above in the system prompt, the system prompt takes precedence — do not override agent-specific configuration with this reference material." Confirm prompt ordering: system prompt content must appear BEFORE the KB block in the final assembled prompt, every time — not after, not interleaved. NOTE: today session.ts PREPENDS the baked KB block before the system prompt, so this is a real reordering change. CRITICAL constraint: for Gemini agents, the context-cache base builder (buildCacheBase/buildLangGuard in pipeline.ts) and the session-side prompt assembly must remain byte-identical after the reorder, or the Gemini context cache silently never reuses — verify this explicitly.
+
+9a. Adjust the curated summary to avoid hardcoding overridable facts — Review the curated summary content for hardcoded universal claims (e.g., "24x7 teleconsultation," specific app names) that individual agents may intentionally override in their own system prompt. Frame the summary as general/default reference info only, explicitly subordinate to the system prompt.
+
+In-memory cache for repeated queries (pipeline.ts) — Cache keyed by sourceIds + normalized query text (lowercased, trimmed) — NOT query text alone, to prevent cross-agent/cross-tenant data leakage. 10-minute TTL, max size cap with LRU eviction. On a cache hit, skip FTS/vector search and use the cached result immediately.
+Deployment boundary — read before marking complete
+The executor works in an isolated dev environment and cannot reach the production Railway database or place live prod test calls.
+
+Executor delivers (in-task): all code changes (steps 1–10), the migration file (written, not run against prod), the idempotent seeding script (written, not run against prod), the drafted summary content, and dev-environment verification that: the cap holds, Knowledge events fire correctly on every turn, pinned entries sort first, system prompt precedes the KB block, and the Gemini cache base remains consistent.
+
+Post-deploy steps (owner, after merge + Railway deploy): run the migration against production; run the seeding script against production; place live test calls (doctor-hours question, wellness-section question, Tamil-only query, code-mixed query, repeated query for cache hit); confirm all acceptance criteria against production.
+
+This task is "code complete" once the dev-verified deliverables are merged — it is not "fully verified" until the post-deploy steps are run and the acceptance criteria are checked against production.
+
+Acceptance criteria (confirmed in production, post-deploy)
+A test call in prod shows a Knowledge event firing every turn with hit, source, latencyMs, contextChars.
+Fallback-triggered turns show contextChars capped at ~6–8k, never near 40–60k.
+The call-start baked injection (webcall start included) is confirmed still capped at its existing 4,000 chars, unaffected by the new maxChars param.
+The pinned column exists in the production database with no 500 errors on affected queries.
+The curated summary entry is confirmed present and pinned in production for the Galaxy agent, and appears first in a live call's injected context.
+A doctor-hours question and a wellness-section question both get correct, KB-sourced answers (24x7 teleconsultation; Wellness Coins → Repository → 'Explore Now') — not invented content — subject to system-prompt precedence (step 9).
+A Tamil-only query, a code-mixed Tamil+English query, and a repeated query (cache hit) all behave correctly.
+The system prompt appears before the KB block in the assembled prompt, and a KB fact that conflicts with an explicit system-prompt fact does not override it.

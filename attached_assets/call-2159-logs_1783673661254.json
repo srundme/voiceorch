@@ -1,0 +1,3067 @@
+[
+  {
+    "id": 147090,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 129,
+      "agentName": "Galaxy Final",
+      "asrProvider": "sarvam",
+      "llmProvider": "krutrim",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "3211f303-f740-473b-b2da-b3486f03eca2"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2159,
+      "sessionId": "live-2159",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-10T08:51:33.672Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 147092,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Vanita",
+        "callCount": 3
+      },
+      "factCount": 3,
+      "facts": {
+        "speaks_tamil": "yes",
+        "speaks_hindi": "no",
+        "name": "Vanita"
+      },
+      "recentCallsCount": 3
+    },
+    "metadata": null
+  },
+  {
+    "id": 147094,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "918637416033",
+        "from_number": "917971442381",
+        "agent_name": "Galaxy Final",
+        "caller_number": "917971442381",
+        "date": "Friday, July 10, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: Vanita  |  Calls: 3\n\nPrevious call summary: The agent from Galaxy Health Insurance called to discuss a policy with the caller, but there was a language barrier as the caller didn't understand Hindi. The agent attempted to communicate in simpler terms.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• speaks_tamil: yes\n• speaks_hindi: no\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-sta"
+    },
+    "metadata": null
+  },
+  {
+    "id": 147093,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 147091,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "krutrim",
+      "model": "gemma-4-E4B-it"
+    }
+  },
+  {
+    "id": 147096,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "sourceIds": [
+        30,
+        29
+      ],
+      "injected": true,
+      "preview": "Title: Galaxy_App_User_Guide.docx (part 1)\nContent: GALAXY HEALTH INSURANCE\n\nMobile App — Complete User Guide\n\nApp Version V.3.2.0\n\nA complete walkthrough of every section, screen, and feature\n\nJune 2026\n\n1. App Overview\n\nThe Galaxy Health Insurance mobile app (Version V.3.2.0) is the all-in-one self-service platform for policyholders. It gives you full access to your insurance policies, claims, h"
+    },
+    "metadata": null
+  },
+  {
+    "id": 147097,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "3211f303-f740-473b-b2da-b3486f03eca2"
+    }
+  },
+  {
+    "id": 147095,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 147098,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:33.693Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "e6823e3a663b",
+      "promptLength": 26362,
+      "preview": "=== CALLER MEMORY ===\nName: Vanita  |  Calls: 3\n\nPrevious call summary: The agent from Galaxy Health Insurance called to discuss a policy with the caller, but there was a language barrier as the calle"
+    }
+  },
+  {
+    "id": 147099,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:38.631Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "नमस्ते Vanita, पिछली बार आपको Galaxy Health Insurance के बारे में बात करनी थी, क्या आप उस बारे में बात करना चाहेंगी?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 147100,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:38.631Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 147101,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:40.388Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1762,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 201954,
+      "textLength": 116,
+      "firstByteMs": 566
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1762
+    }
+  },
+  {
+    "id": 147102,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:43.912Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 1200,
+      "configuredThreshold": 300,
+      "echoFloor": 0,
+      "currentRms": 12830,
+      "turnNumber": 0,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 147103,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:43.918Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 6311,
+      "turnNumber": 0,
+      "durationMs": 5289,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 147104,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:45.524Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "தமிழ்ல பேச முடியுமா?",
+      "endDetectToFinalMs": 190,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147105,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:45.854Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 10,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147106,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:45.863Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147107,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:46.663Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sure."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147108,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:46.714Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147109,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:47.245Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 583,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 15074,
+      "textLength": 5,
+      "firstByteMs": 291
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 583
+    }
+  },
+  {
+    "id": 147110,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:47.397Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 471,
+      "turnNumber": 1,
+      "durationMs": 684
+    }
+  },
+  {
+    "id": 147111,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:47.479Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1830,
+      "turnNumber": 1,
+      "durationMs": 1830
+    }
+  },
+  {
+    "id": 147112,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:47.837Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "கண்டிப்பா பேசலாம் Vanita, நான் தமிழ்ல தான் பேசறேன்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147113,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:47.888Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147115,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:48.243Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1830,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "கண்டிப்பா பேசலாம் Vanita, நான் தமிழ்ல தான் பேசறேன். நீங்க Gala Fit wellness program பத்தி தெரிஞ்சுக்க ரெடியா இருக்கீங்களா?"
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147114,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:48.243Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க Gala Fit wellness program பத்தி தெரிஞ்சுக்க ரெடியா இருக்கீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147116,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:48.674Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 839,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 51,
+      "firstByteMs": 258
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 839
+    }
+  },
+  {
+    "id": 147117,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:49.116Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 876,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 96994,
+      "textLength": 70,
+      "firstByteMs": 189
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 876
+    }
+  },
+  {
+    "id": 147119,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:50.997Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 1,
+      "durationMs": 3109
+    }
+  },
+  {
+    "id": 147118,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:50.997Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 147120,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:51:54.077Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3031,
+      "turnNumber": 1,
+      "durationMs": 3079
+    }
+  },
+  {
+    "id": 147121,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:00.170Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "இத பத்தி எனக்கு அவங்க சொல்லிட்டாங்க மேடம் என்ன இருக்குன்ட்டு எனக்கு ஒரு சின்ன டவுட் மாதிரி இருக்கு கேட்கலாமா",
+      "endDetectToFinalMs": 479,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147122,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:00.490Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 9,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147123,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:00.490Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147124,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:00.806Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 520,
+      "turnNumber": 2,
+      "durationMs": 520
+    }
+  },
+  {
+    "id": 147125,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:01.112Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "என்ன டவுட்னு சொல்லுங்க Vanita"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147126,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:01.163Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147127,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:01.217Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 520,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "என்ன டவுட்னு சொல்லுங்க Vanita, நான் உங்களுக்கு help பண்றேன்."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147128,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:01.217Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நான் உங்களுக்கு help பண்றேன்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147129,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:01.682Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 570,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 56034,
+      "textLength": 29,
+      "firstByteMs": 135
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 570
+    }
+  },
+  {
+    "id": 147130,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:01.845Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 630,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 53474,
+      "textLength": 29,
+      "firstByteMs": 162
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 630
+    }
+  },
+  {
+    "id": 147131,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:02.990Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1751,
+      "turnNumber": 2,
+      "durationMs": 1827
+    }
+  },
+  {
+    "id": 147132,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:02.990Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 147133,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:04.689Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1671,
+      "turnNumber": 2,
+      "durationMs": 1700
+    }
+  },
+  {
+    "id": 147134,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:09.316Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஆ என் பாலிசில மேட்டர்னிட்டி கவர் ஆகுமா?",
+      "endDetectToFinalMs": 314,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147135,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:09.620Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 7,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147136,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:09.620Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147137,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:09.903Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 487,
+      "turnNumber": 3,
+      "durationMs": 487
+    }
+  },
+  {
+    "id": 147138,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:10.353Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Vanita, உங்க பாலிசில மேட்டர்னிட்டி கவர் ஆகுமான்னு தெரிஞ்சுக்க"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147139,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:10.404Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147140,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:10.557Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ஒரு senior executive கால் பண்ணி detailed-ஆ சொல்லுவாங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147141,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:10.557Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 487,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Vanita, உங்க பாலிசில மேட்டர்னிட்டி கவர் ஆகுமான்னு தெரிஞ்சுக்க, ஒரு senior executive கால் பண்ணி detailed-ஆ சொல்லுவாங்க."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147142,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:11.363Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1010,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 107234,
+      "textLength": 61,
+      "firstByteMs": 156
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 1010
+    }
+  },
+  {
+    "id": 147143,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:11.405Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 849,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 55,
+      "firstByteMs": 245
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 849
+    }
+  },
+  {
+    "id": 147145,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:13.954Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3351,
+      "turnNumber": 3,
+      "durationMs": 3550
+    }
+  },
+  {
+    "id": 147144,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:13.954Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 147146,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:17.013Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 3,
+      "durationMs": 3060
+    }
+  },
+  {
+    "id": 147147,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:24.892Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "ஓகே அப்போ என் பாலிசில பேசிக்கா என்னென்ன டீடைல்ஸ் மட்டும் கவர் ஆகும்னு மட்டும் சொல்லுங்க நார்மலா ஜெனரலா?",
+      "endDetectToFinalMs": 476,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147148,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:24.994Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147149,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.045Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147150,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.194Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 9,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147151,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.199Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147152,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.441Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 447,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 15074,
+      "textLength": 7,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 447
+    }
+  },
+  {
+    "id": 147153,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.500Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 508,
+      "turnNumber": 4,
+      "durationMs": 508
+    }
+  },
+  {
+    "id": 147154,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.576Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 471,
+      "turnNumber": 4,
+      "durationMs": 532
+    }
+  },
+  {
+    "id": 147155,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.756Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Vanita, உங்க பாலிசி டீடைல்ஸ்"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147156,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.807Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147157,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.886Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 508,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Vanita, உங்க பாலிசி டீடைல்ஸ், கவர் என்னென்னன்னு நீங்க app-ல anytime பார்க்கலாம்."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147158,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:25.886Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "கவர் என்னென்னன்னு நீங்க app-ல anytime பார்க்கலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147159,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:26.525Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 769,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 28,
+      "firstByteMs": 153
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 769
+    }
+  },
+  {
+    "id": 147160,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:26.707Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 822,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 50,
+      "firstByteMs": 174
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 822
+    }
+  },
+  {
+    "id": 147161,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:28.092Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 4,
+      "durationMs": 2285
+    }
+  },
+  {
+    "id": 147162,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:28.092Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 147163,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:30.673Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2551,
+      "turnNumber": 4,
+      "durationMs": 2581
+    }
+  },
+  {
+    "id": 147164,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.351Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "அப்படின்னா என்னென்ன கிடைக்கும் அதுலங்கிறத எக்ஸ்பிளைன் பண்ண முடியுமா",
+      "endDetectToFinalMs": 895,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147165,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.456Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Mm-hmm."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147166,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.505Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147167,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.658Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 8,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147168,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.658Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147169,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.956Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 503,
+      "turnNumber": 5,
+      "durationMs": 503
+    }
+  },
+  {
+    "id": 147170,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:41.992Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 538,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 22754,
+      "textLength": 7,
+      "firstByteMs": 182
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 538
+    }
+  },
+  {
+    "id": 147171,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:42.216Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Vanita, app-ல நீங்க உங்க பாலிசி details"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147172,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:42.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 711,
+      "turnNumber": 5,
+      "durationMs": 810
+    }
+  },
+  {
+    "id": 147173,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:42.316Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147174,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:42.357Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "coverage, benefits எல்லாத்தையும் see பண்ணலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147175,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:42.713Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அதுக்கு மேல, app-ல doctor consultation feature இருக்கு"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147177,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:43.007Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 503,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Vanita, app-ல நீங்க உங்க பாலிசி details, coverage, benefits எல்லாத்தையும் see பண்ணலாம். அதுக்கு மேல, app-ல doctor consultation feature இருக்கு, அதுல இருந்து ten AM to eight PM வரைக்கும் எந்த நாளும் doctor-ஐ call பண்ணலாம்."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147176,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:43.007Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அதுல இருந்து ten AM to eight PM வரைக்கும் எந்த நாளும் doctor-ஐ call பண்ணலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147178,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:43.089Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 874,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 39,
+      "firstByteMs": 173
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 874
+    }
+  },
+  {
+    "id": 147179,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:43.347Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 991,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 46,
+      "firstByteMs": 295
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 991
+    }
+  },
+  {
+    "id": 147180,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:43.620Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 909,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 54,
+      "firstByteMs": 186
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 909
+    }
+  },
+  {
+    "id": 147181,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:44.128Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1124,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 122594,
+      "textLength": 77,
+      "firstByteMs": 296
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 1124
+    }
+  },
+  {
+    "id": 147182,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:45.058Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2711,
+      "turnNumber": 5,
+      "durationMs": 2741
+    }
+  },
+  {
+    "id": 147183,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:45.058Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147184,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:47.998Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 5,
+      "durationMs": 2940
+    }
+  },
+  {
+    "id": 147185,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:47.998Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147187,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:51.339Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 5,
+      "durationMs": 3341
+    }
+  },
+  {
+    "id": 147186,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:51.339Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 147188,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:52.171Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 1200,
+      "configuredThreshold": 300,
+      "echoFloor": 165,
+      "currentRms": 4501,
+      "turnNumber": 5,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 147189,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:52.180Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 3831,
+      "turnNumber": 5,
+      "durationMs": 841,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 147190,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:55.515Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "த கேரக்ஸ் கிட்ரீஸ் த்ரீ சிக்ஸ்டி பற்றி கொஞ்சம் சொல்ல முடியுமா",
+      "endDetectToFinalMs": 539,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147191,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:55.618Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "I see."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147192,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:55.669Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147193,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:55.818Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 9,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147194,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:55.824Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 12,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147195,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.050Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 432,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 6,
+      "firstByteMs": 140
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 432
+    }
+  },
+  {
+    "id": 147196,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.201Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 584,
+      "turnNumber": 6,
+      "durationMs": 584
+    }
+  },
+  {
+    "id": 147197,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.378Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 6,
+      "durationMs": 710
+    }
+  },
+  {
+    "id": 147198,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.471Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Vanita, app-ல doctor consultation மட்டுமில்ல"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147199,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.521Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147201,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.745Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 584,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Vanita, app-ல doctor consultation மட்டுமில்ல, நீங்க blood tests மற்றும் full body check-ups-ஐயும் directly app-ல book பண்ணலாம்."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147200,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:56.745Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "நீங்க blood tests மற்றும் full body check-ups-ஐயும் directly app-ல book பண்ணலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147202,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:57.151Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 680,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 44,
+      "firstByteMs": 130
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 680
+    }
+  },
+  {
+    "id": 147203,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:58.145Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1401,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 120034,
+      "textLength": 81,
+      "firstByteMs": 313
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1401
+    }
+  },
+  {
+    "id": 147204,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:59.283Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2711,
+      "turnNumber": 6,
+      "durationMs": 2760
+    }
+  },
+  {
+    "id": 147205,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:52:59.283Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 147206,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:01.553Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 2500,
+      "configuredThreshold": 300,
+      "echoFloor": 3696,
+      "currentRms": 2772,
+      "turnNumber": 6,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 147207,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:01.565Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 3751,
+      "turnNumber": 6,
+      "durationMs": 2281,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 147208,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:02.685Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "எக்ஸ் யூ த்ரீ ஃபிஃப்டி ஃபைவ் சிக்தி பத்து பத்தி சொல்ல முடியுமா?",
+      "endDetectToFinalMs": 322,
+      "mergedSegments": 3,
+      "pauseCount": 2
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147209,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:02.788Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Got it."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147210,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:02.838Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147211,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:02.992Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 14,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147212,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:02.992Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 8,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147213,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.231Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 443,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 7,
+      "firstByteMs": 139
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 443
+    }
+  },
+  {
+    "id": 147214,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.384Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 598,
+      "turnNumber": 7,
+      "durationMs": 598
+    }
+  },
+  {
+    "id": 147215,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.522Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Vanita, app-ல wellness activities இருக்கு."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147216,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.548Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 7,
+      "durationMs": 709
+    }
+  },
+  {
+    "id": 147217,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.548Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147218,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.716Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "அதை complete பண்ணா நீங்க Wellness Coins earn பண்ணலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147219,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:03.716Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 598,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Vanita, app-ல wellness activities இருக்கு. அதை complete பண்ணா நீங்க Wellness Coins earn பண்ணலாம்."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147220,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:04.342Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 820,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89314,
+      "textLength": 42,
+      "firstByteMs": 157
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 820
+    }
+  },
+  {
+    "id": 147221,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:04.599Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 885,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 84194,
+      "textLength": 54,
+      "firstByteMs": 128
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 885
+    }
+  },
+  {
+    "id": 147223,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:06.503Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2791,
+      "turnNumber": 7,
+      "durationMs": 2955
+    }
+  },
+  {
+    "id": 147222,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:06.503Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 147224,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:09.184Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2631,
+      "turnNumber": 7,
+      "durationMs": 2681
+    }
+  },
+  {
+    "id": 147225,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:13.823Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "கேரட் த்ரீ சிக்ஸ்டி பற்றி சொல்ல முடியுமா",
+      "endDetectToFinalMs": 367,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147226,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:13.926Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Right."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147227,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:13.976Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147228,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.129Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 8,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "prefetch",
+      "contextChars": 7972,
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147229,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.129Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemma-4-E4B-it",
+      "systemPromptPreview": "[LANGUAGE RULE — OVERRIDE] The caller has explicitly asked you to speak Tamil. Respond ONLY in Tamil for this entire response, and keep responding in Tamil unless the caller explicitly asks for another language. IMPORTANT: Ignore any instruction in your system prompt that says to speak in Hindi, Hinglish, English, or any other language — the caller has explicitly asked for Tamil. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish register. Mixing commonly-used English loanwords (business, finance, tech, and everyday terms) into Tamil is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. EXCEPTION — proper nouns: keep all",
+      "historyLength": 16,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147230,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.350Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 424,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 6,
+      "firstByteMs": 140
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 424
+    }
+  },
+  {
+    "id": 147231,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.447Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 523,
+      "turnNumber": 8,
+      "durationMs": 523
+    }
+  },
+  {
+    "id": 147232,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.609Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 8,
+      "durationMs": 633
+    }
+  },
+  {
+    "id": 147233,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.846Z",
+    "component": "LLM",
+    "provider": "krutrim",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 523,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "Vanita, அந்த coins-ஐ நீங்க உங்க policy renewal premium-க்கு up to twenty percent discount-ஆ பயன்படுத்தலாம்."
+    },
+    "metadata": {
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cachedTokens": 0,
+      "model": "gemma-4-E4B-it",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147234,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.846Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Vanita, அந்த coins-ஐ நீங்க உங்க policy renewal premium-க்கு up to twenty percent discount-ஆ பயன்படுத்தலாம்."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147235,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:14.896Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 147236,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:16.027Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1181,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 163554,
+      "textLength": 107,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 1181
+    }
+  },
+  {
+    "id": 147237,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:20.175Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5111,
+      "turnNumber": 8,
+      "durationMs": 5279
+    }
+  },
+  {
+    "id": 147238,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:20.705Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 147239,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:20.894Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2159"
+    }
+  },
+  {
+    "id": 147240,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:20.894Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2159"
+    }
+  },
+  {
+    "id": 147241,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:20.941Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 107,
+        "turns": 8,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "கேரட் த்ரீ சிக்ஸ்டி பற்றி சொல்ல முடியுமா",
+        "lastAgentResponse": "Vanita, அந்த coins-ஐ நீங்க உங்க policy renewal premium-க்கு up to twenty percent discount-ஆ பயன்படுத்தலாம்.",
+        "recordingStatus": "saved",
+        "warningCount": 6,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 107,
+      "turns": 8,
+      "avgSttMs": 0,
+      "avgLlmMs": 719,
+      "avgTtsMs": 569
+    }
+  },
+  {
+    "id": 147242,
+    "callId": 2159,
+    "agentId": 129,
+    "ts": "2026-07-10T08:53:21.892Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
