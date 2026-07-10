@@ -39,6 +39,18 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
+import { Mic, Brain, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError, mapApiErrors } from "@/lib/format-api-error";
 import {
@@ -588,6 +600,63 @@ export default function AgentEdit() {
   const backchannelingEnabled = useWatch({ control: form.control, name: "backchannelingEnabled" });
   const backchannelingFrequency = useWatch({ control: form.control, name: "backchannelingFrequency" });
 
+  // ── Pipeline config modals (Transcriber / Model / Voice) ─────────────────
+  // Fields are still bound directly to the shared `form` instance (same
+  // controls, same validation, same submit) — the dialogs are purely a
+  // presentation change. A snapshot is taken on open so an outside-click/
+  // ESC/close-icon dismissal with unsaved changes can prompt before
+  // discarding, and Cancel can restore the pre-edit values.
+  type PipelineSection = "transcriber" | "model" | "voice";
+  const SECTION_FIELDS: Record<PipelineSection, (keyof AgentFormValues)[]> = {
+    transcriber: ["asrProvider", "asrModel"],
+    model: ["llmProvider", "llmModel", "temperature"],
+    voice: ["ttsProvider", "ttsModel", "ttsVoice"],
+  };
+  const [openSection, setOpenSection] = useState<PipelineSection | null>(null);
+  const [confirmDiscardSection, setConfirmDiscardSection] = useState<PipelineSection | null>(null);
+  const sectionSnapshotRef = useRef<{ values: Partial<AgentFormValues>; voiceCustomMode: boolean }>({ values: {}, voiceCustomMode: false });
+
+  const openPipelineDialog = (section: PipelineSection) => {
+    const snap: Partial<AgentFormValues> = {};
+    for (const field of SECTION_FIELDS[section]) {
+      (snap as any)[field] = form.getValues(field);
+    }
+    sectionSnapshotRef.current = { values: snap, voiceCustomMode };
+    setOpenSection(section);
+  };
+
+  const isSectionDirty = (section: PipelineSection) => {
+    const snap = sectionSnapshotRef.current;
+    const fieldsDirty = SECTION_FIELDS[section].some(
+      (field) => JSON.stringify(form.getValues(field)) !== JSON.stringify((snap.values as any)[field])
+    );
+    if (section === "voice" && voiceCustomMode !== snap.voiceCustomMode) return true;
+    return fieldsDirty;
+  };
+
+  const requestClosePipelineDialog = () => {
+    if (!openSection) return;
+    if (isSectionDirty(openSection)) {
+      setConfirmDiscardSection(openSection);
+    } else {
+      setOpenSection(null);
+    }
+  };
+
+  const discardPipelineChanges = () => {
+    if (confirmDiscardSection) {
+      const snap = sectionSnapshotRef.current;
+      for (const field of SECTION_FIELDS[confirmDiscardSection]) {
+        form.setValue(field, (snap.values as any)[field] as any);
+      }
+      if (confirmDiscardSection === "voice") setVoiceCustomMode(snap.voiceCustomMode);
+    }
+    setConfirmDiscardSection(null);
+    setOpenSection(null);
+  };
+
+  const savePipelineDialog = () => setOpenSection(null);
+
   const onSubmit = (data: AgentFormValues) => {
     const submitData = buildUpdateAgentPayload(data);
     updateAgent.mutate(
@@ -757,19 +826,6 @@ export default function AgentEdit() {
                       </SelectContent>
                     </Select>
                     <FormDescription>Current date &amp; time in this timezone is injected into every LLM call so the agent knows the time.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="temperature" render={({ field }) => (
-                  <FormItem>
-                    <div className="flex justify-between items-center mb-2">
-                      <FormLabel>Temperature: {field.value}</FormLabel>
-                    </div>
-                    <FormControl>
-                      <Slider min={0} max={2} step={0.1} value={[field.value ?? 0.7]}
-                        onValueChange={(vals) => field.onChange(vals[0])} />
-                    </FormControl>
-                    <FormDescription>Higher = more creative. Lower = more deterministic.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -956,172 +1012,228 @@ export default function AgentEdit() {
               </CardContent>
             </Card>
 
-            {/* ── Pipeline ── */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Pipeline Configuration</CardTitle>
-                <CardDescription>Select providers and models for each stage.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* ── Pipeline summary cards ── */}
+            <div className="md:col-span-2 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <AgentConfigCard
+                  icon={<Mic />}
+                  label="Transcriber"
+                  value={ASR_PROVIDERS.find(p => p.value === asrProvider)?.label ?? asrProvider}
+                  subtext={form.watch("asrModel") || "Default model"}
+                  onClick={() => openPipelineDialog("transcriber")}
+                />
+                <AgentConfigCard
+                  icon={<Brain />}
+                  label="Model"
+                  value={LLM_PROVIDERS.find(p => p.value === llmProvider)?.label ?? llmProvider}
+                  subtext={form.watch("llmModel") || "Default model"}
+                  onClick={() => openPipelineDialog("model")}
+                />
+                <AgentConfigCard
+                  icon={<Volume2 />}
+                  label="Voice"
+                  value={TTS_PROVIDERS.find(p => p.value === ttsProvider)?.label ?? ttsProvider}
+                  subtext={form.watch("ttsModel") || form.watch("ttsVoice") || "Default voice"}
+                  onClick={() => openPipelineDialog("voice")}
+                />
+              </div>
 
-                  {/* Step 1 — ASR */}
-                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 1</div>
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Speech-to-Text</h4>
-                    <FormField control={form.control} name="asrProvider" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select ASR" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="asrModel" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Model</FormLabel>
-                        <FormControl>
-                          {ASR_MODELS[asrProvider] ? (
-                            <ModelSelect options={ASR_MODELS[asrProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
-                          ) : (
-                            <Input placeholder="Enter model name" {...field} />
-                          )}
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-
-                  {/* Step 2 — LLM */}
-                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 2</div>
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Language Model</h4>
-                    <FormField control={form.control} name="llmProvider" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select LLM" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="llmModel" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Model</FormLabel>
-                        <FormControl>
-                          {LLM_MODELS[llmProvider] ? (
-                            <ModelSelect options={LLM_MODELS[llmProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
-                          ) : (
-                            <Input placeholder="Enter model name" {...field} />
-                          )}
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-
-                  {/* Step 3 — TTS */}
-                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 3</div>
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Synthesizer (TTS)</h4>
-                    <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Provider</FormLabel>
-                        <Select onValueChange={(v) => { field.onChange(v); setVoiceCustomMode(false); }} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select TTS" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    {TTS_MODELS[ttsProvider] && (
-                      <FormField control={form.control} name="ttsModel" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Model</FormLabel>
-                          <FormControl>
-                            <ModelSelect options={TTS_MODELS[ttsProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    )}
-                    <FormField control={form.control} name="ttsVoice" render={({ field }) => {
-                      const voiceList = TTS_VOICES[ttsProvider];
-                      const curatedValues = voiceList ? voiceList.filter(v => v.value !== "__custom__").map(v => v.value) : [];
-                      const inCurated = curatedValues.includes(field.value ?? "");
-                      // When provider has a voice list but saved UUID isn't in it, treat as custom
-                      const showDropdown = !!voiceList;
-                      const showCustomInput = !voiceList || !inCurated || voiceCustomMode;
-                      const dropdownVal = inCurated && !voiceCustomMode ? (field.value ?? "") : (field.value || voiceCustomMode ? "__custom__" : "");
-                      return (
-                        <FormItem>
-                          <FormLabel className="text-xs">{voiceList ? "Voice" : "Voice ID"}</FormLabel>
-                          <FormControl>
-                            <div className="space-y-2">
-                              {showDropdown && (
-                                <ModelSelect
-                                  options={voiceList!}
-                                  value={dropdownVal}
-                                  onChange={(v) => {
-                                    if (v === "__custom__") {
-                                      // Show the custom input without erasing the saved voice ID.
-                                      setVoiceCustomMode(true);
-                                      return;
-                                    }
-                                    setVoiceCustomMode(false);
-                                    field.onChange(v);
-                                  }}
-                                  placeholder="Select voice"
-                                />
-                              )}
-                              {showCustomInput && (
-                                <Input
-                                  placeholder={ttsProvider === "elevenlabs" ? "e.g. 21m00Tcm4TlvDq8ikWAM" : "e.g. 694f9389-aac1-45b6-b726-9d9369183238"}
-                                  value={field.value ?? ""}
-                                  onChange={field.onChange}
-                                />
-                              )}
-                            </div>
-                          </FormControl>
-                          <FormDescription className="text-[10px]">
-                            {ttsProvider === "elevenlabs" && "Voice ID from your ElevenLabs account"}
-                            {ttsProvider === "cartesia"   && "Voice ID from your Cartesia account"}
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }} />
-                  </div>
-
-                  {/* Step 4 — Duration */}
-                  <div className="space-y-4 p-4 border border-border/60 rounded-lg bg-card/50 relative">
-                    <div className="absolute top-0 right-0 -mt-3 -mr-3 bg-primary/10 border border-primary/40 rounded-full px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">Step 4</div>
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-foreground/80 border-b border-border/50 pb-2">Call Settings</h4>
-                    <FormField control={form.control} name="maxDuration" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">Max Duration (seconds)</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="e.g. 600" {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </div>
-
-                </div>
-              </CardContent>
-            </Card>
+              {/* ── Call Settings (kept inline — not part of a provider stage) ── */}
+              <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-card/50 px-4 py-3">
+                <FormField control={form.control} name="maxDuration" render={({ field }) => (
+                  <FormItem className="flex items-center gap-3 space-y-0 flex-1">
+                    <FormLabel className="text-xs text-muted-foreground whitespace-nowrap">Max Call Duration (seconds)</FormLabel>
+                    <FormControl>
+                      <Input type="number" className="h-8 max-w-[140px]" placeholder="e.g. 600" {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </div>
           </div>
+
+          {/* ── Transcriber dialog ── */}
+          <EditConfigDialog
+            open={openSection === "transcriber"}
+            onRequestClose={requestClosePipelineDialog}
+            onSave={savePipelineDialog}
+            icon={<Mic />}
+            title="Transcriber"
+            description="Choose the speech-to-text provider and model used to transcribe caller audio."
+          >
+            <FormField control={form.control} name="asrProvider" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Provider</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select ASR" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {ASR_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="asrModel" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Model</FormLabel>
+                <FormControl>
+                  {ASR_MODELS[asrProvider] ? (
+                    <ModelSelect options={ASR_MODELS[asrProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
+                  ) : (
+                    <Input placeholder="Enter model name" {...field} />
+                  )}
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+          </EditConfigDialog>
+
+          {/* ── Model dialog ── */}
+          <EditConfigDialog
+            open={openSection === "model"}
+            onRequestClose={requestClosePipelineDialog}
+            onSave={savePipelineDialog}
+            icon={<Brain />}
+            title="Model"
+            description="Choose the language model that powers the agent's responses."
+          >
+            <FormField control={form.control} name="llmProvider" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Provider</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select LLM" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {LLM_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="llmModel" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Model</FormLabel>
+                <FormControl>
+                  {LLM_MODELS[llmProvider] ? (
+                    <ModelSelect options={LLM_MODELS[llmProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
+                  ) : (
+                    <Input placeholder="Enter model name" {...field} />
+                  )}
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="temperature" render={({ field }) => (
+              <FormItem>
+                <div className="flex justify-between items-center mb-2">
+                  <FormLabel className="text-xs">Temperature: {field.value}</FormLabel>
+                </div>
+                <FormControl>
+                  <Slider min={0} max={2} step={0.1} value={[field.value ?? 0.7]}
+                    onValueChange={(vals) => field.onChange(vals[0])} />
+                </FormControl>
+                <FormDescription className="text-[11px]">Higher = more creative. Lower = more deterministic.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )} />
+          </EditConfigDialog>
+
+          {/* ── Voice dialog ── */}
+          <EditConfigDialog
+            open={openSection === "voice"}
+            onRequestClose={requestClosePipelineDialog}
+            onSave={savePipelineDialog}
+            icon={<Volume2 />}
+            title="Voice"
+            description="Choose the text-to-speech provider and voice used to speak to callers."
+          >
+            <FormField control={form.control} name="ttsProvider" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Provider</FormLabel>
+                <Select onValueChange={(v) => { field.onChange(v); setVoiceCustomMode(false); }} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select TTS" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {TTS_PROVIDERS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+            {TTS_MODELS[ttsProvider] && (
+              <FormField control={form.control} name="ttsModel" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Model</FormLabel>
+                  <FormControl>
+                    <ModelSelect options={TTS_MODELS[ttsProvider]!} value={field.value} onChange={field.onChange} placeholder="Select model" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
+            <FormField control={form.control} name="ttsVoice" render={({ field }) => {
+              const voiceList = TTS_VOICES[ttsProvider];
+              const curatedValues = voiceList ? voiceList.filter(v => v.value !== "__custom__").map(v => v.value) : [];
+              const inCurated = curatedValues.includes(field.value ?? "");
+              // When provider has a voice list but saved UUID isn't in it, treat as custom
+              const showDropdown = !!voiceList;
+              const showCustomInput = !voiceList || !inCurated || voiceCustomMode;
+              const dropdownVal = inCurated && !voiceCustomMode ? (field.value ?? "") : (field.value || voiceCustomMode ? "__custom__" : "");
+              return (
+                <FormItem>
+                  <FormLabel className="text-xs">{voiceList ? "Voice" : "Voice ID"}</FormLabel>
+                  <FormControl>
+                    <div className="space-y-2">
+                      {showDropdown && (
+                        <ModelSelect
+                          options={voiceList!}
+                          value={dropdownVal}
+                          onChange={(v) => {
+                            if (v === "__custom__") {
+                              // Show the custom input without erasing the saved voice ID.
+                              setVoiceCustomMode(true);
+                              return;
+                            }
+                            setVoiceCustomMode(false);
+                            field.onChange(v);
+                          }}
+                          placeholder="Select voice"
+                        />
+                      )}
+                      {showCustomInput && (
+                        <Input
+                          placeholder={ttsProvider === "elevenlabs" ? "e.g. 21m00Tcm4TlvDq8ikWAM" : "e.g. 694f9389-aac1-45b6-b726-9d9369183238"}
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                        />
+                      )}
+                    </div>
+                  </FormControl>
+                  <FormDescription className="text-[10px]">
+                    {ttsProvider === "elevenlabs" && "Voice ID from your ElevenLabs account"}
+                    {ttsProvider === "cartesia"   && "Voice ID from your Cartesia account"}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              );
+            }} />
+          </EditConfigDialog>
+
+          {/* ── Unsaved changes confirmation ── */}
+          <AlertDialog open={confirmDiscardSection !== null} onOpenChange={(v) => { if (!v) setConfirmDiscardSection(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You have unsaved changes in this dialog. Closing now will discard them.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setConfirmDiscardSection(null)}>Keep Editing</AlertDialogCancel>
+                <AlertDialogAction onClick={discardPipelineChanges}>Discard Changes</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* ── Latency Tuning ── */}
           <Card>

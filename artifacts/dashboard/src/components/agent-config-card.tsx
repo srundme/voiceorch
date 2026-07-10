@@ -1,6 +1,15 @@
 import React from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 /**
  * Shared "premium" configuration card used for Transcriber / Model / Voice
@@ -82,5 +91,59 @@ export function AgentConfigPanel({
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * Premium centered edit dialog shell shared by the Transcriber / Model /
+ * Voice configuration modals. Matches an enterprise dashboard aesthetic
+ * (Stripe/Linear/Vercel/GitHub Settings style): centered ~680px card, 16px
+ * radius, dark neutral surface, subtle border, soft shadow only, fade+scale
+ * entrance, header + scrollable body + sticky footer.
+ *
+ * Dismissal (outside click, ESC, close icon) always routes through
+ * `onRequestClose` so the caller can guard against discarding unsaved
+ * changes; "Save Changes" calls `onSave` directly.
+ */
+export function EditConfigDialog({
+  open,
+  onRequestClose,
+  title,
+  description,
+  icon,
+  children,
+  onSave,
+  saveLabel = "Save Changes",
+}: {
+  open: boolean;
+  onRequestClose: () => void;
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  onSave: () => void;
+  saveLabel?: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onRequestClose(); }}>
+      <DialogContent className="p-0 gap-0 w-full sm:max-w-[680px] max-w-[720px] rounded-2xl border border-white/10 bg-[#111111] shadow-2xl duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 overflow-hidden">
+        <DialogHeader className="px-6 py-5 border-b border-white/10 space-y-1">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            {icon && <span className="text-muted-foreground/70 [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
+            {title}
+          </DialogTitle>
+          {description && (
+            <DialogDescription className="text-[12.5px]">{description}</DialogDescription>
+          )}
+        </DialogHeader>
+        <div className="px-6 py-5 max-h-[60vh] overflow-y-auto space-y-4">
+          {children}
+        </div>
+        <DialogFooter className="px-6 py-4 border-t border-white/10 bg-[#111111]">
+          <Button type="button" variant="outline" onClick={onRequestClose}>Cancel</Button>
+          <Button type="button" onClick={onSave}>{saveLabel}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
