@@ -486,88 +486,60 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           {(() => {
             const agentProviders = [asrProvider, llmProvider, ttsProvider].filter(Boolean).map((p: string) => p.toLowerCase());
             const isByop = agentProviders.some(p => userProviderNames.has(p));
-            const billingMode = isByop ? "byop" : "managed";
-            const snapserveCents = rateMap.get(billingMode) ?? (billingMode === "managed" ? 5 : 3.5);
-            const snapservePerMin = snapserveCents / 100;
+            const platformCents = rateMap.get(isByop ? "byop" : "managed") ?? (isByop ? 3.5 : 5);
+            const platformPerMin = platformCents / 100;
             const pipe = computePipelineCost(asrProvider ?? "sarvam", llmProvider ?? "groq", llmModel, ttsProvider ?? "cartesia", telephonyProvider ?? "vobiz");
 
-            const providerRows: { label: string; name: string; cost: number }[] = [
-              { label: "Transcriber (ASR)", name: asrProvider ?? "—", cost: pipe.asr.costPerMin },
-              { label: "LLM",               name: llmProvider ?? "—", cost: pipe.llm.costPerMin },
-              { label: "Voice (TTS)",        name: ttsProvider ?? "—", cost: pipe.tts.costPerMin },
-              { label: "Telephony",          name: telephonyProvider ?? "—", cost: pipe.telephony.costPerMin },
+            const providerTotal = pipe.asr.costPerMin + pipe.llm.costPerMin + pipe.tts.costPerMin + pipe.telephony.costPerMin;
+            // Managed: $0.05 flat already includes provider costs — platform slice is the remainder
+            // BYOP: $0.035 platform fee + provider costs billed separately
+            const platformSlice = isByop ? platformPerMin : Math.max(0, platformPerMin - providerTotal);
+            const totalPerMin = isByop ? platformPerMin + providerTotal : platformPerMin;
+
+            const segments = [
+              { key: "asr",       label: "Transcriber", provider: asrProvider,       cost: pipe.asr.costPerMin,       color: "#22c55e" },
+              { key: "llm",       label: "LLM",         provider: llmProvider,       cost: pipe.llm.costPerMin,       color: "#f97316" },
+              { key: "tts",       label: "Voice",        provider: ttsProvider,       cost: pipe.tts.costPerMin,       color: "#94a3b8" },
+              { key: "telephony", label: "Telephony",    provider: telephonyProvider, cost: pipe.telephony.costPerMin, color: "#f59e0b" },
+              { key: "platform",  label: "Platform",     provider: "SnapServe",       cost: platformSlice,            color: "#6366f1" },
             ];
 
-            const totalEstimate = isByop
-              ? snapservePerMin + providerRows.reduce((s, r) => s + r.cost, 0)
-              : snapservePerMin;
-
             return (
-              <div className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
-                {/* Header row */}
-                <div className="flex items-center justify-between px-4 pt-4 pb-3">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
-                      {isByop ? "Your Total Cost" : "SnapServe Charges"}
-                    </div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold tabular-nums tracking-tight">
-                        ${totalEstimate.toFixed(3)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">/ min</span>
-                    </div>
-                    {isByop && (
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        Platform fee ${snapservePerMin.toFixed(3)} + estimated provider costs
-                      </p>
-                    )}
-                    {!isByop && (
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        Flat rate — all provider keys included
-                      </p>
-                    )}
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
-                    isByop
-                      ? "bg-green-500/10 text-green-400 border-green-500/25"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/25"
+              <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3.5 space-y-3">
+                {/* Header */}
+                <div className="flex items-center gap-2">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground">
+                    Cost per min:{" "}
+                    <span className="font-bold text-foreground">~ ${totalPerMin.toFixed(3)}</span>
+                    {!isByop && <span className="text-[10.5px] text-muted-foreground ml-1">(flat, all keys included)</span>}
+                  </span>
+                  <span className={`ml-auto text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 ${
+                    isByop ? "bg-green-500/10 text-green-400 border-green-500/25" : "bg-amber-500/10 text-amber-400 border-amber-500/25"
                   }`}>
                     {isByop ? "BYOP" : "Managed"}
                   </span>
                 </div>
 
-                {/* Breakdown rows */}
-                <div className="border-t border-border/40 px-4 py-3 space-y-2">
-                  {/* SnapServe platform fee (always shown) */}
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" />
-                      <span className="text-muted-foreground">SnapServe platform</span>
-                    </div>
-                    <span className="font-semibold tabular-nums">${snapservePerMin.toFixed(3)}/min</span>
-                  </div>
+                {/* Stacked bar */}
+                <div className="h-2.5 rounded-full overflow-hidden flex gap-px">
+                  {segments.filter(s => s.cost > 0).map(seg => (
+                    <div
+                      key={seg.key}
+                      style={{ flex: seg.cost / totalPerMin, backgroundColor: seg.color }}
+                      className="min-w-[2px]"
+                    />
+                  ))}
+                </div>
 
-                  {/* Provider breakdown — always shown for transparency */}
-                  {providerRows.map(row => (
-                    <div key={row.label} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-muted-foreground/30 shrink-0" />
-                        <span className="text-muted-foreground">{row.label}</span>
-                        <span className="text-muted-foreground/50 capitalize">{row.name}</span>
-                      </div>
-                      <span className={`tabular-nums ${isByop ? "font-medium" : "text-muted-foreground/60"}`}>
-                        ~${row.cost.toFixed(4)}/min{!isByop && <span className="ml-1 text-[10px]">(covered)</span>}
-                      </span>
+                {/* Legend */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {segments.map(seg => (
+                    <div key={seg.key} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+                      <span>{seg.label}</span>
                     </div>
                   ))}
-
-                  {/* Total line for BYOP */}
-                  {isByop && (
-                    <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40 mt-1">
-                      <span className="font-semibold">Estimated total</span>
-                      <span className="font-bold tabular-nums">${totalEstimate.toFixed(4)}/min</span>
-                    </div>
-                  )}
                 </div>
               </div>
             );
