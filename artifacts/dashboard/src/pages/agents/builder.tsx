@@ -170,7 +170,7 @@ function KnowledgeSourceMultiSelect({ value, onChange }: {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="w-full flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-3 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors"
+            className="w-full h-12 flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 text-sm text-muted-foreground hover:border-border hover:text-foreground transition-colors"
           >
             <span>
               {value.length === 0
@@ -804,14 +804,14 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           )}
 
           {/* ── Conversation ─────────────────────────────────────────────────── */}
-          <div className="space-y-4 pt-2">
-            <h3 className="text-[18px] font-semibold text-foreground leading-none">Conversation</h3>
-            <div className="space-y-3">
+          <div className="space-y-4">
+            <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground mb-5">Conversation</h3>
+            <div className="space-y-4">
               <div className="flex items-start justify-between gap-3">
-                <Label className="text-[13px] font-medium text-foreground/90 pt-3">First Message</Label>
+                <Label className="text-[13px] font-medium text-foreground/90 pt-3.5">First Message</Label>
                 <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
                   <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-12 w-56 rounded-xl text-[13px] shrink-0">
+                    <SelectTrigger className="h-12 w-56 rounded-xl text-[13px] shrink-0 mr-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -825,7 +825,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <FormItem className="space-y-0">
                   <FormControl>
                     <Textarea
-                      className="min-h-[76px] max-h-[76px] text-[15px] leading-relaxed resize-none rounded-2xl border-border/60 bg-muted/20 px-4 py-3 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/25"
+                      className="min-h-[72px] max-h-[76px] text-[15px] leading-relaxed resize-none rounded-2xl border-border/60 bg-muted/20 px-4 py-3.5 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/25"
                       placeholder="Hello, how can I help?"
                       {...field}
                     />
@@ -837,8 +837,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           </div>
 
           {/* ── System Instructions ──────────────────────────────────────────── */}
-          <div className="space-y-4 pt-2">
-            <h3 className="text-[18px] font-semibold text-foreground leading-none">System Instructions</h3>
+          <div className="space-y-4 pt-6">
+            <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground mb-5">System Instructions</h3>
             <div className="rounded-2xl border border-border/60 bg-muted/20 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                 <Label className="text-[13px] font-medium text-foreground/90">System Prompt</Label>
@@ -846,7 +846,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-[11px] px-2.5 gap-1.5 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors"
+                  className="h-8 text-[11px] px-2.5 gap-1.5 items-center text-muted-foreground/80 hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors font-normal"
                   onClick={() => setGenerateOpen(true)}
                 >
                   <Sparkles className="w-3 h-3" />
@@ -857,7 +857,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <FormItem className="space-y-0">
                   <FormControl>
                     <Textarea
-                      className="min-h-[260px] text-[15px] resize-none font-mono leading-[1.7] rounded-none border-0 bg-transparent px-4 py-3.5 shadow-none focus-visible:ring-0"
+                      className="min-h-[260px] text-[15px] resize-none font-mono leading-[1.85] rounded-none border-0 bg-transparent px-5 pt-4 pb-3.5 shadow-none focus-visible:ring-0"
                       placeholder="You are a helpful voice assistant…"
                       {...field}
                     />
@@ -869,9 +869,9 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           </div>
 
           {/* ── Knowledge ────────────────────────────────────────────────────── */}
-          <div className="space-y-4 pt-2">
-            <h3 className="text-[18px] font-semibold text-foreground leading-none">Knowledge</h3>
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-3">
+          <div className="space-y-4 pt-6">
+            <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground mb-5">Knowledge</h3>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-4">
               <Label className="text-[13px] font-medium text-foreground/90">Sources</Label>
               <FormField control={form.control} name="knowledgeSourceIds" render={({ field }) => (
                 <FormItem className="space-y-0">
@@ -881,7 +881,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                       onChange={field.onChange}
                     />
                   </FormControl>
-                  <FormDescription className="text-[12px] text-muted-foreground mt-2 leading-relaxed">
+                  <FormDescription className="text-[12px] text-muted-foreground mt-3 leading-relaxed">
                     Attached sources are searched during live calls and relevant entries are injected into the agent's context.
                   </FormDescription>
                   <FormMessage className="text-[10px]" />
