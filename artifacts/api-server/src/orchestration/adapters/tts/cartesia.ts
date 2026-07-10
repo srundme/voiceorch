@@ -221,6 +221,26 @@ export class CartesiaTTS implements TTSAdapter {
     }
   }
 
+  /**
+   * Cartesia docs: text without terminal punctuation (`.`, `?`, `!`) can cause
+   * audio artifacts — the model may treat incomplete text as still-incoming and
+   * generate an oddly-ended or distorted clip. We always add a period when the
+   * final printable character isn't already sentence-ending punctuation.
+   *
+   * Handles trailing SSML/nonverbalism tags correctly:
+   *   "Your ID is <spell>AB12</spell>"  → "Your ID is <spell>AB12</spell>."
+   *   "Great question! [laughter]"      → "Great question! [laughter]."
+   *   "How can I help you?"             → unchanged
+   */
+  private static ensureTerminalPunctuation(text: string): string {
+    const trimmed = text.trimEnd();
+    if (!trimmed) return text;
+    // Check the trimmed form — no need to strip tags, just look at the last char.
+    const last = trimmed[trimmed.length - 1]!;
+    if (last === "." || last === "?" || last === "!" || last === "…") return text;
+    return trimmed + ".";
+  }
+
   private synthesizeViaWs(
     ws: WebSocket,
     text: string,
@@ -228,6 +248,8 @@ export class CartesiaTTS implements TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal,
   ): Promise<void> {
+    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+
     return new Promise<void>((resolve, reject) => {
       if (signal?.aborted) {
         reject(new DOMException("Aborted", "AbortError"));
@@ -246,16 +268,16 @@ export class CartesiaTTS implements TTSAdapter {
       signal?.addEventListener("abort", onAbort, { once: true });
 
       this.pending.set(contextId, {
-        text,
+        text: safeText,
         onChunk,
-        resolve: () => cleanup(() => { onDone(text.length); resolve(); }),
+        resolve: () => cleanup(() => { onDone(safeText.length); resolve(); }),
         reject: (err) => cleanup(() => reject(err)),
       });
 
       const msg: Record<string, unknown> = {
         context_id: contextId,
         model_id: this.modelId,
-        transcript: text,
+        transcript: safeText,
         voice: this.buildVoice(),
         output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
         continue: false,
@@ -277,10 +299,11 @@ export class CartesiaTTS implements TTSAdapter {
     onDone: (characters: number) => void,
     signal?: AbortSignal,
   ): Promise<void> {
+    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
     const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.restHeaders,
-      body: this.buildRestBody(text),
+      body: this.buildRestBody(safeText),
       signal,
     });
 
@@ -300,14 +323,15 @@ export class CartesiaTTS implements TTSAdapter {
     } finally {
       reader.releaseLock();
     }
-    onDone(text.length);
+    onDone(safeText.length);
   }
 
   async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
+    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
     const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.restHeaders,
-      body: this.buildRestBody(text),
+      body: this.buildRestBody(safeText),
     });
 
     if (!resp.ok) {
@@ -315,7 +339,7 @@ export class CartesiaTTS implements TTSAdapter {
       throw new Error(`Cartesia TTS error ${resp.status}: ${err}`);
     }
 
-    return { audio: Buffer.from(await resp.arrayBuffer()), characters: text.length };
+    return { audio: Buffer.from(await resp.arrayBuffer()), characters: safeText.length };
   }
 
   async synthesizeStream(

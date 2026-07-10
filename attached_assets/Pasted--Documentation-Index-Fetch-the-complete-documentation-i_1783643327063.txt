@@ -1,0 +1,169 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Compare TTS Endpoints
+
+> How bytes, SSE, and WebSocket differ for text-to-speech, and when to use each.
+
+Cartesia exposes three ways to turn text into speech. The same models, voices, and core parameters apply everywhere. What changes is how you connect, how audio is framed on the wire, and whether you get timestamps, continuations (streaming model output into one spoken line), or many generations on one connection.
+
+All three endpoints stream audio as it is produced. The bytes endpoint delivers that stream as a single HTTP response body (the same pattern the playground uses). SSE and WebSocket stream too; they chunk audio into multiple events or messages, which is how per-chunk metadata such as timestamps is carried.
+
+## Feature comparison
+
+|           | Multiple generations per connection | Timestamps | Continuations |
+| --------- | ----------------------------------- | ---------- | ------------- |
+| WebSocket | Yes                                 | Yes        | Yes           |
+| Bytes     | No (one `POST` per generation)      | No         | No            |
+| SSE       | No (one `POST` per generation)      | Yes        | No            |
+
+An **utterance** is one stretch of speech you want pronounced as a single unit (usually a sentence or a line of UI copy). **Continuations** let you send that utterance as several WebSocket messages that share a `context_id`. See [Stream inputs using continuations](/build-with-cartesia/capability-guides/stream-inputs-using-continuations) and [contexts](/use-the-api/tts-websocket/contexts).
+
+```mermaid theme={null}
+flowchart TD
+    Q1{"Are you streaming text from an LLM<br>or other partial input?"}
+    Q2{"Do you need timestamps on HTTP<br>without WebSocket?"}
+    Q3{"Will you speak often enough that<br>repeated connect/TLS cost hurts?"}
+    WS["WebSocket"]
+    SSE["SSE"]
+    Bytes["Bytes"]
+
+    Q1 -- "Yes" --> WS
+    Q1 -- "No" --> Q2
+    Q2 -- "Yes" --> SSE
+    Q2 -- "No" --> Q3
+    Q3 -- "Yes" --> WS
+    Q3 -- "No" --> Bytes
+```
+
+If you care about time-to-first-byte on every turn, remember that a new HTTPS request pays for TCP and TLS again; that overhead is often on the same order as TTFB for the audio itself. WebSocket amortizes that cost when you keep the socket open.
+
+SSE is still supported for stacks that already consume Server-Sent Events or when you want timestamps while staying on HTTP. For audio only, bytes is usually the better HTTP choice (smaller encoding than JSON-wrapped chunks).
+
+## Pick an endpoint in one minute
+
+| What you are building                                                                                                                              | Use this                                                   | Short label                         |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------- |
+| Full transcript in one request; you want a streaming HTTP body (efficient; same pattern as the playground)                                         | [`POST /tts/bytes`](/api-reference/tts/bytes)              | Stream speech (bytes)               |
+| Full transcript in one request; you need timestamps without WebSocket, or your stack already uses SSE                                              | [`POST /tts/sse`](/api-reference/tts/sse)                  | Stream speech with timestamps (SSE) |
+| Long-lived session, partial transcript (for example LLM tokens), lowest latency across many turns, timestamps, or several utterances on one socket | [WebSocket `/tts/websocket`](/api-reference/tts/websocket) | Live session (WebSocket)            |
+
+If the full transcript is not known up front, use WebSocket with contexts, not bytes or SSE.
+
+***
+
+## Bytes (`POST /tts/bytes`)
+
+Best for batch jobs, caching files, notifications, and anywhere one `POST` per generation is enough.
+
+The response body streams while audio is generated. You can read progressively or buffer to the end. For many output formats this is leaner on the wire than SSE because you receive raw or file bytes instead of JSON-wrapped chunks.
+
+Typical flow:
+
+1. One JSON payload with the full `transcript`, voice, model, and output format (WAV, MP3, raw PCM, and so on).
+2. `POST` to `/tts/bytes`.
+3. Read the body as data arrives, or consume it to completion.
+
+One request is one generation. For another line of speech, send another `POST`.
+
+See [bytes reference](/api-reference/tts/bytes).
+
+***
+
+## SSE (`POST /tts/sse`)
+
+Best when you need timestamps while staying on HTTP without WebSocket, or when your integration already uses SSE. If you only need audio and not SSE-shaped events, bytes is usually simpler. WebSocket is otherwise the full-featured option for real-time use and supports timestamps as well.
+
+SSE remains available largely for backward compatibility and for teams that standardize on Server-Sent Events.
+
+Typical flow:
+
+1. Same as bytes: one JSON body with the full transcript.
+2. `POST` to `/tts/sse`.
+3. Consume Server-Sent Events; each event carries the next chunk until completion.
+
+Bytes vs SSE:
+
+|            | Bytes                                           | SSE                                            |
+| ---------- | ----------------------------------------------- | ---------------------------------------------- |
+| Shape      | One streaming response body (raw or file bytes) | Many SSE events (often JSON plus base64 audio) |
+| Timestamps | No                                              | Yes (in the event payload)                     |
+
+You still send one full transcript per request: SSE does not support WebSocket-style continuations across multiple `POST`s. An optional `context_id` is echoed for your logs; it does not merge multiple HTTP requests into one utterance. To send text in pieces over time, use WebSocket.
+
+See [SSE reference](/api-reference/tts/sse).
+
+***
+
+## WebSocket (`/tts/websocket`)
+
+Best for assistants, games, telephony-style stacks, or any case where the connection stays open and transcript text may arrive over time.
+
+Why people choose WebSocket:
+
+1. Latency: you pay connect cost once; later generations avoid extra TCP/TLS round trips (often tens to low hundreds of ms per turn).
+2. Streaming input: send fragments as they arrive (for example from an LLM) and keep prosody across them. See [continuations](/build-with-cartesia/capability-guides/stream-inputs-using-continuations) and [contexts](/use-the-api/tts-websocket/contexts).
+3. Timestamps: word- or segment-level timing (model and language limits apply; see WebSocket docs).
+4. Multiplexing: multiple `context_id` values on one connection for overlapping utterances.
+
+Typical flow:
+
+1. Open the WebSocket.
+2. Send JSON messages. When one utterance is split across messages, use `context_id` and `continue`: set `continue: true` on partials, and `continue: false` on the last part of that utterance (or use the empty-transcript pattern in [contexts](/use-the-api/tts-websocket/contexts) if you cannot know the final string yet).
+3. Read audio until the server finishes that context.
+
+See [WebSocket reference](/api-reference/tts/websocket).
+
+***
+
+## Continuations
+
+If you are not streaming text from a model, start with bytes or SSE, not continuations.
+
+When you do use WebSocket streaming, keep one stable `context_id` per utterance, `continue: true` on every partial, and `continue: false` on the final message for that utterance (see [contexts](/use-the-api/tts-websocket/contexts)).
+
+Things that break text or prosody:
+
+* Concatenation: chunks are joined verbatim. A missing space produces `"...world!How..."` instead of `"...world! How..."`.
+* SSML and numbers: avoid splitting tokens that must stay together (for example decimals in SSML). See `max_buffer_delay_ms` in the [continuations guide](/build-with-cartesia/capability-guides/stream-inputs-using-continuations).
+
+If you leave `continue: true` longer than you meant, contexts eventually expire on their own and audio is still generated and flushed according to server rules. It is not a runaway failure mode. You should still send `continue: false` when you know the utterance is complete so your client state matches the server. Do not reuse old `context_id` values for unrelated utterances.
+
+***
+
+## Why WebSocket uses `context_id` (and HTTP does not)
+
+On `POST /tts/bytes` and `POST /tts/sse`, you send a complete transcript in one JSON body. There is no continuation protocol across requests.
+
+`context_id` and `continue` matter on WebSocket when one utterance's text is split across multiple messages. The server concatenates chunks that share a `context_id`. `continue: true` means more text is coming; `continue: false` finalizes that utterance.
+
+Mental model:
+
+* Whole line of speech in one string: bytes or SSE. No context API.
+* Text arrives in pieces: WebSocket, one `context_id` per utterance, with continuations.
+
+***
+
+## API ergonomics (all endpoints)
+
+* For server-side calls, prefer the API key in the `Authorization` header instead of query strings (headers are less likely to appear in access logs). WebSocket URLs in browsers may need different patterns for your platform.
+* Model IDs, voices, and core generation parameters match across bytes, SSE, and WebSocket. What differs is wire format, how chunks are exposed, and whether input can be streamed with continuations.
+
+***
+
+## Where to go next
+
+<CardGroup cols={3}>
+  <Card title="Stream speech (bytes)" icon="download" href="/api-reference/tts/bytes">
+    One POST, streaming response body
+  </Card>
+
+  <Card title="Stream speech with timestamps (SSE)" icon="waveform" href="/api-reference/tts/sse">
+    Timestamps and SSE-chunked audio
+  </Card>
+
+  <Card title="Live session (WebSocket)" icon="plug" href="/api-reference/tts/websocket">
+    Streaming input, multiplexing, lowest latency across turns
+  </Card>
+</CardGroup>
