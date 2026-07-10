@@ -103,7 +103,7 @@ export type TurnCloseReason = "stt_final" | "force_finalized" | "stall_reprompt"
 const RECOVERY_REPROMPTS: Record<string, string> = {
   en: "Sorry, I didn't catch that — could you say that again?",
   hi: "माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप दोबारा कह सकते हैं?",
-  ta: "மன்னிக்கவும், எனக்கு புரியவில்லை — மீண்டும் சொல்ல முடியுமா?",
+  ta: "சாரி, சரியா கேட்கல — மறுபடி சொல்லுவீங்களா?",
   te: "క్షమించండి, నాకు అర్థం కాలేదు — మళ్ళీ చెప్పగలరా?",
   kn: "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ — ಇನ್ನೊಮ್ಮೆ ಹೇಳಬಹುದೇ?",
   mr: "माफ करा, मला समजलं नाही — तुम्ही पुन्हा सांगू शकता का?",
