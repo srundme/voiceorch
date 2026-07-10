@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { logger } from "../lib/logger.js";
 import { ingestKbTextEntries, type KbEntryInput } from "../services/kb-ingest.js";
 import { isKbVectorReady, kickKbEmbedWorker } from "../services/kb-embeddings.js";
+import { kickKrutrimSummaryWorker } from "../services/kb-source-summary.js";
 import { extractPdfChunksWithGemini } from "../services/kb-pdf-extract.js";
 import multer from "multer";
 import mammoth from "mammoth";
@@ -470,6 +471,7 @@ router.post("/knowledge-sources", requireAuth, async (req, res) => {
         .where(eq(knowledgeSourcesTable.id, sourceId));
       logger.info({ sourceId, url: seedUrl, successCount, failCount, finalStatus }, "KB website crawl complete");
       kickKbEmbedWorker();
+      kickKrutrimSummaryWorker();
     })().catch(err => {
       logger.warn({ err, sourceId }, "KB crawler: unhandled crawl error");
       db.update(knowledgeSourcesTable)
@@ -542,6 +544,7 @@ router.post("/knowledge-sources/upload", requireAuth, upload.single("file"), asy
       .where(eq(knowledgeSourcesTable.id, sourceId));
     logger.info({ sourceId, file: file!.originalname, entryCount: created.length, via }, "KB file upload processed");
     kickKbEmbedWorker();
+    kickKrutrimSummaryWorker();
     return created;
   }
 
@@ -711,6 +714,7 @@ router.post("/knowledge-sources/:id/entries", requireAuth, async (req, res) => {
 
   await syncEntryCount(sourceId);
   kickKbEmbedWorker();
+  kickKrutrimSummaryWorker();
   res.status(201).json(entry);
 });
 
@@ -747,7 +751,10 @@ router.patch("/knowledge-sources/:id/entries/:entryId", requireAuth, async (req,
     .returning(entryCols);
 
   if (!entry) { res.status(404).json({ error: "Not found" }); return; }
-  if (content !== undefined) kickKbEmbedWorker();
+  if (content !== undefined) {
+    kickKbEmbedWorker();
+    kickKrutrimSummaryWorker();
+  }
   res.json(entry);
 });
 
@@ -769,6 +776,7 @@ router.delete("/knowledge-sources/:id/entries/:entryId", requireAuth, async (req
 
   if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
   await syncEntryCount(sourceId);
+  kickKrutrimSummaryWorker();
   res.status(204).end();
 });
 
@@ -803,6 +811,11 @@ router.post("/knowledge-sources/:id/attach-agent/:agentId", requireAuth, async (
   await db.insert(agentKnowledgeSourcesTable)
     .values({ agentId, sourceId })
     .onConflictDoNothing();
+
+  // Attaching may newly link this source to a Krutrim-provider agent for the
+  // first time — kick the sweep so it picks up the source promptly rather
+  // than waiting up to 10 minutes for the periodic sweep.
+  kickKrutrimSummaryWorker();
 
   res.json({ attached: true });
 });

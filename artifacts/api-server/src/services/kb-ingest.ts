@@ -2,6 +2,7 @@ import { db, knowledgeSourcesTable, knowledgeEntriesTable } from "@workspace/db"
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { isKbVectorReady, kickKbEmbedWorker } from "./kb-embeddings.js";
+import { kickKrutrimSummaryWorker } from "./kb-source-summary.js";
 
 export type KbEntryInput = { title?: string; content: string; keywords?: string };
 
@@ -119,6 +120,7 @@ export async function ingestKbTextEntries(params: IngestKbTextParams): Promise<I
 
     logger.info({ sourceId, type, entryCount: upserted }, "KB text/FAQ source ingested");
     kickKbEmbedWorker();
+    kickKrutrimSummaryWorker();
     return { sourceId, entryCount: upserted };
   } catch (err) {
     logger.warn({ err, sourceId }, "ingestKbTextEntries: failed");

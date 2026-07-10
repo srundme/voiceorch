@@ -353,6 +353,14 @@ export interface KbRetrievalOpts {
    * cap via buildKnowledgeBaseBlockEx).
    */
   dumpMaxChars?: number;
+  /**
+   * Entry titles to exclude from BOTH the dump and live-retrieval paths.
+   * Used to keep provider-scoped synthetic entries (e.g. the Krutrim
+   * auto-summary — see kb-source-summary.ts) out of every OTHER provider's
+   * context when a knowledge source is shared across agents with different
+   * LLM providers.
+   */
+  excludeTitles?: string[];
 }
 
 /* ── In-memory LRU cache for repeated queries ────────────────────────────────
@@ -417,7 +425,7 @@ export async function retrieveKbContextMultiEx(
   const cap = Math.min(Math.max(topK, 10), MAX_KB_ENTRIES);
 
   if (!q) {
-    const dump = await dumpEntries(unique, MAX_KB_ENTRIES, opts.dumpMaxChars);
+    const dump = await dumpEntries(unique, MAX_KB_ENTRIES, opts.dumpMaxChars, opts.excludeTitles);
     return {
       text: dump.text,
       source: dump.text ? "dump" : "none",
@@ -427,7 +435,12 @@ export async function retrieveKbContextMultiEx(
     };
   }
 
-  const cacheKey = `${[...unique].sort((a, b) => a - b).join(",")}::${q.toLowerCase()}`;
+  // excludeTitles changes what a query can return, so it MUST be part of the
+  // cache key — otherwise a Krutrim agent's cache entry (auto-summary
+  // included) could be served to a non-Krutrim agent sharing the same
+  // source, or vice versa.
+  const excludeKey = opts.excludeTitles?.length ? `!${[...opts.excludeTitles].sort().join("|")}` : "";
+  const cacheKey = `${[...unique].sort((a, b) => a - b).join(",")}::${q.toLowerCase()}${excludeKey}`;
   const cachedHit = kbCacheGet(cacheKey);
   if (cachedHit) {
     return {
@@ -442,13 +455,17 @@ export async function retrieveKbContextMultiEx(
   try {
     // Vector + FTS run concurrently; vector failure yields [] (pure FTS).
     // skipFts (pure non-Latin query) goes straight to vector-only.
-    const [vecRows, ftsRows] = await Promise.all([
+    const [vecRowsRaw, ftsRowsRaw] = await Promise.all([
       vectorSearch(unique, q, VECTOR_TOP_K).catch((err) => {
         logger.warn({ err: String(err), sourceIds: unique }, "KB vector search failed — FTS-only this turn");
         return [] as EntryRow[];
       }),
       opts.skipFts ? Promise.resolve([] as EntryRow[]) : ftsSearch(unique, q, cap),
     ]);
+    const excluded = opts.excludeTitles?.length ? new Set(opts.excludeTitles) : null;
+    const dropExcluded = (rows: EntryRow[]) => excluded ? rows.filter((r) => !r.title || !excluded.has(r.title)) : rows;
+    const vecRows = dropExcluded(vecRowsRaw);
+    const ftsRows = dropExcluded(ftsRowsRaw);
     const merged = rrfMerge(vecRows, ftsRows, cap);
     const source: KbRetrievalSource =
       vecRows.length && ftsRows.length ? "hybrid"
@@ -498,7 +515,7 @@ export async function retrieveKbContext(
  * Fetches up to `cap` entries PER SOURCE (pinned first, then insertion
  * order) and lets the allocator split the combined entry + char budgets.
  */
-async function dumpEntries(sourceIds: number[], cap: number, maxChars?: number): Promise<KbFairDumpResult> {
+async function dumpEntries(sourceIds: number[], cap: number, maxChars?: number, excludeTitles?: string[]): Promise<KbFairDumpResult> {
   // Fetch up to `cap` rows PER SOURCE at the SQL level via a window function.
   // A global LIMIT here would let one source (e.g. many pinned/low-id rows)
   // consume the entire fetch window and starve other sources before the
@@ -544,6 +561,10 @@ async function dumpEntries(sourceIds: number[], cap: number, maxChars?: number):
       return { text: "", contributingSourceIds: [], truncated: false, perSource: [] };
     }
   }
+  if (excludeTitles?.length) {
+    const excluded = new Set(excludeTitles);
+    entries = entries.filter((e) => !e.title || !excluded.has(e.title));
+  }
   if (!entries.length) return { text: "", contributingSourceIds: [], truncated: false, perSource: [] };
 
   const result = buildFairDump(entries, { maxEntries: cap, maxChars });
@@ -588,10 +609,11 @@ export async function getAttachedSourceIds(
 export async function buildKnowledgeBaseBlockEx(
   sourceIds: number[],
   maxChars?: number,
+  excludeTitles?: string[],
 ): Promise<KbFairDumpResult> {
   const unique = Array.from(new Set(sourceIds.filter((n) => Number.isInteger(n))));
   if (!unique.length) return { text: "", contributingSourceIds: [], truncated: false, perSource: [] };
-  return dumpEntries(unique, MAX_KB_ENTRIES, maxChars);
+  return dumpEntries(unique, MAX_KB_ENTRIES, maxChars, excludeTitles);
 }
 
 /**

@@ -15,6 +15,16 @@ export const knowledgeSourcesTable = pgTable("knowledge_sources", {
   type: text("type").notNull().default("text"),  // 'faq' | 'text' | 'website' | 'file'
   status: text("status").notNull().default("active"), // 'active' | 'processing' | 'error'
   entryCount: integer("entry_count").notNull().default(0),
+  /**
+   * Content hash (sha256 of all entry contents, sorted by id) captured the
+   * last time the Krutrim auto-summary was generated for this source.
+   * NULL = never generated. Compared on each sweep (kb-source-summary.ts);
+   * a mismatch means entries changed since the last summary and it must be
+   * regenerated. Scoped to Krutrim because that's the only provider whose
+   * baked-KB cap (4000 chars, no confirmed prefix caching — see replit.md)
+   * needs a compressed pinned summary to cover a large KB within budget.
+   */
+  krutrimSummaryHash: text("krutrim_summary_hash"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

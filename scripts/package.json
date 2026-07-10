@@ -17,12 +17,14 @@
     "loadtest-api": "tsx ./src/loadtest-api.ts",
     "sync-to-github": "tsx ./src/sync-to-github.ts",
     "seed-galaxy-kb-summary": "tsx ./src/seed-galaxy-kb-summary.ts",
+    "probe-krutrim-caching": "tsx ./src/probe-krutrim-caching.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@clerk/backend": "^3.4.14",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:",
+    "openai": "^6.38.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

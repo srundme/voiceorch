@@ -4,6 +4,7 @@ import { db, agentsTable, callsTable, providersTable, platformSettingsTable, cam
 import { createExecutionLogger, writeCallEndedLog, writeCallStartedLog, logRecordingEvent, EXEC_COMPONENTS } from "../services/execution-log.js";
 import { getFlatRateCentsPerMin, resolveAgentBillingMode } from "../services/minute-rates.js";
 import { getAttachedSourceIds, buildKnowledgeBaseBlockEx } from "./kb-retrieval.js";
+import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
@@ -584,6 +585,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
         : KB_INJECT_DEFAULT_ALL_CHARS;
   const kbBakedMaxChars =
     Number.isFinite(kbMaxCharsRaw) && kbMaxCharsRaw > 0 ? kbMaxCharsRaw : undefined;
+  // The Krutrim auto-summary entry (kb-source-summary.ts) is generated
+  // per-SOURCE, but a source can be shared with non-Krutrim agents. Keep it
+  // out of every other provider's baked block so behavior for non-Krutrim
+  // agents is completely unchanged.
+  const kbExcludeTitles =
+    agent.llmProvider?.toLowerCase() === "krutrim" ? undefined : [KRUTRIM_AUTO_SUMMARY_TITLE];
 
   const [callerCtxResult, campaignLeadResult, kbEntriesResult, providerRowsResult] = await Promise.all([
     // 1. Caller memory (3-layer: profile + facts + archive)
@@ -606,7 +613,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
 
     // 3. Knowledge base (all attached sources, fair per-source budgeting)
     agentConfig.knowledgeSourceIds.length > 0
-      ? buildKnowledgeBaseBlockEx(agentConfig.knowledgeSourceIds, kbBakedMaxChars).catch((kbErr) => {
+      ? buildKnowledgeBaseBlockEx(agentConfig.knowledgeSourceIds, kbBakedMaxChars, kbExcludeTitles).catch((kbErr) => {
           logger.warn({ agentId: params.agentId, knowledgeSourceIds: agentConfig.knowledgeSourceIds, kbErr }, "Failed to load knowledge base — continuing without it");
           return null;
         })

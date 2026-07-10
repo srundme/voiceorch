@@ -21,6 +21,7 @@ import type { AudioProcessResult } from "./audioPool.js";
 import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
+import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
 import { performance } from "perf_hooks";
 import {
@@ -882,6 +883,14 @@ export class OrchestrationPipeline {
         msLeftInEchoWindow: Math.max(0, this.bargeInHoldUntil - now),
       },
     });
+  }
+
+  // The Krutrim auto-summary entry (kb-source-summary.ts) is generated
+  // per-SOURCE, but a source can be attached to multiple agents across
+  // providers. Exclude it from every non-Krutrim agent's per-turn KB
+  // retrieval so their behavior is completely unchanged.
+  private krutrimSummaryExcludeTitles(): string[] | undefined {
+    return this.agent.llmProvider?.toLowerCase() === "krutrim" ? undefined : [KRUTRIM_AUTO_SUMMARY_TITLE];
   }
 
   constructor(config: SessionConfig) {
@@ -1965,7 +1974,7 @@ export class OrchestrationPipeline {
         // dumpMaxChars: the prefetch is a FALLBACK context (used only when live
         // retrieval misses/errors) — cap it at 8k so a huge KB can't blow up the
         // turn prompt. Pinned entries sort first, so a curated summary survives.
-        this.kbPrefetchPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, "", undefined, { dumpMaxChars: KB_PREFETCH_MAX_CHARS })
+        this.kbPrefetchPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, "", undefined, { dumpMaxChars: KB_PREFETCH_MAX_CHARS, excludeTitles: this.krutrimSummaryExcludeTitles() })
           .catch((err) => {
             logger.warn({ callId: this.config.callId, err }, "KB prefetch (streaming STT) failed");
             return null;
@@ -2009,7 +2018,7 @@ export class OrchestrationPipeline {
       // wait + during STT — well before processTurn() needs the result.
       if (this.audioBuffer.length === 0 && this.agent.knowledgeSourceIds.length > 0) {
         // Same 8k fallback cap as the streaming-STT prefetch above.
-        this.kbPrefetchPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, "", undefined, { dumpMaxChars: KB_PREFETCH_MAX_CHARS })
+        this.kbPrefetchPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, "", undefined, { dumpMaxChars: KB_PREFETCH_MAX_CHARS, excludeTitles: this.krutrimSummaryExcludeTitles() })
           .catch((err) => {
             logger.warn({ callId: this.config.callId, err }, "KB prefetch (batch STT) failed");
             return null;
@@ -4227,7 +4236,7 @@ export class OrchestrationPipeline {
       // the (already-resolved) prefetch surfaces almost immediately, so the
       // worst-case turn stall stays ≈ budgetMs even on skipFts turns.
       kbOuterRaceMs = Math.max(KB_CONTEXT_RACE_MS, budgetMs + 100);
-      const live = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts })
+      const live = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts, excludeTitles: this.krutrimSummaryExcludeTitles() })
         .catch((err) => {
           logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — falling back to prefetch");
           return null;
@@ -4253,7 +4262,7 @@ export class OrchestrationPipeline {
       kbContextPromise = kbPrefetch.then(asPrefetch);
       logger.debug({ callId: this.config.callId }, "KB context: using speech-start prefetch");
     } else if (this.agent.knowledgeSourceIds.length > 0) {
-      kbContextPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts: isPureNonLatinQuery(transcript) })
+      kbContextPromise = retrieveKbContextMultiEx(this.agent.knowledgeSourceIds, transcript, undefined, { skipFts: isPureNonLatinQuery(transcript), excludeTitles: this.krutrimSummaryExcludeTitles() })
         .catch((err) => {
           logger.warn({ callId: this.config.callId, err }, "KB retrieval failed — continuing without context");
           return null;
