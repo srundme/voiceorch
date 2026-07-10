@@ -1,0 +1,319 @@
+Perform a comprehensive UI/UX refinement of the Providers page to match the quality of premium SaaS products such as Stripe, Linear, Vercel, Supabase, and Clerk.
+
+IMPORTANT:
+- UI/UX improvements ONLY.
+- Do NOT modify backend logic, APIs, database, provider connections, authentication, dialogs, routing, state management, or functionality.
+- Preserve every existing feature exactly as it works today.
+- Only improve visual hierarchy, spacing, layout, typography, empty states, buttons, and interactions.
+
+========================================
+PAGE LAYOUT
+========================================
+
+• Increase horizontal page padding to approximately 40px.
+• Constrain the content inside a centered container (max-width around 1400–1500px).
+• Reduce unnecessary empty space above the page.
+• Improve vertical spacing between:
+  - page title
+  - subtitle
+  - Add Provider button
+  - provider grid
+• Use a consistent 8px spacing system throughout the page.
+
+========================================
+HEADER
+========================================
+
+Refine the page header.
+
+Current layout feels disconnected.
+
+Create a premium SaaS header:
+
+Left:
+- BUILD label
+- Providers title
+- Subtitle
+
+Right:
+- Primary "Add Provider" button
+
+Improvements:
+• Better alignment
+• Better spacing
+• Vertically centered
+• Stronger typography hierarchy
+• Add Provider button should feel like the page's primary action.
+
+Button:
+• Height around 40px
+• Rounded 12px
+• Premium hover transition
+• Better icon spacing
+
+========================================
+PROVIDER GRID
+========================================
+
+Keep the existing 2-column layout.
+
+Improve:
+
+• Equal card heights
+• Better spacing between cards
+• Slightly reduce vertical gap between rows
+• Consistent alignment
+• Responsive behavior unchanged
+
+========================================
+PROVIDER CARDS
+========================================
+
+Refine every provider card.
+
+Improve:
+
+• Border radius 16px
+• Softer premium border
+• Better internal padding (24px)
+• Slightly darker elevated card background
+• Smooth hover animation
+• Very subtle lift on hover
+• Soft border glow on hover
+• Consistent card height
+
+Do not redesign functionality.
+
+========================================
+CARD HEADER
+========================================
+
+Improve hierarchy.
+
+Current:
+Icon
+Title
+Subtitle
+Counter
+
+Refine:
+
+• Larger icon container (44px)
+• Better spacing
+• Stronger title
+• Smaller secondary description
+• Better vertical alignment
+
+The counter badge (0/5 etc.)
+
+Instead of looking detached:
+
+• Keep it inside a subtle circular badge
+• Better padding
+• Better typography
+• Premium dark appearance
+
+========================================
+EMPTY STATE
+========================================
+
+Current empty states look plain.
+
+Keep the same text and functionality but redesign visually.
+
+Improvements:
+
+• Larger centered icon
+• Better spacing
+• Better typography hierarchy
+• More breathing room
+• Softer secondary text
+• Better centered layout
+
+The Connect button should become the visual focus.
+
+========================================
+CONNECT BUTTON
+========================================
+
+Refine all Connect buttons.
+
+Current buttons feel flat.
+
+Improve:
+
+• Height around 40px
+• Rounded pill
+• Better horizontal padding
+• Premium outlined style
+• Better icon spacing
+• Better hover effect
+• Slight elevation on hover
+• Smooth transition (180ms)
+
+Do NOT change button functionality.
+
+========================================
+CATEGORY ICONS
+========================================
+
+Improve icon presentation.
+
+Keep existing icons.
+
+Only improve container styling.
+
+Suggested accent colors:
+
+Speech-to-Text
+Blue accent
+
+Language Model
+Purple accent
+
+Text-to-Speech
+Green accent
+
+Telephony
+Orange accent
+
+Only the icon container should use accent colors.
+
+Cards should remain dark.
+
+========================================
+TYPOGRAPHY
+========================================
+
+Improve typography hierarchy.
+
+Titles:
+18–20px
+Semibold
+
+Descriptions:
+13–14px
+Muted
+
+Empty state title:
+16px
+
+Empty state description:
+13px
+
+Buttons:
+14px Medium
+
+========================================
+SPACING
+========================================
+
+Increase breathing room everywhere.
+
+Consistent spacing between:
+
+Icon
+↓
+
+Title
+
+↓
+
+Subtitle
+
+↓
+
+Divider
+
+↓
+
+Empty state icon
+
+↓
+
+Empty state title
+
+↓
+
+Description
+
+↓
+
+Connect button
+
+Everything should feel balanced.
+
+========================================
+DIVIDERS
+========================================
+
+Use softer separators.
+
+Do not use harsh borders.
+
+========================================
+ANIMATION
+========================================
+
+Use premium micro interactions.
+
+Transition:
+150–200ms
+
+Hover:
+
+• Slight lift
+• Border glow
+• Button elevation
+
+Avoid flashy animations.
+
+========================================
+RESPONSIVE
+========================================
+
+Desktop:
+Maintain 2-column layout.
+
+Tablet:
+Wrap naturally.
+
+Mobile:
+Single column.
+
+========================================
+ACCESSIBILITY
+========================================
+
+Improve focus states.
+
+Maintain WCAG contrast.
+
+Increase clickable areas.
+
+========================================
+DO NOT CHANGE
+========================================
+
+Do NOT change:
+
+• Provider connection flow
+• API calls
+• Business logic
+• Dialogs
+• Forms
+• Backend
+• Routing
+• State management
+• Existing copy
+• Provider limits
+• Counters
+• Functionality
+
+========================================
+FINAL GOAL
+========================================
+
+The Providers page should look like a premium enterprise SaaS settings page similar to Stripe, Clerk, Linear, and Vercel.
+
+Focus on visual polish, spacing, typography, empty states, card hierarchy, and premium interactions while preserving all existing functionality.

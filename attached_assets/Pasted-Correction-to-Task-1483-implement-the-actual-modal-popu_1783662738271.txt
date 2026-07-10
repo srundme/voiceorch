@@ -1,0 +1,33 @@
+Correction to Task #1483 — implement the actual modal popup flow, not a right-panel-only wizard.
+
+The current implementation does not match the intended UX. The green “Scheduling fully configured” card in the Agent Preview panel is not the required popup flow.
+
+First inspect the current implementation and existing scheduling components. Then make the minimum changes required for this exact behavior:
+
+When a Vibe Builder user confirms appointment scheduling, do not treat auto-created Calendar, Availability, or Event Type records as user-completed setup steps.
+
+After the agent is successfully created, open a real modal Dialog overlay above the current Vibe Builder page. The Vibe Builder must remain mounted and visible underneath the modal overlay. Do not navigate the user to /app/scheduling/....
+
+Reuse the existing scheduling UIs shown in the attached screenshots. Do not create simplified replacement forms.
+
+Required sequence:
+
+1. Google Account / Conferencing modal — render the existing Google connection UI inside the modal. The user connects or reconnects the required Google account. After verified success, close this modal, return focus to Vibe, update progress, and automatically open step 2.
+2. Calendar modal — render the existing Calendar UI inside the modal, scoped to the current Vibe agent. The user must configure the calendar, including the relevant connected Google account, host email, timezone, and existing calendar settings. After an actual successful save, close and automatically continue.
+3. Availability modal — render the existing Availability UI inside the modal, scoped to the current agent/calendar. The user configures days and working hours. Advance only after explicit user confirmation/save, not merely because default rows exist.
+4. Event Type modal — render the full existing Event Type editor inside the modal, including its existing sections such as Basics, Availability, Limits, and Advanced. The user chooses title, duration, confirmation settings, calendar account, Google Meet option, and other existing settings. Advance only after the user saves.
+
+The Agent Preview “Scheduling Setup” section may remain as a progress indicator or launcher, but it is not a substitute for the modal flow.
+
+Important: do not mark Calendar, Availability, or Event Type as completed merely because backend records exist. Completion must represent explicit user interaction/save in this Vibe setup flow.
+
+Review the current auto-creation behavior before changing it. The current automatic creation of a default “Quick Chat” 30-minute event type and default availability is causing the wizard to immediately appear complete. For this Vibe onboarding flow, prevent these bootstrap defaults from bypassing the modal setup. Prefer allowing the user to configure these through the modal sequence. Preserve existing scheduling behavior outside Vibe Builder.
+
+Before coding, report briefly:
+
+* which existing components will be directly embedded in the modal;
+* whether each component can render correctly inside a Dialog without routing away;
+* what current logic causes the green “Scheduling fully configured” state;
+* the smallest changes needed to ensure the modal opens automatically and progresses only after explicit user completion.
+
+Then implement only after that inspection. Do not create new duplicate scheduling forms and do not redesign the scheduling pages.
