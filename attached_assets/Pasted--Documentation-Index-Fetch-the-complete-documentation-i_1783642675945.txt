@@ -1,0 +1,79 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Volume, Speed, and Emotion
+
+> Control the speed, volume, and emotion of generated speech.
+
+Sonic provides controls for the speed, volume, and emotion of generated speech. These are available on [play.cartesia.ai](https://play.cartesia.ai) using the UI controls, by passing a `generation_config` parameter, or by using [SSML tags](/build-with-cartesia/capability-guides/ssml-tags) within the transcript.
+
+<Tip>
+  **Sonic interprets these parameters as guidance** rather than strict adjustments, to ensure natural speech. Test against your content to confirm the output matches your expectations.
+</Tip>
+
+## Speed and volume controls
+
+Guide the speed and volume of a TTS generation with the `generation_config.speed` and `generation_config.volume` parameters.
+
+<ParamField path="generation_config.speed" type="number">
+  The speed of the generation, ranging from `0.6` to `1.5`.
+</ParamField>
+
+<ParamField path="generation_config.volume" type="number">
+  The volume of the generation, ranging from `0.5` to `2.0`.
+</ParamField>
+
+<Tip>
+  Set speed and volume via `generation_config` rather than SSML tags. Most well-punctuated transcripts are paced naturally without any adjustment, so treat these controls as a refinement for specific cases rather than a default.
+</Tip>
+
+You can also set these inside the transcript using [SSML](/build-with-cartesia/capability-guides/ssml-tags) tags.
+
+```xml lines theme={null}
+<speed ratio="1.5"/> I like to speak quickly because it makes me sound smart.
+<volume ratio="1.5"/> And I can be loud, too!
+```
+
+## Emotion controls <span class="beta-tag">Beta</span>
+
+By default, the model interprets the emotional subtext in the provided transcript. Guide the emotion of a TTS generation, the way a director directs an actor, using the `generation_config.emotion` parameter.
+
+<Note>
+  Emotion tags push the model to be more emotive, but only work when the emotion is consistent with the transcript. The mismatch below is unlikely to work well:
+</Note>
+
+```xml theme={null}
+<emotion value="sad"/> I'm so excited!
+```
+
+<ParamField path="generation_config.emotion" type="string">
+  The emotional guidance for a generation, one of the emotions below.
+</ParamField>
+
+The primary emotions, for which we have the most data and produce the best results, are: `neutral`, `calm`, `angry`, `content`, `sad`, and `scared`.
+
+The complete list of available emotions is: `neutral`, `happy`, `excited`, `enthusiastic`, `elated`, `euphoric`, `triumphant`, `amazed`, `surprised`, `flirtatious`, `curious`, `content`, `peaceful`, `serene`, `calm`, `grateful`, `affectionate`, `trust`, `sympathetic`, `anticipation`, `mysterious`, `angry`, `mad`, `outraged`, `frustrated`, `agitated`, `threatened`, `disgusted`, `contempt`, `envious`, `sarcastic`, `ironic`, `sad`, `dejected`, `melancholic`, `disappointed`, `hurt`, `guilty`, `bored`, `tired`, `rejected`, `nostalgic`, `wistful`, `apologetic`, `hesitant`, `insecure`, `confused`, `resigned`, `anxious`, `panicked`, `alarmed`, `scared`, `proud`, `confident`, `distant`, `skeptical`, `contemplative`, `determined`.
+
+The voices with the best emotional response are:
+
+* [Leo](https://play.cartesia.ai/voices/0834f3df-e650-4766-a20c-5a93a43aa6e3) (id: `0834f3df-e650-4766-a20c-5a93a43aa6e3`)
+* [Jace](https://play.cartesia.ai/voices/6776173b-fd72-460d-89b3-d85812ee518d) (id: `6776173b-fd72-460d-89b3-d85812ee518d`)
+* [Kyle](https://play.cartesia.ai/voices/c961b81c-a935-4c17-bfb3-ba2239de8c2f) (id: `c961b81c-a935-4c17-bfb3-ba2239de8c2f`)
+* [Gavin](https://play.cartesia.ai/voices/f4a3a8e4-694c-4c45-9ca0-27caf97901b5) (id: `f4a3a8e4-694c-4c45-9ca0-27caf97901b5`)
+* [Maya](https://play.cartesia.ai/voices/cbaf8084-f009-4838-a096-07ee2e6612b1) (id: `cbaf8084-f009-4838-a096-07ee2e6612b1`)
+* [Tessa](https://play.cartesia.ai/voices/6ccbfb76-1fc6-48f7-b71d-91ac6298247b) (id: `6ccbfb76-1fc6-48f7-b71d-91ac6298247b`)
+* [Dana](https://play.cartesia.ai/voices/cc00e582-ed66-4004-8336-0175b85c85f6) (id: `cc00e582-ed66-4004-8336-0175b85c85f6`)
+* [Marian](https://play.cartesia.ai/voices/26403c37-80c1-4a1a-8692-540551ca2ae5) (id: `26403c37-80c1-4a1a-8692-540551ca2ae5`)
+
+View the full list of emotive voices in our [Voice Library](https://play.cartesia.ai/voices?tags=Emotive).
+
+You can also use [SSML](/build-with-cartesia/capability-guides/ssml-tags) tags for emotions:
+
+```xml theme={null}
+<emotion value="angry"/> How dare you speak to me like I'm just a robot!
+```
+
+## Nonverbalisms
+
+Insert `[laughter]` in your transcript to make the model laugh.

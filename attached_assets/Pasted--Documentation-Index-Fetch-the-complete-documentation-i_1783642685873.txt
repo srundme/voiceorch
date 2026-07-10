@@ -1,0 +1,85 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# SSML Tags
+
+> Laughter, pauses, and mid-transcript controls
+
+<Warning>
+  Tags for volume, speed, and emotions are in beta and subject to change in the
+  future.
+</Warning>
+
+Sonic supports SSML-like (Speech Synthesis Markup Language) tags to control generated speech. The supported tags are `speed`, `volume`, `emotion`, `break`, and `spell`.
+
+## Speed
+
+*Available on `sonic-3` and `sonic-3.5`.*
+
+<Warning>
+  Note that if you're streaming token by token, you'll need to buffer the whole value of the speed or volume tags.
+  Passing in `1`, `.`, `0` as separate inputs, for example, will result in reading out the tags.
+</Warning>
+
+You can guide the speed of a TTS generation with a `speed` tag, which takes a scalar between `0.6` and `1.5`.
+This value is roughly a multiplier on the default speed. For example, `1.5` will generate audio at roughly 1.5x the
+default speed.
+
+```xml theme={null}
+<speed ratio="1.5"/> I like to speak quickly because it makes me sound smart.
+```
+
+## Volume
+
+*Available on `sonic-3` and `sonic-3.5`.*
+
+You can guide the volume of a TTS generation with a `volume` tag, which is a number between `0.5`
+and `2.0`. The default volume is `1`.
+
+```xml theme={null}
+<volume ratio="0.5"/> I will speak softly.
+```
+
+## Emotion <span class="beta-tag">Beta</span>
+
+<Warning>
+  Emotion control is highly experimental, particularly when emotion shifts occur
+  mid-generation. If you need to change the emotion in a transcript, we recommend
+  using separate generation contexts for each emotion. For best results, use [Voices
+  tagged as "Emotive"](https://play.cartesia.ai/voices?tags=Emotive), as emotions may not work reliably with other Voices.
+</Warning>
+
+```xml theme={null}
+<emotion value="angry"/> I will not allow you to continue this! <emotion value="sad"/> I was hoping for a peaceful resolution.
+```
+
+## Pauses and breaks
+
+Punctuation is the first tool for pausing — a comma or period usually produces a natural, well-paced pause in context. Reserve `break` tags for when you need an explicit silence of a specific duration.
+
+A `break` tag takes one attribute, `time`, in seconds (`s`) or milliseconds (`ms`):
+
+```xml theme={null}
+Hello, my name is Sonic.<break time="1s"/>Nice to meet you.
+```
+
+Break tags split the generation, so the model has less surrounding context and the speech can sound less natural. Avoid placing several break tags in quick succession, which can cause the model to hallucinate. Each tag counts as 1 character and doesn't need surrounding whitespace.
+
+## Spelling out numbers and letters
+
+To read input out character by character, wrap it in `<spell>` tags. This is useful for confirmation codes, order IDs, serial numbers, or spelling a name.
+
+```xml theme={null}
+My name is Bob, spelled <spell>Bob</spell>, and my confirmation code is <spell>ABC123</spell>.
+```
+
+The model adds a slight pause between runs of letters and digits automatically. To force a longer pause at a specific point, add a space inside the tag:
+
+```xml theme={null}
+Your confirmation code is <spell>ABC 123</spell>.
+```
+
+Avoid other punctuation inside `<spell>` tags — it may be read aloud (for example, a period is read as "dot").
+
+For phone numbers, credit card numbers, and similar sequences, write them as a plain string and let [text normalization](/build-with-cartesia/capability-guides/prompting-tips#recommendations) handle the grouping and pacing. Reach for a `<spell>` tag only when you need a strict character-by-character read-out, and don't chain `<spell>` and `<break>` tags.

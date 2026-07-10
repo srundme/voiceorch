@@ -333,14 +333,30 @@ export async function createSession(params: {
     effectiveSystemPrompt += `\n\nIf the caller asks you to speak in English, switch immediately and continue in English.`;
   }
 
-  // TTS output formatting — always injected so the LLM never produces patterns that
-  // cause text-to-speech to spell out letters (e.g. "T. Nagar" → T N A G A R).
-  effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:
+  // TTS output formatting — provider-aware.
+  // Cartesia Sonic understands SSML-like tags and nonverbalisms; other TTS engines
+  // speak them aloud literally, so we forbid them for every non-Cartesia provider.
+  const isCartesiaTts = agent.ttsProvider?.toLowerCase() === "cartesia";
+  if (isCartesiaTts) {
+    effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by Cartesia Sonic TTS. Follow these rules strictly:
+- Write plain prose in full sentences. End every response with . ? or !
+- Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
+- Never use ALL-CAPS words or acronyms — write them in lowercase or spell them out naturally.
+- Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
+- Do NOT use any XML or SSML tags except the four listed below — all others are spoken aloud literally.
+CARTESIA DELIVERY TAGS (use sparingly — plain speech is the default):
+- EMOTION: Place <emotion value="VALUE"/> immediately before the sentence it modifies. Supported values for voice agents: enthusiastic (genuinely good news), sympathetic (empathy for a problem), calm (reset to neutral after an emotional moment), curious (when gathering information), content (successful resolution), sad (delivering bad news). Example: "<emotion value="sympathetic"/> I completely understand that, and I'm sorry to hear that."
+- LAUGHTER: Insert [laughter] at a natural moment where a brief, warm laugh fits — do not force it. Example: "That's actually a great question! [laughter] Let me check that for you."
+- SPELL: Wrap confirmation codes, reference IDs, or anything that must be read character by character in <spell> tags. Example: "Your booking ID is <spell>AB12CD</spell>."
+- BREAK: Use <break time="500ms"/> for a deliberate pause before an important point. Do not chain multiple break tags in a row.`;
+  } else {
+    effectiveSystemPrompt += `\n\n[TTS OUTPUT RULES — MANDATORY] Your responses are spoken aloud by a TTS engine. Follow these rules strictly:
 - Never use abbreviated place names with periods. Write "T Nagar" not "T. Nagar", "RK Salai" not "R.K. Salai", "MG Road" not "M.G. Road".
 - Never use ALL-CAPS words or acronyms (AMD, STT, LLM etc.) — write them in lowercase or spell them out naturally.
 - Never use markdown: no asterisks, hashes, bullet points, numbered lists, or underscores.
 - NEVER use XML or SSML markup tags of any kind. Do NOT write <emotion>, </emotion>, <break>, <prosody>, or any similar tags — the TTS engine will speak them aloud literally as "less-than emotion greater-than".
 - Use only plain conversational sentences suitable for speech.`;
+  }
 
   // Conversation discipline — force one-step-at-a-time delivery, turn yielding
   // on "wait for response" markers, and resume-after-objection place-keeping.

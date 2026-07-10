@@ -1,0 +1,134 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.cartesia.ai/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Prompting tips
+
+> Get natural-sounding output from Sonic with minimal prompt engineering.
+
+Sonic 3.5 is designed to sound natural with minimal prompt engineering. In most cases you can pass your transcript as-is and let the model handle normalization, pacing, and expression. The tips below apply across the Sonic family; differences between Sonic 3.5 and Sonic 3 are called out inline.
+
+## Recommendations
+
+* **Pass natural, well-punctuated text.** Full sentences with normal capitalization and punctuation produce the best pacing and intonation. End each transcript with terminal punctuation (`.`, `?`, `!`).
+* **Send complete phrases.** Full sentences sound more natural than isolated fragments or single words. Don't send a number, code, or spell tag on its own — include the surrounding sentence, e.g. `Your confirmation code is <spell>ABC123</spell>.`
+* **Use normal casing.** Reserve all-caps for acronyms you want read out letter by letter (e.g. `USA`). Other all-caps words may be misread as initialisms (e.g. `NASA`). Avoid using capitalization for emphasis or to indicate shouting.
+* **Pass numbers, currency, dates, and common acronyms in conventional written form.** Sonic maps these patterns to natural speech for most inputs:
+
+  * Large numbers like `1,234,567`
+  * Currency like `$19.99`
+  * US phone numbers: `(415) 555-1212`
+  * Street addresses like `123 Main St`
+  * Email addresses: `user@example.com`
+  * Dates in `MM/DD/YYYY`: `04/20/2025`
+  * Times with a space before AM/PM: `7:00 PM`, `7 PM`, `7:00 P.M.`
+  * Common acronyms (`NASA`) and initialisms (`USA`)
+
+  Symbols are handled naturally — `@` reads as `at` (email addresses), `()` is silent (for US phone numbers). When an LLM writes the transcript, see [**Voice agents (LLM-authored text)**](#voice-agents-llm-authored-text).
+* **Match the voice to the language.** Each voice has a primary language it works best with. Use the [Playground](https://play.cartesia.ai) to audition voices for a given language.
+* **Keep prompts in their natural written form.** Heavy preprocessing (stripping punctuation, forcing casing) generally hurts output quality.
+
+## Pre-normalization
+
+Sonic 3.5 automatically covers the common cases above for most inputs. If you hit an unusual case or a bug where something is still misread, you may consider pre-normalizing your text as a fallback. Have your LLM write the transcript fully spelled out, the way it would be spoken.
+
+| Written     | Spoken (fully normalized)                        |
+| ----------- | ------------------------------------------------ |
+| `$123.50`   | one hundred twenty-three dollars and fifty cents |
+| `Dr. Smith` | Doctor Smith                                     |
+| `14:30`     | two thirty PM                                    |
+
+Pre-normalizing is a fallback for edge cases. Well-punctuated text in conventional form is read correctly in the large majority of cases.
+
+## Controlling pacing and spelling
+
+When you need character-by-character read-out (confirmation codes, order IDs, serial numbers, spelled-out names) or fine-grained pacing, use one of the following:
+
+1. **Spell tags (recommended).** Wrap the string in `<spell>...</spell>`. Most reliable option, works for letters, digits, and mixed alphanumerics in all supported languages.
+   ```
+   Your confirmation code is <spell>AB12CD</spell>.
+   ```
+2. **Space-delimited characters.** Alternatively, you can achieve the same result by separating characters with single spaces for a natural spelling pace.
+   ```
+   Your code is A B C 1 2 3.
+   ```
+3. **Comma-delimited characters.** If your use case requires longer pauses, you can add a comma and a space after each character.
+   ```
+   Your code is A, B, C, 1, 2, 3.
+   ```
+4. **Semantic grouping.** For more natural pacing, use spaces and add commas where a human would naturally pause.
+   ```
+   Your code is A B C, 1 2 3.
+   ```
+
+<Note>
+  **Migrating from Sonic 3?** The recommended delimiter format has changed in Sonic 3.5. Separate characters with **spaces or commas** and put a comma between groups. Don't put periods between characters or mix commas and periods, this format still works on `sonic-3` snapshots but is not recommended for Sonic 3.5.
+</Note>
+
+| Scenario                       | Old (Sonic 3)          | New (Sonic 3.5)       |
+| ------------------------------ | ---------------------- | --------------------- |
+| Spell out letters `HELLO`      | `H. E. L. L. O.`       | `H E L L O`           |
+| Spell out digits `123456`      | `1. 2. 3. 4. 5. 6.`    | `1 2 3 4 5 6`         |
+| Confirmation code `ABC123`     | `A, B, C. 1, 2, 3.`    | `A B C, 1 2 3`        |
+| Slow, digit-by-digit `266AO48` | `2. 6. 6. A. O. 4. 8.` | `2, 6, 6, A, O, 4, 8` |
+
+## Voice agents (LLM-authored text)
+
+**Starter system prompt.** Baseline you can paste and trim for your product. If your stack **does not** pass `<spell>` or other tags through to Sonic, omit the tag lines and use the delimiter fallback in section 4.
+
+```text theme={null}
+You are a voice agent. Everything you output will be spoken aloud by Cartesia Sonic text-to-speech. Follow these rules:
+
+1. GENERAL FORMATTING
+- Write plain prose in full sentences. Always end with . ? or !
+- Send complete phrases, not isolated words or fragments. Keep numbers, codes, and spell tags inside a surrounding sentence.
+- Do NOT use markdown, bullet points, headers, bold, raw JSON, emoji, or special characters. Sonic reads them aloud as written.
+
+2. CAPITALIZATION
+- Use normal capitalization, exactly as the sentence would normally be written: capitalize the first word, proper nouns, and the word I, and lowercase everything else. This is the default for almost all output.
+- The model tends to read an all-caps token letter by letter. Use all-caps only when you want that, like an initialism you want spelled out (USA, FBI, ATM).
+- Do not put ordinary words in all-caps. They may be misread as initialisms and spelled out letter by letter.
+- Common acronyms normally said as a word, like NASA or NATO, work in their standard form. If one is read the wrong way, force the reading with <spell> tags or rephrase.
+- Do not use capitalization for emphasis or to indicate shouting. It changes how a word is read, not how loud it sounds.
+
+3. NUMBERS, DATES, AND SYMBOLS
+- Use conventional written forms and let text normalization speak them. No preprocessing needed:
+  numbers like 1,234,567; currency like $19.99; percentages like 12%; dates like 04/20/2025; times like 7:00 PM;
+  US phone numbers like (415) 555-1212; addresses like 123 Main St; emails like user@example.com.
+- Do not strip punctuation or force casing. Heavy preprocessing may hurt output quality.
+
+4. SPELLING OUT CODES AND IDS
+- For confirmation codes, reference numbers, or any alphanumeric ID that must be read character by character, wrap it in <spell> tags:
+  Example: Your confirmation code is <spell>TKT4829XB</spell>.
+- Alternatively, delimit the characters instead: spaces (A B C 1 2 3) for a natural pace, or commas (A, B, C, 1, 2, 3) to slow it down. Do not put periods between sequences of individual characters.
+- For long sequences like credit card numbers, break the run into smaller comma-separated groups the way a person reads them aloud (3 6 8 9, 0 5 0 5, 2 5 8 2, 3 6 7 9).
+- NATO phonetics (Alpha, Bravo) help when the listener needs to disambiguate letters.
+
+5. PAUSES
+- Use natural punctuation for pauses. A comma or period usually produces the right pause in context.
+- For an explicit, fixed-duration silence, use a break tag:
+  Example: Your balance is $1,234.<break time="500ms"/> Your next payment is due June 15th.
+- Avoid placing several break tags in quick succession, which can cause hallucinations, and do not chain <spell> and <break> tags.
+
+6. SPEED (beta)
+- To slow down speech generation, use a speed tag with a ratio between 0.6 and 1.5: <speed ratio="0.85"/>
+- Return to normal speed after: <speed ratio="1.0"/>
+
+7. THINGS TO AVOID
+- Do not output bullet points, numbered lists, or any structured formatting. Speak items naturally with pauses between them, and do not say "here's a list."
+- Do not use asterisks, hashtags, or markdown syntax. Do not wrap words in **bold** or *italics* — the engine will speak the asterisks.
+- Do not improvise details that were not provided.
+- Do not repeat the same information more than once unless asked.
+```
+
+## Inserting pauses
+
+Use natural punctuation for pauses — a comma or period usually produces the right pause in context. For an explicit, fixed-duration silence, use a [break tag](/build-with-cartesia/capability-guides/ssml-tags#pauses-and-breaks). Break tags split the generation, so they can sound less natural; avoid placing several in quick succession, which can cause hallucinations. Each tag counts as a single character and doesn't need surrounding whitespace.
+
+## Pronunciation
+
+For proper nouns, trademarks, and domain-specific terms — or to disambiguate identical spellings (e.g. *Nice*, the city, vs. *nice*, the adjective) — use [custom pronunciations](/build-with-cartesia/capability-guides/custom-pronunciations).
+
+## Streaming
+
+Use [continuations](/build-with-cartesia/capability-guides/stream-inputs-using-continuations) when generating chunks of audio that need to sound contiguous (for example, LLM-streamed output). This preserves prosody and voice consistency across chunk boundaries.
