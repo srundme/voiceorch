@@ -1537,6 +1537,7 @@ export default function VibePage() {
               ) : showCalPanel && schedulingSetup && (lastSavedAgentId ?? createdId) != null ? (
                 <VibeCalendarPanel
                   agentId={(lastSavedAgentId ?? createdId)!}
+                  agentName={createdName || "Agent"}
                   timezone={schedulingSetup.timezone}
                   onDone={() => { setShowCalPanel(false); setPostBuildStep("hype"); }}
                 />
@@ -1707,6 +1708,7 @@ export default function VibePage() {
                   <VibeSchedulingWizard
                     agentId={(lastSavedAgentId ?? createdId)!}
                     timezone={schedulingSetup.timezone}
+                    agentName={createdName || undefined}
                   />
                 </Section>
               )}
@@ -2328,10 +2330,12 @@ function VibeKbPanel({
 
 function VibeCalendarPanel({
   agentId,
+  agentName,
   timezone,
   onDone,
 }: {
   agentId: number;
+  agentName: string;
   timezone: string;
   onDone: () => void;
 }) {
@@ -2344,10 +2348,10 @@ function VibeCalendarPanel({
             <Calendar className="h-5 w-5 text-primary/70" />
           </div>
           <div>
-            <p className="font-semibold text-sm">Connect Google Calendar</p>
+            <p className="font-semibold text-sm">Set up scheduling</p>
             <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-              Connect Google Calendar so your agent can create Meet links and sync bookings automatically.
-              You can also set your availability and configure the booking event type below.
+              Complete these steps to enable appointment booking for your agent.
+              Start by creating a calendar, then connect Google for Meet links and auto-syncing.
             </p>
           </div>
         </div>
@@ -2362,7 +2366,7 @@ function VibeCalendarPanel({
       </div>
 
       {/* Scheduling wizard inline */}
-      <VibeSchedulingWizard agentId={agentId} timezone={timezone} />
+      <VibeSchedulingWizard agentId={agentId} timezone={timezone} agentName={agentName} />
     </div>
   );
 }

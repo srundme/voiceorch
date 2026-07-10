@@ -1,0 +1,58 @@
+Task: Improve KB retrieval reliability without restructuring the core lookup mechanism
+Make the following changes. Do NOT change the overall architecture (the Promise.all bundling of FTS + vector search, or the baked-injection approach) — these are targeted, low-risk tuning changes only.
+1. Raise the per-turn KB wait time (pipeline.ts)
+
+Find KB_CONTEXT_RACE_MS and change it from 200 to 300.
+
+2. Fix the prefetch fallback's internal wait budget (pipeline.ts)
+
+Find the prefetch fallback logic currently waiting ~900ms before its result becomes usable.
+Set that internal budget to 200ms — it must be LOWER than the outer KB_CONTEXT_RACE_MS (300ms), not higher. Confirm: inner (200ms) < outer (300ms).
+
+2a. Cap the prefetch fallback dump size (kb-retrieval.ts)
+
+Find dumpEntries (or wherever the prefetch fallback assembles its full-KB dump) and the parameter that controls how much it returns.
+Set that limit to ~6,000-8,000 characters total, not the full 200-entry / 40-60k character dump.
+If possible, prioritize which entries get included within that cap (most relevant, or same section-coverage priority as the curated summary in Item 5) — but a hard character cap alone is the critical fix even without smart prioritization.
+This is required because lowering the inner budget below the outer wait (item 2) activates this fallback path on nearly every turn — without this cap, it would inject the entire KB into the prompt on most turns, causing major latency and token-cost regressions on the small Krutrim model.
+
+3. Add per-turn Knowledge hit/miss logging (pipeline.ts)
+
+Wherever kbContext is resolved (or times out to null), add a log entry into the call execution log — not just server logs — capturing:
+
+turn number
+hit: true/false (whether KB context was found)
+source: fts / vector / prefetch / none
+latencyMs: how long the lookup took
+contextChars: size of whatever KB context was actually injected that turn
+
+
+This should appear as a "Knowledge" event in the call log on every turn, and must be detailed enough to confirm the fallback cap (item 2a) is working as expected in real calls — not just in code review.
+
+4. Add a language-based routing shortcut (pipeline.ts)
+
+Before running FTS, detect if the query is non-Latin script (e.g., Tamil).
+If non-Latin script is detected AND no Latin-script tokens are present in the same query, skip the FTS call for that turn and go straight to vector search only.
+If the query is code-mixed (Tamil script plus English words like "claim" or "app"), still run FTS as normal — do not skip it.
+
+5. Curated 4,000-char baked summary covering every section (session.ts)
+
+Keep the existing 4,000-character cap as is — do not raise it.
+Replace the current "first 4,000 characters of the App Guide" approach with a manually curated summary covering EVERY major section: Navigation, My Policies, My Claims, Doctor/Labs/Hospital/Pharmacy rules (including the 24x7 teleconsultation fact and the shared-benefit-pool rule), Wellness Tab, and Feature Cards — 2-4 sentences per section.
+This curated summary must live as its own pinned/dedicated KB entry, not auto-derived from truncating the raw document. Since there is currently no "pinned" concept in the schema, add a simple pinned flag (or equivalent) so pinned entries are sorted first at injection time, ahead of regular insertion-order entries.
+This task includes drafting the actual summary content for the Galaxy agent from the two source documents (Policy Knowledge Base + App User Guide) — do not ship the pinning mechanism with placeholder or empty content.
+Flag in code comments that this summary requires manual review/update whenever the source KB documents change.
+
+6. Add a small cache for common/repeated queries (pipeline.ts)
+
+Add an in-memory cache (Map or similar) keyed by sourceIds + normalized query text (lowercased, trimmed) — NOT query text alone, to prevent cross-agent/cross-tenant data leakage.
+Set a 10-minute TTL and a max size cap with LRU eviction so memory doesn't grow unbounded.
+On a cache hit, skip the FTS/vector search entirely and use the cached result immediately.
+
+Do not modify:
+
+The Promise.all structure combining FTS and vector search
+The overall call-start injection flow
+Any embedding API endpoint or model configuration
+
+Known limitation to accept: Live vector/FTS retrieval will still rarely complete within 300ms on most turns (the embed call typically takes 300-800ms). Most turns will be served by either the curated pinned summary (item 5) or the capped fallback dump (item 2a) rather than a live, query-specific lookup. This is an intentional trade-off to avoid restructuring the race logic.

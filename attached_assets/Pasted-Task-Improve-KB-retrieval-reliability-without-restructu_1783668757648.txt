@@ -1,0 +1,80 @@
+Task: Improve KB retrieval reliability without restructuring the core lookup mechanism
+Do NOT change the overall architecture (the Promise.all bundling of FTS + vector search, or the baked-injection approach) — these are targeted, low-risk tuning changes only.
+1. Raise the per-turn KB wait time (pipeline.ts)
+
+Change KB_CONTEXT_RACE_MS from 200 to 300.
+
+2. Fix the prefetch fallback's internal wait budget (pipeline.ts)
+
+Set the prefetch fallback's internal wait budget to 200ms — must be LOWER than the outer KB_CONTEXT_RACE_MS (300ms). Confirm: inner (200ms) < outer (300ms).
+
+2a. Cap the prefetch fallback dump size — scoped to the fallback path only (kb-retrieval.ts)
+
+Do NOT apply a cap globally inside dumpEntries. Add an optional maxChars parameter to dumpEntries, defaulting to undefined (no cap = current behavior).
+Pass maxChars: 8000 only at the per-turn prefetch fallback call site in pipeline.ts.
+The call-start injection path (buildKnowledgeBaseBlock, including webcall start) must call dumpEntries with no cap — it keeps its own separate 4,000-char handling in session.ts, unaffected by this change.
+If possible, prioritize which entries fill the 8k budget (most relevant / same section-coverage priority as item 5) — but the hard cap alone is the critical fix even without smart prioritization.
+Required because lowering the inner budget (item 2) activates this fallback on nearly every turn — without the cap, it would inject the full 40-60k-char KB into the prompt on most turns.
+
+3. Add per-turn Knowledge hit/miss logging (pipeline.ts)
+
+Wherever kbContext is resolved (or times out to null), log an event into the call execution log — not just server logs — with:
+
+turn number
+hit: true/false
+source: fts / vector / prefetch / none
+latencyMs
+contextChars: size of KB context actually injected that turn
+
+
+Must appear as a "Knowledge" event on every turn, detailed enough to confirm the item 2a cap is holding in real calls.
+
+4. Add a language-based routing shortcut (pipeline.ts)
+
+If the query is non-Latin script (e.g., Tamil) AND contains no Latin-script tokens, skip FTS and go straight to vector search.
+If code-mixed (Tamil script + English words like "claim", "app"), still run FTS as normal.
+
+5. Curated 4,000-char baked summary covering every section (session.ts)
+
+Keep the 4,000-char cap as-is. Replace "first 4,000 characters of the App Guide" with a manually curated summary covering EVERY major section: Navigation, My Policies, My Claims, Doctor/Labs/Hospital/Pharmacy rules (including the 24x7 teleconsultation fact and shared-benefit-pool rule), Wellness Tab, Feature Cards — 2-4 sentences each.
+This task includes drafting the actual summary content from the two source documents — do not ship the mechanism with placeholder content.
+Flag in code comments that this summary needs manual review when source KB docs change.
+
+5a. Ship the pinned flag as a real migration
+
+Add the pinned column via a proper migration file with a fresh timestamp, following this repo's existing migration convention.
+Do not just edit the schema in dev — production runs on Railway and will 500 with "column does not exist" if the migration isn't applied there too. Confirm the migration is run against production as part of this task.
+At injection time, sort pinned entries first, ahead of regular insertion-order entries.
+
+5b. Insert the curated summary into production as data
+
+The curated summary is production data, not just code. Deliver it as either:
+
+a small idempotent seeding script that inserts/upserts the pinned entry for the Galaxy agent's sourceIds, run against production after the migration lands, OR
+a paste-ready entry with exact steps to add it via the existing admin/dashboard KB entry flow.
+
+
+This task is not complete until the pinned summary actually exists in the production database and is confirmed visible in a live call's Knowledge log.
+
+6. Add a small cache for common/repeated queries (pipeline.ts)
+
+In-memory cache keyed by sourceIds + normalized query text (lowercased, trimmed) — NOT query text alone, to prevent cross-agent/cross-tenant data leakage.
+10-minute TTL, max size cap with LRU eviction.
+On a cache hit, skip FTS/vector search and use the cached result immediately.
+
+Do not modify:
+
+The Promise.all structure combining FTS and vector search
+The overall call-start injection flow
+Any embedding API endpoint or model configuration
+
+Known limitation to accept: Live query-specific retrieval will still rarely complete within 300ms on most turns. Most turns will be served by the curated pinned summary (item 5) or the capped fallback dump (item 2a), not a fresh query-specific lookup. This is intentional.
+Acceptance criteria — task is not done until ALL of these are confirmed true in production:
+
+A test call in prod shows a Knowledge event firing every turn with hit, source, latencyMs, contextChars.
+Fallback-triggered turns show contextChars capped at ~6-8k, never near 40-60k.
+The call-start baked injection (webcall start included) is confirmed still capped at its existing 4,000 chars, unaffected by the new maxChars param.
+The pinned column exists in the production database with no 500 errors on affected queries.
+The curated summary entry is confirmed present and pinned in production for the Galaxy agent, and appears first in a live call's injected context.
+A test call with a doctor-hours question and a wellness-section question both get correct, KB-sourced answers (24x7 teleconsultation; Wellness Coins → Repository → 'Explore Now', etc.) — not invented content.
+A Tamil-only query, a code-mixed Tamil+English query, and a repeated query (cache hit) are all tested and behave correctly.

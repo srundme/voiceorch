@@ -1,0 +1,47 @@
+Task: Improve KB retrieval reliability without restructuring the core lookup mechanism
+Make the following changes. Do NOT change the overall architecture (the Promise.all bundling of FTS + vector search, the prefetch design, or the baked-injection approach) — these are targeted, low-risk tuning changes only.
+1. Raise the per-turn KB wait time (pipeline.ts)
+
+Find KB_CONTEXT_RACE_MS and change it from 200 to 300.
+
+2. Lower the prefetch fallback's internal wait budget (pipeline.ts)
+
+Find the prefetch fallback logic currently waiting ~900ms before its result becomes usable.
+Reduce that internal budget to ~400-500ms so it has a realistic chance of resolving before the turn moves on.
+
+3. Add per-turn Knowledge hit/miss logging (pipeline.ts)
+
+Wherever kbContext is resolved (or times out to null), add a log entry into the call execution log — not just server logs — capturing:
+
+turn number
+hit: true/false (whether KB context was found)
+source: fts / vector / prefetch / none
+latencyMs: how long the lookup took
+
+
+This should appear as a "Knowledge" event in the call log, same as the call-start injection event, so every turn is visible — not just turn 1.
+
+4. Add a language-based routing shortcut (pipeline.ts)
+
+Before running FTS, detect if the query is non-Latin script (e.g., Tamil).
+If non-Latin script is detected, skip the FTS call for that turn and go straight to vector search only (same components, just don't waste time on a search that can't match Tamil against an English tsvector index).
+
+5. Trim and rebalance the baked-in KB injection (session.ts)
+
+Keep the existing 4,000-character cap as is — do not raise it.
+Replace the current "first 4,000 characters of the App Guide" approach with a manually curated summary that includes a short paragraph (2-4 sentences) covering EVERY major section (Navigation, Policies, Claims, Doctor/Labs/Hospital/Pharmacy hours and rules, Wellness Tab, Feature Cards) rather than full detail on only the first sections.
+Goal: every section gets baseline coverage in the baked context, even if per-turn retrieval fails.
+
+6. Add a small cache for common/repeated queries (pipeline.ts)
+
+Add an in-memory cache (Map or similar) keyed by normalized query text (lowercased, trimmed) storing recent KB results with a short TTL (e.g., 10 minutes).
+On a cache hit, skip the FTS/vector search entirely and use the cached result immediately.
+This should specifically help repeated question patterns like doctor hours, wellness steps, claim process.
+
+Do not modify:
+
+The Promise.all structure combining FTS and vector search
+The overall call-start injection flow
+Any embedding API endpoint or model configuration
+
+After implementing, run a test call covering: an English query, a Tamil query, a repeated query (to test cache), and check the call log confirms a "Knowledge" event fires on every turn with hit/miss status.

@@ -109,3 +109,4 @@
 - [Krutrim Cloud LLM integration](krutrim-integration.md) — real model catalogue (gpt-oss-20b default), streaming quirks (thinking in delta.reasoning not delta.content), Session Expired = stale key
 - [KB baked-injection cap for voice TTFT](kb-baked-cap-voice-ttft.md) — non-Gemini agents now default to 4000-char KB cap (session.ts); per-turn retrieval covers the rest; 22K→7K prompt = ~400-600ms TTFT gain on small models
 - [Unicode script directive for Indic LLMs](unicode-script-directive.md) — weak models (Krutrim Qwen/Gemma) default to Tanglish/romanized output; LANG_SCRIPT_DIRECTIVE appended to both pipeline.ts buildLangGuard() and session.ts static rules
+- [Scheduling wizard ListCalendars field](scheduling-wizard-calendar-fields.md) — ListCalendars response has `connectedGoogleEmail` not `googleCalendarConnectionId`; wizard must use this to detect Google linkage

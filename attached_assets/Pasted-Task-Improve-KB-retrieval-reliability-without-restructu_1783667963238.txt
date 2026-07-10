@@ -1,0 +1,48 @@
+Task: Improve KB retrieval reliability without restructuring the core lookup mechanism
+Make the following changes. Do NOT change the overall architecture (the Promise.all bundling of FTS + vector search, or the baked-injection approach) — these are targeted, low-risk tuning changes only.
+1. Raise the per-turn KB wait time (pipeline.ts)
+
+Find KB_CONTEXT_RACE_MS and change it from 200 to 300.
+
+2. Fix the prefetch fallback's internal wait budget (pipeline.ts)
+
+Find the prefetch fallback logic currently waiting ~900ms before its result becomes usable.
+Set that internal budget to 200ms — it must be LOWER than the outer KB_CONTEXT_RACE_MS (300ms), not higher. The fallback is only useful if it resolves before the outer race gives up. Confirm: inner (200ms) < outer (300ms).
+
+3. Add per-turn Knowledge hit/miss logging (pipeline.ts)
+
+Wherever kbContext is resolved (or times out to null), add a log entry into the call execution log — not just server logs — capturing:
+
+turn number
+hit: true/false (whether KB context was found)
+source: fts / vector / prefetch / none
+latencyMs: how long the lookup took
+
+
+This should appear as a "Knowledge" event in the call log, same as the call-start injection event, so every turn is visible — not just turn 1.
+
+4. Add a language-based routing shortcut (pipeline.ts)
+
+Before running FTS, detect if the query is non-Latin script (e.g., Tamil).
+If non-Latin script is detected AND no Latin-script tokens are present in the same query, skip the FTS call for that turn and go straight to vector search only.
+If the query is code-mixed (e.g., Tamil script plus English words like "claim" or "app"), still run FTS as normal — do not skip it, or real keyword hits will be lost.
+
+5. Curated 4,000-char baked summary covering every section (session.ts)
+
+Keep the existing 4,000-character cap as is — do not raise it.
+Replace the current "first 4,000 characters of the App Guide" approach with a manually curated summary that includes a short paragraph (2-4 sentences) covering EVERY major section: Navigation, My Policies, My Claims, Doctor/Labs/Hospital/Pharmacy rules (including the 24x7 teleconsultation fact and the shared-benefit-pool rule), Wellness Tab, and Feature Cards.
+This curated summary must live as its own pinned/dedicated KB entry (not auto-derived from truncating the raw document), so it's injected first and stays stable even if the source document is edited later. Flag clearly in code/comments that this summary must be manually reviewed and updated if the source KB content changes.
+
+6. Add a small cache for common/repeated queries (pipeline.ts)
+
+Add an in-memory cache (Map or similar) keyed by sourceIds + normalized query text (lowercased, trimmed) — NOT query text alone. This is required to prevent one agent's cached KB answer from being served into a different agent's or tenant's call.
+Set a short TTL (10 minutes) and a max size cap with simple eviction (e.g., LRU) so memory doesn't grow unbounded.
+On a cache hit, skip the FTS/vector search entirely and use the cached result immediately.
+
+Do not modify:
+
+The Promise.all structure combining FTS and vector search
+The overall call-start injection flow
+Any embedding API endpoint or model configuration
+
+Known limitation to accept: These changes improve visibility (item 3), Tamil routing correctness (item 4), and baseline answer coverage (item 5) — but per-turn live retrieval will still miss on most turns where the embed call exceeds 300ms, because the Promise.all structure is intentionally being kept as-is. Item 5's curated summary is what compensates for this gap, not the retrieval fix itself.
