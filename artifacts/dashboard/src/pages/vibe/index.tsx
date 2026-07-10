@@ -1416,9 +1416,14 @@ export default function VibePage() {
             )}
 
             {!isThinking && (
-              <p className="mt-10 text-center text-xs text-muted-foreground/50">
-                50+ Languages • Real-time Voice • Enterprise Ready • Knowledge Powered
-              </p>
+              <div className="mt-10 mb-2 text-center animate-in fade-in slide-in-from-bottom-1 duration-300">
+                <p className="text-sm font-semibold text-white/85">
+                  SnapServe Voice Engine
+                </p>
+                <p className="mt-1.5 text-[11px] font-normal text-white/40">
+                  Real-time Voice • Knowledge Powered • Enterprise Ready
+                </p>
+              </div>
             )}
           </div>
         </div>
