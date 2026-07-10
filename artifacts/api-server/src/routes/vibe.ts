@@ -1254,7 +1254,9 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
     // Only honour a user-typed quoted line from their call-flow notes.
     function buildGreeting(_name: string, _company: string, lang: string, callFlowNotes: string | undefined): string {
       if (callFlowNotes) {
-        const q = callFlowNotes.match(/[""'"'][^""'"']{8,80}[""'"']/);
+        // Only match double-quotes (straight " or curly "" ) — never apostrophes/single-quotes,
+        // which are common mid-word (e.g. "customer's") and cause partial-phrase extraction.
+        const q = callFlowNotes.match(/[""][^""]{8,80}[""]/);
         if (q) return q[0].slice(1, -1);
       }
       // Simple locale greeting — no name/company at all.

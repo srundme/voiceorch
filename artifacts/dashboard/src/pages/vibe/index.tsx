@@ -296,6 +296,8 @@ export default function VibePage() {
   // Keep mirror refs in sync with state so callbacks see fresh data without stale closures
   useEffect(() => { vibeKbSourcesRef.current = vibeKbSources; }, [vibeKbSources]);
   useEffect(() => { createdIdRef.current = createdId; }, [createdId]);
+  const schedulingSetupRef = useRef<{ timezone: string } | null>(null);
+  useEffect(() => { schedulingSetupRef.current = schedulingSetup; }, [schedulingSetup]);
 
   // ── Poll non-terminal Vibe KB sources until each reaches a terminal status ──
   // Uses a recursive setTimeout (not a one-shot) so polling continues even when
@@ -694,6 +696,9 @@ export default function VibePage() {
         || viewMode === "history") return;
 
     if (!overrideText) setInput("");
+    // Close the URL input overlay if it was left open
+    setUrlInputOpen(false);
+    setUrlInputValue("");
     if (refineId != null) setPromptPreview("");
 
     const userMsg: ChatMsg = { id: uid(), role: "user", content: text, done: true };
@@ -954,7 +959,7 @@ export default function VibePage() {
                 setLastSavedAgentId(evt.agentId as number);
                 // If scheduling was enabled, surface the Google Calendar connect panel
                 // as a full right-panel takeover so the user can connect Google right now
-                if (schedulingSetup) {
+                if (schedulingSetupRef.current) {
                   setShowCalPanel(true);
                 } else {
                   setPostBuildStep("hype");
