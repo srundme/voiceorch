@@ -11,6 +11,7 @@ import { createSTTAdapter } from "./adapters/stt/index.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
+import { CartesiaTTS } from "./adapters/tts/cartesia.js";
 import { encodeMulaw, upsample8to16, downsample16to8, decodeMulaw, hasSpeechEnergy, frameRms } from "./audio.js";
 import { AmbientNoiseStream, FileAmbientNoiseStream, TRACK_PARAMS, loadPcmLoop, AMBIENT_LEVELS } from "./ambient.js";
 import { DtmfDetector } from "./dtmf.js";
@@ -2922,7 +2923,7 @@ export class OrchestrationPipeline {
    * "now" yet. Deferring them to drainSentenceJob keeps both correct because
    * drainSentenceJob only ever runs one job at a time, in play order.
    */
-  private startSentenceSynthesis(text: string, turnNumber: number): TtsSentenceJob {
+  private startSentenceSynthesis(text: string, turnNumber: number, turnContextId?: string): TtsSentenceJob {
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
     // completes. Dispatch may now happen while a prior sentence is still
@@ -3005,21 +3006,24 @@ export class OrchestrationPipeline {
 
       void (async () => {
         try {
-          await synthesizeStream(
-            text,
-            (chunk) => {
-              if (this.closed || this.bargeInRequested) return;
-              if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
-              if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
-              _ttsTotalBytes += chunk.length;
-              clearTimeout(ttsTimerId); // connection is alive — reset the hung-API timer
-              accum.push(chunk);
-              accumSize += chunk.length;
-              if (accumSize >= STREAM_ACCUM_BYTES) flush();
-            },
-            (_characters: number) => { flush(); },
-            ttsAbort.signal
-          );
+          const onTtsChunk = (chunk: Buffer): void => {
+            if (this.closed || this.bargeInRequested) return;
+            if (this._tTurnTtsFirstByte === null) this._tTurnTtsFirstByte = performance.now();
+            if (_ttsFirstByteMs === null) _ttsFirstByteMs = Date.now() - _ttsReqStart;
+            _ttsTotalBytes += chunk.length;
+            clearTimeout(ttsTimerId); // connection is alive — reset the hung-API timer
+            accum.push(chunk);
+            accumSize += chunk.length;
+            if (accumSize >= STREAM_ACCUM_BYTES) flush();
+          };
+          const onTtsDone = (_characters: number): void => { flush(); };
+          // Cartesia turn-level continuations: share one context_id per LLM
+          // turn with manual flushing to maintain prosody across sentences.
+          if (turnContextId && ttsAdapter instanceof CartesiaTTS) {
+            await ttsAdapter.synthesizeStreamInContext(turnContextId, text, onTtsChunk, onTtsDone, ttsAbort.signal);
+          } else {
+            await synthesizeStream(text, onTtsChunk, onTtsDone, ttsAbort.signal);
+          }
         } catch (err) {
           const isAbort = err instanceof Error && err.name === "AbortError";
           if (!isAbort) {
@@ -4013,6 +4017,15 @@ export class OrchestrationPipeline {
     // from TTS (ordinary bracketed text streams normally).
     const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
+    // Cartesia turn-level continuations: one context_id per LLM turn so
+    // prosody is maintained across all sentences. finalizeTurnCtx() sends
+    // {continue:false} after all sentences are queued.
+    const cartesiaTts = this.tts instanceof CartesiaTTS ? this.tts : null;
+    const turnContextId = cartesiaTts ? globalThis.crypto.randomUUID() : undefined;
+    const finalizeTurnCtx = (): void => {
+      if (turnContextId && cartesiaTts) cartesiaTts.finalizeTurnContext(turnContextId);
+    };
+
     // Sentences are queued as TtsSentenceJobs whose synthesis is started at
     // enqueue time (below), not when playTask reaches them — this lets
     // sentence N+1's TTS network fetch run WHILE sentence N is still being
@@ -4026,7 +4039,7 @@ export class OrchestrationPipeline {
       if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
         this._tTurnLlmFirstClause = performance.now();
       }
-      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex));
+      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex, turnContextId));
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -4808,6 +4821,7 @@ export class OrchestrationPipeline {
           });
           this.config.onFatalError?.(reason);
           allEnqueued = true;
+          finalizeTurnCtx();
           const w = wakePlayer as (() => void) | null; wakePlayer = null;
           if (w) w();
           await playPromise;
@@ -4826,6 +4840,7 @@ export class OrchestrationPipeline {
         });
         this.config.onFatalError?.(reason);
         allEnqueued = true;
+        finalizeTurnCtx();
         const w = wakePlayer as (() => void) | null; wakePlayer = null;
         if (w) w();
         await playPromise;
@@ -4935,6 +4950,7 @@ export class OrchestrationPipeline {
         );
       }
       allEnqueued = true;
+      finalizeTurnCtx();
       const finalWake = wakePlayer as (() => void) | null;
       wakePlayer = null;
       if (finalWake) finalWake();
@@ -4998,6 +5014,7 @@ export class OrchestrationPipeline {
     }
     { const g = stepGuard.push(flushText); if (g.trim()) enqueue(g); }
     allEnqueued = true;
+    finalizeTurnCtx();
     const finalWake = wakePlayer as (() => void) | null;
     wakePlayer = null;
     if (finalWake) finalWake();
@@ -5398,13 +5415,20 @@ export class OrchestrationPipeline {
     // leaked serialized tool envelope from TTS on chained tool turns too.
     const envelopeGuard = makeToolEnvelopeGuard(toolNamesOf(toolDefs));
 
+    // Cartesia turn-level continuations (mirrors processTurn logic).
+    const ctCartesiaTts = this.tts instanceof CartesiaTTS ? this.tts : null;
+    const ctTurnContextId = ctCartesiaTts ? globalThis.crypto.randomUUID() : undefined;
+    const ctFinalizeTurnCtx = (): void => {
+      if (ctTurnContextId && ctCartesiaTts) ctCartesiaTts.finalizeTurnContext(ctTurnContextId);
+    };
+
     // See processTurn's sentenceQueue for why synthesis starts at enqueue
     // time (sentence-prefetch pipelining), not when playTask reaches the job.
     const sentenceQueue: TtsSentenceJob[] = [];
     let wakePlayer: (() => void) | null = null;
 
     const enqueue = (text: string): void => {
-      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex));
+      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex, ctTurnContextId));
       if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
     };
 
@@ -5557,6 +5581,7 @@ export class OrchestrationPipeline {
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "continueWithToolResult LLM call failed");
       allEnqueued = true;
+      ctFinalizeTurnCtx();
       const wErr = wakePlayer as (() => void) | null; wakePlayer = null; if (wErr) wErr();
       await playPromise;
       return;
@@ -5595,6 +5620,7 @@ export class OrchestrationPipeline {
     }
     { const g = stepGuard.push(flushText); if (g.trim()) enqueue(g); }
     allEnqueued = true;
+    ctFinalizeTurnCtx();
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
     await playPromise;
 

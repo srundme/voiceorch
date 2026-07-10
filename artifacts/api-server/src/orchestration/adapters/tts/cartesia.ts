@@ -55,6 +55,16 @@ interface PendingCtx {
   reject: (err: unknown) => void;
 }
 
+/**
+ * Pending entry for a sentence within a turn-level context (manual flushing).
+ * Keyed by `${contextId}:${flushId}` in CartesiaTTS.flushPending.
+ */
+interface FlushPendingCtx {
+  onChunk: (pcm: Buffer) => void;
+  resolve: () => void;
+  reject: (err: unknown) => void;
+}
+
 export class CartesiaTTS implements TTSAdapter {
   private key: string;
   private voiceId: string;
@@ -66,6 +76,10 @@ export class CartesiaTTS implements TTSAdapter {
   private wsConnecting: Promise<WebSocket> | null = null;
   private wsFailedPermanently = false;
   private readonly pending = new Map<string, PendingCtx>();
+  /** Turn-level flush tracking: key = `${contextId}:${flushId}` */
+  private readonly flushPending = new Map<string, FlushPendingCtx>();
+  /** Client-side flush_id counter per turn context (mirrors the server's counter). */
+  private readonly turnFlushCounters = new Map<string, number>();
 
   constructor(
     apiKey: string,
@@ -114,6 +128,11 @@ export class CartesiaTTS implements TTSAdapter {
       ctx.reject(new Error("CartesiaTTS: WebSocket closed (call ended)"));
     }
     this.pending.clear();
+    for (const [, ctx] of this.flushPending) {
+      ctx.reject(new Error("CartesiaTTS: WebSocket closed (call ended)"));
+    }
+    this.flushPending.clear();
+    this.turnFlushCounters.clear();
   }
 
   private buildWsUrl(): string {
@@ -205,10 +224,45 @@ export class CartesiaTTS implements TTSAdapter {
 
     const contextId = msg["context_id"] as string | undefined;
     if (!contextId) return;
+
+    const type = msg["type"] as string | undefined;
+    const flushId = msg["flush_id"] as number | undefined;
+
+    // Route to flush-tracked pending (turn-level contexts using manual flushing).
+    if (flushId != null) {
+      const key = `${contextId}:${flushId}`;
+      const flushCtx = this.flushPending.get(key);
+      if (flushCtx) {
+        if (type === "chunk") {
+          const b64 = msg["data"] as string | undefined;
+          if (b64) flushCtx.onChunk(Buffer.from(b64, "base64"));
+        } else if (type === "done") {
+          this.flushPending.delete(key);
+          flushCtx.resolve();
+        } else if (type === "error") {
+          this.flushPending.delete(key);
+          flushCtx.reject(new Error(`Cartesia WS turn error: ${String(msg["error"] ?? "unknown")}`));
+        }
+        return;
+      }
+    }
+
+    // Context-level done without flush_id: safety net — resolves any remaining
+    // flush entries for this context in case the server sends a single done
+    // instead of per-flush dones.
+    if (type === "done" && flushId == null) {
+      for (const [key, flushCtx] of this.flushPending) {
+        if (key.startsWith(`${contextId}:`)) {
+          this.flushPending.delete(key);
+          flushCtx.resolve();
+        }
+      }
+    }
+
+    // Route to per-sentence pending (single-sentence contexts, no flushing).
     const ctx = this.pending.get(contextId);
     if (!ctx) return;
 
-    const type = msg["type"] as string | undefined;
     if (type === "chunk") {
       const b64 = msg["data"] as string | undefined;
       if (b64) ctx.onChunk(Buffer.from(b64, "base64"));
@@ -218,6 +272,119 @@ export class CartesiaTTS implements TTSAdapter {
     } else if (type === "error") {
       this.pending.delete(contextId);
       ctx.reject(new Error(`Cartesia WS synthesis error: ${String(msg["error"] ?? "unknown")}`));
+    }
+  }
+
+  /**
+   * Synthesis within a shared turn context — maintains prosody continuity
+   * across all sentences in the same LLM turn. Each sentence is separated by
+   * a manual flush so its audio arrives as a discrete stream tracked by
+   * flush_id, preserving the per-sentence drainSentenceJob architecture.
+   */
+  private synthesizeViaWsInContext(
+    ws: WebSocket,
+    turnContextId: string,
+    text: string,
+    onChunk: (pcm16k: Buffer) => void,
+    onDone: (characters: number) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
+
+    // Client-side flush_id counter — must exactly mirror the server's counter
+    // so we register the pending entry under the correct key before the
+    // response chunks arrive.
+    const flushId = (this.turnFlushCounters.get(turnContextId) ?? 0) + 1;
+    this.turnFlushCounters.set(turnContextId, flushId);
+    const pendingKey = `${turnContextId}:${flushId}`;
+
+    return new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+
+      const cleanup = (fn: () => void): void => {
+        signal?.removeEventListener("abort", onAbort);
+        this.flushPending.delete(pendingKey);
+        fn();
+      };
+      const onAbort = (): void => cleanup(() => reject(new DOMException("Aborted", "AbortError")));
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      this.flushPending.set(pendingKey, {
+        onChunk,
+        resolve: () => cleanup(() => { onDone(safeText.length); resolve(); }),
+        reject: (err) => cleanup(() => reject(err)),
+      });
+
+      // Transcript with continue:true — the turn context expects more input.
+      const transcriptMsg: Record<string, unknown> = {
+        context_id: turnContextId,
+        model_id: this.modelId,
+        transcript: safeText,
+        voice: this.buildVoice(),
+        output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
+        continue: true,
+        max_buffer_delay_ms: 0,
+      };
+      if (this.language) transcriptMsg.language = this.language;
+
+      // Manual flush: creates a discrete audio boundary for this sentence.
+      // Server increments flush_id on each flush — our client counter must
+      // stay in sync so handleWsMessage routes chunks to the right entry.
+      const flushMsg: Record<string, unknown> = {
+        context_id: turnContextId,
+        transcript: "",
+        continue: true,
+        flush: true,
+      };
+
+      try {
+        ws.send(JSON.stringify(transcriptMsg));
+        ws.send(JSON.stringify(flushMsg));
+      } catch (err) {
+        cleanup(() => reject(err));
+      }
+    });
+  }
+
+  /**
+   * Public entry-point for per-sentence turn-level synthesis.
+   * Falls back to normal per-sentence REST synthesis if the WS is broken.
+   */
+  async synthesizeStreamInContext(
+    turnContextId: string,
+    text: string,
+    onChunk: (pcm16k: Buffer) => void,
+    onDone: (characters: number) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!this.wsFailedPermanently) {
+      try {
+        const ws = await this.getOrOpenWs();
+        return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal);
+      } catch (err) {
+        if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
+        this.wsFailedPermanently = true;
+      }
+    }
+    // WS permanently failed — fall back to REST (no prosody continuity for
+    // this sentence, but at least audio is produced).
+    return this.synthesizeViaRest(text, onChunk, onDone, signal);
+  }
+
+  /**
+   * Finalizes a turn context by telling Cartesia no more input is coming.
+   * Must be called once after all sentences for the turn have been dispatched.
+   */
+  finalizeTurnContext(turnContextId: string): void {
+    this.turnFlushCounters.delete(turnContextId);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({
+          context_id: turnContextId,
+          transcript: "",
+          continue: false,
+        }));
+      } catch { /* WS closing, fine */ }
     }
   }
 
