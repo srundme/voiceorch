@@ -1,0 +1,230 @@
+Redesign the Agent Configuration cards (Transcriber, Model, Voice) to achieve a premium enterprise SaaS appearance similar to Stripe, Linear, Vercel and Clerk.
+
+IMPORTANT
+- UI/UX improvements ONLY.
+- Do NOT modify backend logic.
+- Do NOT change APIs.
+- Do NOT modify state management.
+- Do NOT change routing.
+- Do NOT change provider selection logic.
+- Do NOT change editing functionality.
+- Preserve every existing feature exactly as it is.
+
+----------------------------------------------------
+REMOVE BRIGHT ACCENT COLORS
+----------------------------------------------------
+
+The current blue, purple and green section labels feel visually noisy.
+
+Remove those bright accent colors.
+
+Instead use:
+
+• neutral white text
+• subtle gray secondary text
+• very soft monochrome icons
+
+No saturated colors should appear unless required for warnings/errors.
+
+The page should feel calm and premium.
+
+----------------------------------------------------
+CARD DESIGN
+----------------------------------------------------
+
+Each configuration card should look like a premium configuration card.
+
+Current:
+• colored title
+• empty space
+• weak hierarchy
+
+Replace with:
+
+Top row
+
+Left:
+small monochrome icon
+
+Center:
+Configuration type
+Example:
+Transcriber
+Model
+Voice
+
+Below:
+Selected provider
+
+Bottom:
+Selected value
+
+Example
+
+🎤
+Transcriber
+
+Sarvam
+
+English (India)
+
+Do the same for all three cards.
+
+----------------------------------------------------
+CARD STYLE
+----------------------------------------------------
+
+Use
+
+background:
+#111111
+
+border:
+1px solid rgba(255,255,255,0.06)
+
+radius:
+16px
+
+padding:
+20px
+
+hover:
+slightly brighter border
+
+transition:
+150ms
+
+----------------------------------------------------
+TYPOGRAPHY
+----------------------------------------------------
+
+Configuration Type
+
+12px
+uppercase
+letter spacing
+
+Selected Provider
+
+13px
+gray
+
+Selected Value
+
+22px
+font weight 600
+
+Make the value the visual focus.
+
+----------------------------------------------------
+EDIT ACTION
+----------------------------------------------------
+
+Instead of a floating pencil icon,
+
+move Edit into a subtle icon button
+aligned perfectly in the top-right corner.
+
+It should appear only on hover
+or remain low emphasis.
+
+----------------------------------------------------
+REMOVE VISUAL NOISE
+----------------------------------------------------
+
+Remove:
+
+• colored dots
+• colored labels
+• unnecessary separators
+
+Keep everything clean.
+
+----------------------------------------------------
+CONSISTENT HEIGHT
+----------------------------------------------------
+
+All three cards must have
+
+exact same height
+
+exact same padding
+
+exact same spacing
+
+exact same typography alignment
+
+----------------------------------------------------
+TOGGLE DESIGN
+----------------------------------------------------
+
+Across the entire Agents section
+replace the current white toggle.
+
+OFF
+
+dark gray track
+
+small gray thumb
+
+ON
+
+dark neutral track
+
+thumb:
+soft blue (#4F8EF7)
+
+Do NOT use bright white.
+
+The toggle should match Vercel / Linear style.
+
+Transition:
+180ms.
+
+----------------------------------------------------
+GLOBAL CONSISTENCY
+----------------------------------------------------
+
+This same card style must automatically be used on
+
+Overview
+
+Prompt
+
+Voice
+
+Tools
+
+Analysis
+
+Voicemail
+
+Advanced
+
+Versions
+
+Every configuration card throughout the Agent pages should share the exact same visual language.
+
+----------------------------------------------------
+DESIGN GOAL
+----------------------------------------------------
+
+The Agent configuration should feel like an enterprise AI platform used by OpenAI, Stripe or Vercel.
+
+Minimal.
+
+Professional.
+
+Quiet.
+
+Balanced.
+
+No unnecessary colors.
+
+Strong typography.
+
+Perfect alignment.
+
+Consistent spacing.
+
+Every card should feel premium without changing any existing functionality.
