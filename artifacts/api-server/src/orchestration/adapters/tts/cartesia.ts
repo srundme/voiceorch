@@ -139,17 +139,21 @@ export class CartesiaTTS implements TTSAdapter {
     return `${CARTESIA_WS_BASE}/tts/websockets?api_key=${encodeURIComponent(this.key)}&cartesia_version=${encodeURIComponent(CARTESIA_VERSION)}`;
   }
 
-  private buildVoice(): Record<string, unknown> {
-    return this.speed != null
-      ? { mode: "id", id: this.voiceId, __experimental_controls: { speed: this.speed } }
+  private buildVoice(emotions?: string[]): Record<string, unknown> {
+    const controls: Record<string, unknown> = {};
+    if (this.speed != null) controls.speed = this.speed;
+    if (emotions && emotions.length > 0) controls.emotion = emotions;
+    const hasControls = Object.keys(controls).length > 0;
+    return hasControls
+      ? { mode: "id", id: this.voiceId, __experimental_controls: controls }
       : { mode: "id", id: this.voiceId };
   }
 
-  private buildRestBody(text: string): string {
+  private buildRestBody(text: string, emotions?: string[]): string {
     const body: Record<string, unknown> = {
       transcript: text,
       model_id: this.modelId,
-      voice: this.buildVoice(),
+      voice: this.buildVoice(emotions),
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
     };
     if (this.language) body.language = this.language;
@@ -288,6 +292,7 @@ export class CartesiaTTS implements TTSAdapter {
     onChunk: (pcm16k: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
+    emotions?: string[],
   ): Promise<void> {
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
 
@@ -320,7 +325,7 @@ export class CartesiaTTS implements TTSAdapter {
         context_id: turnContextId,
         model_id: this.modelId,
         transcript: safeText,
-        voice: this.buildVoice(),
+        voice: this.buildVoice(emotions),
         output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
         continue: true,
         max_buffer_delay_ms: 0,
@@ -356,11 +361,12 @@ export class CartesiaTTS implements TTSAdapter {
     onChunk: (pcm16k: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
+    emotions?: string[],
   ): Promise<void> {
     if (!this.wsFailedPermanently) {
       try {
         const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal);
+        return await this.synthesizeViaWsInContext(ws, turnContextId, text, onChunk, onDone, signal, emotions);
       } catch (err) {
         if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
         this.wsFailedPermanently = true;
@@ -368,7 +374,7 @@ export class CartesiaTTS implements TTSAdapter {
     }
     // WS permanently failed — fall back to REST (no prosody continuity for
     // this sentence, but at least audio is produced).
-    return this.synthesizeViaRest(text, onChunk, onDone, signal);
+    return this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
   }
 
   /**
@@ -414,6 +420,7 @@ export class CartesiaTTS implements TTSAdapter {
     onChunk: (pcm16k: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
+    emotions?: string[],
   ): Promise<void> {
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
 
@@ -445,7 +452,7 @@ export class CartesiaTTS implements TTSAdapter {
         context_id: contextId,
         model_id: this.modelId,
         transcript: safeText,
-        voice: this.buildVoice(),
+        voice: this.buildVoice(emotions),
         output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: 16000 },
         continue: false,
         max_buffer_delay_ms: 0,
@@ -465,12 +472,13 @@ export class CartesiaTTS implements TTSAdapter {
     onChunk: (pcm16k: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
+    emotions?: string[],
   ): Promise<void> {
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
     const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.restHeaders,
-      body: this.buildRestBody(safeText),
+      body: this.buildRestBody(safeText, emotions),
       signal,
     });
 
@@ -493,12 +501,12 @@ export class CartesiaTTS implements TTSAdapter {
     onDone(safeText.length);
   }
 
-  async synthesize(text: string): Promise<{ audio: Buffer; characters: number }> {
+  async synthesize(text: string, emotions?: string[]): Promise<{ audio: Buffer; characters: number }> {
     const safeText = CartesiaTTS.ensureTerminalPunctuation(text);
     const resp = await fetchWithRetry(`${CARTESIA_BASE_URL}/tts/bytes`, {
       method: "POST",
       headers: this.restHeaders,
-      body: this.buildRestBody(safeText),
+      body: this.buildRestBody(safeText, emotions),
     });
 
     if (!resp.ok) {
@@ -514,16 +522,17 @@ export class CartesiaTTS implements TTSAdapter {
     onChunk: (pcm16k: Buffer) => void,
     onDone: (characters: number) => void,
     signal?: AbortSignal,
+    emotions?: string[],
   ): Promise<void> {
     if (!this.wsFailedPermanently) {
       try {
         const ws = await this.getOrOpenWs();
-        return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal);
+        return await this.synthesizeViaWs(ws, text, onChunk, onDone, signal, emotions);
       } catch (err) {
         if (signal?.aborted || (err instanceof DOMException && err.name === "AbortError")) throw err;
         this.wsFailedPermanently = true;
       }
     }
-    return this.synthesizeViaRest(text, onChunk, onDone, signal);
+    return this.synthesizeViaRest(text, onChunk, onDone, signal, emotions);
   }
 }

@@ -2301,6 +2301,7 @@ export class OrchestrationPipeline {
       // scripted greeting — otherwise the agent would re-introduce itself cold.
       const isReturningCaller = this.config.isReturningCaller === true;
       let greeting = isReturningCaller ? "" : (this.agent.greetingMessage ?? "");
+      let greetingEmotions: string[] | undefined;
 
       // Substitute {caller_salutation} in the greeting with the neutral salutation —
       // gender detection has not fired yet at greeting time.
@@ -2367,11 +2368,14 @@ export class OrchestrationPipeline {
           );
           greeting = fallback;
         }
-        // Strip <think> reasoning blocks, JSON message wrappers, and any
-        // <emotion>/<break> markup tags that some models emit — TTS must
-        // receive plain text only.
+        // Strip <think> reasoning blocks and markup. For Cartesia, extract the
+        // leading <emotion> tag first so it can be forwarded to the voice controls
+        // while TTS receives clean text (all other TTS engines ignore the emotion).
+        const _strippedGreeting = stripReasoningBlocks(greeting).trim();
+        const { emotion: _greetingEmotion, text: _greetingNoEmotion } = extractEmotionTag(_strippedGreeting);
+        greetingEmotions = _greetingEmotion ? mapEmotionToCartesia(_greetingEmotion) : undefined;
         greeting = stripJsonMessageWrapper(
-          stripReasoningBlocks(greeting)
+          _greetingNoEmotion
             .replace(/<\/?emotion[^>]*>/gi, "")
             .replace(/<break[^>]*\/?>/gi, "")
             .replace(/[^\S\r\n]{2,}/g, " ")
@@ -2403,7 +2407,7 @@ export class OrchestrationPipeline {
       }
       this.isPlaying = true;
       try {
-        await this.playSentence(greeting);
+        await this.playSentence(greeting, greetingEmotions);
       } finally {
         this.isPlaying = false;
         this.armTailEchoGrace();
@@ -2892,8 +2896,8 @@ export class OrchestrationPipeline {
    * playback (greeting, turns, stall reprompts, goodbye) funnels through here,
    * mirroring the web-call playback lifecycle.
    */
-  private playSentence(text: string): Promise<void> {
-    return this.playJob(this.startSentenceSynthesis(text, this._activeTurnIndex));
+  private playSentence(text: string, emotions?: string[]): Promise<void> {
+    return this.playJob(this.startSentenceSynthesis(text, this._activeTurnIndex, undefined, emotions));
   }
 
   /**
@@ -2951,7 +2955,7 @@ export class OrchestrationPipeline {
    * "now" yet. Deferring them to drainSentenceJob keeps both correct because
    * drainSentenceJob only ever runs one job at a time, in play order.
    */
-  private startSentenceSynthesis(text: string, turnNumber: number, turnContextId?: string): TtsSentenceJob {
+  private startSentenceSynthesis(text: string, turnNumber: number, turnContextId?: string, emotions?: string[]): TtsSentenceJob {
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
     // completes. Dispatch may now happen while a prior sentence is still
@@ -3048,7 +3052,7 @@ export class OrchestrationPipeline {
           // Cartesia turn-level continuations: share one context_id per LLM
           // turn with manual flushing to maintain prosody across sentences.
           if (turnContextId && ttsAdapter instanceof CartesiaTTS) {
-            await ttsAdapter.synthesizeStreamInContext(turnContextId, text, onTtsChunk, onTtsDone, ttsAbort.signal);
+            await ttsAdapter.synthesizeStreamInContext(turnContextId, text, onTtsChunk, onTtsDone, ttsAbort.signal, emotions);
           } else {
             await synthesizeStream(text, onTtsChunk, onTtsDone, ttsAbort.signal);
           }
@@ -4067,7 +4071,11 @@ export class OrchestrationPipeline {
       if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
         this._tTurnLlmFirstClause = performance.now();
       }
-      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex, turnContextId));
+      // Extract any leading <emotion value="…"/> tag so the clean sentence goes
+      // to TTS while the emotion array is forwarded to Cartesia's voice controls.
+      const { emotion, text: cleanText } = extractEmotionTag(text);
+      const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
+      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, turnContextId, emotions));
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -5511,7 +5519,11 @@ export class OrchestrationPipeline {
     let wakePlayer: (() => void) | null = null;
 
     const enqueue = (text: string): void => {
-      sentenceQueue.push(this.startSentenceSynthesis(text, this._activeTurnIndex, ctTurnContextId));
+      // Extract any leading <emotion value="…"/> tag so the clean sentence goes
+      // to TTS while the emotion array is forwarded to Cartesia's voice controls.
+      const { emotion, text: cleanText } = extractEmotionTag(text);
+      const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
+      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, ctTurnContextId, emotions));
       if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
     };
 
@@ -6172,6 +6184,8 @@ function detectExplicitLanguageRequest(rawText: string): string | null {
  * text between them. Without this they reach TTS verbatim and get XML-escaped
  * (Azure) or spoken literally (Cartesia/ElevenLabs/Deepgram), mangling audio
  * and corrupting sentence splitting. Whole-string variant of makeMarkupTagFilter.
+ * Used for transcript/history cleanup only — the streaming filter deliberately
+ * passes <emotion …/> through so extractEmotionTag can read it at enqueue time.
  */
 function stripMarkupTags(text: string): string {
   return text
@@ -6179,6 +6193,36 @@ function stripMarkupTags(text: string): string {
     .replace(/<break[^>]*\/?>/gi, "")
     .replace(/[^\S\r\n]{2,}/g, " ")
     .trim();
+}
+
+/**
+ * Extracts the first `<emotion value="…"/>` tag from the very beginning of a
+ * sentence (leading whitespace is ignored). Returns the matched emotion value
+ * (lowercased) and the sentence text with the tag stripped and leading space
+ * trimmed. When no tag is present both fields reflect the original text.
+ */
+function extractEmotionTag(text: string): { emotion: string | null; text: string } {
+  const match = /^\s*<emotion\s+value="([^"]+)"\s*\/?>/i.exec(text);
+  if (!match) return { emotion: null, text };
+  return { emotion: match[1]!.toLowerCase(), text: text.slice(match[0].length).replace(/^\s+/, "") };
+}
+
+/**
+ * Maps a VoiceOrch LLM emotion value to Cartesia's `__experimental_controls.emotion`
+ * array format. Returns an empty array for `calm` (explicit neutral reset) or
+ * any unrecognised value (safe no-op — Cartesia omits the controls block when
+ * the array is empty, preserving current behaviour for unknown values).
+ */
+function mapEmotionToCartesia(value: string): string[] {
+  switch (value) {
+    case "enthusiastic": return ["positivity:high"];
+    case "sympathetic":  return ["sadness:low", "positivity:low"];
+    case "calm":         return [];
+    case "curious":      return ["curiosity:high"];
+    case "content":      return ["positivity:medium"];
+    case "sad":          return ["sadness:high"];
+    default:             return [];
+  }
 }
 
 /**
@@ -6312,15 +6356,20 @@ function makeFunctionTagFilter(): (token: string) => string {
 }
 
 /**
- * Stateful per-turn filter that strips inline markup tags — `<emotion …>`,
- * `</emotion>`, and self-closing `<break …/>` — from the LLM token stream
- * while KEEPING the speakable text between them. Buffers partial tags split
- * across streaming chunks and collapses double spaces left behind so words
- * aren't run together. Analogous to makeFunctionTagFilter.
+ * Stateful per-turn filter that strips `</emotion>` closing tags and
+ * self-closing `<break …/>` from the LLM token stream while KEEPING all
+ * speakable text (including any `<emotion value="…"/>` opening/self-closing
+ * tags, which are passed through intentionally so extractEmotionTag can read
+ * them at enqueue time). Buffers partial tags split across streaming chunks
+ * and collapses double spaces so words aren't run together.
  */
 function makeMarkupTagFilter(): (token: string) => string {
   // Lower-cased prefixes of the tags we strip (everything up to the attributes).
-  const STRIP_PREFIXES = ["<emotion", "</emotion", "<break"];
+  // NOTE: "<emotion" is deliberately absent — opening emotion tags flow through
+  // to the sentence accumulator so enqueue() can extract and forward them to
+  // Cartesia's __experimental_controls.emotion.  Only orphaned closing tags and
+  // <break/> are removed here.
+  const STRIP_PREFIXES = ["</emotion", "<break"];
   let buf = "";
   let prevEndedWithSpace = false;
 
