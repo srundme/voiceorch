@@ -1,0 +1,106 @@
+Refine the global "Estimated Cost per Minute" component into a premium enterprise SaaS cost summary while preserving the existing functionality.
+
+IMPORTANT
+- UI/UX changes ONLY.
+- Do NOT modify backend logic, APIs, calculations, provider selection, routing, tabs, or business logic.
+- Reuse the existing cost calculation and provider breakdown.
+- This component must continue appearing globally across all Agent tabs (Overview, Prompt, Voice, Tools, Analysis, Voicemail, Advanced, Versions).
+
+GOAL
+Keep the cost visualization, but redesign it to feel like Stripe, Linear, Vercel, Clerk, and OpenAI—not an analytics dashboard.
+
+------------------------------------
+LAYOUT
+------------------------------------
+
+Estimated Cost / Minute                         $0.050
+
+████████████████──────────────
+
+STT 16% • LLM 24% • Voice 50% • Telephony 10%
+
+------------------------------------
+
+DESIGN REQUIREMENTS
+
+1. Overall Card
+- Reduce overall height by around 35%.
+- Compact layout (70–80px tall).
+- Full width aligned with page content.
+- Background slightly elevated from page.
+- 14px border radius.
+- Subtle 1px border.
+- Soft shadow only.
+
+2. Cost Value
+- Make "$0.050" the primary visual element.
+- Font size 28–30px.
+- Semibold.
+- White.
+
+3. Label
+Estimated Cost / Minute
+- 12px.
+- Medium weight.
+- Muted gray.
+
+4. Progress Bar
+- KEEP the bar.
+- Replace the current thick rainbow bar.
+- Height: 6px.
+- Fully rounded.
+- Smooth corners.
+- Use one primary accent color (amber or blue).
+- Remaining sections should use muted neutral grays.
+- No saturated green, purple, yellow, or orange blocks.
+- Make the bar around 220–260px wide instead of stretching across the full page.
+- Center it under the cost.
+
+5. Provider Breakdown
+Display below the bar:
+
+STT • LLM • Voice • Telephony
+
+- Small 11–12px text.
+- Muted gray.
+- Small neutral dots.
+- No bright colors.
+- Equal spacing.
+
+6. Managed Badge
+Move the "Managed" badge to the top-right corner of the card.
+Use:
+- Small outline pill.
+- Neutral gray border.
+- No yellow background.
+
+7. Animation
+- 150ms hover transition.
+- Slight elevation only.
+- No glowing effects.
+
+8. Spacing
+- 24px horizontal padding.
+- 18px vertical padding.
+- Consistent alignment with the rest of the Agent page.
+
+9. Consistency
+This redesigned cost summary must remain visible across:
+- Overview
+- Prompt
+- Voice
+- Tools
+- Analysis
+- Voicemail
+- Advanced
+- Versions
+
+10. Preserve Functionality
+Do NOT change:
+- Cost calculation.
+- Provider percentages.
+- Existing data source.
+- Managed state.
+- Business logic.
+
+Only redesign the visual presentation into a clean, premium, enterprise SaaS component.
