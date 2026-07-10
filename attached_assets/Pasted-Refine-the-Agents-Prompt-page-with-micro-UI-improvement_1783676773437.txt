@@ -1,0 +1,196 @@
+Refine the Agents → Prompt page with micro UI improvements only.
+
+IMPORTANT
+
+- UI polish ONLY.
+- Do NOT modify backend.
+- Do NOT modify functionality.
+- Do NOT change APIs.
+- Do NOT change data.
+- Keep the existing layout exactly as it is.
+
+The current layout is approved. This task is only for typography, spacing, alignment, and visual refinement.
+
+------------------------------------------------
+1. SECTION HEADINGS
+------------------------------------------------
+
+Convert section titles into enterprise SaaS style.
+
+Current:
+Conversation
+System Instructions
+Knowledge
+
+Improve them by:
+
+- Font size: 13px
+- Uppercase
+- Medium weight
+- Slight letter spacing
+- Muted gray (#9CA3AF style)
+- Add 20px spacing below each heading
+
+Example style:
+
+CONVERSATION
+
+SYSTEM INSTRUCTIONS
+
+KNOWLEDGE
+
+Do NOT increase heading size.
+
+------------------------------------------------
+2. FIRST MESSAGE
+------------------------------------------------
+
+Reduce the textarea height slightly.
+
+Current feels oversized.
+
+Target:
+
+72-76px height
+
+Increase internal padding slightly.
+
+Text should vertically align better.
+
+------------------------------------------------
+3. ASSISTANT SPEAKS FIRST
+------------------------------------------------
+
+Keep the dropdown exactly where it is.
+
+Only:
+
+- Increase right margin slightly
+- Align perfectly with the First Message label
+- Match height with other dropdowns
+
+------------------------------------------------
+4. SYSTEM PROMPT
+------------------------------------------------
+
+Keep the editor.
+
+Improve only typography.
+
+Increase:
+
+- line-height
+- internal padding
+- top padding
+
+The text should feel more comfortable for long prompts.
+
+Do NOT increase the overall editor height.
+
+------------------------------------------------
+5. GENERATE BUTTON
+------------------------------------------------
+
+Keep Generate in the editor header.
+
+Refine:
+
+- Better vertical alignment
+- Same height as other ghost buttons
+- Reduce visual weight slightly
+
+No color changes.
+
+------------------------------------------------
+6. KNOWLEDGE SECTION
+------------------------------------------------
+
+Increase dropdown height to match all other inputs.
+
+Target:
+
+48px height
+
+Increase spacing between:
+
+Dropdown
+
+↓
+
+Description
+
+Description should be easier to read.
+
+------------------------------------------------
+7. VERTICAL SPACING
+------------------------------------------------
+
+Improve spacing consistency.
+
+Conversation → System Instructions
+
+24px
+
+System Instructions → Knowledge
+
+24px
+
+Within sections:
+
+16px
+
+------------------------------------------------
+8. TYPOGRAPHY
+------------------------------------------------
+
+Use consistent typography hierarchy.
+
+Section Heading
+13px
+
+Labels
+13px
+
+Descriptions
+13px muted
+
+Editor Text
+15px
+
+------------------------------------------------
+9. ALIGNMENT
+------------------------------------------------
+
+Everything should align to one vertical grid.
+
+No element should appear shifted.
+
+Labels
+
+Inputs
+
+Editors
+
+Dropdowns
+
+must start on the exact same left edge.
+
+------------------------------------------------
+10. DO NOT CHANGE
+------------------------------------------------
+
+Do NOT redesign.
+
+Do NOT move sections.
+
+Do NOT add colors.
+
+Do NOT add cards.
+
+Do NOT add gradients.
+
+Do NOT add animations.
+
+Do NOT change business logic.
+
+This is purely a premium SaaS polish pass focusing on spacing, alignment, typography, and consistency.
