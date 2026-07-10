@@ -4849,7 +4849,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
-        className="flex flex-col gap-6 px-6 py-4 border-b border-border/60 shrink-0"
+        className="flex flex-col gap-1 px-6 py-2.5 border-b border-border/60 shrink-0"
       >
         <div className="flex flex-col min-w-0">
           <button
@@ -4859,7 +4859,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           >
             ← Agents
           </button>
-          <div className="flex items-center gap-2 min-w-0 mt-2">
+          <div className="flex items-center gap-2 min-w-0 mt-1">
             <h1
               className="text-[32px] lg:text-[40px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
               title={agent.name}
@@ -4877,7 +4877,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             </button>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 mt-1">
           <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
             <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
@@ -4949,7 +4949,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       )}
 
       <Form {...form}>
-        <div className="px-6 pt-3 shrink-0">
+        <div className="px-6 pt-3 pb-0 shrink-0">
           <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
         </div>
       </Form>
