@@ -298,11 +298,97 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
 
 type CardSection = "transcriber" | "model" | "voice";
 
+function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
+  const userProviderNames = useUserProviderNames();
+
+  const asrProvider       = form.watch("asrProvider");
+  const llmProvider       = form.watch("llmProvider");
+  const ttsProvider       = form.watch("ttsProvider");
+  const telephonyProvider = form.watch("telephonyProvider") ?? "vobiz";
+  const llmModel          = form.watch("llmModel");
+
+  return (
+    <>
+      {/* ── Per-minute cost breakdown ────────────────────────────────────── */}
+      {(() => {
+        const agentProviders = [asrProvider, llmProvider, ttsProvider].filter(Boolean).map((p: string) => p.toLowerCase());
+        const isByop = agentProviders.some(p => userProviderNames.has(p));
+        const platformCents = rateMap.get(isByop ? "byop" : "managed") ?? (isByop ? 3.5 : 5);
+        const platformPerMin = platformCents / 100;
+        const pipe = computePipelineCost(asrProvider ?? "sarvam", llmProvider ?? "groq", llmModel, ttsProvider ?? "cartesia", telephonyProvider ?? "vobiz");
+
+        const providerTotal = pipe.asr.costPerMin + pipe.llm.costPerMin + pipe.tts.costPerMin + pipe.telephony.costPerMin;
+        // Managed: $0.05 flat already includes provider costs — platform slice is the remainder
+        // BYOP: $0.035 platform fee + provider costs billed separately
+        const platformSlice = isByop ? platformPerMin : Math.max(0, platformPerMin - providerTotal);
+        const totalPerMin = isByop ? platformPerMin + providerTotal : platformPerMin;
+
+        const segments = [
+          { key: "asr",       label: "Transcriber", provider: asrProvider,       cost: pipe.asr.costPerMin,       color: "#22c55e" },
+          { key: "llm",       label: "LLM",         provider: llmProvider,       cost: pipe.llm.costPerMin,       color: "#f97316" },
+          { key: "tts",       label: "Voice",        provider: ttsProvider,       cost: pipe.tts.costPerMin,       color: "#94a3b8" },
+          { key: "telephony", label: "Telephony",    provider: telephonyProvider, cost: pipe.telephony.costPerMin, color: "#f59e0b" },
+          { key: "platform",  label: "Platform",     provider: "SnapServe",       cost: platformSlice,            color: "#6366f1" },
+        ];
+
+        return (
+          <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3.5 space-y-3">
+            {/* Header */}
+            <div className="flex items-center gap-2">
+              <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground">
+                Cost per min:{" "}
+                <span className="font-bold text-foreground">~ ${totalPerMin.toFixed(3)}</span>
+                {!isByop && <span className="text-[10.5px] text-muted-foreground ml-1">(flat, all keys included)</span>}
+              </span>
+              <span className={`ml-auto text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 ${
+                isByop ? "bg-green-500/10 text-green-400 border-green-500/25" : "bg-amber-500/10 text-amber-400 border-amber-500/25"
+              }`}>
+                {isByop ? "BYOP" : "Managed"}
+              </span>
+            </div>
+
+            {/* Stacked bar */}
+            <div className="h-2.5 rounded-full overflow-hidden flex gap-px">
+              {segments.filter(s => s.cost > 0).map(seg => (
+                <Tooltip key={seg.key}>
+                  <TooltipTrigger asChild>
+                    <div
+                      style={{ flex: seg.cost / totalPerMin, backgroundColor: seg.color }}
+                      className="min-w-[2px] cursor-default"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    <span className="font-semibold">{seg.label}</span>
+                    {seg.provider && seg.provider !== "SnapServe" && (
+                      <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
+                    )}
+                    <span className="ml-2 tabular-nums">${seg.cost.toFixed(4)}/min</span>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {segments.map(seg => (
+                <div key={seg.key} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+                  <span>{seg.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+    </>
+  );
+}
+
 function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
   const [openCard, setOpenCard] = useState<CardSection | null>(null);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [, navigate] = useLocation();
-  const userProviderNames = useUserProviderNames();
 
   const asrProvider           = form.watch("asrProvider");
   const llmProvider           = form.watch("llmProvider");
@@ -482,78 +568,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             </button>
           </div>
 
-          {/* ── Per-minute cost breakdown ────────────────────────────────────── */}
-          {(() => {
-            const agentProviders = [asrProvider, llmProvider, ttsProvider].filter(Boolean).map((p: string) => p.toLowerCase());
-            const isByop = agentProviders.some(p => userProviderNames.has(p));
-            const platformCents = rateMap.get(isByop ? "byop" : "managed") ?? (isByop ? 3.5 : 5);
-            const platformPerMin = platformCents / 100;
-            const pipe = computePipelineCost(asrProvider ?? "sarvam", llmProvider ?? "groq", llmModel, ttsProvider ?? "cartesia", telephonyProvider ?? "vobiz");
-
-            const providerTotal = pipe.asr.costPerMin + pipe.llm.costPerMin + pipe.tts.costPerMin + pipe.telephony.costPerMin;
-            // Managed: $0.05 flat already includes provider costs — platform slice is the remainder
-            // BYOP: $0.035 platform fee + provider costs billed separately
-            const platformSlice = isByop ? platformPerMin : Math.max(0, platformPerMin - providerTotal);
-            const totalPerMin = isByop ? platformPerMin + providerTotal : platformPerMin;
-
-            const segments = [
-              { key: "asr",       label: "Transcriber", provider: asrProvider,       cost: pipe.asr.costPerMin,       color: "#22c55e" },
-              { key: "llm",       label: "LLM",         provider: llmProvider,       cost: pipe.llm.costPerMin,       color: "#f97316" },
-              { key: "tts",       label: "Voice",        provider: ttsProvider,       cost: pipe.tts.costPerMin,       color: "#94a3b8" },
-              { key: "telephony", label: "Telephony",    provider: telephonyProvider, cost: pipe.telephony.costPerMin, color: "#f59e0b" },
-              { key: "platform",  label: "Platform",     provider: "SnapServe",       cost: platformSlice,            color: "#6366f1" },
-            ];
-
-            return (
-              <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3.5 space-y-3">
-                {/* Header */}
-                <div className="flex items-center gap-2">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs text-muted-foreground">
-                    Cost per min:{" "}
-                    <span className="font-bold text-foreground">~ ${totalPerMin.toFixed(3)}</span>
-                    {!isByop && <span className="text-[10.5px] text-muted-foreground ml-1">(flat, all keys included)</span>}
-                  </span>
-                  <span className={`ml-auto text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 ${
-                    isByop ? "bg-green-500/10 text-green-400 border-green-500/25" : "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                  }`}>
-                    {isByop ? "BYOP" : "Managed"}
-                  </span>
-                </div>
-
-                {/* Stacked bar */}
-                <div className="h-2.5 rounded-full overflow-hidden flex gap-px">
-                  {segments.filter(s => s.cost > 0).map(seg => (
-                    <Tooltip key={seg.key}>
-                      <TooltipTrigger asChild>
-                        <div
-                          style={{ flex: seg.cost / totalPerMin, backgroundColor: seg.color }}
-                          className="min-w-[2px] cursor-default"
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">
-                        <span className="font-semibold">{seg.label}</span>
-                        {seg.provider && seg.provider !== "SnapServe" && (
-                          <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
-                        )}
-                        <span className="ml-2 tabular-nums">${seg.cost.toFixed(4)}/min</span>
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-
-                {/* Legend */}
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  {segments.map(seg => (
-                    <div key={seg.key} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
-                      <span>{seg.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
 
           {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-2.5">
@@ -4773,6 +4787,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           <WebcallPanel agentId={agent.id} agentName={agent.name ?? "Agent"} compact onClose={() => setShowWebcall(false)} />
         </div>
       )}
+
+      <Form {...form}>
+        <div className="px-6 pt-3 shrink-0">
+          <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
+        </div>
+      </Form>
 
       {/* Tab strip */}
       <div className="flex items-center gap-1 px-6 border-b border-border/60 shrink-0 overflow-x-auto">
