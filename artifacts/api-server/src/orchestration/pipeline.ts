@@ -2384,6 +2384,12 @@ export class OrchestrationPipeline {
         const _strippedGreeting = stripReasoningBlocks(greeting).trim();
         const { emotion: _greetingEmotion, text: _greetingNoEmotion } = extractEmotionTag(_strippedGreeting);
         greetingEmotions = _greetingEmotion ? mapEmotionToCartesia(_greetingEmotion) : undefined;
+        if (_greetingEmotion && greetingEmotions) {
+          logger.info(
+            { callId: this.config.callId, evt: "emotion_applied", emotion: _greetingEmotion, emotions: greetingEmotions, textSnippet: _greetingNoEmotion.slice(0, 80) },
+            "Emotion tag forwarded to TTS",
+          );
+        }
         greeting = stripJsonMessageWrapper(
           _greetingNoEmotion
             .replace(/<\/?emotion[^>]*>/gi, "")
@@ -4095,6 +4101,12 @@ export class OrchestrationPipeline {
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       const { emotion, text: cleanText } = extractEmotionTag(text);
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
+      if (emotion && emotions) {
+        logger.info(
+          { callId: this.config.callId, evt: "emotion_applied", emotion, emotions, textSnippet: cleanText.slice(0, 80) },
+          "Emotion tag forwarded to TTS",
+        );
+      }
       sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, turnContextId, emotions));
       if (wakePlayer) {
         const wake = wakePlayer;
@@ -5580,6 +5592,12 @@ export class OrchestrationPipeline {
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       const { emotion, text: cleanText } = extractEmotionTag(text);
       const emotions = emotion ? mapEmotionToCartesia(emotion) : undefined;
+      if (emotion && emotions) {
+        logger.info(
+          { callId: this.config.callId, evt: "emotion_applied", emotion, emotions, textSnippet: cleanText.slice(0, 80) },
+          "Emotion tag forwarded to TTS",
+        );
+      }
       sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, ctTurnContextId, emotions));
       if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
     };

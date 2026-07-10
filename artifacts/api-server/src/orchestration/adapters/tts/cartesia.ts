@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { logger } from "../../../lib/logger.js";
 import type { TTSAdapter } from "../../types.js";
 
 /**
@@ -142,7 +143,10 @@ export class CartesiaTTS implements TTSAdapter {
   private buildVoice(emotions?: string[]): Record<string, unknown> {
     const controls: Record<string, unknown> = {};
     if (this.speed != null) controls.speed = this.speed;
-    if (emotions && emotions.length > 0) controls.emotion = emotions;
+    if (emotions && emotions.length > 0) {
+      controls.emotion = emotions;
+      logger.info({ evt: "cartesia_emotion_controls", emotions }, "Injecting emotion controls into Cartesia voice request");
+    }
     const hasControls = Object.keys(controls).length > 0;
     return hasControls
       ? { mode: "id", id: this.voiceId, __experimental_controls: controls }
