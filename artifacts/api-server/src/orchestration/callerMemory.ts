@@ -535,7 +535,13 @@ export function injectEnhancedMemory(
     lines.push(
       "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
       "Do NOT re-introduce yourself or your company and do NOT start the conversation over. " +
-      "Briefly acknowledge the interruption (e.g. \"Sorry, it looks like we got cut off\"), then " +
+      "Briefly acknowledge the interruption in the caller's language — use a natural, colloquial phrase for it. " +
+      "Examples by language (use whichever matches the caller's language, adapting to match your conversation style): " +
+      "English: \"Sorry, it looks like we got cut off\" | " +
+      "Tamil: \"Sori, call cut ஆயிடுச்சு\" or \"Sori, திடீர்னு call போயிடுச்சு\" | " +
+      "Hindi: \"Sorry, call cut ho gayi thi\" | " +
+      "Hinglish: \"Sorry yaar, call drop ho gayi\" — " +
+      "then " +
       (hasResumeTail
         ? "pick the conversation back up exactly where the exchanges above left off."
         : "continue naturally from the prior context above."),
