@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { CheckCircle2, Loader2, Calendar, X, ChevronRight } from "lucide-react";
+import { CheckCircle2, Loader2, Calendar, X, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,10 +8,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { customFetch } from "@workspace/api-client-react";
-import ConferencingPage from "@/pages/settings/Conferencing";
 import CalendarsPage from "@/pages/scheduling/Calendars";
 import AvailabilityPage from "@/pages/scheduling/Availability";
 import EventTypeDetailPage from "@/pages/scheduling/EventTypeDetail";
+import EventTypesPage from "@/pages/scheduling/EventTypes";
+import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API  = `${BASE}/api`;
@@ -26,11 +27,19 @@ interface StepStatus {
   eventtype:    StepState;
 }
 
+interface CalendarInfo {
+  id: number;
+  hostEmail: string | null;
+  googleCalendarConnectionId: string | null;
+}
+
+type GoogleConnection = { id: string; email: string };
+
 const STEPS: { id: Step; label: string; sub: string }[] = [
   { id: "google",       label: "Connect Google Account",  sub: "Required for Meet links and calendar sync"        },
   { id: "calendar",     label: "Create a Calendar",       sub: "Links this agent to a booking calendar"           },
   { id: "availability", label: "Set Availability",        sub: "When can callers book appointments?"             },
-  { id: "eventtype",    label: "Configure Event Type",    sub: "Duration, name, and booking page for Quick Chat" },
+  { id: "eventtype",    label: "Configure Event Type",    sub: "Duration, name, and booking page for your event" },
 ];
 
 const NEXT_STEP: Partial<Record<Step, Step>> = {
@@ -49,6 +58,139 @@ async function poll<T>(fn: () => Promise<T>, attempts = 5, delayMs = 800): Promi
   return null;
 }
 
+// ── Google Account Step ────────────────────────────────────────────────────
+
+function GoogleAccountStep({
+  calendarId,
+  onLinked,
+}: {
+  calendarId: number | null;
+  onLinked: () => void;
+}) {
+  const { toast } = useToast();
+  const [connections, setConnections] = useState<GoogleConnection[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [linking, setLinking]         = useState<string | null>(null);
+  const [connecting, setConnecting]   = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const conns = await customFetch<GoogleConnection[]>(`${API}/scheduling/google/connections`);
+      setConnections(Array.isArray(conns) ? conns : []);
+    } catch { /* non-fatal */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // Listen for OAuth popup completing
+  useEffect(() => {
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel("google-oauth");
+      ch.onmessage = (e: MessageEvent<{ type: string }>) => {
+        if (e.data?.type === "connected") {
+          setConnecting(false);
+          void load();
+        }
+      };
+    } catch { /* noop */ }
+    return () => { try { ch?.close(); } catch { /* noop */ } };
+  }, [load]);
+
+  async function handleAddAccount() {
+    setConnecting(true);
+    try {
+      const { url } = await customFetch<{ url: string }>(
+        `${API}/scheduling/google/connect-url?returnTo=calendar&returnOrigin=${encodeURIComponent(window.location.origin)}`
+      );
+      window.open(url, "_blank", "noopener,width=500,height=650");
+    } catch {
+      toast({ title: "Could not start Google sign-in", variant: "destructive" });
+      setConnecting(false);
+    }
+  }
+
+  async function handleSelect(connectionId: string) {
+    if (!calendarId) {
+      toast({ title: "Calendar not ready yet — try again in a moment", variant: "destructive" });
+      return;
+    }
+    setLinking(connectionId);
+    try {
+      await customFetch(`${API}/scheduling/calendars/${calendarId}/google-connection`, {
+        method: "PATCH",
+        body: JSON.stringify({ connectionId }),
+      });
+      onLinked();
+    } catch {
+      toast({ title: "Failed to link Google account", variant: "destructive" });
+    } finally {
+      setLinking(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      <p className="text-sm text-muted-foreground">
+        Select which Google account to use for this agent's calendar. Meet links and calendar events will be created under that account.
+      </p>
+
+      {connections.length > 0 ? (
+        <div className="space-y-2">
+          {connections.map(conn => (
+            <div key={conn.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background">
+              <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <span className="text-xs font-semibold">{conn.email[0]?.toUpperCase()}</span>
+              </div>
+              <span className="flex-1 text-sm truncate">{conn.email}</span>
+              <Button
+                size="sm"
+                className="h-7 px-3 text-xs shrink-0"
+                disabled={linking !== null}
+                onClick={() => void handleSelect(conn.id)}
+              >
+                {linking === conn.id ? (
+                  <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Linking…</>
+                ) : "Use this account"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+          No Google accounts connected yet.
+        </div>
+      )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs"
+        disabled={connecting}
+        onClick={() => void handleAddAccount()}
+      >
+        {connecting ? (
+          <><Loader2 className="h-3 w-3 animate-spin" />Opening…</>
+        ) : (
+          <><Plus className="h-3 w-3" />Add a Google account</>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+// ── Main Wizard ────────────────────────────────────────────────────────────
+
 export default function VibeSchedulingWizard({
   agentId,
   timezone,
@@ -62,11 +204,11 @@ export default function VibeSchedulingWizard({
     availability: "idle",
     eventtype:    "idle",
   });
-  const [activeStep,   setActiveStep]   = useState<Step | null>(null);
-  const [calendarId,   setCalendarId]   = useState<number | null>(null);
-  const [eventTypeId,  setEventTypeId]  = useState<number | null>(null);
-  const [initDone,     setInitDone]     = useState(false);
-  const broadcastRef   = useRef<BroadcastChannel | null>(null);
+  const [activeStep,  setActiveStep]  = useState<Step | null>(null);
+  const [calendarId,  setCalendarId]  = useState<number | null>(null);
+  const [eventTypeId, setEventTypeId] = useState<number | null>(null);
+  const [initDone,    setInitDone]    = useState(false);
+  const autoOpenFiredRef = useRef(false);
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -81,8 +223,7 @@ export default function VibeSchedulingWizard({
   /** Mark a step done, then (after a short pause) open the next uncompleted step */
   const completeStepAndAdvance = useCallback((completedStep: Step, currentStatus: StepStatus) => {
     const next = NEXT_STEP[completedStep];
-    if (!next) return; // eventtype is last
-    // Only auto-open if next step is not already done
+    if (!next) return;
     if (currentStatus[next] !== "done") {
       setTimeout(() => {
         setActiveStep(next);
@@ -93,18 +234,13 @@ export default function VibeSchedulingWizard({
 
   // ── API probes ────────────────────────────────────────────────────────────
 
-  const verifyGoogle = useCallback(async (): Promise<boolean> => {
+  /** Returns the agent's calendar with hostEmail + googleCalendarConnectionId, or null. */
+  const fetchCalendarInfo = useCallback(async (): Promise<CalendarInfo | null> => {
     try {
-      const conns = await customFetch<{ id: string }[]>(`${API}/scheduling/google/connections`);
-      return Array.isArray(conns) && conns.length > 0;
-    } catch { return false; }
-  }, []);
-
-  const verifyCalendar = useCallback(async (): Promise<number | null> => {
-    try {
-      const cals = await customFetch<{ id: number; agentId: number }[]>(`${API}/scheduling/calendars`);
+      const cals = await customFetch<(CalendarInfo & { agentId: number })[]>(`${API}/scheduling/calendars`);
       const cal = cals.find(c => c.agentId === agentId);
-      return cal?.id ?? null;
+      if (!cal) return null;
+      return { id: cal.id, hostEmail: cal.hostEmail ?? null, googleCalendarConnectionId: cal.googleCalendarConnectionId ?? null };
     } catch { return null; }
   }, [agentId]);
 
@@ -115,60 +251,48 @@ export default function VibeSchedulingWizard({
     } catch { return false; }
   }, []);
 
-  /** Prefer the auto-created "Quick Chat"; fall back to first in list. */
   const verifyEventType = useCallback(async (calId: number): Promise<number | null> => {
     try {
       const rows = await customFetch<{ id: number; name: string }[]>(`${API}/scheduling/event-types?calendarId=${calId}`);
       if (!Array.isArray(rows) || rows.length === 0) return null;
-      const quickChat = rows.find(r => r.name === "Quick Chat");
-      return (quickChat ?? rows[0])!.id;
+      return rows[0]!.id;
     } catch { return null; }
   }, []);
 
   // ── step completion handlers ──────────────────────────────────────────────
 
-  const advanceAfterGoogle = useCallback(async () => {
-    setStepVerifying("google");
-    const ok = await verifyGoogle();
-    if (!ok) {
-      setStepStatus(prev => ({ ...prev, google: "idle" }));
-      return;
-    }
-    // Pre-check how far ahead we already are (calendar may have been created already)
-    const calId = await verifyCalendar();
-    const status: StepStatus = {
-      google:       "done",
-      calendar:     calId ? "done" : "idle",
-      availability: "idle",
-      eventtype:    "idle",
-    };
-    if (calId) {
-      setCalendarId(calId);
-      const [availOk, etId] = await Promise.all([verifyAvailability(calId), verifyEventType(calId)]);
-      if (availOk) { status.availability = "done"; }
-      if (etId)    { status.eventtype    = "done"; setEventTypeId(etId); }
-    }
+  /**
+   * Called by GoogleAccountStep after successfully PATCHing the calendar's
+   * googleCalendarConnectionId. Never auto-called — requires explicit user action.
+   */
+  const advanceAfterGoogle = useCallback(() => {
+    setStepStatus(prev => {
+      const next: StepStatus = { ...prev, google: "done" };
+      completeStepAndAdvance("google", next);
+      return next;
+    });
     setActiveStep(null);
-    setStepStatus(status);
-    completeStepAndAdvance("google", status);
-  }, [setStepVerifying, verifyGoogle, verifyCalendar, verifyAvailability, verifyEventType, completeStepAndAdvance]);
+  }, [completeStepAndAdvance]);
 
   const advanceAfterCalendar = useCallback(async () => {
     setStepVerifying("calendar");
-    // Poll — the calendar row may take a moment after CalendarFormDialog submission
-    const calId = await poll(verifyCalendar, 5, 600);
-    if (!calId) {
+    // Poll until the calendar has a hostEmail (shell won't have one yet)
+    const calInfo = await poll(async () => {
+      const info = await fetchCalendarInfo();
+      return info?.hostEmail ? info : null;
+    }, 6, 600);
+    if (!calInfo) {
       setStepStatus(prev => ({ ...prev, calendar: "idle" }));
       return;
     }
-    setCalendarId(calId);
+    setCalendarId(calInfo.id);
     setActiveStep(null);
     setStepStatus(prev => {
       const next: StepStatus = { ...prev, calendar: "done" };
       completeStepAndAdvance("calendar", next);
       return next;
     });
-  }, [setStepVerifying, verifyCalendar, completeStepAndAdvance]);
+  }, [setStepVerifying, fetchCalendarInfo, completeStepAndAdvance]);
 
   const advanceAfterAvailability = useCallback(async () => {
     if (!calendarId) return;
@@ -178,8 +302,7 @@ export default function VibeSchedulingWizard({
       setStepStatus(prev => ({ ...prev, availability: "idle" }));
       return;
     }
-    // Pre-fetch event type (created by vibe.ts; may not exist yet if user skipped)
-    const etId = await poll(() => verifyEventType(calendarId), 5, 800);
+    const etId = await poll(() => verifyEventType(calendarId), 3, 600);
     if (etId) setEventTypeId(etId);
     setActiveStep(null);
     setStepStatus(prev => {
@@ -200,10 +323,57 @@ export default function VibeSchedulingWizard({
     setEventTypeId(etId);
     setStepDone("eventtype");
     setActiveStep(null);
-    // eventtype is the last step — no further advance
   }, [calendarId, setStepVerifying, verifyEventType, setStepDone]);
 
-  // ── eventtype step polling: if opened with null ID, retry until resolved ──
+  // ── on mount: resolve existing state ─────────────────────────────────────
+
+  useEffect(() => {
+    async function init() {
+      const calInfo = await fetchCalendarInfo();
+      const next: StepStatus = { google: "idle", calendar: "idle", availability: "idle", eventtype: "idle" };
+
+      if (calInfo) {
+        setCalendarId(calInfo.id);
+        // Google step: done only if user has explicitly linked an account to this calendar
+        if (calInfo.googleCalendarConnectionId) next.google = "done";
+        // Calendar step: done only if BOTH hostEmail AND googleCalendarConnectionId are set
+        // (shell calendar from vibe.ts has neither — both require explicit user action)
+        if (calInfo.hostEmail && calInfo.googleCalendarConnectionId) next.calendar = "done";
+
+        if (calInfo.hostEmail) {
+          const [availOk, etId] = await Promise.all([
+            verifyAvailability(calInfo.id),
+            verifyEventType(calInfo.id),
+          ]);
+          if (availOk) next.availability = "done";
+          if (etId) { next.eventtype = "done"; setEventTypeId(etId); }
+        }
+      }
+
+      setStepStatus(next);
+      setInitDone(true);
+    }
+    void init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId]);
+
+  // ── auto-open first incomplete step once init is done ────────────────────
+
+  useEffect(() => {
+    if (!initDone || autoOpenFiredRef.current) return;
+    const allDone = STEPS.every(s => stepStatus[s.id] === "done");
+    if (allDone) return;
+    autoOpenFiredRef.current = true;
+    const firstIncomplete = STEPS.find(s => stepStatus[s.id] !== "done");
+    if (firstIncomplete) {
+      setTimeout(() => {
+        setActiveStep(firstIncomplete.id);
+        setStepStatus(prev => ({ ...prev, [firstIncomplete.id]: "open" }));
+      }, 200);
+    }
+  }, [initDone, stepStatus]);
+
+  // ── eventtype polling when opened with null ID ─────────────────────────
 
   useEffect(() => {
     if (activeStep !== "eventtype" || eventTypeId !== null || !calendarId) return;
@@ -214,47 +384,6 @@ export default function VibeSchedulingWizard({
     })();
     return () => { cancelled = true; };
   }, [activeStep, eventTypeId, calendarId, verifyEventType]);
-
-  // ── Google OAuth BroadcastChannel listener ────────────────────────────────
-
-  useEffect(() => {
-    if (activeStep !== "google") return;
-    let ch: BroadcastChannel | null = null;
-    try {
-      ch = new BroadcastChannel("google-oauth");
-      broadcastRef.current = ch;
-      ch.onmessage = (e: MessageEvent<{ type: string }>) => {
-        if (e.data?.type === "connected") {
-          void advanceAfterGoogle();
-        }
-      };
-    } catch { /* BroadcastChannel not available */ }
-    return () => {
-      try { ch?.close(); } catch { /* noop */ }
-      broadcastRef.current = null;
-    };
-  }, [activeStep, advanceAfterGoogle]);
-
-  // ── on mount: resolve existing state ─────────────────────────────────────
-
-  useEffect(() => {
-    async function init() {
-      const [googleOk, calId] = await Promise.all([verifyGoogle(), verifyCalendar()]);
-      const next: StepStatus = { google: "idle", calendar: "idle", availability: "idle", eventtype: "idle" };
-      if (googleOk) next.google = "done";
-      if (calId) {
-        next.calendar = "done";
-        setCalendarId(calId);
-        const [availOk, etId] = await Promise.all([verifyAvailability(calId), verifyEventType(calId)]);
-        if (availOk) next.availability = "done";
-        if (etId) { next.eventtype = "done"; setEventTypeId(etId); }
-      }
-      setStepStatus(next);
-      setInitDone(true);
-    }
-    void init();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentId]);
 
   // ── derived state ─────────────────────────────────────────────────────────
 
@@ -399,12 +528,16 @@ export default function VibeSchedulingWizard({
 
           <div className="flex-1 overflow-y-auto px-6 pb-2">
             {activeStep === "google" && (
-              <ConferencingPage embedded returnPath="vibe" />
+              <GoogleAccountStep
+                calendarId={calendarId}
+                onLinked={() => { advanceAfterGoogle(); }}
+              />
             )}
 
             {activeStep === "calendar" && (
               <CalendarsPage
                 embedded
+                defaultAgentId={agentId}
                 onCalendarSaved={() => { void advanceAfterCalendar(); }}
               />
             )}
@@ -421,10 +554,18 @@ export default function VibeSchedulingWizard({
               />
             )}
 
-            {activeStep === "eventtype" && eventTypeId === null && (
+            {activeStep === "eventtype" && eventTypeId === null && calendarId && (
+              <EventTypesPage
+                embedded
+                embeddedCalendarId={calendarId}
+                onEventTypeCreated={id => { setEventTypeId(id); }}
+              />
+            )}
+
+            {activeStep === "eventtype" && eventTypeId === null && !calendarId && (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading event type…
+                Loading calendar…
               </div>
             )}
           </div>
@@ -433,29 +574,16 @@ export default function VibeSchedulingWizard({
           <div className="border-t px-6 py-3 shrink-0 flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
               {activeStep === "google"
-                ? "Click \"Add account\", sign in with Google, then close that window."
+                ? "Select a Google account above, or add a new one."
                 : activeStep === "calendar"
                 ? "Fill in the calendar details and click Save."
                 : activeStep === "availability"
                 ? "Add your weekly schedule above. Each row saves automatically."
                 : activeStep === "eventtype"
-                ? "Edit the event type and click Save."
+                ? eventTypeId !== null ? "Edit the event type and click Save." : "Create an event type to continue."
                 : ""}
             </p>
             <div className="flex items-center gap-2 shrink-0">
-              {activeStep === "google" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-3 text-xs"
-                  onClick={() => void advanceAfterGoogle()}
-                  disabled={stepStatus.google === "verifying"}
-                >
-                  {stepStatus.google === "verifying" ? (
-                    <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Checking…</>
-                  ) : "I've connected — continue"}
-                </Button>
-              )}
               {activeStep === "availability" && (
                 <Button
                   size="sm"
@@ -475,6 +603,7 @@ export default function VibeSchedulingWizard({
           </div>
         </DialogContent>
       </Dialog>
+
     </>
   );
 }

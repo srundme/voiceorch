@@ -50,14 +50,16 @@ function SlugCopy({ slug }: { slug: string }) {
   );
 }
 
-function QuickCreateDialog({
+export function QuickCreateDialog({
   open,
   onClose,
   defaultCalendarId,
+  onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   defaultCalendarId: number | null;
+  onCreated?: (id: number) => void;
 }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -110,7 +112,11 @@ function QuickCreateDialog({
       });
       await qc.invalidateQueries({ queryKey: getListEventTypesQueryKey({}) });
       handleClose();
-      navigate(`${BASE}/app/scheduling/event-types/${created.id}`);
+      if (onCreated) {
+        onCreated(created.id);
+      } else {
+        navigate(`${BASE}/app/scheduling/event-types/${created.id}`);
+      }
     } catch (e) {
       toast({ title: "Error creating event type", description: formatApiError(e), variant: "destructive" });
     }
@@ -261,12 +267,26 @@ function EventTypeRow({ et, onDelete }: { et: EventType; onDelete: (id: number) 
   );
 }
 
-export default function EventTypesPage() {
+export default function EventTypesPage({
+  embedded = false,
+  embeddedCalendarId,
+  onEventTypeCreated,
+}: {
+  embedded?: boolean;
+  embeddedCalendarId?: number;
+  onEventTypeCreated?: (id: number) => void;
+  params?: Record<string, string | undefined>;
+} = {}) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
   const { data: calendars } = useListCalendars();
-  const { data: eventTypes, isLoading } = useListEventTypes({}, { query: { queryKey: getListEventTypesQueryKey({}) } });
+  const { data: allEventTypes, isLoading } = useListEventTypes({}, { query: { queryKey: getListEventTypesQueryKey({}) } });
+
+  // When embedded with a specific calendarId, scope event types to that calendar
+  const eventTypes = embeddedCalendarId != null
+    ? allEventTypes?.filter(et => et.calendarId === embeddedCalendarId)
+    : allEventTypes;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -276,7 +296,14 @@ export default function EventTypesPage() {
   const deleteTarget = eventTypes?.find(et => et.id === deleteId);
   const forceDeleteTarget = eventTypes?.find(et => et.id === forceDeleteId);
 
-  const defaultCalendarId = calendars?.[0]?.id ?? null;
+  const defaultCalendarId = embeddedCalendarId ?? calendars?.[0]?.id ?? null;
+
+  // When embedded and no event type exists yet, auto-open the create dialog
+  useEffect(() => {
+    if (embedded && !isLoading && eventTypes?.length === 0) {
+      setCreateOpen(true);
+    }
+  }, [embedded, isLoading, eventTypes?.length]);
 
   async function handleDelete(id: number) {
     setDeleting(true);
@@ -386,6 +413,7 @@ export default function EventTypesPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         defaultCalendarId={defaultCalendarId}
+        onCreated={onEventTypeCreated}
       />
 
       {/* Delete confirm */}

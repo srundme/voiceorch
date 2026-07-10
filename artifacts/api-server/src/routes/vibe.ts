@@ -1538,48 +1538,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           })
           .returning();
 
-        if (cal) {
-          // Availability schedule — only create defaults if none exist yet (preserve user config on Refine)
-          const existingAvail = await db.select({ id: availabilitySchedulesTable.id })
-            .from(availabilitySchedulesTable)
-            .where(eq(availabilitySchedulesTable.calendarId, cal.id))
-            .limit(1);
-          if (existingAvail.length === 0) {
-            const days: number[] = [1, 2, 3, 4, 5];
-            const startTime = "09:00";
-            const endTime   = "17:00";
-            await db.insert(availabilitySchedulesTable)
-              .values(days.map((day: number) => ({
-                calendarId: cal.id,
-                dayOfWeek:  day,
-                startTime,
-                endTime,
-                isActive:   true,
-              })))
-              .catch(() => {});
-          }
-
-          // Auto-create a default "Quick Chat" 30-min event type — only if none exists (no duplicates on Refine)
-          const existingET = await db.select({ id: eventTypesTable.id })
-            .from(eventTypesTable)
-            .where(eq(eventTypesTable.calendarId, cal.id))
-            .limit(1);
-          if (existingET.length === 0) {
-            const slugBase = cfg.agentName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-            await db.insert(eventTypesTable)
-              .values({
-                calendarId:       cal.id,
-                userId:           clerkId,
-                name:             "Quick Chat",
-                slug:             `${slugBase}-${Date.now()}`,
-                description:      `Book a quick call with ${cfg.agentName}`,
-                durationMinutes:  30,
-                confirmationMode: "instant",
-                isActive:         true,
-              })
-              .catch(() => {});
-          }
-        }
+        void cal; // calendar shell created; availability + event type are configured by the user via the wizard
       } catch (err) {
         logger.warn({ err }, "vibe-chat: scheduling setup failed (non-fatal)");
       }

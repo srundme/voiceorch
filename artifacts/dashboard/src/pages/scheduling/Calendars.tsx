@@ -110,12 +110,14 @@ function CalendarFormDialog({
   onSaved,
   editing,
   takenAgentIds = new Set(),
+  defaultAgentId,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
   editing: SchedulingCalendar | null;
   takenAgentIds?: Set<number>;
+  defaultAgentId?: number;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -127,8 +129,15 @@ function CalendarFormDialog({
   const [form, setForm] = useState<FormState>(() =>
     editing
       ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive }
-      : defaultForm()
+      : { ...defaultForm(), agentId: defaultAgentId != null ? String(defaultAgentId) : "" }
   );
+
+  // Keep agentId in sync if defaultAgentId arrives after mount
+  useEffect(() => {
+    if (!editing && defaultAgentId != null) {
+      setForm(f => ({ ...f, agentId: String(defaultAgentId) }));
+    }
+  }, [editing, defaultAgentId]);
   const [agentError, setAgentError] = useState<string | null>(null);
   // Tracks whether the user has manually edited hostEmail so we never stomp their input
   const hostEmailTouched = useRef(false);
@@ -236,16 +245,23 @@ function CalendarFormDialog({
           {!editing && (
             <div className="space-y-1.5">
               <Label>Agent <span className="text-foreground">*</span></Label>
-              <Select value={form.agentId} onValueChange={v => set("agentId", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an agent…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents?.filter(a => !takenAgentIds.has(a.id)).map(a => (
-                    <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {defaultAgentId != null ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-input bg-muted/50 text-sm">
+                  {agents?.find(a => a.id === defaultAgentId)?.name ?? `Agent #${defaultAgentId}`}
+                  <span className="ml-auto text-xs text-muted-foreground">pre-selected</span>
+                </div>
+              ) : (
+                <Select value={form.agentId} onValueChange={v => set("agentId", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an agent…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents?.filter(a => !takenAgentIds.has(a.id)).map(a => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {agentError ? (
                 <p className="text-xs text-destructive">{agentError}</p>
               ) : (
@@ -357,12 +373,14 @@ function CalendarCard({
   googleConnections,
   linkedConnectionId,
   onLinkChange,
+  onSaved,
 }: {
   calendar: SchedulingCalendar;
   agentName?: string;
   googleConnections: GoogleConnection[];
   linkedConnectionId: string | null;
   onLinkChange: (calendarId: number, connectionId: string | null) => void;
+  onSaved?: () => void;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -567,7 +585,7 @@ function CalendarCard({
         </CardContent>
       </Card>
 
-      <CalendarFormDialog open={editOpen} onClose={() => setEditOpen(false)} editing={calendar} />
+      <CalendarFormDialog open={editOpen} onClose={() => setEditOpen(false)} editing={calendar} onSaved={onSaved} />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
@@ -616,7 +634,7 @@ function CalendarCard({
   );
 }
 
-export default function CalendarsPage({ embedded = false, onCalendarSaved }: { embedded?: boolean; onCalendarSaved?: () => void }) {
+export default function CalendarsPage({ embedded = false, onCalendarSaved, defaultAgentId }: { embedded?: boolean; onCalendarSaved?: () => void; defaultAgentId?: number }) {
   const [createOpen, setCreateOpen] = useState(false);
   const { data: calendars, isLoading } = useListCalendars();
   const { data: agents } = useListAgents();
@@ -865,6 +883,7 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved }: { e
             googleConnections={googleConnections}
             linkedConnectionId={calendarLinks[cal.id] ?? null}
             onLinkChange={handleLinkChange}
+            onSaved={onCalendarSaved}
           />
         ))}
       </div>
@@ -875,6 +894,7 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved }: { e
         onSaved={onCalendarSaved}
         editing={null}
         takenAgentIds={new Set(calendars?.map(c => c.agentId) ?? [])}
+        defaultAgentId={defaultAgentId}
       />
       </div>
     </div>
