@@ -15,7 +15,7 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WebcallPanel } from "@/components/webcall-panel";
-import { AgentConfigCard, AgentConfigPanel } from "@/components/agent-config-card";
+import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
@@ -395,8 +395,16 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
   );
 }
 
+const SECTION_FIELDS: Record<CardSection, string[]> = {
+  transcriber: ["language", "asrProvider", "asrModel", "sarvamSttMode", "languageAutoDetect"],
+  model: ["llmProvider", "llmModel", "temperature"],
+  voice: ["ttsProvider", "ttsModel", "ttsVoice"],
+};
+
 function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
-  const [openCard, setOpenCard] = useState<CardSection | null>(null);
+  const [openSection, setOpenSection] = useState<CardSection | null>(null);
+  const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
+  const sectionSnapshotRef = useRef<{ values: Record<string, any>; voiceCustomMode: boolean }>({ values: {}, voiceCustomMode: false });
   const [generateOpen, setGenerateOpen] = useState(false);
   const [, navigate] = useLocation();
 
@@ -489,7 +497,46 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsVoiceLabel  = (!ttsVoice || ttsVoice === "__custom__") ? "" : (curatedVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice);
   const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
-  const toggle = (c: CardSection) => setOpenCard(prev => prev === c ? null : c);
+  const openPipelineDialog = (section: CardSection) => {
+    const snap: Record<string, any> = {};
+    for (const field of SECTION_FIELDS[section]) {
+      snap[field] = form.getValues(field);
+    }
+    sectionSnapshotRef.current = { values: snap, voiceCustomMode };
+    setOpenSection(section);
+  };
+
+  const isSectionDirty = (section: CardSection) => {
+    const snap = sectionSnapshotRef.current;
+    const fieldsDirty = SECTION_FIELDS[section].some(
+      (field) => JSON.stringify(form.getValues(field)) !== JSON.stringify(snap.values[field])
+    );
+    if (section === "voice" && voiceCustomMode !== snap.voiceCustomMode) return true;
+    return fieldsDirty;
+  };
+
+  const requestClosePipelineDialog = () => {
+    if (!openSection) return;
+    if (isSectionDirty(openSection)) {
+      setConfirmDiscardSection(openSection);
+    } else {
+      setOpenSection(null);
+    }
+  };
+
+  const discardPipelineChanges = () => {
+    if (confirmDiscardSection) {
+      const snap = sectionSnapshotRef.current;
+      for (const field of SECTION_FIELDS[confirmDiscardSection]) {
+        form.setValue(field as any, snap.values[field]);
+      }
+      if (confirmDiscardSection === "voice") setVoiceCustomMode(snap.voiceCustomMode);
+    }
+    setConfirmDiscardSection(null);
+    setOpenSection(null);
+  };
+
+  const savePipelineDialog = () => setOpenSection(null);
 
   const agentName = form.watch("name") as string | undefined;
 
@@ -528,8 +575,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               label="Transcriber"
               value={langLabel}
               subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
-              active={openCard === "transcriber"}
-              onClick={() => toggle("transcriber")}
+              active={openSection === "transcriber"}
+              onClick={() => openPipelineDialog("transcriber")}
             />
 
             <AgentConfigCard
@@ -537,8 +584,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               label="Model"
               value={llmModelLabel || llmLabel}
               subtext={llmLabel}
-              active={openCard === "model"}
-              onClick={() => toggle("model")}
+              active={openSection === "model"}
+              onClick={() => openPipelineDialog("model")}
             />
 
             <AgentConfigCard
@@ -546,8 +593,8 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               label="Voice"
               value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
               subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
-              active={openCard === "voice"}
-              onClick={() => toggle("voice")}
+              active={openSection === "voice"}
+              onClick={() => openPipelineDialog("voice")}
             />
           </div>
 
@@ -643,165 +690,198 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             </div>
           )}
 
-          {/* ── Inline config for selected card ─────────────────────────────── */}
-          {openCard === "transcriber" && (
-            <AgentConfigPanel icon={<Mic />} title="Transcriber Configuration">
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="language" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
-                    <SmallSelect value={field.value} onChange={(v) => {
-                      field.onChange(v);
-                      const { llmProvider, llmModel } = defaultLlmForLanguages(v);
-                      form.setValue("llmProvider", llmProvider);
-                      form.setValue("llmModel", llmModel);
-                    }}
-                      options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="asrProvider" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("asrModel", ""); }}
-                      options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                  </FormItem>
-                )} />
-                {asrModelOpts.length > 0 && (
-                  <FormField control={form.control} name="asrModel" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                        options={asrModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                      <FormMessage className="text-[10px]" />
-                    </FormItem>
-                  )} />
-                )}
-                {asrProvider === "sarvam" && (
-                  <FormField control={form.control} name="sarvamSttMode" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">STT Mode</FormLabel>
-                      <SmallSelect value={field.value ?? "codemix"} onChange={field.onChange}
-                        options={[
-                          { value: "codemix", label: "Codemix (Regional + English)" },
-                          { value: "verbatim", label: "Verbatim (exact words)" },
-                          { value: "transcribe", label: "Transcribe (basic)" },
-                        ]} />
-                    </FormItem>
-                  )} />
-                )}
-              </div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
-                <div>
-                  <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
-                  <p className="text-[9px] text-muted-foreground">Follow caller's language mid-call — off enforces a single language</p>
-                </div>
-                <Switch
-                  checked={langAutoDetect}
-                  onCheckedChange={(v) => form.setValue("languageAutoDetect", v, { shouldDirty: true })}
-                />
-              </div>
-            </AgentConfigPanel>
-          )}
-
-          {openCard === "model" && (
-            <AgentConfigPanel icon={<Brain />} title="Model Configuration">
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="llmProvider" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("llmModel", ""); }}
-                      options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                  </FormItem>
-                )} />
-                {llmOptions.length > 0 && (
-                  <FormField control={form.control} name="llmModel" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                        options={llmOptions.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                      <FormMessage className="text-[10px]" />
-                    </FormItem>
-                  )} />
-                )}
-              </div>
-              <FormField control={form.control} name="temperature" render={({ field }) => (
+          {/* ── Transcriber dialog ── */}
+          <EditConfigDialog
+            open={openSection === "transcriber"}
+            onRequestClose={requestClosePipelineDialog}
+            onSave={savePipelineDialog}
+            icon={<Mic />}
+            title="Transcriber"
+            description="Choose the speech-to-text provider, model, and language used to transcribe caller audio."
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={form.control} name="language" render={({ field }) => (
                 <FormItem className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <FormLabel className="text-[10px] text-muted-foreground">Temperature — Creativity</FormLabel>
-                    <span className="text-xs font-mono">{temperature.toFixed(2)}</span>
-                  </div>
-                  <input type="range" min={0} max={2} step={0.01} value={temperature}
-                    onChange={e => field.onChange(parseFloat(e.target.value))}
-                    className="w-full h-1.5 accent-primary cursor-pointer" />
-                  <div className="flex justify-between text-[9px] text-muted-foreground"><span>0</span><span>2</span></div>
+                  <FormLabel className="text-[10px] text-muted-foreground">Language</FormLabel>
+                  <SmallSelect value={field.value} onChange={(v) => {
+                    field.onChange(v);
+                    const { llmProvider, llmModel } = defaultLlmForLanguages(v);
+                    form.setValue("llmProvider", llmProvider);
+                    form.setValue("llmModel", llmModel);
+                  }}
+                    options={LANGUAGES.map(l => ({ value: l.value, label: l.label }))} placeholder="Select language" />
                 </FormItem>
               )} />
-            </AgentConfigPanel>
-          )}
-
-          {openCard === "voice" && (
-            <AgentConfigPanel icon={<Volume2 />} title="Voice Configuration">
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="ttsProvider" render={({ field }) => (
+              <FormField control={form.control} name="asrProvider" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("asrModel", ""); }}
+                    options={ASR_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                </FormItem>
+              )} />
+              {asrModelOpts.length > 0 && (
+                <FormField control={form.control} name="asrModel" render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); setVoiceCustomMode(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
-                      options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                    <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                      options={asrModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                    <FormMessage className="text-[10px]" />
                   </FormItem>
                 )} />
-                {ttsVoiceOpts.length > 0 && (
-                  <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
-                      <SmallSelect
-                        value={ttsVoiceDropdownVal}
-                        onChange={(v) => {
-                          if (v === "__custom__") {
-                            // Show the custom input without erasing the saved voice ID.
-                            setVoiceCustomMode(true);
-                            return;
-                          }
-                          setVoiceCustomMode(false);
-                          field.onChange(v);
-                        }}
-                        options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
-                        placeholder="Default"
-                      />
-                    </FormItem>
-                  )} />
-                )}
-                {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && (
-                  <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
-                    No voices available for the selected language.
-                  </p>
-                )}
-                {showCustomVoiceInput && (
-                  <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">
-                        {ttsVoiceOpts.length > 0 ? "Custom Voice ID" : "Voice ID"}
-                      </FormLabel>
-                      <Input
-                        value={field.value === "__custom__" ? "" : (field.value ?? "")}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        placeholder="Paste UUID / voice ID…"
-                        className="h-8 text-xs bg-background/50"
-                      />
-                    </FormItem>
-                  )} />
-                )}
-                {ttsModelOpts.length > 0 && (
-                  <FormField control={form.control} name="ttsModel" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                    </FormItem>
-                  )} />
-                )}
+              )}
+              {asrProvider === "sarvam" && (
+                <FormField control={form.control} name="sarvamSttMode" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">STT Mode</FormLabel>
+                    <SmallSelect value={field.value ?? "codemix"} onChange={field.onChange}
+                      options={[
+                        { value: "codemix", label: "Codemix (Regional + English)" },
+                        { value: "verbatim", label: "Verbatim (exact words)" },
+                        { value: "transcribe", label: "Transcribe (basic)" },
+                      ]} />
+                  </FormItem>
+                )} />
+              )}
+            </div>
+            <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
+              <div>
+                <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
+                <p className="text-[9px] text-muted-foreground">Follow caller's language mid-call — off enforces a single language</p>
               </div>
-            </AgentConfigPanel>
-          )}
+              <Switch
+                checked={langAutoDetect}
+                onCheckedChange={(v) => form.setValue("languageAutoDetect", v, { shouldDirty: true })}
+              />
+            </div>
+          </EditConfigDialog>
+
+          {/* ── Model dialog ── */}
+          <EditConfigDialog
+            open={openSection === "model"}
+            onRequestClose={requestClosePipelineDialog}
+            onSave={savePipelineDialog}
+            icon={<Brain />}
+            title="Model"
+            description="Choose the language model that powers the agent's responses."
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={form.control} name="llmProvider" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); form.setValue("llmModel", ""); }}
+                    options={LLM_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                </FormItem>
+              )} />
+              {llmOptions.length > 0 && (
+                <FormField control={form.control} name="llmModel" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                      options={llmOptions.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )} />
+              )}
+            </div>
+            <FormField control={form.control} name="temperature" render={({ field }) => (
+              <FormItem className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <FormLabel className="text-[10px] text-muted-foreground">Temperature — Creativity</FormLabel>
+                  <span className="text-xs font-mono">{temperature.toFixed(2)}</span>
+                </div>
+                <input type="range" min={0} max={2} step={0.01} value={temperature}
+                  onChange={e => field.onChange(parseFloat(e.target.value))}
+                  className="w-full h-1.5 accent-primary cursor-pointer" />
+                <div className="flex justify-between text-[9px] text-muted-foreground"><span>0</span><span>2</span></div>
+              </FormItem>
+            )} />
+          </EditConfigDialog>
+
+          {/* ── Voice dialog ── */}
+          <EditConfigDialog
+            open={openSection === "voice"}
+            onRequestClose={requestClosePipelineDialog}
+            onSave={savePipelineDialog}
+            icon={<Volume2 />}
+            title="Voice"
+            description="Choose the text-to-speech provider and voice used to speak to callers."
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={form.control} name="ttsProvider" render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); setVoiceCustomMode(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
+                    options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
+                </FormItem>
+              )} />
+              {ttsVoiceOpts.length > 0 && (
+                <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
+                    <SmallSelect
+                      value={ttsVoiceDropdownVal}
+                      onChange={(v) => {
+                        if (v === "__custom__") {
+                          // Show the custom input without erasing the saved voice ID.
+                          setVoiceCustomMode(true);
+                          return;
+                        }
+                        setVoiceCustomMode(false);
+                        field.onChange(v);
+                      }}
+                      options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
+                      placeholder="Default"
+                    />
+                  </FormItem>
+                )} />
+              )}
+              {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && (
+                <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
+                  No voices available for the selected language.
+                </p>
+              )}
+              {showCustomVoiceInput && (
+                <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">
+                      {ttsVoiceOpts.length > 0 ? "Custom Voice ID" : "Voice ID"}
+                    </FormLabel>
+                    <Input
+                      value={field.value === "__custom__" ? "" : (field.value ?? "")}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      placeholder="Paste UUID / voice ID…"
+                      className="h-8 text-xs bg-background/50"
+                    />
+                  </FormItem>
+                )} />
+              )}
+              {ttsModelOpts.length > 0 && (
+                <FormField control={form.control} name="ttsModel" render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                      options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                  </FormItem>
+                )} />
+              )}
+            </div>
+          </EditConfigDialog>
+
+          {/* ── Unsaved changes confirmation ── */}
+          <AlertDialog open={confirmDiscardSection !== null} onOpenChange={(v) => { if (!v) setConfirmDiscardSection(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You have unsaved changes in this dialog. Closing now will discard them.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setConfirmDiscardSection(null)}>Keep Editing</AlertDialogCancel>
+                <AlertDialogAction onClick={discardPipelineChanges}>Discard Changes</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* ── Conversation ─────────────────────────────────────────────────── */}
           <div className="space-y-4 pt-8">
