@@ -105,12 +105,12 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
   telephony: Phone,
 };
 
-/* Category accent colors — icon container background/text per category */
+/* Category icon container — monochrome, no colorful backgrounds */
 const TYPE_ACCENT: Record<string, string> = {
-  asr:       "bg-blue-500/12 text-blue-500 dark:text-blue-400",
-  llm:       "bg-violet-500/12 text-violet-500 dark:text-violet-400",
-  tts:       "bg-emerald-500/12 text-emerald-500 dark:text-emerald-400",
-  telephony: "bg-orange-500/12 text-orange-500 dark:text-orange-400",
+  asr:       "bg-muted text-foreground/70",
+  llm:       "bg-muted text-foreground/70",
+  tts:       "bg-muted text-foreground/70",
+  telephony: "bg-muted text-foreground/70",
 };
 
 /* Deterministic accent palette per provider, keyed by first letter of the value */
@@ -261,21 +261,21 @@ export default function ProvidersList() {
 
   return (
     <div className="flex-1 overflow-y-auto animate-fade-in">
-    <div className="max-w-[1450px] mx-auto px-10 py-8 space-y-8">
+    <div className="max-w-[1400px] mx-auto px-10 py-10 space-y-6">
 
       {/* Header */}
-      <div className="flex items-end justify-between gap-6">
+      <div className="flex items-center justify-between gap-6">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/60 mb-2">Build</p>
-          <h1 className="text-[26px] font-semibold tracking-tight text-foreground leading-none">Providers</h1>
-          <p className="text-[13px] mt-2 text-muted-foreground/60 max-w-[520px]">API keys for your voice AI services. Stored encrypted, never exposed.</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/50 mb-1.5">Build</p>
+          <h1 className="text-[18px] font-semibold tracking-tight text-foreground leading-none">Providers</h1>
+          <p className="text-[13px] mt-1.5 text-muted-foreground/60 max-w-[520px]">API keys for your voice AI services. Stored encrypted, never exposed.</p>
         </div>
         <button
           onClick={() => openDialog()}
-          className="flex items-center gap-2 text-[13.5px] font-medium rounded-xl px-4 h-10 bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:brightness-105 active:scale-[0.98] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background shrink-0"
+          className="flex items-center gap-1.5 text-[13px] font-medium rounded-xl px-3.5 h-[38px] border border-border bg-transparent text-foreground/85 hover:bg-accent/40 hover:border-border active:scale-[0.98] transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background shrink-0"
           data-testid="button-add-provider"
         >
-          <Plus className="h-4 w-4" /> Add Provider
+          <Plus className="h-3.5 w-3.5" /> Add Provider
         </button>
       </div>
 
@@ -404,26 +404,26 @@ export default function ProvidersList() {
 
       {/* Provider Grid */}
       {isLoading ? (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="bg-card rounded-2xl border border-border/70 overflow-hidden">
-              <div className="px-6 py-5 border-b border-border/60 flex items-center gap-3.5">
-                <Skeleton className="h-11 w-11 rounded-xl" />
+            <div key={i} className="bg-card rounded-xl border border-border/60 overflow-hidden">
+              <div className="px-5 py-4 border-b border-border/50 flex items-center gap-3">
+                <Skeleton className="h-9 w-9 rounded-lg" />
                 <div className="flex-1 space-y-1.5">
                   <Skeleton className="h-3.5 w-28" />
                   <Skeleton className="h-2.5 w-36" />
                 </div>
-                <Skeleton className="h-9 w-9 rounded-full" />
+                <Skeleton className="h-8 w-8 rounded-full" />
               </div>
-              <div className="p-4 space-y-2">
-                <Skeleton className="h-14 w-full rounded-xl" />
-                <Skeleton className="h-14 w-full rounded-xl" />
+              <div className="p-3.5 space-y-2">
+                <Skeleton className="h-11 w-full rounded-lg" />
+                <Skeleton className="h-11 w-full rounded-lg" />
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {(["asr", "llm", "tts", "telephony"] as const).map(type => {
             const typeProviders = groupedProviders[type] ?? [];
             const supported     = SUPPORTED_PROVIDERS[type]!;
@@ -432,35 +432,35 @@ export default function ProvidersList() {
             return (
               <div
                 key={type}
-                className="group/card flex flex-col bg-card rounded-2xl border border-border/70 overflow-hidden shadow-sm hover:shadow-lg hover:border-primary/25 transition-all duration-200"
+                className="group/card flex flex-col h-full bg-card rounded-xl border border-border/60 overflow-hidden hover:border-border transition-colors duration-150"
               >
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-border/60 flex items-center gap-3.5">
-                  <div className={cn("h-11 w-11 rounded-xl flex items-center justify-center shrink-0", TYPE_ACCENT[type])}>
-                    <Icon className="h-5 w-5" />
+                <div className="px-5 py-4 border-b border-border/50 flex items-center gap-3">
+                  <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", TYPE_ACCENT[type])}>
+                    <Icon className="h-4 w-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[19px] font-semibold text-foreground leading-tight">{TYPE_LABELS[type]}</p>
+                    <p className="text-[16px] font-semibold text-foreground leading-tight">{TYPE_LABELS[type]}</p>
                     <p className="text-[13px] text-muted-foreground/60 truncate">{TYPE_DESC[type]}</p>
                   </div>
                   <CompletionRing value={typeProviders.length} total={supported.length} />
                 </div>
 
                 {/* Provider entries */}
-                <div className="p-4 flex-1 flex flex-col gap-2">
+                <div className="p-3.5 flex-1 flex flex-col gap-1.5">
                   {isEmpty ? (
-                    <div className="flex flex-1 flex-col items-center justify-center text-center gap-3 py-10 px-6 rounded-xl border border-dashed border-border/60 bg-accent/15">
-                      <div className={cn("h-12 w-12 rounded-full flex items-center justify-center", TYPE_ACCENT[type])}>
-                        <Icon className="h-5 w-5" />
+                    <div className="flex flex-1 flex-col items-center justify-center text-center gap-2.5 py-7 px-5 rounded-lg border border-dashed border-border/50 bg-accent/10">
+                      <div className={cn("h-9 w-9 rounded-full flex items-center justify-center", TYPE_ACCENT[type])}>
+                        <Icon className="h-4 w-4" />
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-[16px] font-semibold text-foreground/85">No {TYPE_LABELS[type]} provider yet</p>
-                        <p className="text-[13px] text-muted-foreground/55 max-w-[260px] mx-auto">
+                      <div className="space-y-0.5">
+                        <p className="text-[13.5px] font-medium text-foreground/80">No {TYPE_LABELS[type]} provider yet</p>
+                        <p className="text-[12px] text-muted-foreground/50 max-w-[240px] mx-auto">
                           Connect a key to enable {TYPE_DESC[type].toLowerCase()} for your agents.
                         </p>
                       </div>
                       <button
-                        className="mt-1 flex items-center gap-1.5 text-[14px] font-medium rounded-xl px-4 h-10 bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:brightness-105 active:scale-[0.98] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        className="mt-0.5 flex items-center gap-1.5 text-[13px] font-medium rounded-xl px-3.5 h-9 border border-border bg-transparent text-foreground/85 hover:bg-accent/40 active:scale-[0.98] transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         onClick={() => openDialog(type)}
                       >
                         <Plus className="h-3.5 w-3.5" /> Connect {TYPE_LABELS[type]}
@@ -474,15 +474,15 @@ export default function ProvidersList() {
                         return (
                           <div
                             key={provider.id}
-                            className="group flex items-center justify-between px-3.5 py-3 rounded-xl bg-elevated/60 border border-border/60 hover:border-border hover:bg-elevated transition-colors duration-150"
+                            className="group flex items-center justify-between px-3 py-2.5 rounded-lg bg-elevated/50 border border-border/50 hover:border-border/80 hover:bg-elevated transition-colors duration-150"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0", avatarClasses(provider.providerName))}>
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center text-[10.5px] font-bold shrink-0", avatarClasses(provider.providerName))}>
                                 {providerInitials(displayName)}
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[13.5px] font-medium text-foreground/85 truncate">{displayName}</span>
+                                  <span className="text-[13px] font-medium text-foreground/85 truncate">{displayName}</span>
                                   {provider.isActive && (
                                     <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -490,14 +490,14 @@ export default function ProvidersList() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center text-[11.5px] text-muted-foreground/45 gap-1 font-mono mt-0.5">
+                                <div className="flex items-center text-[11px] text-muted-foreground/45 gap-1 font-mono mt-0.5">
                                   <Lock className="h-2.5 w-2.5" />
                                   •••• {provider.apiKeyHint ?? "••••"}
                                 </div>
                               </div>
                             </div>
                             <button
-                              className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground/25 opacity-60 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-colors duration-150 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+                              className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground/25 opacity-60 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-colors duration-150 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
                               onClick={() => setPendingDeleteId(provider.id)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -508,7 +508,7 @@ export default function ProvidersList() {
 
                       {/* Add button */}
                       <button
-                        className="w-full flex items-center justify-center gap-1.5 h-10 rounded-xl border border-dashed border-border/50 text-[13px] font-medium text-muted-foreground/45 hover:text-muted-foreground/80 hover:border-border hover:bg-accent/30 transition-colors duration-150 mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="w-full flex items-center justify-center gap-1.5 h-9 rounded-lg border border-dashed border-border/50 text-[12.5px] font-medium text-muted-foreground/45 hover:text-muted-foreground/80 hover:border-border hover:bg-accent/25 transition-colors duration-150 mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         onClick={() => openDialog(type)}
                       >
                         <Plus className="h-3.5 w-3.5" />
