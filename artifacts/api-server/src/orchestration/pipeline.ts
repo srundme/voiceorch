@@ -62,6 +62,7 @@ import {
 import {
   buildToolDefs,
   matchToolByName,
+  sanitizeToolName,
   executeNativeBooking as sharedExecuteNativeBooking,
   executeNativeCheckAvailability as sharedExecuteNativeCheckAvailability,
   executeNativeListBookings as sharedExecuteNativeListBookings,
@@ -5446,6 +5447,32 @@ export class OrchestrationPipeline {
 
   /** P2-A: Execute a native booking and return a structured result string for LLM consumption. */
   private async executeNativeBooking(tool: AgentTool & { type: "native_booking" }, args: Record<string, unknown>): Promise<string> {
+    // ── Minimum engagement guard ─────────────────────────────────────────────
+    // Require at least 2 genuine user turns before a booking can be made.
+    // A genuine user turn is a role:"user" message that is NOT a tool-result
+    // injection (those start with "[Tool result for"). This blocks Pattern A:
+    // LLM chains check_availability×N → book_appointment after a single "Hello".
+    const genuineUserTurns = this.conversationHistory.filter(
+      (m) => m.role === "user" && !m.content.startsWith("[Tool result for"),
+    ).length;
+    if (genuineUserTurns < 2) {
+      logger.warn(
+        { callId: this.config.callId, genuineUserTurns },
+        "Native booking blocked: fewer than 2 genuine user turns",
+      );
+      this.logExec("Booking", "system", {
+        status: "error",
+        turnNumber: this._activeTurnIndex,
+        metadata: {
+          event: "Booking Blocked",
+          reason: "insufficient_user_turns",
+          genuineUserTurns,
+          attendeeName: String(args["attendee_name"] ?? args["name"] ?? ""),
+          attendeeEmail: String(args["attendee_email"] ?? args["email"] ?? ""),
+        },
+      });
+      return "error: cannot book yet — you must first ask the caller for their name, email, and preferred slot. Do not call this tool until the caller has provided those details in the conversation.";
+    }
     return sharedExecuteNativeBooking(this.config.callId, this.agent.id, tool, args);
   }
 
@@ -5488,7 +5515,13 @@ export class OrchestrationPipeline {
    * TTS chunk starts as soon as the LLM emits the first sentence boundary —
    * not after the full response is buffered.
    */
-  private async continueWithToolResult(toolName: string, result: string, depth: number = 0, toolCallId?: string): Promise<void> {
+  private async continueWithToolResult(
+    toolName: string,
+    result: string,
+    depth: number = 0,
+    toolCallId?: string,
+    chainState: { bookApptFired: boolean } = { bookApptFired: false },
+  ): Promise<void> {
     if (toolCallId) {
       // Native tool call: use proper "tool" role with matching tool_call_id so
       // OpenAI-compatible APIs (Sarvam, Groq, Mistral, etc.) accept the follow-up call.
@@ -5498,6 +5531,11 @@ export class OrchestrationPipeline {
       // which the instruction-following model already understands from its system prompt.
       this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
     }
+    // Track whether a booking tool has already fired in this agentic chain so the
+    // duplicate-booking guard below can block Pattern B (bulk slot booking).
+    const bookApptFired = chainState.bookApptFired || this.agent.tools.some(
+      (t) => t.type === "native_booking" && sanitizeToolName(t.name) === toolName,
+    );
 
     let llmResponse = "";
     let pendingText = "";
@@ -5742,6 +5780,48 @@ export class OrchestrationPipeline {
     if (triggeredToolName) {
       const chainedName: string = triggeredToolName;
       const chainedCallId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      // ── One-booking-per-chain guard (Pattern B: bulk slot booking) ─────────
+      // If book_appointment already fired in this agentic chain, block the second
+      // call immediately so the LLM must present the first booking confirmation to
+      // the caller and wait for a response before booking again.
+      const isChainedBooking = this.agent.tools.some(
+        (t) => t.type === "native_booking" && sanitizeToolName(t.name) === chainedName,
+      );
+      if (isChainedBooking && bookApptFired) {
+        logger.warn(
+          { callId: this.config.callId, depth, chainedName },
+          "Chained booking blocked: book_appointment already called in this agentic chain",
+        );
+        this.logExec("Booking", "system", {
+          status: "error",
+          turnNumber: this._activeTurnIndex,
+          metadata: {
+            event: "Booking Blocked",
+            reason: "duplicate_in_chain",
+            chainedTool: chainedName,
+            depth,
+            args: triggeredToolArgs,
+          },
+        });
+        // Push the error as a tool result so the LLM sees it and speaks the
+        // first booking's confirmation to the caller rather than booking again.
+        const dupError = "error: a booking was already made in this turn — speak the confirmation to the caller and wait for their response before booking again";
+        this.conversationHistory.push({
+          role: "assistant",
+          content: cleanResponse || "",
+          toolCalls: [{ id: chainedCallId, name: chainedName, args: JSON.stringify(triggeredToolArgs) }],
+        });
+        await this.continueWithToolResult(
+          chainedName,
+          dupError,
+          depth + 1,
+          chainedCallId,
+          { bookApptFired: true },
+        );
+        return;
+      }
+
       this.conversationHistory.push({
         role: "assistant",
         content: cleanResponse || "",
@@ -5749,7 +5829,13 @@ export class OrchestrationPipeline {
       });
       const chainedResult = await this.handleToolCall(chainedName, triggeredToolArgs);
       if (chainedResult !== undefined) {
-        await this.continueWithToolResult(chainedName, chainedResult, depth + 1, chainedCallId);
+        await this.continueWithToolResult(
+          chainedName,
+          chainedResult,
+          depth + 1,
+          chainedCallId,
+          { bookApptFired: bookApptFired || isChainedBooking },
+        );
       }
       return;
     }
@@ -5780,7 +5866,7 @@ export class OrchestrationPipeline {
       logger.info({ callId: this.config.callId, fnName: inlineFn.name }, "Inline function tag detected in continueWithToolResult — executing");
       const toolResult = await this.handleToolCall(inlineFn.name, inlineFn.args);
       if (toolResult !== undefined) {
-        await this.continueWithToolResult(inlineFn.name, toolResult, depth + 1);
+        await this.continueWithToolResult(inlineFn.name, toolResult, depth + 1, undefined, { bookApptFired });
       }
     }
   }

@@ -142,7 +142,12 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
           name: t.name,
           description:
             t.description +
-            " Call this tool to create the actual booking. Do NOT confirm the appointment to the caller before calling this tool. Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided).",
+            " Call this tool to create the actual booking." +
+            " CRITICAL RULES — violating any of these will cause an error:" +
+            " (1) NEVER call this tool with placeholder, example, or test values — attendee_name must be the caller's real full name and attendee_email must be their real email address (not @example.com, @test.com, or similar fake domains)." +
+            " (2) You MUST have the caller's real name AND real email address explicitly stated in the conversation before calling — do NOT fabricate or guess these details." +
+            " (3) Only book ONE slot per conversation turn — present available slots to the caller, wait for them to choose one, then book only that ONE slot. Do NOT call this tool multiple times in a row." +
+            " (4) Required fields: attendee_name (ask the caller if not yet provided) and attendee_email (ask the caller if not yet provided).",
           parameters: {
             type: "object",
             properties: {
@@ -353,6 +358,17 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
 
 // ── Native scheduling executors ───────────────────────────────────────────────
 
+// ── Placeholder attendee guard ────────────────────────────────────────────────
+// Domains known to be fake/placeholder — reject immediately so the LLM must ask
+// the caller for their real email rather than booking under a fabricated address.
+const BLOCKED_EMAIL_DOMAINS = ["example.com", "test.com", "placeholder.com", "example.org", "test.org"];
+
+// Names that are clearly fabricated placeholders — case-insensitive match.
+const BLOCKED_ATTENDEE_NAMES = new Set([
+  "test user", "unknown", "guest", "user", "test", "unknown user",
+  "placeholder", "sample user", "demo user", "caller",
+]);
+
 export async function executeNativeBooking(
   callId: number,
   agentId: number,
@@ -367,6 +383,32 @@ export async function executeNativeBooking(
   if (!attendeeEmail) {
     logger.warn({ callId }, "Native booking: no attendee email — cannot book");
     return "error: attendee_email is required to complete the booking";
+  }
+
+  // ── Placeholder email guard ──────────────────────────────────────────────
+  const emailDomain = attendeeEmail.split("@")[1]?.toLowerCase() ?? "";
+  if (BLOCKED_EMAIL_DOMAINS.includes(emailDomain)) {
+    logger.warn({ callId, attendeeEmail }, "Native booking blocked: placeholder email domain");
+    void appendBookingLog(callId, agentId, "Booking Blocked", {
+      reason: "placeholder_email",
+      attendeeEmail,
+      attendeeName,
+      blockedDomain: emailDomain,
+    }, "error");
+    return "error: cannot book with a placeholder or example email address. Ask the caller for their real email address (e.g. name@gmail.com) before calling this tool again.";
+  }
+
+  // ── Placeholder name guard ───────────────────────────────────────────────
+  const nameTrimmed = attendeeName.trim();
+  const nameLower = nameTrimmed.toLowerCase();
+  if (!nameTrimmed || BLOCKED_ATTENDEE_NAMES.has(nameLower)) {
+    logger.warn({ callId, attendeeName }, "Native booking blocked: placeholder attendee name");
+    void appendBookingLog(callId, agentId, "Booking Blocked", {
+      reason: "placeholder_name",
+      attendeeEmail,
+      attendeeName,
+    }, "error");
+    return "error: cannot book with a placeholder or missing attendee name. Ask the caller for their real full name before calling this tool again.";
   }
 
   try {
