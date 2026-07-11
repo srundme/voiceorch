@@ -226,6 +226,35 @@ const KB_PREFETCH_MAX_CHARS   = 8000;
  * there and retrieval should go vector-only. Code-mixed text (any Latin word
  * present) keeps FTS.
  */
+/**
+ * Returns true when an LLM-streamed sentence is a pure acknowledgment word or
+ * short phrase (e.g. "சரி.", "சரிங்க.", "okay.", "Got it.") that carries no
+ * information and would double the filler already spoken this turn.
+ * Conservative list — only exact single-word/short-phrase acks that the LLM
+ * typically emits as openers in Tamil/English conversations.
+ */
+function isLlmLeadingAck(sentence: string): boolean {
+  const t = sentence
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?,\s]+$/g, "") // strip trailing punctuation/whitespace
+    .trim();
+  // Keep this list minimal and exact — only phrases that convey zero new
+  // information when a filler word of the same type was already spoken.
+  const ACK_WORDS = new Set([
+    // Tamil
+    "சரி", "சரிங்க", "சரிங்கம்", "ஆமா", "ஆம்", "நல்லது",
+    // English
+    "okay", "ok", "got it", "i see", "sure", "right", "alright",
+    "understood", "great", "perfect", "mm-hmm", "mhm", "mmhm", "yes", "yeah",
+    // Hindi (occasional)
+    "हाँ", "अच्छा", "ठीक है",
+    // Telugu/Kannada/Malayalam common acks
+    "సరే", "ಸರಿ", "ശരി",
+  ]);
+  return ACK_WORDS.has(t);
+}
+
 function isPureNonLatinQuery(q: string): boolean {
   return /\p{L}/u.test(q) && !/[A-Za-z]/.test(q);
 }
@@ -4122,6 +4151,11 @@ export class OrchestrationPipeline {
     // the first natural yield point. Mirrored into stored history below.
     const stepGuard = makeFlowStepGuard();
     let allEnqueued  = false;
+    // Leading-ack suppression: when a dead-air or backchannel filler was already
+    // spoken this turn, the first LLM sentence is checked and dropped if it is a
+    // pure acknowledgment word ("சரி.", "okay.", etc.) — avoids the audible
+    // double-ack where filler and LLM opener are the same word.
+    let llmFirstSentenceProcessed = false;
     let triggeredToolName: string | null = null;
     let triggeredToolArgs: Record<string, unknown> = {};
     // Per-turn token usage (for the LLM execution-log row metadata).
@@ -4923,7 +4957,24 @@ export class OrchestrationPipeline {
           if (!afterEnvelope) return;
           pendingText += afterEnvelope;
           const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
-          for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
+          for (const s of sentences) {
+            const g = stepGuard.push(s);
+            if (!g) continue;
+            // Suppress the very first LLM sentence if a filler (backchannel or
+            // dead-air) was already played this turn AND the sentence is a pure
+            // acknowledgment — avoids the double-ack "சரி … சரி." pattern.
+            if (!llmFirstSentenceProcessed) {
+              llmFirstSentenceProcessed = true;
+              if ((backchanneledThisTurn || this._fillerPlayedThisTurn) && isLlmLeadingAck(g)) {
+                logger.info(
+                  { callId: this.config.callId, suppressed: g, turnNumber: _currentTurnIndex, evt: "llm_leading_ack_suppressed" },
+                  "Pipeline: LLM leading ack suppressed (filler already played this turn)",
+                );
+                continue;
+              }
+            }
+            enqueue(g);
+          }
           pendingText = remainder;
         },
         (fullText) => { llmResponse = fullText; },
@@ -5023,6 +5074,7 @@ export class OrchestrationPipeline {
         });
         llmResponse = "";
         pendingText  = "";
+        llmFirstSentenceProcessed = false; // reset so fallback can also suppress its leading ack
         try {
           await this.fallbackLlm.chat(
             historyForLlm,
@@ -5045,7 +5097,21 @@ export class OrchestrationPipeline {
               if (!afterBrackets) return;
               pendingText += afterBrackets;
               const { sentences, remainder } = extractSentences(pendingText, this.agent.ttsMinSentenceChars);
-              for (const s of sentences) { const g = stepGuard.push(s); if (g) enqueue(g); }
+              for (const s of sentences) {
+                const g = stepGuard.push(s);
+                if (!g) continue;
+                if (!llmFirstSentenceProcessed) {
+                  llmFirstSentenceProcessed = true;
+                  if ((backchanneledThisTurn || this._fillerPlayedThisTurn) && isLlmLeadingAck(g)) {
+                    logger.info(
+                      { callId: this.config.callId, suppressed: g, turnNumber: _currentTurnIndex, evt: "llm_leading_ack_suppressed" },
+                      "Pipeline: LLM leading ack suppressed on fallback path (filler already played this turn)",
+                    );
+                    continue;
+                  }
+                }
+                enqueue(g);
+              }
               pendingText = remainder;
             },
             (fullText) => { llmResponse = fullText; },
