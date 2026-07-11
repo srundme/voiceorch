@@ -250,7 +250,15 @@ export class AzureSTT implements STTAdapter {
     let intentionallyClosed = false;
     let reconnectAttempts = 0;
     let currentRequestId = "";
-    const MAX_RECONNECT_ATTEMPTS = 10;
+    // 3 retries is enough to recover from transient network blips; it also
+    // fails fast when the key/region is wrong (auth errors close the socket
+    // immediately — retrying 10 times would take 30 s and swallow the silence
+    // timeout before the pipeline can react).
+    const MAX_RECONNECT_ATTEMPTS = 3;
+    // Track when the current socket was opened so we can detect "instant close"
+    // failures (auth / wrong region) vs genuine network drops.
+    let socketOpenedAt = 0;
+    const QUICK_CLOSE_MS = 2_000; // socket lived <2s → very likely auth/config error
     const audioQueue: Buffer[] = [];
     // Endpointing latency tracking
     let lastPartialAt = 0;          // timestamp of last speech.hypothesis
@@ -270,6 +278,7 @@ export class AzureSTT implements STTAdapter {
       ws.on("open", () => {
         wsReady = true;
         reconnectAttempts = 0;
+        socketOpenedAt = Date.now();
 
         // ① Speech config — declares the audio format to Azure
         ws.send(
@@ -426,19 +435,35 @@ export class AzureSTT implements STTAdapter {
       });
 
       ws.on("close", (code: number, reason: Buffer) => {
+        wsReady = false;
+        const livedMs = socketOpenedAt > 0 ? Date.now() - socketOpenedAt : -1;
         logger.info(
-          { code, reason: reason.toString(), intentionallyClosed, reconnectAttempts },
+          { code, reason: reason.toString(), intentionallyClosed, reconnectAttempts, livedMs },
           "Azure streaming STT WebSocket closed",
         );
         if (intentionallyClosed) {
           onClose?.();
           return;
         }
-        // Unexpected close — reconnect with exponential back-off (max ~30 s).
+        // Quick-close heuristic: if the socket died within QUICK_CLOSE_MS of
+        // opening (or never opened at all), it is almost certainly an auth or
+        // region misconfiguration — retrying won't help and would just delay
+        // the pipeline's onClose() fallback until after the silence timeout.
+        // Give up immediately after 1 quick-close attempt.
+        const isQuickClose = socketOpenedAt === 0 || livedMs < QUICK_CLOSE_MS;
+        if (isQuickClose && reconnectAttempts >= 1) {
+          logger.error(
+            { code, livedMs, region: this.region },
+            "Azure STT: repeated quick-close — likely auth/region error; not retrying",
+          );
+          onClose?.();
+          return;
+        }
+        // Unexpected close — reconnect with exponential back-off (max ~8 s).
         // Azure closes after ~10 min idle or on transient errors; reconnect
         // silently so long calls continue without dropping user audio.
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30_000);
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 8_000);
           reconnectAttempts++;
           logger.info({ delay, reconnectAttempts }, "Azure STT: reconnecting…");
           setTimeout(openSocket, delay);

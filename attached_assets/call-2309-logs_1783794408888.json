@@ -1,0 +1,643 @@
+[
+  {
+    "id": 169293,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 170,
+      "agentName": "VLCC",
+      "asrProvider": "azure",
+      "llmProvider": "sarvam",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "9fb23d39-9ff7-4c13-b320-cb01421d9142"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2309,
+      "sessionId": "live-2309",
+      "callType": "Live Call",
+      "direction": "Outbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-11T18:22:57.044Z",
+      "telephonyProvider": "vobiz"
+    }
+  },
+  {
+    "id": 169289,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 0
+      },
+      "factCount": 0,
+      "facts": {},
+      "recentCallsCount": 0
+    },
+    "metadata": null
+  },
+  {
+    "id": 169288,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "918904887300",
+        "from_number": "917971543255",
+        "agent_name": "VLCC",
+        "caller_number": "917971543255",
+        "date": "Saturday, July 11, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to that name and use it exclusively for the rest of the call. The caller's self-stated name takes absolute priority over the stored name shown above, which may belong to a previous caller on the same number.\n=====================================\n\nAt the start of this conversation, you have been given a LEAD CONTEXT block above. It contains whatever information the lead submitted — their name, city"
+    },
+    "metadata": null
+  },
+  {
+    "id": 169291,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "sourceIds": [
+        39
+      ],
+      "injected": true,
+      "contributingSourceIds": [
+        39
+      ],
+      "truncated": true,
+      "perSource": [
+        {
+          "sourceId": 39,
+          "totalEntries": 1,
+          "keptEntries": 1,
+          "chars": 3736,
+          "truncated": true
+        }
+      ],
+      "injectedChars": 3736,
+      "preview": "Content: ILCC Premium Clinic - AI Voice Agent Knowledge Base\n\n1. Clinic Overview\n\nClinic Name: ILCC Premium Clinic\n\nMission Statement: The ILCC Premium Clinic is dedicated to providing targeted, science-backed treatments tailored to the unique concerns of each client, delivered by certified specialists.\n\nCore Expertise:\n\n•\nAdvanced Skin Care: Focused on rejuvenating and restoring natural skin glow"
+    },
+    "metadata": null
+  },
+  {
+    "id": 169290,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "azure",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 169295,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 169292,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "9fb23d39-9ff7-4c13-b320-cb01421d9142"
+    }
+  },
+  {
+    "id": 169294,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "model": "sarvam-105b"
+    }
+  },
+  {
+    "id": 169296,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:57.049Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "4193055a583a",
+      "promptLength": 21343,
+      "preview": "=== CALLER MEMORY ===\nName: unknown\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch "
+    }
+  },
+  {
+    "id": 169298,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:58.551Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Hello"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169297,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:58.551Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169299,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:59.569Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1019,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 5,
+      "firstByteMs": 551
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1019
+    }
+  },
+  {
+    "id": 169300,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:22:59.621Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 0,
+      "durationMs": 1070
+    }
+  },
+  {
+    "id": 169301,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:10.423Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 0,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 169302,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:10.423Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169303,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:10.423Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169304,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:11.162Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 740,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 89314,
+      "textLength": 54,
+      "firstByteMs": 141
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 740
+    }
+  },
+  {
+    "id": 169305,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:13.366Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2791,
+      "turnNumber": 0,
+      "durationMs": 2943
+    }
+  },
+  {
+    "id": 169307,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:24.166Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Silence Reprompt",
+      "reason": "no usable transcript — prompting caller again",
+      "turnNumber": 0,
+      "warningFlags": [
+        "silence_reprompt"
+      ]
+    }
+  },
+  {
+    "id": 169306,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:24.166Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Sorry, I didn't catch that — could you say that again?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169308,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:24.166Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169309,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:25.006Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 841,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 54,
+      "firstByteMs": 269
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 841
+    }
+  },
+  {
+    "id": 169310,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:27.017Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2551,
+      "turnNumber": 0,
+      "durationMs": 2850
+    }
+  },
+  {
+    "id": 169312,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:37.818Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "Since I can't hear you, I'll end the call now. Thank you, goodbye!"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169311,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:37.818Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 169313,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:38.766Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 948,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 112354,
+      "textLength": 66,
+      "firstByteMs": 251
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 948
+    }
+  },
+  {
+    "id": 169314,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:41.649Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3511,
+      "turnNumber": 0,
+      "durationMs": 3831
+    }
+  },
+  {
+    "id": 169315,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:42.519Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 169316,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:42.557Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2309"
+    }
+  },
+  {
+    "id": 169317,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:42.557Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2309"
+    }
+  },
+  {
+    "id": 169318,
+    "callId": 2309,
+    "agentId": 170,
+    "ts": "2026-07-11T18:23:42.580Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "silence_timeout",
+        "reasonLabel": "Silence timeout — no caller speech detected",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Timeout",
+        "durationSeconds": 45,
+        "turns": 0,
+        "lastComponent": "Recording",
+        "lastUserTranscript": null,
+        "lastAgentResponse": "Hello",
+        "recordingStatus": "saved",
+        "warningCount": 2,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 45,
+      "turns": 0,
+      "avgSttMs": null,
+      "avgLlmMs": null,
+      "avgTtsMs": null
+    }
+  }
+]

@@ -1392,6 +1392,15 @@ export class OrchestrationPipeline {
           const MAX_ATTEMPTS = 5;
           if (this.streamSTTReconnectAttempts >= MAX_ATTEMPTS) {
             logger.warn({ callId: this.config.callId }, "Streaming STT: max reconnect attempts reached — falling back to batch STT");
+            // Surface this failure in the call exec log so it's visible in the
+            // dashboard — a missing or invalid API key is the most common cause.
+            logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Provider Failed", ["provider_error"], {
+              provider: this.agent.asrProvider,
+              detail: {
+                reason: "Streaming STT permanently disconnected — falling back to batch STT. Check your API key and (for Azure) confirm the region matches your Speech resource.",
+                reconnectAttempts: this.streamSTTReconnectAttempts,
+              },
+            });
             return;
           }
           const backoffMs = Math.min(1000 * 2 ** this.streamSTTReconnectAttempts, 16000);
