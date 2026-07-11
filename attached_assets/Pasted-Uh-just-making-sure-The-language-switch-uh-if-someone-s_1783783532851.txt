@@ -1,0 +1,78 @@
+Uh, just making sure. The language switch, uh, if someone says English, please, it will change. Right? Because it's a two word. So that question I had. And with the step get two strict, that will not affect the agent speaking style. Right? And no persistence step rate. Uh, you're saying me that that it... that, uh, the particular persistence step calculates it and only helps it to move forward. So what if someone wants repetition? Sorry, ma'am. I didn't understand. At that time, it will again explain what it said. Right? It will not only move forward, So I wanted to have... I have this toads... this chicken. And, also, uh, the fillers the fillers, I forgot to tell about the fillers. In the call logs, the agent transcript is different. Like, What to say? Back channeling fillers, the agent is saying, oh, I see. Uh, okay. Got it. Got it. It is saying all of these phrases, which are not given to it. The language assigned is English or Tamil. If it's English and, uh, only English, it can use English fillers. But if it's a Tamil agent and the primary language is English, Because it is multilingual, then it should only speak the fullness of the language it is speaking, not English fullness. It sounds so unnatural. Add this also as a task to the replete that we actually changed that okay or sorry are the only... not sorry. Sorry. S e r a s e r i. Seri is the only filler that we are going to use. Okay and seri. But why is again... okay. Got it. IT, uh, I see, OIC. Why is this being used? add this to the task and give me the final instruction. And also explain me if everything is good.Show moreRefined language-switching logic, step-state persistence, and constrained filler vocabularyRefined language-switching logic, step-state persistence, and constrained filler vocabularyGood questions — quick answers first:
+1. "English please" (2 words) — yes, it will still switch. The exclusion list is only for pure fillers/backchannel/greetings (hello, okay, thank you, yes, no) that carry no request. "English please" is short but it's a clear, intentful request — not a filler — so it stays in the "switch immediately" bucket. The rule isn't about word count, it's about whether the phrase expresses actual intent vs. just acknowledging. I'll make sure the brief says this explicitly so Replit doesn't accidentally filter by length.
+2. Step-gate loosening — no, it won't touch speaking style. It only changes the condition the agent checks before moving to the next step (accepting more responses as "consent"). It doesn't touch tone, phrasing, or TTS at all.
+3. Persistent step-state — good catch, this needed correcting. The state variable should stop the agent from resetting back to Step 2 after the language-confusion recovery. It should NOT stop the agent from re-explaining the current step when the caller says "Sorry, I didn't understand" — that's a valid in-place repeat-on-request, not a state reset. I've added this distinction explicitly below so Replit doesn't accidentally block legitimate re-explanation.
+4. Fillers — this is a real bug worth flagging clearly, added as its own item below.
+Here's the updated final brief:
+
+Task: Fix latency, over-sensitive language switching, stuck-flow repetition, and filler-phrase inconsistency — isolated, additive changes only
+Scope note: All changes below must be additive/conditional. Do not restructure the call flow, prompt architecture, or KB logic. Do not touch agent-specific content — only the shared logic layers noted.
+1. Latency — Gemini thinking tokens
+
+Add thinkingConfig: { thinkingBudget: 0 } to the Gemini API call config to disable thinking tokens. Config-only change.
+Confirm tok(in/out/cached) values populate in exec logs (currently undefined) to verify prompt-caching and measure latency impact.
+
+2. Language-switch over-sensitivity — SHARED LAYER, not per-agent
+
+Fix wherever the per-turn language detection lives (Foundation template or shared Gemini-calling function) — once, not duplicated per agent.
+Current bug: any turn with zero Tamil characters triggers a full switch, including fillers/backchannels ("Okay," "Thank you," "Hello," "Please tell me").
+Required behavior: switching is based on intent, not word count. A short phrase with real request/intent ("English please," "speak in English") must still switch immediately — same as today. Only pure filler/acknowledgment/greeting phrases (no request content) are excluded from triggering a switch.
+Add an exclusion list of filler/backchannel/greeting words only — do not gate on sentence length or turn count.
+Confirm this applies everywhere Gemini is used as the LLM, not just this call flow.
+
+3. Step-gate too strict
+
+Loosen Step-2 gate: treat any non-negative, non-empty caller response as implicit consent to proceed, not just literal "yes." Isolated to this gate's condition only. Does not affect tone/speaking style.
+
+4. No persistent step-state (with repeat-on-request preserved)
+
+Add a persistent current_step variable that survives language-switch recovery — it must not reset to an earlier step after the recovery loop ends.
+Important: this must NOT block the agent from re-explaining the current step in place when the caller asks for clarification (e.g., "Sorry, I didn't understand"). That's a valid repeat-in-place, not a step reset. The fix only prevents the agent from re-starting the flow from Step 2 after recovering from confusion — it does not prevent normal re-explanation on request.
+
+5. Filler-phrase inconsistency — NEW
+
+Call logs show the agent generating ungoverned filler/backchannel phrases not specified anywhere in the prompt: "Oh I see," "Uh, okay," "Got it," "OIC," etc.
+Required fix: restrict the agent's filler vocabulary to only two allowed tokens — "Okay" and "சரி" (seri) — and nothing else.
+Language-matching rule: the filler used must match the agent's currently active spoken language for that turn, not default to English. If the agent is speaking Tamil, it must use "சரி," not an English filler, even though the agent is multilingual overall.
+Investigate why the LLM is generating filler phrases outside the defined list in the first place — check whether the system prompt currently constrains filler output explicitly, or if this is unconstrained natural generation. This needs a generation-level constraint (e.g., explicit instruction disallowing any acknowledgment phrase other than the two allowed tokens), not just a post-hoc filter.
+
+Out of scope for this task: KB content, call flow restructuring, prompt rewrites beyond the specific rules above, changes to any agent's domain-specific content.
+
+This covers everything discussed and the logic is consistent. Good to send as-is.Key findings so far — thinkingBudget:0 is already set in google.ts. Let me read a few more specific spots:
+
+
+4 actions
+Now I have the full picture — including a critical finding that changes the scope of three of these tasks significantly. Here's the report:
+
+Task 1 — Gemini thinking tokens / pastedSynthesized investigation findings and risk assessment frameworkSynthesized investigation findings and risk assessment frameworkGood news — Replit actually dug into the code and found the real state is better than we assumed in a few places. Quick summary:
+Task 1 (latency/thinking tokens): Already fixed — thinkingBudget: 0 is already set for all 2.x models. Nothing to do there except fix the missing tok(in/out/cached) logging, which is a pure visibility fix (5 lines) — won't itself change latency, but will tell us if context caching is actually working (if it's broken, that's the real 400–700ms fix hiding underneath).
+Task 2 (language switch): Not missing logic — it's a tuned-wrong parameter. There's already a filler stoplist and a 3-word minimum. "Please tell me" is exactly 3 words and "tell" isn't in the stoplist, so it passes as "real English" under the current rule. Fix is just: bump the threshold to 4 words + add "tell/me/more" to the stoplist. Doesn't touch explicit requests like "Can you speak in English" — those still switch fine. This is the safest, highest-impact fix on the list.
+Task 3 (step-gate): This is the one to think about. There's no pipeline-level gate — it's pure LLM instruction inside each agent's own prompt. So the only way to fix it only for this agent is a per-agent prompt edit (which you said you wanted to avoid). Doing it at the shared Foundation-template level would cover every agent, but "treat any response as yes" is risky if worded too loosely — it could weaken agents that legitimately need explicit confirmation (KYC, legal disclosure, booking confirmation). This needs careful, narrow wording if you want it shared, or it should just stay as a one-off edit to this agent's prompt if you want zero platform risk.
+Task 4 (state loss after language-confusion loop): No step-tracking exists — the LLM just reads back the conversation history to infer where it is. Replit proposes injecting a short recovery message right after a confusion loop resolves ("don't restart, resume from where you left off"), instead of building an actual state variable. Low risk, ~15 lines, and it naturally preserves the caller's right to ask "sorry, didn't understand" without over-engineering a full state machine.
+Task 5 (fillers): Two separate bugs, not one:
+
+Backchannel filler (pre-LLM): Tamil pool already only has "சரி"/"okay" — correct. Bug is it's picking the pool based on STT input language instead of the conversation's actual spoken language, so English fillers leak into Tamil calls. Fix: switch the pool selection to use conversation language, with STT-language as fallback only for turn 0.
+LLM-generated fillers ("Got it," "I see," "OIC"): a soft constraint already exists but doesn't name only two allowed tokens. Needs tightening — flagged as low-to-medium risk since it's a global constraint affecting all agents, not just this one.
+
+Recommended order (safest → most involved), per Replit: Task 2 → Task 5 → Task 1 → Task 4 → Task 3.
+Everything looks sound to me except Task 3 — that's the one genuine judgment call, since it's the only one that touches shared logic with real risk to other agents' confirmation flows. Do you want to greenlight all five as-is, or hold Task 3 back and decide separately how narrowly to word it?Okay, then. Let's fix only the things that are... has minimal... like, more risk or minimal risk. Uh, task three, is it... will collapse the system? Let's not rush it. Um, maybe we can order it or rectify it with system prompt changes. Right? Let's not go back end back end.Weighed risk levels and circumvented backend complications strategicallyWeighed risk levels and circumvented backend complications strategicallyMakes sense — Task 3 stays out of the backend entirely. Handle it as a prompt-only tweak on this specific agent's system prompt (softening the "wait for explicit yes/no" instruction to "treat any non-negative response as consent to proceed"), scoped to just this agent. No Foundation template changes, no shared logic touched, zero platform risk.
+Here's the final go-ahead message for Replit:
+
+Go ahead with Tasks 1, 2, 4, and 5 as scoped in the report, in this order: Task 2 → Task 5 → Task 1 → Task 4.
+Task 3 — do NOT touch the Foundation template or any shared/backend logic. Instead, edit only this agent's own system prompt: soften the current "wait for explicit yes/no before continuing" instruction to something like "treat any non-negative, engaged response from the caller as sufficient to proceed to the next step — don't require a literal yes." This change stays isolated to this one agent's prompt text and must not be propagated to the Foundation template or any other agent.
+Confirm each task's diff before merging, and flag if any of Tasks 1, 2, 4, or 5 end up requiring changes outside the specific files/functions already named in the report (google.ts, language-filler-guard.ts, backchannel.ts, session.ts).Okay, now give me the final instruction to give to Replett.Final instruction for Replit:
+
+Proceed with the following fixes. Order: Task 2 → Task 5 → Task 1 → Task 4 → Task 3.
+Task 2 — Language-switch over-sensitivity
+In language-filler-guard.ts: raise MIN_REAL_ENGLISH_WORDS from 3 to 4, and add "tell", "me", "more" to FILLER_WORDS. No other changes to this file.
+Task 5 — Filler-phrase inconsistency
+
+In backchannel.ts: change filler-pool selection to use the conversation's current spoken language (currentLang) instead of sttConfig.language. For turn 0 (before any STT/language is established), fall back to sttConfig.language.
+In session.ts (lines ~2264–2272): tighten the existing filler constraint to explicitly allow only two tokens — "Okay" (when currently speaking English) and "சரி" (when currently speaking Tamil). No other acknowledgment phrases permitted.
+
+Task 1 — Logging fix
+Surface the Gemini SDK response metadata (in, out, cached token counts) into the exec log output, replacing the current undefined values. Confirm after deploying whether gemini_context_cache_created events appear for subsequent turns — this tells us if prompt caching is actually active.
+Task 4 — State loss after language-confusion recovery
+Implement Path A only: after a language-confusion loop resolves, inject a system message into the conversation history: "Language confusion resolved. Do not re-introduce yourself or restart the call flow — resume from the last content topic you were discussing before the confusion." Do not implement a persistent step-state variable (Path B) — out of scope.
+Task 3 — Step-gate too strict
+Do NOT modify the Foundation template or any shared/backend logic. Edit only this agent's own system prompt: soften the current "wait for explicit yes/no before continuing" instruction to "treat any non-negative, engaged response from the caller as sufficient to proceed to the next step — don't require a literal yes." This change must stay isolated to this single agent's prompt and must not be copied to any other agent or shared template.

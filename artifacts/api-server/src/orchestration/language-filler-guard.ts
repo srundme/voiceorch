@@ -17,7 +17,7 @@
  */
 
 /** Minimum word count before a Latin-only utterance can count as real English. */
-const MIN_REAL_ENGLISH_WORDS = 3;
+const MIN_REAL_ENGLISH_WORDS = 4;
 
 /**
  * Borrowed English fillers / backchannels / romanized Indic acknowledgments that
@@ -43,6 +43,8 @@ const FILLER_WORDS = new Set([
   "haan", "han", "ha", "hn", "ji", "hai", "nahi", "nhi",
   "acha", "accha", "achha", "theek", "thik", "sari", "seri", "sarì",
   "ama", "aama", "illa", "illai",
+  // continuation / clarification requests (e.g. "please tell me", "tell me more")
+  "tell", "me", "more",
   // hold-on fragments
   "wait", "hold", "on", "one", "sec", "second", "minute",
 ]);

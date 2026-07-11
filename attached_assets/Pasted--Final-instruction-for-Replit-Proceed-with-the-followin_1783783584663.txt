@@ -1,0 +1,26 @@
+**Final instruction for Replit:**
+
+---
+
+Proceed with the following fixes. Order: Task 2 → Task 5 → Task 1 → Task 4 → Task 3.
+
+**Task 2 — Language-switch over-sensitivity**
+In `language-filler-guard.ts`: raise `MIN_REAL_ENGLISH_WORDS` from 3 to 4, and add "tell", "me", "more" to `FILLER_WORDS`. No other changes to this file.
+
+**Task 5 — Filler-phrase inconsistency**
+- In `backchannel.ts`: change filler-pool selection to use the conversation's current spoken language (`currentLang`) instead of `sttConfig.language`. For turn 0 (before any STT/language is established), fall back to `sttConfig.language`.
+- In `session.ts` (lines ~2264–2272): tighten the existing filler constraint to explicitly allow only two tokens — "Okay" (when currently speaking English) and "சரி" (when currently speaking Tamil). No other acknowledgment phrases permitted.
+
+**Task 1 — Logging fix**
+Surface the Gemini SDK response metadata (`in`, `out`, `cached` token counts) into the exec log output, replacing the current `undefined` values. Confirm after deploying whether `gemini_context_cache_created` events appear for subsequent turns — this tells us if prompt caching is actually active.
+
+**Task 4 — State loss after language-confusion recovery**
+Implement Path A only: after a language-confusion loop resolves, inject a system message into the conversation history: "Language confusion resolved. Do not re-introduce yourself or restart the call flow — resume from the last content topic you were discussing before the confusion." Do not implement a persistent step-state variable (Path B) — out of scope.
+
+**Task 3 — Step-gate too strict**
+Do NOT modify the Foundation template or any shared/backend logic. Edit only this agent's own system prompt: soften the current "wait for explicit yes/no before continuing" instruction to "treat any non-negative, engaged response from the caller as sufficient to proceed to the next step — don't require a literal yes." This change must stay isolated to this single agent's prompt and must not be copied to any other agent or shared template.
+
+**General constraints for all tasks:**
+- No changes outside the specific files/functions named above (`google.ts`, `language-filler-guard.ts`, `backchannel.ts`, `session.ts`, and this agent's own system prompt).
+- Show the diff for each task before merging.
+- Flag immediately if any task requires touching a file or shared layer not listed here.

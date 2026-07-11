@@ -689,6 +689,13 @@ export class OrchestrationPipeline {
   // Azure STT endpointing metadata — set in streaming callback, consumed in processTurn
   private _pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number } | null = null;
   private _fillerPlayedThisTurn = false;
+  // ── Language-confusion recovery (Task 4) ──────────────────────────────────
+  // Counts consecutive turns where the filler guard held the current language
+  // (caller spoke a short English phrase in a non-English conversation). When
+  // this reaches ≥ 2 the LLM has likely been stuck in a "I'm speaking in Tamil
+  // / do you want another language?" loop. The next turn injects a recovery
+  // system note so the LLM resumes the call flow instead of re-starting it.
+  private _consecutiveHeldFillerTurns = 0;
 
   // Usage accumulators — updated on every LLM call and every TTS synthesis.
   // Exposed via getUsageTotals() so session.ts can pass real values to recordUsage().
@@ -1298,6 +1305,11 @@ export class OrchestrationPipeline {
                 { callId: this.config.callId, heldLang: this.currentLang, text: text.slice(0, 60) },
                 "Auto-detect: English filler/backchannel — holding current language",
               );
+              // Task 4: count consecutive held-filler turns so the recovery
+              // message can be injected when ≥ 2 such turns accumulate.
+              this._consecutiveHeldFillerTurns++;
+            } else {
+              this._consecutiveHeldFillerTurns = 0;
             }
             detected = resolved.lang;
             if (detected) {
@@ -2264,12 +2276,14 @@ export class OrchestrationPipeline {
       // Constrain LLM-generated acknowledgment fillers — models otherwise larden
       // every reply with a translated "got it" / "I see" / "oh I see" style opener,
       // which sounds scripted and repetitive over a whole call (Tamil especially:
-      // only "okay"/"seri" sound natural, and even those should be used sparingly).
+      // only "seri" sounds natural, and even that should be used sparingly).
+      // Task 5b: exactly two permitted tokens, language-matched; all others forbidden.
+      const allowedFiller = effectiveLang.startsWith("ta") ? `"சரி" (seri)` : `"Okay"`;
       langGuard +=
-        ` [ACKNOWLEDGMENT FILLERS] Keep acknowledgment fillers minimal — most replies should have NONE at all. ` +
-        `When one is genuinely natural, keep it to a single short word ("okay"${effectiveLang.startsWith("ta") ? ` or "சரி" (seri)` : ""}) ` +
-        `and never stack multiple fillers or use verbose translated phrases like "I see", "oh I see", "understood", or "got it" in the target language. ` +
-        `Do not open consecutive replies with a filler.`;
+        ` [ACKNOWLEDGMENT FILLERS] The ONLY permitted acknowledgment/filler token is ${allowedFiller}. ` +
+        `Do NOT use "Sure", "Got it", "I see", "Oh I see", "Mm-hmm", "Right", "Understood", "Great", ` +
+        `or ANY other acknowledgment phrase — in any language. ` +
+        `Most replies must have NO filler at all. Never open two consecutive replies with a filler.`;
     }
 
     return langGuard;
@@ -4332,10 +4346,12 @@ export class OrchestrationPipeline {
     // first agent word.
     let backchanneledThisTurn = false;
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
-      // Tamil's trimmed pool ("okay"/"seri" only) sounds natural in sparing use
-      // but robotic if it fires on most turns — dampen the effective frequency
-      // for Tamil specifically, on top of the agent-configured base frequency.
-      const fillerLang = this.agent.sttConfig.language;
+      // Task 5a: use the conversation's current spoken language to pick the filler
+      // pool, not the STT config language. This ensures a Tamil-speaking caller in
+      // an en-IN STT session gets "சரி"/"okay" (Tamil pool) instead of "Got it." /
+      // "Sure." (English pool). Fall back to sttConfig.language on turn 0 before
+      // any STT has established a current language.
+      const fillerLang = this.currentLang || this.agent.sttConfig.language;
       const isTamil = (fillerLang ?? "").toLowerCase().split(/[-_]/)[0] === "ta";
       const baseFreq = this.agent.backchannelingFrequency ?? 0.5;
       const freq = isTamil ? Math.min(baseFreq, 0.25) : baseFreq;
@@ -4758,6 +4774,29 @@ export class OrchestrationPipeline {
         callId:      this.config.callId,
       },
     }) : null;
+
+    // ── Task 4: Language-confusion recovery injection ───────────────────────
+    // After ≥ 2 consecutive turns where the filler guard held the current
+    // language (caller said English backchannels in a Tamil conversation),
+    // the LLM may have lost track of the call flow and is looping on
+    // "I'm speaking in Tamil / do you want another language?".
+    // Inject a one-shot system note before the LLM call so it resumes from
+    // the last content topic instead of restarting the call flow.
+    // The note is injected ONCE (counter resets immediately) and uses role
+    // "user" with a [SYSTEM NOTE] prefix so it works across all providers.
+    if (this._consecutiveHeldFillerTurns >= 2) {
+      const recoveryNote =
+        "[SYSTEM NOTE — do not read this aloud] Language confusion has been resolved. " +
+        "Resume your call flow from the last content topic you were explaining before the confusion — " +
+        "do not re-introduce yourself, do not restart the call from the beginning, " +
+        "and do not ask about language preferences again. Continue from where you left off.";
+      this.conversationHistory.push({ role: "user", content: recoveryNote });
+      this._consecutiveHeldFillerTurns = 0;
+      logger.info(
+        { callId: this.config.callId, turnNumber: _currentTurnIndex },
+        "Language confusion recovery note injected into conversation history",
+      );
+    }
 
     this.logExec("LLM", "request", {
       provider: this.agent.llmProvider,
