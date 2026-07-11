@@ -6418,7 +6418,44 @@ function detectExplicitLanguageRequest(rawText: string): string | null {
     // Native-script locatives: "<lang>में" (Devanagari), "தமிழில்/தமிழ்ல", "…த்தில்/யில்" etc.
     /(अंग्रेज़ी|अंग्रेजी|हिन्दी|हिंदी|तमिल|तेलुगु|कन्नड़|कन्नड|मलयालम|मराठी|बांग्ला|बंगाली|गुजराती|पंजाबी|उड़िया|ओड़िया|उर्दू)\s*(में|मे)/u.test(text) ||
     /தமிழ(ில்|்ல|ுல)|ஆங்கிலத்தில்|ஹிந்தியில்|இந்தியில்|தெலுங்கில்|கன்னடத்தில்|மலையாளத்தில்|উর্দু|ਵਿੱਚ/u.test(text);
-  if (!hasRequestVerb && !hasInLang) return null;
+  if (!hasRequestVerb && !hasInLang) {
+    // ── Bare-imperative fast-path ──────────────────────────────────────────
+    // Indian conversational speech drops the request verb: "Ma'am Tamil" means
+    // "Ma'am, speak Tamil". If the ENTIRE non-address content of a SHORT (≤5
+    // word) utterance is exactly one language name and there is no negation
+    // present, treat it as an explicit language request.
+    //
+    // Safeguards:
+    //   • negation words ("no", "not", "nahi", "illa") veto this path
+    //   • more than one content word → not a bare imperative → fall through
+    //   • the sole content word must literally match the language spec's own
+    //     mention regex (prevents accidental matches from a nearby native-
+    //     script language glyph in an otherwise unrelated utterance)
+    //
+    // Examples that DO latch:   "Ma'am Tamil"  "sir Hindi"  "Tamil please"
+    // Examples that do NOT latch: "Do you support Tamil?" (3 content words)
+    //                             "I don't know Tamil" (negated)
+    //                             "Tamil teacher" (2 content words)
+    const isNegatedBare = /\b(no|not|dont|don'?t|never|nahi|nahin|illa|illai|vendam|venda|mat)\b/.test(t);
+    if (!isNegatedBare && mentioned.length === 1) {
+      const ADDR_TERMS = new Set([
+        "maam", "madam", "sir", "please", "hi", "hello", "ok", "okay",
+        "uh", "um", "hmm", "hm", "bhai", "didi", "anna", "akka", "hey",
+        "yeah", "yea", "yes", "can", "you",
+      ]);
+      const allWords = t.split(/\s+/).filter((w) => /[a-z]/.test(w));
+      const contentWords = allWords.filter((w) => !ADDR_TERMS.has(w.replace(/[^a-z]/g, "")));
+      if (allWords.length <= 5 && contentWords.length === 1) {
+        const soleWord = contentWords[0]!;
+        const spec = mentioned[0]!;
+        // Confirm the sole content word itself matches the language's mention pattern.
+        if (spec.mention.test(soleWord)) {
+          return spec.code;
+        }
+      }
+    }
+    return null;
+  }
 
   // Negation guard per language: "don't speak English" / "English mat bolo" /
   // "தமிழ் வேண்டாம்" must not latch that language (but leaves any OTHER
