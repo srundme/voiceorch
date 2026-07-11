@@ -4066,6 +4066,32 @@ export class OrchestrationPipeline {
       return;
     }
 
+    // ── Caller farewell short-circuit ─────────────────────────────────────
+    // When the caller says a clear farewell ("Thank you", "Bye", "நன்றி"…)
+    // after the opening exchange, skip the LLM entirely and trigger end_call
+    // immediately.  Without this, the LLM responds with an acknowledgment
+    // ("சரிங்க") and keeps waiting — the caller has to hang up manually.
+    if (this.turnIndex >= 3 && this.isCallerFarewellUtterance(transcript)) {
+      const endCallTool = this.agent.tools.find((t) => t.type === "end_call");
+      if (endCallTool) {
+        logger.info(
+          { callId: this.config.callId, transcript, turnIndex: this.turnIndex },
+          "Pipeline: caller farewell detected — auto-triggering end_call (skipping LLM)",
+        );
+        this.logExec("Agent", "system", {
+          status: "info",
+          metadata: {
+            event: "Caller Farewell Auto-End",
+            transcript,
+            turnNumber: this._activeTurnIndex,
+          },
+        });
+        await this.executeEndCall(endCallTool as AgentTool & { type: "end_call" });
+        await this.drainPlaybackTail();
+        return;
+      }
+    }
+
     const guardrailResponse = this.checkGuardrailRoutes(transcript);
     if (guardrailResponse !== null) {
       logger.info({ callId: this.config.callId, transcript }, "Guardrail route triggered");
@@ -6120,6 +6146,44 @@ export class OrchestrationPipeline {
       const phrase = p.trim().toLowerCase();
       return phrase.length > 0 && lower.includes(phrase);
     });
+  }
+
+  /**
+   * Returns true when the caller's utterance is a pure farewell — short enough
+   * that it cannot be anything else, and containing at least one unambiguous
+   * farewell keyword.  Used by the processTurn() farewell short-circuit.
+   *
+   * Conservative by design: "Thank you for the information" does NOT match
+   * (extra content words), "Thank you" DOES match.  This prevents ending the
+   * call on a mid-conversation polite acknowledgment.
+   */
+  private isCallerFarewellUtterance(transcript: string): boolean {
+    // Normalise: keep Tamil + lowercase Latin, strip punctuation
+    const t = transcript
+      .toLowerCase()
+      .replace(/[^\u0B80-\u0BFFa-z\s]/g, "")
+      .trim();
+    if (t.length === 0 || t.length > 60) return false;
+
+    // Pure bye/goodbye — unambiguous regardless of surrounding fillers
+    if (/\b(bye|byee|bye\s*bye|goodbye|good\s*bye|cya|tata|tatata)\b/.test(t)) return true;
+
+    // "thank you" / "thanks" — only when the ENTIRE utterance (after stripping
+    // address terms and common intensifiers) IS the thank-you itself.  This
+    // prevents "thank you, now let me ask…" from ending the call mid-sentence.
+    const stripped = t
+      .replace(
+        /\b(sir|madam|maam|please|ok|okay|so|much|very|lot|again|alright|great|nice|fine)\b/g,
+        "",
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+    if (/^(thank\s*you|thanks|thankyou|thank\s*u)$/.test(stripped)) return true;
+
+    // Tamil farewells: நன்றி (thank you)
+    if (/நன்றி/.test(t)) return true;
+
+    return false;
   }
 
   /**

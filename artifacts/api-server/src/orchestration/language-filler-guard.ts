@@ -16,13 +16,25 @@
  * entirely (handled by the caller in resolveAutoDetectLanguage).
  */
 
-/** Minimum word count before a Latin-only utterance can count as real English. */
+/**
+ * Minimum number of NON-FILLER content words required before a Latin-only
+ * utterance is treated as genuine English.
+ *
+ * Counting only content words (not total words) prevents Sarvam STT artifacts
+ * like "direct to the about" (≤1 content word) from triggering a language
+ * switch that a sentence with real English nouns/verbs/adjectives will still
+ * exceed comfortably.
+ */
 const MIN_REAL_ENGLISH_WORDS = 4;
 
 /**
  * Borrowed English fillers / backchannels / romanized Indic acknowledgments that
  * are normal inside an Indian-language conversation and are NOT evidence the
  * caller has switched to English. Lowercase, apostrophes/punctuation stripped.
+ *
+ * Also includes English grammatical function words (articles, prepositions,
+ * auxiliaries) that carry zero "this is English" signal on their own and
+ * regularly appear in Sarvam's uncertain-audio output for Tamil speech.
  */
 const FILLER_WORDS = new Set([
   // acknowledgments / backchannels
@@ -47,6 +59,21 @@ const FILLER_WORDS = new Set([
   "tell", "me", "more",
   // hold-on fragments
   "wait", "hold", "on", "one", "sec", "second", "minute",
+  // ── English grammatical function words ───────────────────────────────────
+  // These appear in Sarvam's output when it is uncertain about Tamil audio
+  // ("direct to the about", "okay ma'am is in the") — they carry zero
+  // standalone "this is English" signal and must not count toward the content-
+  // word threshold.  Genuine English sentences still exceed the threshold easily
+  // through their nouns, verbs, and adjectives.
+  // Articles
+  "a", "an", "the",
+  // Prepositions & particles
+  "to", "in", "of", "at", "by", "on", "for", "from", "with", "into",
+  "about", "up", "out", "off", "over", "under", "as", "if",
+  // Copula / auxiliaries
+  "is", "are", "was", "be", "am", "been",
+  // Coordinating conjunctions
+  "and", "or", "but",
 ]);
 
 /** Split into normalized lowercase words; apostrophes and punctuation removed. */
@@ -61,12 +88,20 @@ function tokenize(text: string): string[] {
 /**
  * True when a Latin-only transcript looks like the caller genuinely conversing
  * in English (rather than a borrowed filler/backchannel): it has at least
- * MIN_REAL_ENGLISH_WORDS words AND at least one word outside the stoplist.
+ * MIN_REAL_ENGLISH_WORDS **content words** — i.e. words not in the filler/
+ * function-word stoplist.
+ *
+ * Counting content words (not total words) is critical: a Sarvam transcription
+ * artifact like "Okay ma'am direct to the about" has 6 total words but only
+ * 1 content word ("direct") after stripping fillers + function words, so it
+ * stays safely below the threshold and does NOT trigger an English switch.
+ * A genuine English sentence ("Are there any other features in the app?")
+ * still has 5+ content words and correctly triggers.
  */
 export function isRealEnglishUtterance(text: string): boolean {
   const words = tokenize(text);
-  if (words.length < MIN_REAL_ENGLISH_WORDS) return false;
-  return words.some((w) => !FILLER_WORDS.has(w));
+  const contentWordCount = words.filter((w) => !FILLER_WORDS.has(w)).length;
+  return contentWordCount >= MIN_REAL_ENGLISH_WORDS;
 }
 
 export interface AutoDetectResolution {
