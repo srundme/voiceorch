@@ -1,0 +1,32 @@
+Task: Fix latency, over-sensitive language switching, stuck-flow repetition, and filler-phrase inconsistency — isolated, additive changes only
+Scope note: All changes below must be additive/conditional. Do not restructure the call flow, prompt architecture, or KB logic. Do not touch agent-specific content — only the shared logic layers noted.
+1. Latency — Gemini thinking tokens
+
+Add thinkingConfig: { thinkingBudget: 0 } to the Gemini API call config to disable thinking tokens. Config-only change.
+Confirm tok(in/out/cached) values populate in exec logs (currently undefined) to verify prompt-caching and measure latency impact.
+
+2. Language-switch over-sensitivity — SHARED LAYER, not per-agent
+
+Fix wherever the per-turn language detection lives (Foundation template or shared Gemini-calling function) — once, not duplicated per agent.
+Current bug: any turn with zero Tamil characters triggers a full switch, including fillers/backchannels ("Okay," "Thank you," "Hello," "Please tell me").
+Required behavior: switching is based on intent, not word count. A short phrase with real request/intent ("English please," "speak in English") must still switch immediately — same as today. Only pure filler/acknowledgment/greeting phrases (no request content) are excluded from triggering a switch.
+Add an exclusion list of filler/backchannel/greeting words only — do not gate on sentence length or turn count.
+Confirm this applies everywhere Gemini is used as the LLM, not just this call flow.
+
+3. Step-gate too strict
+
+Loosen Step-2 gate: treat any non-negative, non-empty caller response as implicit consent to proceed, not just literal "yes." Isolated to this gate's condition only. Does not affect tone/speaking style.
+
+4. No persistent step-state (with repeat-on-request preserved)
+
+Add a persistent current_step variable that survives language-switch recovery — it must not reset to an earlier step after the recovery loop ends.
+Important: this must NOT block the agent from re-explaining the current step in place when the caller asks for clarification (e.g., "Sorry, I didn't understand"). That's a valid repeat-in-place, not a step reset. The fix only prevents the agent from re-starting the flow from Step 2 after recovering from confusion — it does not prevent normal re-explanation on request.
+
+5. Filler-phrase inconsistency — NEW
+
+Call logs show the agent generating ungoverned filler/backchannel phrases not specified anywhere in the prompt: "Oh I see," "Uh, okay," "Got it," "OIC," etc.
+Required fix: restrict the agent's filler vocabulary to only two allowed tokens — "Okay" and "சரி" (seri) — and nothing else.
+Language-matching rule: the filler used must match the agent's currently active spoken language for that turn, not default to English. If the agent is speaking Tamil, it must use "சரி," not an English filler, even though the agent is multilingual overall.
+Investigate why the LLM is generating filler phrases outside the defined list in the first place — check whether the system prompt currently constrains filler output explicitly, or if this is unconstrained natural generation. This needs a generation-level constraint (e.g., explicit instruction disallowing any acknowledgment phrase other than the two allowed tokens), not just a post-hoc filter.
+
+Out of scope for this task: KB content, call flow restructuring, prompt rewrites beyond the specific rules above, changes to any agent's domain-specific content.
