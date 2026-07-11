@@ -5571,7 +5571,7 @@ export class OrchestrationPipeline {
     result: string,
     depth: number = 0,
     toolCallId?: string,
-    chainState: { bookApptFired: boolean } = { bookApptFired: false },
+    chainState: { bookApptFired: boolean; toolCounts?: Record<string, number> } = { bookApptFired: false },
   ): Promise<void> {
     if (toolCallId) {
       // Native tool call: use proper "tool" role with matching tool_call_id so
@@ -5587,6 +5587,17 @@ export class OrchestrationPipeline {
     const bookApptFired = chainState.bookApptFired || this.agent.tools.some(
       (t) => t.type === "native_booking" && sanitizeToolName(t.name) === toolName,
     );
+    // Stable key for the tool that just completed — used to seed toolCounts so
+    // the result of the CURRENT call is already counted before the next call fires.
+    const completedKey = toolName + ":" + JSON.stringify(
+      Object.fromEntries(Object.entries(
+        (() => { try { return JSON.parse(
+          this.conversationHistory.at(-1)?.toolCalls?.[0]?.args ?? "{}",
+        ) as Record<string, unknown>; } catch { return {}; } })(),
+      ).sort()),
+    );
+    const toolCounts: Record<string, number> = { ...chainState.toolCounts };
+    toolCounts[completedKey] = (toolCounts[completedKey] ?? 0) + 1;
 
     let llmResponse = "";
     let pendingText = "";
@@ -5838,6 +5849,36 @@ export class OrchestrationPipeline {
       const chainedName: string = triggeredToolName;
       const chainedCallId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+      // ── Same-tool-same-args loop guard ────────────────────────────────────
+      // Prevent the LLM from calling the same tool with identical arguments more
+      // than twice in a single agentic chain (a common pattern with Groq/llama
+      // where check_availability fires 5-6 times in a row for no reason, causing
+      // 8-10 seconds of silence after "One moment").
+      const chainedArgKey = chainedName + ":" + JSON.stringify(
+        Object.fromEntries(Object.entries(triggeredToolArgs).sort()),
+      );
+      const priorCalls = toolCounts[chainedArgKey] ?? 0;
+      if (priorCalls >= 2) {
+        logger.warn(
+          { callId: this.config.callId, depth, chainedName, priorCalls },
+          "Tool loop guard: same tool+args called too many times in chain — breaking loop",
+        );
+        const loopError = `error: ${chainedName} was already called ${priorCalls} time(s) with these same arguments — you already have the data, speak your response to the caller now without calling the tool again`;
+        this.conversationHistory.push({
+          role: "assistant",
+          content: cleanResponse || "",
+          toolCalls: [{ id: chainedCallId, name: chainedName, args: JSON.stringify(triggeredToolArgs) }],
+        });
+        await this.continueWithToolResult(
+          chainedName,
+          loopError,
+          depth + 1,
+          chainedCallId,
+          { bookApptFired, toolCounts },
+        );
+        return;
+      }
+
       // ── One-booking-per-chain guard (Pattern B: bulk slot booking) ─────────
       // If book_appointment already fired in this agentic chain, block the second
       // call immediately so the LLM must present the first booking confirmation to
@@ -5874,7 +5915,7 @@ export class OrchestrationPipeline {
           dupError,
           depth + 1,
           chainedCallId,
-          { bookApptFired: true },
+          { bookApptFired: true, toolCounts },
         );
         return;
       }
@@ -5891,7 +5932,7 @@ export class OrchestrationPipeline {
           chainedResult,
           depth + 1,
           chainedCallId,
-          { bookApptFired: bookApptFired || isChainedBooking },
+          { bookApptFired: bookApptFired || isChainedBooking, toolCounts },
         );
       }
       return;
@@ -5923,7 +5964,7 @@ export class OrchestrationPipeline {
       logger.info({ callId: this.config.callId, fnName: inlineFn.name }, "Inline function tag detected in continueWithToolResult — executing");
       const toolResult = await this.handleToolCall(inlineFn.name, inlineFn.args);
       if (toolResult !== undefined) {
-        await this.continueWithToolResult(inlineFn.name, toolResult, depth + 1, undefined, { bookApptFired });
+        await this.continueWithToolResult(inlineFn.name, toolResult, depth + 1, undefined, { bookApptFired, toolCounts });
       }
     }
   }

@@ -363,6 +363,13 @@ export function buildToolDefs(tools: AgentTool[]): ToolDefinition[] {
 // the caller for their real email rather than booking under a fabricated address.
 const BLOCKED_EMAIL_DOMAINS = ["example.com", "test.com", "placeholder.com", "example.org", "test.org"];
 
+// Local-parts (the part before @) that are clearly placeholder regardless of domain.
+// e.g. "example@gmail.com", "test@gmail.com", "fake@yahoo.com" are all fabricated.
+const BLOCKED_EMAIL_LOCAL_PARTS = new Set([
+  "example", "test", "fake", "dummy", "placeholder", "sample", "demo",
+  "noreply", "no-reply", "null", "undefined", "none", "na", "n/a", "invalid",
+]);
+
 // Names that are clearly fabricated placeholders — case-insensitive match.
 const BLOCKED_ATTENDEE_NAMES = new Set([
   "test user", "unknown", "guest", "user", "test", "unknown user",
@@ -386,16 +393,21 @@ export async function executeNativeBooking(
   }
 
   // ── Placeholder email guard ──────────────────────────────────────────────
-  const emailDomain = attendeeEmail.split("@")[1]?.toLowerCase() ?? "";
-  if (BLOCKED_EMAIL_DOMAINS.includes(emailDomain)) {
-    logger.warn({ callId, attendeeEmail }, "Native booking blocked: placeholder email domain");
+  const emailParts = attendeeEmail.split("@");
+  const emailLocalPart = emailParts[0]?.toLowerCase() ?? "";
+  const emailDomain = emailParts[1]?.toLowerCase() ?? "";
+  const isBlockedDomain = BLOCKED_EMAIL_DOMAINS.includes(emailDomain);
+  const isBlockedLocalPart = BLOCKED_EMAIL_LOCAL_PARTS.has(emailLocalPart);
+  if (isBlockedDomain || isBlockedLocalPart) {
+    logger.warn({ callId, attendeeEmail, isBlockedDomain, isBlockedLocalPart }, "Native booking blocked: placeholder email");
     void appendBookingLog(callId, agentId, "Booking Blocked", {
       reason: "placeholder_email",
       attendeeEmail,
       attendeeName,
-      blockedDomain: emailDomain,
+      blockedDomain: isBlockedDomain ? emailDomain : undefined,
+      blockedLocalPart: isBlockedLocalPart ? emailLocalPart : undefined,
     }, "error");
-    return "error: cannot book with a placeholder or example email address. Ask the caller for their real email address (e.g. name@gmail.com) before calling this tool again.";
+    return "error: cannot book with a placeholder or example email address. Ask the caller for their real email address before calling this tool again.";
   }
 
   // ── Placeholder name guard ───────────────────────────────────────────────
