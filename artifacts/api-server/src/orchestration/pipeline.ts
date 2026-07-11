@@ -1349,7 +1349,16 @@ export class OrchestrationPipeline {
                 );
               }
               this.currentLang = detected;
-              if (!detected.startsWith("en-")) this.lastNonEnglishLang = detected;
+              if (!detected.startsWith("en-")) {
+                this.lastNonEnglishLang = detected;
+                // Switch the streaming STT to the detected language so it
+                // transcribes in the correct script instead of translating
+                // (e.g. Sarvam en-IN translates "புரியுது" → "I understood").
+                // Only switch passively to non-English — switching BACK to
+                // English requires an explicit caller request to avoid repeated
+                // WebSocket reconnects when the caller mixes English fillers.
+                this.switchStreamSTTLanguage(detected);
+              }
             }
           } else {
             // Strict single-language mode — still honor an EXPLICIT caller request
@@ -5566,7 +5575,7 @@ export class OrchestrationPipeline {
       this.streamSTTLang = lang;
       logger.info(
         { callId: this.config.callId, lang },
-        "Streaming STT language switched to match explicit caller request",
+        "Streaming STT language switched",
       );
     } catch (err) {
       logger.warn(
