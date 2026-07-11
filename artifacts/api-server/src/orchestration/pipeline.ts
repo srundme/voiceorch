@@ -4346,46 +4346,59 @@ export class OrchestrationPipeline {
     // first agent word.
     let backchanneledThisTurn = false;
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
-      // Task 5a: use the conversation's current spoken language to pick the filler
-      // pool, not the STT config language. This ensures a Tamil-speaking caller in
-      // an en-IN STT session gets "சரி"/"okay" (Tamil pool) instead of "Got it." /
-      // "Sure." (English pool). Fall back to sttConfig.language on turn 0 before
-      // any STT has established a current language.
-      const fillerLang = this.currentLang || this.agent.sttConfig.language;
-      const isTamil = (fillerLang ?? "").toLowerCase().split(/[-_]/)[0] === "ta";
-      const baseFreq = this.agent.backchannelingFrequency ?? 0.5;
-      const freq = isTamil ? Math.min(baseFreq, 0.25) : baseFreq;
-      if (Math.random() < freq) {
-        // Strict, language-based fillers only — no cross-language fallback.
-        const pool = getBackchannelFillers(fillerLang);
-        if (pool.length > 0) {
-          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase)!;
-          this.lastFillerPhrase = phrase;
-          logger.info(
-            {
-              callId: this.config.callId,
-              fillerType: "backchannel",
-              language: fillerLang,
-              backchannelingEnabled: this.agent.backchannelingEnabled,
-              fillerListLength: pool.length,
-              selectedFiller: phrase,
-              ttsText: phrase,
-            },
-            "Backchannel filler selected (language-aware)",
-          );
-          enqueue(phrase);
-          backchanneledThisTurn = true;
-        } else {
-          logger.info(
-            {
-              callId: this.config.callId,
-              fillerType: "backchannel",
-              language: fillerLang,
-              backchannelingEnabled: this.agent.backchannelingEnabled,
-              fillerListLength: 0,
-            },
-            "Backchannel filler skipped — no filler set for language",
-          );
+      // Language resolution for the filler pool:
+      // 1. Use the conversation's established language (currentLang) when available.
+      // 2. If currentLang is null (turn 1, language not yet established) AND the agent
+      //    has languageAutoDetect on, SKIP entirely — sttConfig.language may be "en-IN"
+      //    for a Tamil conversation (Sarvam), which resolves to the English pool and
+      //    plays "Got it." / "I see." before the Tamil LLM reply.
+      // 3. Only fall back to sttConfig.language once the language is known, or for
+      //    single-language agents (no auto-detect) where sttConfig.language is trusted.
+      const fillerLang = this.currentLang
+        || (this.agent.languageAutoDetect ? null : this.agent.sttConfig.language);
+      if (!fillerLang) {
+        // Language not yet established on an auto-detect agent — skip backchannel to
+        // avoid playing an English filler in a non-English (e.g. Tamil) conversation.
+        logger.info(
+          { callId: this.config.callId, fillerType: "backchannel" },
+          "Backchannel filler skipped — language not yet established (auto-detect agent, turn 1)",
+        );
+      } else {
+        const isTamil = fillerLang.toLowerCase().split(/[-_]/)[0] === "ta";
+        const baseFreq = this.agent.backchannelingFrequency ?? 0.5;
+        const freq = isTamil ? Math.min(baseFreq, 0.25) : baseFreq;
+        if (Math.random() < freq) {
+          // Strict, language-based fillers only — no cross-language fallback.
+          const pool = getBackchannelFillers(fillerLang);
+          if (pool.length > 0) {
+            const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase)!;
+            this.lastFillerPhrase = phrase;
+            logger.info(
+              {
+                callId: this.config.callId,
+                fillerType: "backchannel",
+                language: fillerLang,
+                backchannelingEnabled: this.agent.backchannelingEnabled,
+                fillerListLength: pool.length,
+                selectedFiller: phrase,
+                ttsText: phrase,
+              },
+              "Backchannel filler selected (language-aware)",
+            );
+            enqueue(phrase);
+            backchanneledThisTurn = true;
+          } else {
+            logger.info(
+              {
+                callId: this.config.callId,
+                fillerType: "backchannel",
+                language: fillerLang,
+                backchannelingEnabled: this.agent.backchannelingEnabled,
+                fillerListLength: 0,
+              },
+              "Backchannel filler skipped — no filler set for language",
+            );
+          }
         }
       }
     }
@@ -4726,7 +4739,19 @@ export class OrchestrationPipeline {
       fillerTimer = setTimeout(() => {
         if (!llmFirstTokenAt && !this.bargeInRequested && !this.closed) {
           // Strict, language-based fillers only — no hardcoded English fallback.
-          const fillerLang = this.agent.sttConfig.language;
+          // Mirror the backchannel language resolution: prefer currentLang, fall back
+          // to sttConfig.language only for single-language agents (no auto-detect).
+          // This prevents the "en-IN" STT config from selecting English fillers in a
+          // Tamil conversation at the 800ms dead-air point.
+          const fillerLang = this.currentLang
+            || (this.agent.languageAutoDetect ? null : this.agent.sttConfig.language);
+          if (!fillerLang) {
+            logger.info(
+              { callId: this.config.callId, fillerType: "dead-air" },
+              "Dead-air filler skipped — language not yet established (auto-detect agent)",
+            );
+            return;
+          }
           const pool = getBackchannelFillers(fillerLang);
           const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase);
           if (!phrase) {
