@@ -1,0 +1,308 @@
+I want to redesign the Scheduling architecture before we continue adding more features. Please do not implement anything yet.
+
+First, analyze the current implementation and provide a detailed implementation plan, architecture, migration strategy, and impact analysis.
+
+The goal is to significantly reduce configuration complexity while making the scheduling system scalable for both SMBs and enterprise customers.
+
+==================================================
+CURRENT PROBLEM
+==================================================
+
+The current scheduling flow requires users to configure the same concepts multiple times.
+
+Current flow:
+
+1. Create Agent
+2. Calendar is created
+3. Configure Calendar
+4. Configure Availability
+5. Connect Google
+6. Create Event Type
+7. Go to Agent Builder
+8. Enable scheduling tools
+9. Select Event Type again
+10. Configure timezone again
+
+Problems:
+
+• Timezone is configured multiple times.
+• Event Type is selected multiple times.
+• Google Account is connected in one place and selected again elsewhere.
+• Users must visit multiple pages just to enable appointment booking.
+• The scheduling tools (book, availability, reschedule, cancel) all require duplicate configuration.
+
+This creates unnecessary complexity and increases the chance of misconfiguration.
+
+==================================================
+PROPOSED ARCHITECTURE
+==================================================
+
+I want to separate Scheduling from the Agent Builder.
+
+Scheduling should become a workspace-level module.
+
+It should own:
+
+• Connected Google Accounts
+• Calendars
+• Availability
+• Timezone
+• Organizer
+• Conference Provider
+• Event Types
+
+The Scheduling module should be the single source of truth.
+
+==================================================
+GOOGLE ACCOUNT STRUCTURE
+==================================================
+
+One Workspace can have multiple Google Accounts.
+
+Example:
+
+Workspace
+
+├── Google Account A
+│
+│   ├── Calendar A
+│   ├── Calendar B
+│   └── Calendar C
+│
+├── Google Account B
+│
+│   ├── Calendar D
+│   └── Calendar E
+│
+└── Google Account C
+    └── Calendar F
+
+A Google Account may contain multiple Calendars.
+
+Each Calendar owns:
+
+• Availability
+• Busy slots
+• Timezone
+• Organizer
+• Google Meet links
+• Existing bookings
+
+Calendars are the source of truth.
+
+==================================================
+IMPORTANT DESIGN PRINCIPLE
+==================================================
+
+A Calendar is NOT owned by an AI Agent.
+
+A Calendar represents a business resource.
+
+Examples:
+
+Clinic
+
+• Dr. John Calendar
+• Dr. Priya Calendar
+
+Hospital
+
+• Cardiology Calendar
+• Dental Calendar
+• Dermatology Calendar
+
+Company
+
+• Sales Calendar
+• Support Calendar
+• Demo Calendar
+
+The AI Agent is simply a booking channel.
+
+==================================================
+AGENT DESIGN
+==================================================
+
+Inside the Agent Builder, Scheduling should simply be another Platform Capability.
+
+Example:
+
+Platform Tools
+
+✓ Memory
+✓ CRM
+✓ Calendar
+✓ Knowledge Base
+✓ Human Transfer
+
+If Calendar is disabled,
+
+the agent should have no scheduling capability.
+
+If Calendar is enabled,
+
+the user configures:
+
+Calendar Access
+
+Example:
+
+Accessible Calendars
+
+✓ Dr. John Calendar
+✓ Dr. Priya Calendar
+
+Default Calendar
+
+Dr. John Calendar
+
+Permissions
+
+✓ Check Availability
+✓ Book Appointment
+✓ Reschedule
+✓ Cancel
+
+The scheduling tools should automatically inherit this configuration.
+
+There should be NO duplicate Event Type selection.
+
+There should be NO duplicate timezone configuration.
+
+==================================================
+HOW MULTIPLE AGENTS WORK
+==================================================
+
+Example
+
+Google Account
+
+├── Dr. John Calendar
+├── Dr. Priya Calendar
+
+AI Agents
+
+Reception AI
+
+↓
+
+Access
+
+✓ Dr. John
+✓ Dr. Priya
+
+Website AI
+
+↓
+
+Access
+
+✓ Dr. Priya
+
+Meta Ads AI
+
+↓
+
+Access
+
+✓ Dr. John
+
+If Reception AI books
+
+12 Jul
+10:00 AM
+
+inside Dr. John Calendar,
+
+then Website AI or Meta Ads AI should immediately see that slot as unavailable.
+
+Availability belongs to the Calendar.
+
+NOT to the AI Agent.
+
+Every booking request should check the live Calendar before booking.
+
+This prevents double booking.
+
+==================================================
+EVENT TYPES
+==================================================
+
+Event Types should belong to Calendars.
+
+Example
+
+Dr. John Calendar
+
+Event Types
+
+• Consultation
+• Follow-up
+• Surgery
+
+The Agent simply selects the default Event Type.
+
+The scheduling tools should automatically use that Event Type.
+
+==================================================
+TIMEZONE
+==================================================
+
+Timezone should only exist on the Calendar.
+
+Everything else should inherit it.
+
+There should never be timezone configuration inside:
+
+• Book Tool
+• Availability Tool
+• Reschedule Tool
+• Cancel Tool
+
+==================================================
+GOOGLE ACCOUNT
+==================================================
+
+Google Account should be connected once.
+
+Calendars belong to that account.
+
+Meeting links should be generated using that Calendar.
+
+The user should never have to select the Google Account multiple times.
+
+==================================================
+WHAT I NEED FROM YOU
+==================================================
+
+Please analyze the current scheduling architecture and answer the following before implementing anything:
+
+1. How should we redesign the Scheduling module based on this architecture?
+
+2. Which existing database tables need to change?
+
+3. Which APIs will change?
+
+4. Which frontend components need to change?
+
+5. Which backend services need to change?
+
+6. Will this affect the existing booking pipeline?
+
+7. Will this affect calendar integrations?
+
+8. Will this affect existing Event Types?
+
+9. Can this be implemented without breaking existing agents?
+
+10. Is a migration required?
+
+11. What would the migration strategy be?
+
+12. Are there any edge cases or technical challenges with this design?
+
+13. Are there any improvements you would recommend to make this architecture more scalable while keeping the configuration simple?
+
+Please do not start coding yet.
+
+I want a complete architecture review, implementation plan, database impact, API impact, migration strategy, and risk analysis before we begin implementation.
