@@ -634,8 +634,9 @@ export class SarvamSTT implements STTAdapter {
           if (total > MAX_QUEUE_BYTES) {
             let dropped = 0;
             while (total > MAX_QUEUE_BYTES && audioQueue.length > 1) {
-              dropped += audioQueue.shift()!.length;
-              total   -= dropped;
+              const len = audioQueue.shift()!.length;
+              dropped  += len;
+              total    -= len;
             }
             if (!queueTrimLogged) {
               queueTrimLogged = true;
