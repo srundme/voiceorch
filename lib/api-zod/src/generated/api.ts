@@ -4609,7 +4609,6 @@ export const NormalizePhoneResponse = zod.object({
  */
 export const ListCalendarsResponseItem = zod.object({
   "id": zod.number(),
-  "agentId": zod.number().nullish().describe('Legacy 1:1 agent link; null for workspace-level calendars'),
   "userId": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish().describe('Optional label for workspace calendars'),
@@ -4632,7 +4631,6 @@ export const ListCalendarsResponse = zod.array(ListCalendarsResponseItem)
 export const createCalendarBodyIsActiveDefault = true;
 
 export const CreateCalendarBody = zod.object({
-  "agentId": zod.number().optional().describe('Optional — links the calendar to a specific agent (legacy 1:1 mode)'),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "timezone": zod.string(),
@@ -4652,7 +4650,6 @@ export const GetCalendarParams = zod.object({
 
 export const GetCalendarResponse = zod.object({
   "id": zod.number(),
-  "agentId": zod.number().nullish().describe('Legacy 1:1 agent link; null for workspace-level calendars'),
   "userId": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish().describe('Optional label for workspace calendars'),
@@ -4687,7 +4684,6 @@ export const UpdateCalendarBody = zod.object({
 
 export const UpdateCalendarResponse = zod.object({
   "id": zod.number(),
-  "agentId": zod.number().nullish().describe('Legacy 1:1 agent link; null for workspace-level calendars'),
   "userId": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish().describe('Optional label for workspace calendars'),

@@ -379,9 +379,7 @@ const BLOCKED_ATTENDEE_NAMES = new Set([
 
 /**
  * Resolve calendar context for native scheduling tools.
- * Priority:
- *   1. agentConfig.calendarCapability (Phase 2 workspace-calendar path)
- *   2. scheduling_calendars WHERE agent_id = agentId (legacy 1:1 path)
+ * Reads agentConfig.calendarCapability (set by the agent editor's calendar picker).
  */
 async function resolveCalendarContext(agentId: number): Promise<{
   authorizedUserId: string | null;
@@ -396,24 +394,10 @@ async function resolveCalendarContext(agentId: number): Promise<{
   const authorizedUserId = agentRow?.userId ?? null;
   const cap = (agentRow?.agentConfig as AgentConfig | null)?.calendarCapability;
 
-  if (cap?.enabled && cap.defaultCalendarId != null) {
-    return {
-      authorizedUserId,
-      defaultCalendarId: cap.defaultCalendarId,
-      defaultEventTypeId: cap.defaultEventTypeId ?? null,
-    };
-  }
-
-  // Legacy fallback: scheduling_calendars WHERE agent_id = agentId
-  const [legacyCal] = await db
-    .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
-    .from(schedulingCalendarsTable)
-    .where(eq(schedulingCalendarsTable.agentId, agentId));
-
   return {
-    authorizedUserId: legacyCal?.userId ?? authorizedUserId,
-    defaultCalendarId: legacyCal?.id ?? null,
-    defaultEventTypeId: null,
+    authorizedUserId,
+    defaultCalendarId: cap?.enabled && cap.defaultCalendarId != null ? cap.defaultCalendarId : null,
+    defaultEventTypeId: cap?.defaultEventTypeId ?? null,
   };
 }
 

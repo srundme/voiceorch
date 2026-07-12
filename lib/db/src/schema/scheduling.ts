@@ -1,7 +1,6 @@
 import { pgTable, text, serial, timestamp, integer, boolean, unique, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { agentsTable } from "./agents";
 import { callsTable } from "./calls";
 
 export const googleCalendarConnectionsTable = pgTable("google_calendar_connections", {
@@ -18,10 +17,6 @@ export const googleCalendarConnectionsTable = pgTable("google_calendar_connectio
 
 export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   id: serial("id").primaryKey(),
-  /** Nullable — calendars are workspace-level resources, not 1:1 with agents.
-   *  Kept for backward compat (existing rows retain the value); Phase 2 removes
-   *  all agent-scoped lookups and replaces them with agentConfig.calendarCapability. */
-  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   userId: text("user_id").notNull(),
   name: text("name").notNull().default("My Calendar"),
   /** Optional human-readable label to distinguish multiple workspace calendars. */

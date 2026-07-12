@@ -520,9 +520,6 @@ router.get("/admin/scheduling/bookings", async (req, res): Promise<void> => {
     if (endDate) {
       conditions.push(sql`${bookingsTable.slotStart} <= ${endDate}::timestamptz + interval '1 day'`);
     }
-    if (agentId) {
-      conditions.push(eq(schedulingCalendarsTable.agentId, parseInt(agentId)));
-    }
     const rows = await db
       .select({
         id: bookingsTable.id,
@@ -533,7 +530,6 @@ router.get("/admin/scheduling/bookings", async (req, res): Promise<void> => {
         status: bookingsTable.status,
         bookedVia: bookingsTable.bookedVia,
         userId: schedulingCalendarsTable.userId,
-        agentId: schedulingCalendarsTable.agentId,
         calendarName: schedulingCalendarsTable.name,
         createdAt: bookingsTable.createdAt,
       })

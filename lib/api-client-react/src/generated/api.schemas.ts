@@ -2973,11 +2973,6 @@ export interface CsvImportResult {
 
 export interface SchedulingCalendar {
   id: number;
-  /**
-     * Legacy 1:1 agent link; null for workspace-level calendars
-     * @nullable
-     */
-  agentId?: number | null;
   userId: string;
   name: string;
   /**
@@ -3014,8 +3009,6 @@ export interface SchedulingCalendar {
 }
 
 export interface SchedulingCalendarInput {
-  /** Optional — links the calendar to a specific agent (legacy 1:1 mode) */
-  agentId?: number;
   name: string;
   /** @nullable */
   description?: string | null;

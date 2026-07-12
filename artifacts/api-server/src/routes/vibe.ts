@@ -6,7 +6,7 @@ import {
   platformListedVoicesTable, agentDispositionsTable, phoneNumbersTable,
   agentKnowledgeSourcesTable, knowledgeSourcesTable, knowledgeEntriesTable,
 } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { ingestKbTextEntries } from "../services/kb-ingest.js";
 import { logger } from "../lib/logger.js";
 import { logActivity } from "../lib/activity.js";
@@ -552,13 +552,18 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
           const acfg = (agentRow.agentConfig ?? {}) as Record<string, unknown>;
 
           // Fetch dispositions, scheduling calendar, and KB sources in parallel
+          const calCapability = (agentRow.agentConfig as any)?.calendarCapability;
+          const refineCalId: number | null = calCapability?.enabled && calCapability?.defaultCalendarId != null
+            ? calCapability.defaultCalendarId : null;
           const [dispositionRow, calendarRow, kbSourceRows] = await Promise.all([
             db.select().from(agentDispositionsTable)
               .where(eq(agentDispositionsTable.agentId, refineAgentId!))
               .then(rows => rows[0] ?? null),
-            db.select().from(schedulingCalendarsTable)
-              .where(eq(schedulingCalendarsTable.agentId, refineAgentId!))
-              .then(rows => rows[0] ?? null),
+            refineCalId != null
+              ? db.select().from(schedulingCalendarsTable)
+                  .where(eq(schedulingCalendarsTable.id, refineCalId))
+                  .then(rows => rows[0] ?? null)
+              : Promise.resolve(null),
             db.select({
               id:   knowledgeSourcesTable.id,
               name: knowledgeSourcesTable.name,
@@ -1522,23 +1527,23 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       try {
         const [cal] = await db.insert(schedulingCalendarsTable)
           .values({
-            agentId:   insertedAgent.id,
             userId:    clerkId,
             name:      `${cfg.agentName} Calendar`,
             timezone:  agentTimezone,
             hostEmail: cfg.hostEmail || null,
             isActive:  true,
           })
-          .onConflictDoUpdate({
-            target: [schedulingCalendarsTable.agentId],
-            set: {
-              timezone:  agentTimezone,
-              hostEmail: cfg.hostEmail || null,
-            },
-          })
           .returning();
 
-        void cal; // calendar shell created; availability + event type are configured by the user via the wizard
+        // Link the new calendar to this agent via calendarCapability
+        if (cal) {
+          await db.update(agentsTable)
+            .set({
+              agentConfig: sql`coalesce(${agentsTable.agentConfig}, '{}'::jsonb) || ${JSON.stringify({ calendarCapability: { enabled: true, defaultCalendarId: cal.id } })}::jsonb`,
+            })
+            .where(eq(agentsTable.id, insertedAgent.id))
+            .catch(err => logger.warn({ err }, "vibe-chat: calendarCapability link failed (non-fatal)"));
+        }
       } catch (err) {
         logger.warn({ err }, "vibe-chat: scheduling setup failed (non-fatal)");
       }
@@ -1558,10 +1563,15 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
       // agent (e.g. from a prior creation or a refine that preserved it), surface the
       // wizard so the user can complete setup without recreating the agent.
       try {
-        const [existingCal] = await db.select({ id: schedulingCalendarsTable.id, timezone: schedulingCalendarsTable.timezone })
-          .from(schedulingCalendarsTable)
-          .where(eq(schedulingCalendarsTable.agentId, insertedAgent.id))
-          .limit(1);
+        const insertedAgentCap = (insertedAgent as any).agentConfig?.calendarCapability;
+        const existingCalId: number | null = insertedAgentCap?.enabled && insertedAgentCap?.defaultCalendarId != null
+          ? insertedAgentCap.defaultCalendarId : null;
+        const [existingCal] = existingCalId != null
+          ? await db.select({ id: schedulingCalendarsTable.id, timezone: schedulingCalendarsTable.timezone })
+              .from(schedulingCalendarsTable)
+              .where(eq(schedulingCalendarsTable.id, existingCalId))
+              .limit(1)
+          : [];
         if (existingCal) {
           emit({
             type:              "scheduling_setup",

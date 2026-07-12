@@ -1,0 +1,11 @@
+-- Phase 5: Drop scheduling_calendars.agent_id
+--
+-- The legacy 1:1 agent→calendar link has been replaced by
+-- agentConfig.calendarCapability.defaultCalendarId (Phase 2 backend).
+-- All existing agent rows were backfilled by the backfill-calendar-capability
+-- script (Phase 4) before this migration runs.
+--
+-- This column is now unused; dropping it removes the stale FK and
+-- simplifies the table to a pure workspace-level resource.
+--> statement-breakpoint
+ALTER TABLE "scheduling_calendars" DROP COLUMN IF EXISTS "agent_id";
