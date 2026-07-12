@@ -797,6 +797,13 @@ export class OrchestrationPipeline {
    *  language preference. Falls back to currentLang only if the caller spoke
    *  nothing but English the whole call. */
   private lastNonEnglishLang: string = "";
+  /** Consecutive-detection guard for passive STT language switching.
+   *  We only call switchStreamSTTLanguage once the SAME non-English language
+   *  is detected in 2 consecutive transcripts, preventing a single stray
+   *  Telugu/Hindi glyph in a Sarvam en-IN transcript from switching the STT
+   *  socket away from the correct language. */
+  private _pendingSttSwitchLang: string = "";
+  private _pendingSttSwitchCount: number = 0;
   /** Sticky language the caller EXPLICITLY requested (e.g. "speak in English").
    *  Once set it overrides per-turn script auto-detection so a single Indic-script
    *  utterance can't silently drag the agent back to its default language; only
@@ -1357,7 +1364,22 @@ export class OrchestrationPipeline {
                 // Only switch passively to non-English — switching BACK to
                 // English requires an explicit caller request to avoid repeated
                 // WebSocket reconnects when the caller mixes English fillers.
-                this.switchStreamSTTLanguage(detected);
+                //
+                // Consecutive-detection guard: require the SAME non-English
+                // language in 2 back-to-back transcripts before switching the
+                // STT socket. Sarvam en-IN occasionally emits a stray Telugu
+                // glyph while transcribing Tamil audio; a single stray character
+                // used to flip the STT connection to te-IN (this bug). A genuine
+                // Tamil caller will trigger the switch within their first 2 turns.
+                if (detected === this._pendingSttSwitchLang) {
+                  this._pendingSttSwitchCount++;
+                } else {
+                  this._pendingSttSwitchLang = detected;
+                  this._pendingSttSwitchCount = 1;
+                }
+                if (this._pendingSttSwitchCount >= 2) {
+                  this.switchStreamSTTLanguage(detected);
+                }
               }
             }
           } else {
