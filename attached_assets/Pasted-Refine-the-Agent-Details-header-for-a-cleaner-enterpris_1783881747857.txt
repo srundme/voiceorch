@@ -1,0 +1,93 @@
+Refine the Agent Details header for a cleaner enterprise SaaS experience.
+
+Do NOT redesign the page.
+Only improve spacing and layout.
+
+==================================================
+1. REDUCE HEADER HEIGHT
+==================================================
+
+Reduce the total height of the agent header by approximately 15–20%.
+
+Specifically:
+
+• Reduce top padding.
+• Reduce bottom padding.
+• Reduce spacing between:
+  - Breadcrumb → Agent Name
+  - Agent Name → Metadata
+  - Metadata → Bottom Divider
+
+Keep the layout compact while maintaining readability.
+
+==================================================
+2. ALIGN ACTION BUTTONS
+==================================================
+
+Move the entire action group
+
+Refine with AI
+Save
+Publish
+Call
+Web Call
+More
+
+down slightly so they align perfectly with the metadata row:
+
+● Inactive • Agent #0146 • 0 Calls
+
+Do NOT align them with the title.
+
+The metadata row and actions should share the same visual baseline.
+
+==================================================
+3. REDUCE ESTIMATED COST CARD HEIGHT
+==================================================
+
+Reduce the vertical padding inside the Estimated Cost card.
+
+Reduce:
+
+• Top padding
+• Bottom padding
+
+Keep:
+
+• Same width
+• Same border radius
+• Same colors
+• Same typography
+
+The card should become approximately 15% shorter.
+
+Keep the content vertically centered.
+
+==================================================
+4. VISUAL RESULT
+==================================================
+
+The page should feel lighter, cleaner, and less bulky.
+
+Think of:
+
+• Linear
+• Stripe Dashboard
+• Vercel
+• GitHub Enterprise
+
+Avoid oversized headers and excessive whitespace.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+✓ Header height reduced.
+
+✓ Actions align with metadata row.
+
+✓ Estimated Cost card is shorter.
+
+✓ Less wasted vertical space.
+
+✓ Premium enterprise appearance.

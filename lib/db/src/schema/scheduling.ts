@@ -18,17 +18,25 @@ export const googleCalendarConnectionsTable = pgTable("google_calendar_connectio
 
 export const schedulingCalendarsTable = pgTable("scheduling_calendars", {
   id: serial("id").primaryKey(),
-  agentId: integer("agent_id").notNull().references(() => agentsTable.id, { onDelete: "cascade" }),
+  /** Nullable — calendars are workspace-level resources, not 1:1 with agents.
+   *  Kept for backward compat (existing rows retain the value); Phase 2 removes
+   *  all agent-scoped lookups and replaces them with agentConfig.calendarCapability. */
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   userId: text("user_id").notNull(),
   name: text("name").notNull().default("My Calendar"),
+  /** Optional human-readable label to distinguish multiple workspace calendars. */
+  description: text("description"),
   timezone: text("timezone").notNull().default("Asia/Kolkata"),
   hostEmail: text("host_email"),
   additionalHosts: text("additional_hosts").array(),
   googleCalendarConnectionId: uuid("google_calendar_connection_id").references(() => googleCalendarConnectionsTable.id, { onDelete: "set null" }),
+  /** The specific Google Calendar ID within the connected Google Account
+   *  (e.g. "primary", "abc@group.calendar.google.com"). NULL = use primary. */
+  googleCalendarId: text("google_calendar_id"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-}, (t) => [unique("scheduling_calendars_agent_id_unique").on(t.agentId)]);
+});
 
 export const eventTypesTable = pgTable("event_types", {
   id: serial("id").primaryKey(),
