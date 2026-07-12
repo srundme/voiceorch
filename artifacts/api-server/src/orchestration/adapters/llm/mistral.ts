@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
+import { drainOpenAICompatibleStream } from "./openai-compat.js";
 
 /**
  * Mistral AI — OpenAI-compatible API
@@ -54,37 +55,6 @@ export class MistralLLM implements LLMAdapter {
       ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
     });
 
-    let full = "";
-    let toolCallName = "";
-    let toolCallArgs = "";
-    let isToolCall = false;
-    let usage: LLMUsage | undefined;
-
-    for await (const chunk of stream) {
-      if (chunk.usage) {
-        usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
-      }
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
-      const token = delta.content ?? "";
-      if (token) { full += token; onToken(token); }
-      if (delta.tool_calls) {
-        isToolCall = true;
-        for (const tc of delta.tool_calls) {
-          if (tc.function?.name) toolCallName += tc.function.name;
-          if (tc.function?.arguments) toolCallArgs += tc.function.arguments;
-        }
-      }
-    }
-
-    if (usage) options?.onUsage?.(usage);
-
-    if (isToolCall && toolCallName && options?.onToolCall) {
-      let args: Record<string, unknown> = {};
-      try { args = JSON.parse(toolCallArgs || "{}") as Record<string, unknown>; } catch { /* ignore */ }
-      options.onToolCall(toolCallName, args);
-    } else {
-      onDone(full, usage);
-    }
+    await drainOpenAICompatibleStream(stream as any, onToken, onDone, options);
   }
 }
