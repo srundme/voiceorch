@@ -74,3 +74,43 @@ GOOGLE_REDIRECT_URI = "https://app.snapserve.ai/api/scheduling/google/callback"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-91796087-b1dd-4bb5-9024-614e68bbc16c"
+
+[[ports]]
+localPort = 8083
+externalPort = 3002
+
+[[ports]]
+localPort = 8084
+externalPort = 4200
+
+[[ports]]
+localPort = 8085
+externalPort = 8008
+
+[[ports]]
+localPort = 8086
+externalPort = 8099
+
+[[ports]]
+localPort = 18150
+externalPort = 3003
+
+[[ports]]
+localPort = 18522
+externalPort = 8000
+
+[[ports]]
+localPort = 20831
+externalPort = 6000
+
+[[ports]]
+localPort = 25045
+externalPort = 6800
+
+[[ports]]
+localPort = 25820
+externalPort = 5173
+
+[[ports]]
+localPort = 25821
+externalPort = 9000
