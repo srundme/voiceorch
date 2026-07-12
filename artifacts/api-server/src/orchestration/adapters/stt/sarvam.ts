@@ -503,22 +503,29 @@ export class SarvamSTT implements STTAdapter {
           logger.debug({ langCode }, "Sarvam STT: speech end");
           // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
           // caller has stopped talking — shorten any running timer.
-          // • Complete-looking buffer → 30 ms (dispatch immediately).
-          // • Incomplete-looking buffer → at least 700 ms (thinking-pause budget).
-          //   "வந்து", "போய்", conjunctive participles etc. ALWAYS signal more is
-          //   coming; the caller may be mid-thought with a ~1 s thinking gap.
-          //   adaptiveHoldMs() alone (~220 ms) is too short — we observed the
-          //   fragment "எனக்கு வந்து" being flushed and responded to while the
-          //   caller was still formulating "5 lakhs". 700 ms covers a normal human
-          //   thinking pause without adding dead air on a truly-done call.
-          //   Cap is still well below COALESCE_INCOMPLETE_MS (800 ms) so we never
-          //   hold longer than the original full hold.
-          const INCOMPLETE_SPEECH_END_MIN_MS = 700;
+          // Universal thinking-pause rule (language-agnostic):
+          //   • CLEARLY COMPLETE  → 30 ms fast-flush
+          //       – Terminal punctuation (.?!।) — STT itself declared it done
+          //       – Single known-affirmation word ("yes", "சரி", "हाँ", …)
+          //   • EVERYTHING ELSE   → max(adaptiveHoldMs(), 700 ms)
+          //       Covers ALL mid-sentence fragments in ALL languages without
+          //       enumerating grammar patterns. "5 lakhs", "எனக்கு வந்து",
+          //       "mujhe chahiye", "I want", Telugu/Kannada partials, etc.
+          //       all wait 700 ms, which is enough to survive a normal human
+          //       thinking pause (~1 s) while the STT silence window is shorter.
+          const THINKING_PAUSE_FLOOR_MS = 700;
           if (coalesceBuf && coalesceTimer) {
             clearTimeout(coalesceTimer);
-            const newHold = looksIncomplete(coalesceBuf)
-              ? Math.max(adaptiveHoldMs(), INCOMPLETE_SPEECH_END_MIN_MS)
-              : 30;
+            const bufT   = coalesceBuf.trim();
+            const single = bufT.split(/\s+/).length === 1;
+            const clearlyComplete =
+              /[.?!।]$/.test(bufT) ||
+              (single && COMPLETE_SINGLE_WORDS.has(
+                bufT.toLowerCase().replace(/[।,!?.]+$/, ""),
+              ));
+            const newHold = clearlyComplete
+              ? 30
+              : Math.max(adaptiveHoldMs(), THINKING_PAUSE_FLOOR_MS);
             coalesceTimer = setTimeout(emitCoalesced, newHold);
             logger.debug(
               { langCode, buf: coalesceBuf.slice(0, 60), newHold },
