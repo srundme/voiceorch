@@ -131,6 +131,12 @@ const CACHE_TTL_SECONDS = Number(process.env.GEMINI_CACHE_TTL_SECONDS) || 900;
 // when the per-turn language guard flips (auto-detect agents on caller code-switch);
 // after a few flips we give up and stay uncached rather than churn the cache API.
 const CACHE_MAX_WARMS = Number(process.env.GEMINI_CACHE_MAX_WARMS) || 3;
+// How long chat() will wait for an in-flight warmPromise before falling through
+// to uncached. This fixes the race on short greetings / first-speaker-user agents
+// where turn 1 arrives before the greeting-time warm has resolved. Bounded so it
+// cannot noticeably delay a turn when the cache API is genuinely slow; in the
+// common case (warm took ~300-800 ms) the wait is much shorter than this cap.
+const CACHE_WARM_WAIT_MS = 1000;
 
 // Hard request timeout so a stalled Gemini connection fails fast and the
 // pipeline's existing same-provider retry / fallback-LLM logic can take over,
@@ -471,9 +477,28 @@ export class GoogleLLM implements LLMAdapter {
     // ── Cached path (Gemini explicit context caching) ──────────────────────────
     if (this.cacheEligible(options?.cacheBase, systemPrompt, lastIsTool)) {
       const base = options!.cacheBase!;
-      // Kick off (or reuse) the cache. Non-blocking: this turn only uses it if a
-      // previous warm already completed for this exact base.
+      // Kick off (or reuse) the cache.
       this.ensureCache(base, geminiTools);
+      // Race-condition guard: warmContextCache() fires during greet() while the
+      // greeting plays. On short greetings or first-speaker-user calls, turn 1
+      // can arrive while warmPromise is still in-flight — ensureCache() sees the
+      // in-flight promise and returns immediately (dedup), but cachedContent is
+      // still null, so the turn falls through to the fully uncached path and pays
+      // the full per-prompt token cost for that turn.
+      //
+      // Fix: if a warm is in-flight, wait up to CACHE_WARM_WAIT_MS for it to
+      // settle before checking. This is bounded so it cannot block indefinitely;
+      // if the cache doesn't arrive in time we still fall through to uncached.
+      // Errors are caught inside warmPromise already (sets cacheDisabled); here
+      // we deliberately ignore the rejection so the outer logic handles it cleanly.
+      if (this.warmPromise) {
+        try {
+          await Promise.race([
+            this.warmPromise,
+            new Promise<void>(r => setTimeout(r, CACHE_WARM_WAIT_MS)),
+          ]);
+        } catch { /* warmPromise errors already handled inside ensureCache */ }
+      }
       if (this.cachedContent && this.cachedBase === base) {
         // Volatile tail = everything after the cached static prefix (per-turn KB
         // slice, gender directive, tool guides, [TOOL CALLING], date/time). Move
