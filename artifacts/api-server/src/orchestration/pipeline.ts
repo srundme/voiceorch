@@ -1344,7 +1344,10 @@ export class OrchestrationPipeline {
       // Re-apply a latched explicit language request after a full stream
       // re-init (reconnect path) — the fresh adapter stream starts on the
       // call-start language, not the requested one.
-      if (this.agent.languageAutoDetect && this.requestedLangLatch) {
+      if (this.requestedLangLatch) {
+        // Re-apply on reconnect for both auto-detect AND strict-mode agents —
+        // strict mode can now latch and switch the STT socket (fix #4), so a
+        // mid-call Sarvam reconnect must restore the requested language on both paths.
         this.streamSTTLang = null;
         this.switchStreamSTTLanguage(this.requestedLangLatch);
       }
@@ -1512,7 +1515,9 @@ export class OrchestrationPipeline {
       // LANG_DISPLAY_NAMES lookups and the consecutive-detection guard resolve
       // correctly (od-IN vs or-IN would never match → guard never fires → oscillation).
       let sttLang = this._pendingSttLang;
+      this._pendingSttLang = null; // consume — prevent stale value leaking into force-finalize / queue-drain paths
       if (sttLang === "od-IN") sttLang = "or-IN";
+      if (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null; // unknown code — fall through to script detection
 
       if (this.agent.languageAutoDetect) {
         let detected = sttLang ?? detectScriptLanguage(transcript);

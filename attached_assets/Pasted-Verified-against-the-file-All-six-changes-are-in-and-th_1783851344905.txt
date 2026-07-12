@@ -1,0 +1,18 @@
+Verified against the file. All six changes are in and the core move is correct — the language block now sits after both echo guards and the transferInitiated check, right before safetyNet.onFinal(), exactly where it should be. Fixes #2, #3, #4, #6 are all clean. But Replit deviated from the spec in one way that leaves two small holes, plus one thing it skipped:
+1. _pendingSttLang is never cleared — stale-value leak.
+The spec asked for detectedLang as a parameter threaded through handleStreamingTranscript; Replit used an instance field instead. Functional, but the field is set in the STT callback and read in the language block without ever being consumed. Two stale paths:
+
+Safety-net force-finalize: onForceFinalize calls handleStreamingTranscript(transcript, ..., "force_finalized") without any new STT callback firing, so the language block reads whatever _pendingSttLang was left over from the previous utterance and applies it to text built from partials. Since sttLang is truthy, script detection never runs as fallback — the wrong LID sticks.
+The merged pendingTranscriptQueue drain re-invokes handleStreamingTranscript with combined text but the lang of only the last segment.
+
+Fix is two lines: at the top of the language block, consume it —
+tslet sttLang = this._pendingSttLang;
+this._pendingSttLang = null;
+Now a force-finalized or re-drained transcript falls back to detectScriptLanguage instead of inheriting a stale verdict. (_pendingSttMeta already gets exactly this treatment in processTurn — mirror it.)
+2. Unknown-code guard was skipped.
+Change 5 asked for two things; only the od-IN → or-IN normalize landed. If Sarvam ever returns a code not in LANG_DISPLAY_NAMES, it flows into currentLang and buildLangGuard emits "Respond in xx-YY" literally. One line after the od-IN normalize:
+tsif (sttLang && !LANG_DISPLAY_NAMES[sttLang]) sttLang = null;
+3. Strict-mode latch isn't re-applied after STT reconnect (new gap created by fix #4).
+initStreamingSTT's post-init re-apply block is gated on this.agent.languageAutoDetect && this.requestedLangLatch. Now that strict mode also drives the STT socket, a mid-call Sarvam reconnect on a strict-mode agent silently drops the caller's requested language — the fresh socket opens on the call-start language and never switches back. Change the gate to just if (this.requestedLangLatch).
+None of these block deploying — #1 is the only one with real production surface (it needs a force-finalize or queue-merge to coincide with a language-relevant turn), #2 and #3 are edge cases. But all three are one-or-two-line fixes, so do them in one pass before the next deploy.
+After that, the live test: Tamil call on a carrier line, then grep for three things — "emitting adaptive-coalesced transcript" with detectedLang: "ta-IN" (adapter side working), "Auto-detect: caller language switch detected" appearing only on genuine caller turns and never right after a "Transcript Discarded" line (fix #1 working), and "Streaming STT language switched" firing on the second consecutive detection, not the first (guard intact).
