@@ -1,0 +1,82 @@
+You are working on a TypeScript/Node.js voice agent orchestration platform. The file to modify is the Sarvam STT adapter (src/services/stt/adapters/sarvam.ts or wherever SarvamSTT class lives). It implements batch REST + streaming WebSocket STT with adaptive transcript coalescing, zombie-socket detection, reconnect backoff, and live language switching via setLanguage().
+
+Make the following 4 changes. Do NOT refactor anything else. Do NOT change the coalescing timing logic, the looksIncomplete() heuristics, the heartbeat/zombie detector, or the reconnect backoff. Preserve all existing comments and logging style (pino-style logger.info/debug/warn with object-first args).
+
+────────────────────────────────────────
+CHANGE 1 — Forward Sarvam's detected language to onTranscript (HIGH PRIORITY)
+
+Problem: emitCoalesced() currently calls onTranscript(text, true, undefined, meta) — the detectedLanguage arg is always undefined. Sarvam saaras:v3 performs language identification and returns language_code in its transcript messages, but we drop it. Upstream language auto-detect is forced to do script-based sniffing on transcript text, which causes false language switches when fillers like "okay" are rendered in native script (e.g. "ஓகே", "సరే").
+
+Steps:
+1. Extend the SarvamMsg interface: add language_code?: string to the data object:
+   interface SarvamMsg {
+     type: string;
+     data?: { transcript?: string; signal_type?: string; message?: string; language_code?: string };
+   }
+2. Inside transcribeStream(), next to the existing coalesceBuf / coalesceMeta declarations, add:
+   let coalesceLang: string | undefined;
+3. In the ws.on("message") handler, in the transcript branch (msg.type === "transcript" || msg.type === "data"), after extracting text, capture:
+   coalesceLang = msg.data?.language_code ?? coalesceLang;
+4. In emitCoalesced():
+   - snapshot the value: const lang = coalesceLang;
+   - reset it along with the other buffer vars: coalesceLang = undefined;
+   - change the final call to: onTranscript(text, true, lang, meta);
+5. Add lang to the existing logger.info in emitCoalesced for observability.
+
+Verify: the onTranscript callback signature already accepts detectedLanguage?: string as the 3rd param — no interface changes needed outside this file.
+
+────────────────────────────────────────
+CHANGE 2 — Cap the reconnect audioQueue (prevents stale-audio flood)
+
+Problem: while the WebSocket is down (backoff up to 8s), sendAudio() pushes every chunk into audioQueue unbounded. On reconnect, up to 8 seconds of stale audio is flushed to Sarvam, producing stale transcripts dispatched mid-conversation.
+
+Steps:
+1. Near the audioQueue declaration, add:
+   const MAX_QUEUE_BYTES = 64_000; // ~2 s @ 16 kHz s16le — drop oldest beyond this
+2. In sttObj.sendAudio(), after audioQueue.push(chunk), trim from the front:
+   let total = audioQueue.reduce((a, b) => a + b.length, 0);
+   while (total > MAX_QUEUE_BYTES && audioQueue.length > 1) {
+     total -= audioQueue.shift()!.length;
+   }
+3. Add a logger.debug when trimming occurs (log dropped byte count), but throttle it — log at most once per reconnect episode (use a boolean latch reset in ws.on("open")).
+
+────────────────────────────────────────
+CHANGE 3 — Reset VAD state on socket (re)open
+
+Problem: inSpeechSegment and speechEndReceived are not reset when a socket dies mid-utterance and reconnects. A stale speechEndReceived=true causes the first post-reconnect transcript to take the 30 ms fast-flush path even though no fresh speech_end fired.
+
+Steps:
+In ws.on("open"), alongside the existing deadFired/lastMsgAt resets, add:
+   inSpeechSegment   = false;
+   speechEndReceived = false;
+
+────────────────────────────────────────
+CHANGE 4 — flush() must drain buffer even without an active timer
+
+Problem: flush() only emits the coalesce buffer when coalesceTimer is non-null:
+   if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
+If coalesceBuf is somehow non-empty with no timer, the text is stuck.
+
+Steps:
+Change the first line of flush() (and ONLY flush() — leave setLanguage() and close() as-is) to:
+   if (coalesceTimer) clearTimeout(coalesceTimer);
+   emitCoalesced();
+(emitCoalesced already no-ops on empty buffer, so this is safe.)
+
+────────────────────────────────────────
+CLEANUP (trivial):
+- Remove the dead entry "alright." from COMPLETE_SINGLE_WORDS (trailing punctuation is stripped before lookup, so it can never match).
+
+────────────────────────────────────────
+TESTING / VERIFICATION PLAN:
+
+1. tsc must pass with no new errors.
+2. Simulate a transcript message containing language_code and assert onTranscript receives it as the 3rd arg:
+   { type: "transcript", data: { transcript: "வணக்கம்", language_code: "ta-IN" } }
+3. Simulate multi-segment coalescing (two transcript messages merged) — assert the LAST seen language_code wins and coalesceLang resets after emit.
+4. Simulate socket down: push 10s worth of fake PCM into sendAudio while wsReady=false — assert queue never exceeds ~64KB and oldest chunks were dropped.
+5. Simulate reconnect mid-utterance: set speechEndReceived=true, kill socket, reopen — assert both VAD flags are false after open.
+6. Call flush() with a non-empty coalesceBuf and coalesceTimer=null — assert onTranscript fires.
+7. Confirm setLanguage() live-switch still works: call setLanguage("hi") mid-stream, assert old-language buffer drains first, socket closes with 1000, reopens with language_code=hi-IN in the URL.
+
+Report back with a diff of the changes only.

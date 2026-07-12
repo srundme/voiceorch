@@ -94,7 +94,7 @@ function normaliseLang(code: string | null | undefined): string {
 
 interface SarvamMsg {
   type: string;
-  data?: { transcript?: string; signal_type?: string; message?: string };
+  data?: { transcript?: string; signal_type?: string; message?: string; language_code?: string };
 }
 
 export class SarvamSTT implements STTAdapter {
@@ -207,6 +207,8 @@ export class SarvamSTT implements STTAdapter {
     const MAX_RECONNECT = 10;
 
     const audioQueue: Buffer[] = [];
+    const MAX_QUEUE_BYTES = 64_000; // ~2 s @ 16 kHz s16le — drop oldest chunks beyond this
+    let queueTrimLogged   = false;  // throttle: log queue trim at most once per reconnect episode
     let speechEndAt       = 0;     // timestamp of last END_SPEECH event for latency tracking
     let speechEndReceived = false; // true once speech_end fires; reset on speech_start
 
@@ -252,7 +254,7 @@ export class SarvamSTT implements STTAdapter {
       // English — affirmatives / negatives / acknowledgements / greetings
       "yes", "no", "ok", "okay", "sure", "fine", "right", "correct", "wrong",
       "good", "great", "perfect", "excellent", "absolutely", "definitely",
-      "yeah", "yep", "yup", "nope", "nah", "alright", "alright.",
+      "yeah", "yep", "yup", "nope", "nah", "alright",
       "hello", "hi", "hey", "bye", "goodbye", "thanks", "thank", "thankyou",
       "done", "stop", "cancel", "confirm", "proceed", "continue", "next",
       "back", "send", "wait", "hold", "go", "start", "begin", "end",
@@ -367,14 +369,16 @@ export class SarvamSTT implements STTAdapter {
       return false;
     }
 
-    let coalesceBuf = "";
+    let coalesceBuf  = "";
     let coalesceMeta: SttFinalMetadata | undefined;
+    let coalesceLang: string | undefined;
     let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const emitCoalesced = () => {
       coalesceTimer = null;
       if (!coalesceBuf) return;
       const text     = coalesceBuf;
+      const lang     = coalesceLang;
       const segments = coalesceMergedSegments;
       const meta: SttFinalMetadata = {
         ...coalesceMeta,
@@ -383,14 +387,15 @@ export class SarvamSTT implements STTAdapter {
       };
       coalesceBuf            = "";
       coalesceMeta           = undefined;
+      coalesceLang           = undefined;
       coalesceMergedSegments = 0;
       transcriptArrivedAt    = 0;
 
       logger.info(
-        { text: text.slice(0, 120), segments, holdMs: adaptiveHoldMs(), pauseHistory: pauseHistory.slice() },
+        { text: text.slice(0, 120), segments, holdMs: adaptiveHoldMs(), pauseHistory: pauseHistory.slice(), detectedLang: lang },
         "Sarvam STT: emitting adaptive-coalesced transcript",
       );
-      onTranscript(text, true, undefined, meta);
+      onTranscript(text, true, lang, meta);
     };
 
     // ── WebSocket health monitoring ───────────────────────────────────────────
@@ -438,8 +443,13 @@ export class SarvamSTT implements STTAdapter {
       ws.on("open", () => {
         wsReady = true;
         reconnectAttempts = 0;
-        deadFired = false;      // fresh socket — re-arm the zombie detector
-        lastMsgAt = Date.now(); // and start its silence window from now, not the dead socket's last frame
+        deadFired         = false; // fresh socket — re-arm the zombie detector
+        lastMsgAt         = Date.now(); // start silence window from now, not dead socket's last frame
+        queueTrimLogged   = false; // re-arm queue-trim log for this reconnect episode
+        // Reset VAD state: a stale speechEndReceived=true would send post-reconnect
+        // transcripts down the 30ms fast-flush path before any fresh speech_end fires.
+        inSpeechSegment   = false;
+        speechEndReceived = false;
         logger.info(
           { langCode, model, mode },
           "Sarvam streaming STT: WebSocket opened",
@@ -514,6 +524,9 @@ export class SarvamSTT implements STTAdapter {
         if (msg.type === "transcript" || msg.type === "data") {
           inSpeechSegment = false; // segment complete
           const text = stripDiarizationLabels(msg.data?.transcript ?? "");
+          // Capture the language Sarvam identified for this segment (saaras:v3 LID).
+          // Last seen language_code wins across coalesced segments; reset in emitCoalesced().
+          coalesceLang = msg.data?.language_code ?? coalesceLang;
           if (!text) return;
           const meta: SttFinalMetadata = {
             endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
@@ -615,13 +628,30 @@ export class SarvamSTT implements STTAdapter {
       sendAudio(chunk: Buffer): void {
         if (!wsReady || ws.readyState !== WebSocket.OPEN) {
           audioQueue.push(chunk);
+          // Cap the queue at ~2 s of audio — drop oldest chunks so that on reconnect
+          // we don't flood Sarvam with stale audio and produce phantom transcripts.
+          let total = audioQueue.reduce((a, b) => a + b.length, 0);
+          if (total > MAX_QUEUE_BYTES) {
+            let dropped = 0;
+            while (total > MAX_QUEUE_BYTES && audioQueue.length > 1) {
+              dropped += audioQueue.shift()!.length;
+              total   -= dropped;
+            }
+            if (!queueTrimLogged) {
+              queueTrimLogged = true;
+              logger.debug({ droppedBytes: dropped }, "Sarvam STT: audio queue trimmed — dropped stale chunks during reconnect backoff");
+            }
+          }
         } else {
           sendChunk(chunk);
         }
       },
       flush(): void {
         // Emit any held coalesced transcript immediately (don't wait for the timer).
-        if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
+        // emitCoalesced() is a no-op on an empty buffer, so always call it — this
+        // handles the edge case where coalesceBuf is non-empty but coalesceTimer is null.
+        if (coalesceTimer) clearTimeout(coalesceTimer);
+        emitCoalesced();
         // Ask Sarvam to immediately finalize its internal audio buffer.
         if (!wsReady || ws.readyState !== WebSocket.OPEN) return;
         const emptyData = Buffer.alloc(0);
