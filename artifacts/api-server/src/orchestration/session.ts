@@ -272,6 +272,7 @@ export async function createSession(params: {
     "te": "Telugu", "te-IN": "Telugu", "kn": "Kannada", "kn-IN": "Kannada",
     "mr": "Marathi", "mr-IN": "Marathi", "gu": "Gujarati", "gu-IN": "Gujarati",
     "bn": "Bengali", "bn-IN": "Bengali", "ml": "Malayalam", "ml-IN": "Malayalam",
+    "si": "Sinhala", "si-LK": "Sinhala",
     "es": "Spanish", "es-MX": "Spanish (Mexico)", "fr": "French", "de": "German",
     "it": "Italian", "pt-BR": "Portuguese (Brazil)", "ja": "Japanese",
     "ko": "Korean", "zh": "Mandarin Chinese", "ar": "Arabic",
@@ -309,6 +310,8 @@ export async function createSession(params: {
     "bn":    "CRITICAL: Write ALL Bengali words in Bengali Unicode script (e.g. নমস্কার, ধন্যবাদ). NEVER romanize Bengali into English/Latin letters.",
     "gu-IN": "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
     "gu":    "CRITICAL: Write ALL Gujarati words in Gujarati Unicode script (e.g. નમસ્તે, આભાર). NEVER romanize Gujarati into English/Latin letters.",
+    "si-LK": "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
+    "si":    "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
   };
   const agentTimezone = (agentCfg["timezone"] as string | undefined) || "Asia/Kolkata";
   const nowForCtx = new Date();

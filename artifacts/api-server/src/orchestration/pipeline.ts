@@ -269,6 +269,7 @@ const LANG_DISPLAY_NAMES: Record<string, string> = {
   "fr-FR": "French", "de-DE": "German", "es-ES": "Spanish", "pt-BR": "Portuguese",
   "it-IT": "Italian", "ja-JP": "Japanese", "ko-KR": "Korean", "zh-CN": "Chinese",
   "ar-EG": "Arabic", "ru-RU": "Russian",
+  "si-LK": "Sinhala", "si": "Sinhala",
 };
 
 /**
@@ -295,6 +296,8 @@ const LANG_SCRIPT_DIRECTIVE: Record<string, string> = {
   "pa-IN": "CRITICAL: Write ALL Punjabi words in Gurmukhi Unicode script (e.g. ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਧੰਨਵਾਦ). NEVER romanize Punjabi into English/Latin letters.",
   "or-IN": "CRITICAL: Write ALL Odia words in Odia Unicode script (e.g. ନମସ୍କାର, ଧନ୍ୟବାଦ). NEVER romanize Odia into English/Latin letters.",
   "ur-IN": "CRITICAL: Write ALL Urdu words in Urdu/Nastaliq Unicode script (e.g. سلام, شکریہ). NEVER romanize Urdu into English/Latin letters.",
+  "si-LK": "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
+  "si":    "CRITICAL: Write ALL Sinhala words in Sinhala Unicode script (e.g. ආයුබෝවන්, ස්තූතියි, හරි). NEVER romanize Sinhala into English/Latin letters — writing 'ayubowan', 'stuthi', 'hari' instead of Sinhala script is WRONG.",
 };
 
 const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so the
@@ -373,12 +376,13 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string):
  */
 function detectScriptLanguage(text: string): string | null {
   let tamil = 0, devanagari = 0, malayalam = 0, telugu = 0, kannada = 0;
-  let bengali = 0, gujarati = 0, gurmukhi = 0, odia = 0, latin = 0;
+  let bengali = 0, gujarati = 0, gurmukhi = 0, odia = 0, sinhala = 0, latin = 0;
   for (const ch of text) {
     const cp = ch.codePointAt(0) ?? 0;
     if (cp >= 0x0B80 && cp <= 0x0BFF) tamil++;
     else if (cp >= 0x0900 && cp <= 0x097F) devanagari++;
     else if (cp >= 0x0D00 && cp <= 0x0D7F) malayalam++;
+    else if (cp >= 0x0D80 && cp <= 0x0DFF) sinhala++;
     else if (cp >= 0x0C00 && cp <= 0x0C7F) telugu++;
     else if (cp >= 0x0C80 && cp <= 0x0CFF) kannada++;
     else if (cp >= 0x0980 && cp <= 0x09FF) bengali++;
@@ -393,12 +397,13 @@ function detectScriptLanguage(text: string): string | null {
   // stronger evidence of language than any number of shared-Latin words.
   // English (Latin-only) is returned only when the transcript contains zero Indic chars.
   const indicTotal = tamil + devanagari + malayalam + telugu + kannada +
-                     bengali + gujarati + gurmukhi + odia;
+                     bengali + gujarati + gurmukhi + odia + sinhala;
   const effectiveLatin = indicTotal > 0 ? 0 : latin;
   const scores: Array<[number, string]> = [
     [tamil,         "ta-IN"],
     [devanagari,    "hi-IN"],
     [malayalam,     "ml-IN"],
+    [sinhala,       "si-LK"],
     [telugu,        "te-IN"],
     [kannada,       "kn-IN"],
     [bengali,       "bn-IN"],
@@ -2561,7 +2566,7 @@ export class OrchestrationPipeline {
       // which sounds scripted and repetitive over a whole call (Tamil especially:
       // only "seri" sounds natural, and even that should be used sparingly).
       // Task 5b: exactly two permitted tokens, language-matched; all others forbidden.
-      const allowedFiller = effectiveLang.startsWith("ta") ? `"சரி" (seri)` : `"Okay"`;
+      const allowedFiller = effectiveLang.startsWith("ta") ? `"சரி" (seri)` : effectiveLang.startsWith("si") ? `"හරි" (hari)` : `"Okay"`;
       langGuard +=
         ` [ACKNOWLEDGMENT FILLERS] The ONLY permitted acknowledgment/filler token is ${allowedFiller}. ` +
         `Do NOT use "Sure", "Got it", "I see", "Oh I see", "Mm-hmm", "Right", "Understood", "Great", ` +
