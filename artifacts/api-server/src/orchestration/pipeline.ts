@@ -729,6 +729,7 @@ export class OrchestrationPipeline {
   // / do you want another language?" loop. The next turn injects a recovery
   // system note so the LLM resumes the call flow instead of re-starting it.
   private _consecutiveHeldFillerTurns = 0;
+  private _recoveryNoteInjected = false;
 
   // Usage accumulators — updated on every LLM call and every TTS synthesis.
   // Exposed via getUsageTotals() so session.ts can pass real values to recordUsage().
@@ -4934,13 +4935,14 @@ export class OrchestrationPipeline {
     // the last content topic instead of restarting the call flow.
     // The note is injected ONCE (counter resets immediately) and uses role
     // "user" with a [SYSTEM NOTE] prefix so it works across all providers.
-    if (this._consecutiveHeldFillerTurns >= 2) {
+    if (this._consecutiveHeldFillerTurns >= 2 && !this._recoveryNoteInjected) {
       const recoveryNote =
         "[SYSTEM NOTE — do not read this aloud] Language confusion has been resolved. " +
         "Resume your call flow from the last content topic you were explaining before the confusion — " +
         "do not re-introduce yourself, do not restart the call from the beginning, " +
         "and do not ask about language preferences again. Continue from where you left off.";
       this.conversationHistory.push({ role: "user", content: recoveryNote });
+      this._recoveryNoteInjected = true;
       this._consecutiveHeldFillerTurns = 0;
       logger.info(
         { callId: this.config.callId, turnNumber: _currentTurnIndex },
