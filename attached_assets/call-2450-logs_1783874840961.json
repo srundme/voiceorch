@@ -1,0 +1,1090 @@
+[
+  {
+    "id": 183213,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": "Sampuravaya",
+        "callCount": 9
+      },
+      "factCount": 10,
+      "facts": {
+        "existing_coverage": "500000",
+        "existing_policy": "yes",
+        "desired_coverage": "500000",
+        "language_pref": "tamil",
+        "name": "Sampuravaya",
+        "budget_range": "5000",
+        "family_members": "4",
+        "decision_maker": "self_and_wife",
+        "top_up_interest": "yes",
+        "existing_insurance": "yes"
+      },
+      "recentCallsCount": 5
+    },
+    "metadata": null
+  },
+  {
+    "id": 183211,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 166,
+      "agentName": "vikram",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "de1f4e6b-1585-4721-934a-8b282b1a10a0"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2450,
+      "sessionId": "live-2450",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-12T16:35:11.368Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 183212,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-166",
+        "from_number": "webcall-user-101122737730832668494",
+        "agent_name": "vikram",
+        "caller_number": "webcall-user-101122737730832668494",
+        "date": "Sunday, July 12, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: Sampuravaya  |  Calls: 9  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller is discussing top-up health insurance with the agent, building on their previous conversation, and the agent is explaining how top-up insurance works as an extra cover on top of their existing policy. The caller has an existing policy with ₹5 lakhs coverage and is considering a top-up policy. The caller needs time to think about the additional coverage required.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• existing_coverage: 500000\n• existing_policy: yes\n• desired_coverage: 500000\n• budget_r"
+    },
+    "metadata": null
+  },
+  {
+    "id": 183214,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "ta-IN",
+      "languageOverriddenFromMemory": true,
+      "originalLanguage": "en-IN"
+    }
+  },
+  {
+    "id": 183218,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 183215,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 183217,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "899fc025f0fd",
+      "promptLength": 12916,
+      "preview": "=== CALLER MEMORY ===\nName: Sampuravaya  |  Calls: 9  |  ⚠️ LAST CALL DROPPED\n\nPrevious call summary: The caller is discussing top-up health insurance with the agent, building on their previous conver"
+    }
+  },
+  {
+    "id": 183216,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:11.431Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "de1f4e6b-1585-4721-934a-8b282b1a10a0"
+    }
+  },
+  {
+    "id": 183219,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:12.513Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சாரி, கால் கட் ஆயிடுச்சு. நீங்க எவ்வளவு கவரேஜ் வேணும்னு யோசிக்கிறதா சொன்னீங்க, யோசிச்சிட்டீங்களா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 183220,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:12.513Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 183221,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:14.030Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1517,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 189154,
+      "textLength": 97,
+      "firstByteMs": 542
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1517
+    }
+  },
+  {
+    "id": 183222,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:19.077Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 5911,
+      "turnNumber": 0,
+      "durationMs": 6563
+    }
+  },
+  {
+    "id": 183223,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:21.619Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "யோசிச்சுட்டே இருக்கேன்.",
+      "endDetectToFinalMs": 445,
+      "mergedSegments": 1,
+      "pauseCount": 0,
+      "detectedLang": "ta-IN"
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183224,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:21.620Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183225,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:21.622Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183226,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.422Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183227,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.472Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183228,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.836Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1218,
+      "turnNumber": 1,
+      "durationMs": 1218
+    }
+  },
+  {
+    "id": 183229,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.839Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, நீங்க யோசிச்சுட்டு இருக்கீங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183230,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.852Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "bargeInFiredTotal": 0,
+      "bargeInRecoveryTotal": 0,
+      "bargeInRecoveryRate": null,
+      "agentSpeakCharsThisTurn": 97,
+      "agentSpeakCharsTotal": 97,
+      "callerSpeakCharsTotal": 23,
+      "talkListenRatio": 4.22,
+      "longestAgentMonologueChars": 97,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183231,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.852Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1218,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, நீங்க யோசிச்சுட்டு இருக்கீங்க. உங்களுக்கு எவ்வளவு கவரேஜ் வேணும்னு முடிவு பண்ணதும் சொல்லுங்க."
+    },
+    "metadata": {
+      "inputTokens": 5558,
+      "outputTokens": 28,
+      "cachedTokens": 4987,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183232,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:22.852Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்களுக்கு எவ்வளவு கவரேஜ் வேணும்னு முடிவு பண்ணதும் சொல்லுங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183233,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:23.015Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 594,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 3,
+      "firstByteMs": 272
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 594
+    }
+  },
+  {
+    "id": 183235,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:23.476Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 1,
+      "durationMs": 1004
+    }
+  },
+  {
+    "id": 183234,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:23.476Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183236,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:23.482Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 645,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 35,
+      "firstByteMs": 148
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 645
+    }
+  },
+  {
+    "id": 183237,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:23.673Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 824,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 61,
+      "firstByteMs": 266
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 824
+    }
+  },
+  {
+    "id": 183239,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:25.678Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 1,
+      "durationMs": 2200
+    }
+  },
+  {
+    "id": 183238,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:25.678Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 183240,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:28.238Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2551,
+      "turnNumber": 1,
+      "durationMs": 2560
+    }
+  },
+  {
+    "id": 183241,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:31.810Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "10 lakhs இருந்தா நல்லா இருக்கும்.",
+      "endDetectToFinalMs": 114,
+      "mergedSegments": 1,
+      "pauseCount": 0,
+      "detectedLang": "ta-IN"
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183242,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:31.810Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "okay"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183243,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:31.811Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Tamil. Respond in Tamil. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Tamil, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183244,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:31.811Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183245,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:31.860Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183246,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:32.234Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 424,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 4,
+      "firstByteMs": 133
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 424
+    }
+  },
+  {
+    "id": 183247,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:32.567Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 2,
+      "durationMs": 707
+    }
+  },
+  {
+    "id": 183248,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.047Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1239,
+      "turnNumber": 2,
+      "durationMs": 1239
+    }
+  },
+  {
+    "id": 183249,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.048Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "சரி, உங்களுக்கு ₹10 lakhs கவரேஜ் வேணும்னு சொல்றீங்க."
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183250,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.050Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1239,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "சரி, உங்களுக்கு ₹10 lakhs கவரேஜ் வேணும்னு சொல்றீங்க. உங்க பட்ஜெட் எவ்வளவுன்னு சொல்ல முடியுமா?"
+    },
+    "metadata": {
+      "inputTokens": 5588,
+      "outputTokens": 30,
+      "cachedTokens": 4987,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183251,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.050Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "உங்க பட்ஜெட் எவ்வளவுன்னு சொல்ல முடியுமா?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183252,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.050Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Turn Metrics",
+      "bargeInFiredTotal": 0,
+      "bargeInRecoveryTotal": 0,
+      "bargeInRecoveryRate": null,
+      "agentSpeakCharsThisTurn": 93,
+      "agentSpeakCharsTotal": 190,
+      "callerSpeakCharsTotal": 56,
+      "talkListenRatio": 3.39,
+      "longestAgentMonologueChars": 97,
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183253,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.099Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183254,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.809Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 761,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 68834,
+      "textLength": 40,
+      "firstByteMs": 257
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 761
+    }
+  },
+  {
+    "id": 183255,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:33.925Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 878,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 122594,
+      "textLength": 52,
+      "firstByteMs": 158
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 878
+    }
+  },
+  {
+    "id": 183257,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:37.147Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 183256,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:37.147Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3831,
+      "turnNumber": 2,
+      "durationMs": 4049
+    }
+  },
+  {
+    "id": 183258,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:39.327Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2151,
+      "turnNumber": 2,
+      "durationMs": 2180
+    }
+  },
+  {
+    "id": 183259,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:42.036Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 183260,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:42.081Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2450"
+    }
+  },
+  {
+    "id": 183261,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:42.081Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2450"
+    }
+  },
+  {
+    "id": 183262,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:42.104Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 30,
+        "turns": 2,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "10 lakhs இருந்தா நல்லா இருக்கும்.",
+        "lastAgentResponse": "சரி, உங்களுக்கு ₹10 lakhs கவரேஜ் வேணும்னு சொல்றீங்க. உங்க பட்ஜெட் எவ்வளவுன்னு சொல்ல முடியுமா?",
+        "recordingStatus": "saved",
+        "warningCount": 0,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 30,
+      "turns": 2,
+      "avgSttMs": 0,
+      "avgLlmMs": 1229,
+      "avgTtsMs": 608
+    }
+  },
+  {
+    "id": 183263,
+    "callId": 2450,
+    "agentId": 166,
+    "ts": "2026-07-12T16:35:43.003Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true,
+      "callbackDetectionSkipped": true
+    }
+  }
+]
