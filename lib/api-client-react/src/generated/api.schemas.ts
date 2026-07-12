@@ -2973,9 +2973,18 @@ export interface CsvImportResult {
 
 export interface SchedulingCalendar {
   id: number;
-  agentId: number;
+  /**
+     * Legacy 1:1 agent link; null for workspace-level calendars
+     * @nullable
+     */
+  agentId?: number | null;
   userId: string;
   name: string;
+  /**
+     * Optional label for workspace calendars
+     * @nullable
+     */
+  description?: string | null;
   timezone: string;
   /** @nullable */
   hostEmail?: string | null;
@@ -2984,6 +2993,11 @@ export interface SchedulingCalendar {
      * @nullable
      */
   additionalHosts?: string[] | null;
+  /**
+     * Sub-calendar ID within the linked Google account (null uses the primary calendar)
+     * @nullable
+     */
+  googleCalendarId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -3000,23 +3014,32 @@ export interface SchedulingCalendar {
 }
 
 export interface SchedulingCalendarInput {
-  agentId: number;
+  /** Optional — links the calendar to a specific agent (legacy 1:1 mode) */
+  agentId?: number;
   name: string;
+  /** @nullable */
+  description?: string | null;
   timezone: string;
   /** @nullable */
   hostEmail?: string | null;
   /** @nullable */
   additionalHosts?: string[] | null;
+  /** @nullable */
+  googleCalendarId?: string | null;
   isActive?: boolean;
 }
 
 export interface SchedulingCalendarUpdate {
   name?: string;
+  /** @nullable */
+  description?: string | null;
   timezone?: string;
   /** @nullable */
   hostEmail?: string | null;
   /** @nullable */
   additionalHosts?: string[] | null;
+  /** @nullable */
+  googleCalendarId?: string | null;
   isActive?: boolean;
 }
 

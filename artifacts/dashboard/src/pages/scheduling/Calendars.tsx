@@ -879,7 +879,7 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved, defau
           <CalendarCard
             key={cal.id}
             calendar={cal}
-            agentName={agentMap.get(cal.agentId)}
+            agentName={cal.agentId != null ? agentMap.get(cal.agentId) : undefined}
             googleConnections={googleConnections}
             linkedConnectionId={calendarLinks[cal.id] ?? null}
             onLinkChange={handleLinkChange}
@@ -893,7 +893,7 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved, defau
         onClose={() => setCreateOpen(false)}
         onSaved={onCalendarSaved}
         editing={null}
-        takenAgentIds={new Set(calendars?.map(c => c.agentId) ?? [])}
+        takenAgentIds={new Set(calendars?.map(c => c.agentId).filter((id): id is number => id != null) ?? [])}
         defaultAgentId={defaultAgentId}
       />
       </div>

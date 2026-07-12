@@ -72,10 +72,12 @@ router.post("/scheduling/calendars", requireAuth, async (req, res): Promise<void
   const clerkId = (req as any).clerkUserId as string;
   const parsed = CreateCalendarBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Validation failed", issues: parsed.error.issues }); return; }
-  // Verify the referenced agent belongs to the caller
-  const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable)
-    .where(and(eq(agentsTable.id, parsed.data.agentId), eq(agentsTable.userId, clerkId)));
-  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  // If agentId is provided, verify the referenced agent belongs to the caller
+  if (parsed.data.agentId != null) {
+    const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable)
+      .where(and(eq(agentsTable.id, parsed.data.agentId), eq(agentsTable.userId, clerkId)));
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  }
   const [row] = await db.insert(schedulingCalendarsTable)
     .values({ ...parsed.data, userId: clerkId })
     .returning();

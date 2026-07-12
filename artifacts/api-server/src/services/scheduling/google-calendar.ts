@@ -530,6 +530,8 @@ export async function createCalendarEvent(params: {
   timezone: string;
   hostEmail?: string | null;
   additionalHosts?: string[] | null;
+  /** Sub-calendar ID within the linked Google account; null/undefined uses the primary calendar */
+  googleCalendarId?: string | null;
   onError?: (detail: { errorCode: string; status?: number; googleError?: string; googleErrorDescription?: string; message?: string }) => void;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   // ── Scope gate ──────────────────────────────────────────────────────────────
@@ -592,7 +594,7 @@ export async function createCalendarEvent(params: {
 
   try {
     const event = await calendar.events.insert({
-      calendarId: "primary",
+      calendarId: params.googleCalendarId ?? "primary",
       conferenceDataVersion: 1,
       // sendUpdates: "all" causes Google Calendar to email invitations to every
       // attendee (and organizer). Without it Google silently skips the emails.
@@ -624,7 +626,7 @@ export async function createCalendarEvent(params: {
       await new Promise<void>((resolve) => setTimeout(resolve, 2000));
       try {
         const fetched = await calendar.events.get({
-          calendarId: "primary",
+          calendarId: params.googleCalendarId ?? "primary",
           eventId,
         });
         const retryLink = fetched.data.conferenceData?.entryPoints?.find(e => e.entryPointType === "video")?.uri ?? null;
@@ -677,14 +679,14 @@ export async function createCalendarEvent(params: {
   }
 }
 
-export async function deleteCalendarEvent(connectionId: string, eventId: string): Promise<void> {
+export async function deleteCalendarEvent(connectionId: string, eventId: string, googleCalendarId?: string | null): Promise<void> {
   const tokens = await getValidAccessToken(connectionId);
   if (!tokens) return;
   const client = makePlatformOAuth2Client();
   client.setCredentials({ access_token: tokens.accessToken });
   const calendar = google.calendar({ version: "v3", auth: client });
   try {
-    await calendar.events.delete({ calendarId: "primary", eventId });
+    await calendar.events.delete({ calendarId: googleCalendarId ?? "primary", eventId });
     logger.info({ connectionId, eventId }, "Google Calendar event deleted");
   } catch (err) {
     logger.warn({ err, connectionId, eventId }, "Failed to delete Google Calendar event");
@@ -707,6 +709,8 @@ export async function updateCalendarEvent(params: {
   timezone?: string;
   hostEmail?: string | null;
   additionalHosts?: string[] | null;
+  /** Sub-calendar ID within the linked Google account; null/undefined uses the primary calendar */
+  googleCalendarId?: string | null;
 }): Promise<{ meetLink: string | null; eventId: string } | null> {
   const tokens = await getValidAccessToken(params.connectionId);
   if (!tokens) return null;
@@ -742,7 +746,7 @@ export async function updateCalendarEvent(params: {
 
   try {
     const event = await calendar.events.patch({
-      calendarId: "primary",
+      calendarId: params.googleCalendarId ?? "primary",
       eventId: params.eventId,
       conferenceDataVersion: 1,
       sendUpdates: "all",

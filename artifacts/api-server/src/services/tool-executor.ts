@@ -12,6 +12,7 @@ import {
   leadTransfersTable,
   leadTimelineTable,
   callExecutionsTable,
+  type AgentConfig,
 } from "@workspace/db";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAvailableSlots } from "./scheduling/slot-engine.js";
@@ -376,6 +377,46 @@ const BLOCKED_ATTENDEE_NAMES = new Set([
   "placeholder", "sample user", "demo user", "caller",
 ]);
 
+/**
+ * Resolve calendar context for native scheduling tools.
+ * Priority:
+ *   1. agentConfig.calendarCapability (Phase 2 workspace-calendar path)
+ *   2. scheduling_calendars WHERE agent_id = agentId (legacy 1:1 path)
+ */
+async function resolveCalendarContext(agentId: number): Promise<{
+  authorizedUserId: string | null;
+  defaultCalendarId: number | null;
+  defaultEventTypeId: number | null;
+}> {
+  const [agentRow] = await db
+    .select({ userId: agentsTable.userId, agentConfig: agentsTable.agentConfig })
+    .from(agentsTable)
+    .where(eq(agentsTable.id, agentId));
+
+  const authorizedUserId = agentRow?.userId ?? null;
+  const cap = (agentRow?.agentConfig as AgentConfig | null)?.calendarCapability;
+
+  if (cap?.enabled && cap.defaultCalendarId != null) {
+    return {
+      authorizedUserId,
+      defaultCalendarId: cap.defaultCalendarId,
+      defaultEventTypeId: cap.defaultEventTypeId ?? null,
+    };
+  }
+
+  // Legacy fallback: scheduling_calendars WHERE agent_id = agentId
+  const [legacyCal] = await db
+    .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
+    .from(schedulingCalendarsTable)
+    .where(eq(schedulingCalendarsTable.agentId, agentId));
+
+  return {
+    authorizedUserId: legacyCal?.userId ?? authorizedUserId,
+    defaultCalendarId: legacyCal?.id ?? null,
+    defaultEventTypeId: null,
+  };
+}
+
 export async function executeNativeBooking(
   callId: number,
   agentId: number,
@@ -424,28 +465,15 @@ export async function executeNativeBooking(
   }
 
   try {
-    const [agentCalendar] = await db
-      .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
-      .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.agentId, agentId));
-    let authorizedUserId: string | null = null;
-    if (agentCalendar) {
-      authorizedUserId = agentCalendar.userId;
-    } else {
-      const [agentRow] = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId));
-      authorizedUserId = agentRow?.userId ?? null;
-    }
+    const { authorizedUserId, defaultCalendarId, defaultEventTypeId } = await resolveCalendarContext(agentId);
 
-    // Always auto-resolve event type from agent's calendar first; legacy stored eventTypeId is a fallback only
-    let resolvedEventTypeId: number | undefined;
-    if (agentCalendar?.id) {
+    // Resolve eventTypeId: capability default → first active on calendar → legacy tool.eventTypeId
+    let resolvedEventTypeId = defaultEventTypeId ?? undefined;
+    if (!resolvedEventTypeId && defaultCalendarId) {
       const [firstEt] = await db
         .select({ id: eventTypesTable.id })
         .from(eventTypesTable)
-        .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
+        .where(and(eq(eventTypesTable.calendarId, defaultCalendarId), eq(eventTypesTable.isActive, true)))
         .limit(1);
       resolvedEventTypeId = firstEt?.id;
     }
@@ -909,28 +937,15 @@ export async function executeNativeCheckAvailability(
   const preferredRaw = args["preferred_date"] != null ? String(args["preferred_date"]) : null;
 
   try {
-    const [agentCalendar] = await db
-      .select({ id: schedulingCalendarsTable.id, userId: schedulingCalendarsTable.userId })
-      .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.agentId, agentId));
-    let authorizedUserId: string | null = null;
-    if (agentCalendar) {
-      authorizedUserId = agentCalendar.userId;
-    } else {
-      const [agentRow] = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId));
-      authorizedUserId = agentRow?.userId ?? null;
-    }
+    const { authorizedUserId, defaultCalendarId, defaultEventTypeId } = await resolveCalendarContext(agentId);
 
-    // Always auto-resolve event type from agent's calendar first; legacy stored eventTypeId is a fallback only
-    let resolvedEventTypeId: number | undefined;
-    if (agentCalendar?.id) {
+    // Resolve eventTypeId: capability default → first active on calendar → legacy tool.eventTypeId
+    let resolvedEventTypeId = defaultEventTypeId ?? undefined;
+    if (!resolvedEventTypeId && defaultCalendarId) {
       const [firstEt] = await db
         .select({ id: eventTypesTable.id })
         .from(eventTypesTable)
-        .where(and(eq(eventTypesTable.calendarId, agentCalendar.id), eq(eventTypesTable.isActive, true)))
+        .where(and(eq(eventTypesTable.calendarId, defaultCalendarId), eq(eventTypesTable.isActive, true)))
         .limit(1);
       resolvedEventTypeId = firstEt?.id;
     }
@@ -1029,21 +1044,8 @@ export async function executeNativeListBookings(
   try {
     logger.debug({ callId, attendeeName }, "list_bookings: input received");
 
-    // Determine authorized user for ownership scoping (same pattern as other native executors)
-    const [agentCalendar] = await db
-      .select({ userId: schedulingCalendarsTable.userId })
-      .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.agentId, agentId));
-    let authorizedUserId: string | null = null;
-    if (agentCalendar) {
-      authorizedUserId = agentCalendar.userId;
-    } else {
-      const [agentRow] = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId));
-      authorizedUserId = agentRow?.userId ?? null;
-    }
+    // Determine authorized user for ownership scoping
+    const { authorizedUserId } = await resolveCalendarContext(agentId);
     logger.debug({ callId, authorizedUserId }, "list_bookings: ownership resolved");
 
     // Fetch upcoming, active bookings with a case-insensitive name match.
@@ -1166,20 +1168,7 @@ export async function executeNativeReschedule(
   }
 
   try {
-    const [agentCalendar] = await db
-      .select({ userId: schedulingCalendarsTable.userId })
-      .from(schedulingCalendarsTable)
-      .where(eq(schedulingCalendarsTable.agentId, agentId));
-    let authorizedUserId: string | null = null;
-    if (agentCalendar) {
-      authorizedUserId = agentCalendar.userId;
-    } else {
-      const [agentRow] = await db
-        .select({ userId: agentsTable.userId })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId));
-      authorizedUserId = agentRow?.userId ?? null;
-    }
+    const { authorizedUserId } = await resolveCalendarContext(agentId);
 
     const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
     if (!existing || existing.status === "cancelled") {
@@ -1487,11 +1476,7 @@ export async function executeNativeCancel(
   }
 
   try {
-    const [agentRow] = await db
-      .select({ userId: agentsTable.userId })
-      .from(agentsTable)
-      .where(eq(agentsTable.id, agentId));
-    const agentOwnerId = agentRow?.userId ?? null;
+    const { authorizedUserId: resolvedUserId } = await resolveCalendarContext(agentId);
 
     let authorizedUserId: string | null = null;
     if (tool.calendarId) {
@@ -1499,20 +1484,16 @@ export async function executeNativeCancel(
         .select({ userId: schedulingCalendarsTable.userId })
         .from(schedulingCalendarsTable)
         .where(eq(schedulingCalendarsTable.id, tool.calendarId));
-      if (!calRow || calRow.userId !== agentOwnerId) {
+      if (!calRow || calRow.userId !== resolvedUserId) {
         logger.warn(
-          { callId, toolCalendarId: tool.calendarId, agentOwnerId },
+          { callId, toolCalendarId: tool.calendarId, agentOwnerId: resolvedUserId },
           "Native cancel: stored calendarId does not belong to agent owner — rejected",
         );
         return `error: no booking found with reference ${bookingId}`;
       }
       authorizedUserId = calRow.userId;
     } else {
-      const [agentCalendar] = await db
-        .select({ userId: schedulingCalendarsTable.userId })
-        .from(schedulingCalendarsTable)
-        .where(eq(schedulingCalendarsTable.agentId, agentId));
-      authorizedUserId = agentCalendar?.userId ?? agentOwnerId;
+      authorizedUserId = resolvedUserId;
     }
 
     const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));

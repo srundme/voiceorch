@@ -4609,12 +4609,14 @@ export const NormalizePhoneResponse = zod.object({
  */
 export const ListCalendarsResponseItem = zod.object({
   "id": zod.number(),
-  "agentId": zod.number(),
+  "agentId": zod.number().nullish().describe('Legacy 1:1 agent link; null for workspace-level calendars'),
   "userId": zod.string(),
   "name": zod.string(),
+  "description": zod.string().nullish().describe('Optional label for workspace calendars'),
   "timezone": zod.string(),
   "hostEmail": zod.string().nullish(),
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
+  "googleCalendarId": zod.string().nullish().describe('Sub-calendar ID within the linked Google account (null uses the primary calendar)'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
@@ -4630,11 +4632,13 @@ export const ListCalendarsResponse = zod.array(ListCalendarsResponseItem)
 export const createCalendarBodyIsActiveDefault = true;
 
 export const CreateCalendarBody = zod.object({
-  "agentId": zod.number(),
+  "agentId": zod.number().optional().describe('Optional — links the calendar to a specific agent (legacy 1:1 mode)'),
   "name": zod.string(),
+  "description": zod.string().nullish(),
   "timezone": zod.string(),
   "hostEmail": zod.string().nullish(),
   "additionalHosts": zod.array(zod.string()).nullish(),
+  "googleCalendarId": zod.string().nullish(),
   "isActive": zod.boolean().default(createCalendarBodyIsActiveDefault)
 })
 
@@ -4648,12 +4652,14 @@ export const GetCalendarParams = zod.object({
 
 export const GetCalendarResponse = zod.object({
   "id": zod.number(),
-  "agentId": zod.number(),
+  "agentId": zod.number().nullish().describe('Legacy 1:1 agent link; null for workspace-level calendars'),
   "userId": zod.string(),
   "name": zod.string(),
+  "description": zod.string().nullish().describe('Optional label for workspace calendars'),
   "timezone": zod.string(),
   "hostEmail": zod.string().nullish(),
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
+  "googleCalendarId": zod.string().nullish().describe('Sub-calendar ID within the linked Google account (null uses the primary calendar)'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
@@ -4671,20 +4677,24 @@ export const UpdateCalendarParams = zod.object({
 
 export const UpdateCalendarBody = zod.object({
   "name": zod.string().optional(),
+  "description": zod.string().nullish(),
   "timezone": zod.string().optional(),
   "hostEmail": zod.string().nullish(),
   "additionalHosts": zod.array(zod.string()).nullish(),
+  "googleCalendarId": zod.string().nullish(),
   "isActive": zod.boolean().optional()
 })
 
 export const UpdateCalendarResponse = zod.object({
   "id": zod.number(),
-  "agentId": zod.number(),
+  "agentId": zod.number().nullish().describe('Legacy 1:1 agent link; null for workspace-level calendars'),
   "userId": zod.string(),
   "name": zod.string(),
+  "description": zod.string().nullish().describe('Optional label for workspace calendars'),
   "timezone": zod.string(),
   "hostEmail": zod.string().nullish(),
   "additionalHosts": zod.array(zod.string()).nullish().describe('Additional host\/organizer email addresses notified on every booking and added as calendar attendees'),
+  "googleCalendarId": zod.string().nullish().describe('Sub-calendar ID within the linked Google account (null uses the primary calendar)'),
   "isActive": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),

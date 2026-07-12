@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, isNull, inArray, max } from "drizzle-orm";
-import { db, agentsTable, agentVersionsTable, schedulingCalendarsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, type AgentConfig } from "@workspace/db";
+import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, type AgentConfig } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -234,18 +234,6 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     createdSourceIds = Array.from(new Set(createSourceIds.filter((n) => Number.isInteger(n))));
   }
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
-  db.insert(schedulingCalendarsTable)
-    .values({
-      agentId: agent.id,
-      userId: clerkId,
-      name: `${agent.name} Calendar`,
-      timezone: "UTC",
-      isActive: true,
-    })
-    .onConflictDoNothing()
-    .catch((err) => {
-      req.log.warn({ err, agentId: agent.id }, "Failed to auto-create scheduling calendar for agent");
-    });
   res.status(201).json(GetAgentResponse.parse(prepareAgentForResponse(agent, createdSourceIds)));
 });
 

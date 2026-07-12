@@ -9674,16 +9674,20 @@ components:
     # ── Scheduling ───────────────────────────────────────────────────────────
     SchedulingCalendar:
       type: object
-      required: [id, agentId, userId, name, timezone, isActive, createdAt, updatedAt]
+      required: [id, userId, name, timezone, isActive, createdAt, updatedAt]
       properties:
         id:
           type: integer
         agentId:
-          type: integer
+          type: ["integer", "null"]
+          description: Legacy 1:1 agent link; null for workspace-level calendars
         userId:
           type: string
         name:
           type: string
+        description:
+          type: ["string", "null"]
+          description: Optional label for workspace calendars
         timezone:
           type: string
         hostEmail:
@@ -9693,6 +9697,9 @@ components:
           items:
             type: string
           description: Additional host/organizer email addresses notified on every booking and added as calendar attendees
+        googleCalendarId:
+          type: ["string", "null"]
+          description: Sub-calendar ID within the linked Google account (null uses the primary calendar)
         isActive:
           type: boolean
         createdAt:
@@ -9710,12 +9717,15 @@ components:
 
     SchedulingCalendarInput:
       type: object
-      required: [agentId, name, timezone]
+      required: [name, timezone]
       properties:
         agentId:
           type: integer
+          description: Optional — links the calendar to a specific agent (legacy 1:1 mode)
         name:
           type: string
+        description:
+          type: ["string", "null"]
         timezone:
           type: string
         hostEmail:
@@ -9724,6 +9734,8 @@ components:
           type: ["array", "null"]
           items:
             type: string
+        googleCalendarId:
+          type: ["string", "null"]
         isActive:
           type: boolean
           default: true
@@ -9733,6 +9745,8 @@ components:
       properties:
         name:
           type: string
+        description:
+          type: ["string", "null"]
         timezone:
           type: string
         hostEmail:
@@ -9741,6 +9755,8 @@ components:
           type: ["array", "null"]
           items:
             type: string
+        googleCalendarId:
+          type: ["string", "null"]
         isActive:
           type: boolean
 

@@ -1,0 +1,121 @@
+Improve scrolling behavior on the Agent Details page.
+
+==================================================
+GOAL
+==================================================
+
+The Estimated Cost card should scroll away naturally.
+
+The navigation tabs should remain accessible while reading the page.
+
+==================================================
+SCROLL BEHAVIOR
+==================================================
+
+When the user starts scrolling down:
+
+Header
+(Mouse + Metadata + Actions)
+
+↓
+
+Estimated Cost Card
+
+↓
+
+Overview Tabs
+
+As the page scrolls:
+
+• The Header remains visible.
+• The Estimated Cost card scrolls away normally.
+• The navigation tabs become sticky and stay pinned below the header.
+
+Sticky tabs include:
+
+Overview
+Prompt
+Voice
+Tools
+Analysis
+Voicemail
+Advanced
+Versions
+
+==================================================
+WHEN SCROLLING BACK UP
+==================================================
+
+When the user returns to the top:
+
+The Estimated Cost card should reappear naturally.
+
+The sticky tabs should return to their original position.
+
+==================================================
+STICKY BEHAVIOR
+==================================================
+
+Only the tab navigation becomes sticky.
+
+Do NOT make the Estimated Cost card sticky.
+
+Do NOT duplicate the navigation.
+
+Do NOT create layout jumps.
+
+The transition should feel smooth and premium.
+
+==================================================
+VISUAL BEHAVIOR
+==================================================
+
+Top of page:
+
+Header
+Estimated Cost
+Tabs
+
+Scrolling:
+
+Header
+Sticky Tabs
+
+Configuration Content
+
+Back to top:
+
+Header
+Estimated Cost
+Tabs
+
+==================================================
+REFERENCES
+==================================================
+
+Follow the scrolling behavior used in:
+
+• GitHub repository navigation
+• Stripe Dashboard
+• Linear Issue Details
+• Notion page navigation
+
+Smooth, subtle, and enterprise-grade.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+✓ Header always visible.
+
+✓ Estimated Cost scrolls away.
+
+✓ Tabs become sticky.
+
+✓ No flicker.
+
+✓ No duplicated tabs.
+
+✓ Smooth transitions.
+
+✓ Production-quality implementation.

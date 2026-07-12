@@ -134,6 +134,24 @@ export type AgentConfig = {
     status: "present" | "missing";
     detail: string;
   }>;
+  // Workspace calendar capability — explicit pointer to the calendar(s) this agent
+  // may use for scheduling tools (Phase 2 multi-workspace scheduling).
+  // When absent the runtime falls back to the legacy 1:1 agent_id lookup.
+  calendarCapability?: {
+    enabled: boolean;
+    /** Calendar IDs the agent is allowed to access (for UI; runtime uses defaultCalendarId) */
+    accessibleCalendarIds: number[];
+    /** Primary calendar used for booking / availability tools */
+    defaultCalendarId: number | null;
+    /** Default event type within that calendar; null = pick first active */
+    defaultEventTypeId: number | null;
+    permissions: {
+      checkAvailability: boolean;
+      book: boolean;
+      reschedule: boolean;
+      cancel: boolean;
+    };
+  };
 };
 
 export const agentsTable = pgTable("agents", {
