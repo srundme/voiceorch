@@ -504,12 +504,21 @@ export class SarvamSTT implements STTAdapter {
           // Fast-path when transcript is ALREADY buffered (multi-segment coalescing):
           // caller has stopped talking — shorten any running timer.
           // • Complete-looking buffer → 30 ms (dispatch immediately).
-          // • Incomplete-looking buffer → adaptiveHoldMs (120–500 ms).
-          //   NEVER leave a 1200 ms COALESCE_INCOMPLETE_MS timer running after
-          //   speech_end — the caller is done; waiting 1200 ms is just dead air.
+          // • Incomplete-looking buffer → at least 700 ms (thinking-pause budget).
+          //   "வந்து", "போய்", conjunctive participles etc. ALWAYS signal more is
+          //   coming; the caller may be mid-thought with a ~1 s thinking gap.
+          //   adaptiveHoldMs() alone (~220 ms) is too short — we observed the
+          //   fragment "எனக்கு வந்து" being flushed and responded to while the
+          //   caller was still formulating "5 lakhs". 700 ms covers a normal human
+          //   thinking pause without adding dead air on a truly-done call.
+          //   Cap is still well below COALESCE_INCOMPLETE_MS (800 ms) so we never
+          //   hold longer than the original full hold.
+          const INCOMPLETE_SPEECH_END_MIN_MS = 700;
           if (coalesceBuf && coalesceTimer) {
             clearTimeout(coalesceTimer);
-            const newHold = looksIncomplete(coalesceBuf) ? adaptiveHoldMs() : 30;
+            const newHold = looksIncomplete(coalesceBuf)
+              ? Math.max(adaptiveHoldMs(), INCOMPLETE_SPEECH_END_MIN_MS)
+              : 30;
             coalesceTimer = setTimeout(emitCoalesced, newHold);
             logger.debug(
               { langCode, buf: coalesceBuf.slice(0, 60), newHold },
