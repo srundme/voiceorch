@@ -1,0 +1,24 @@
+In endpointing.ts, make exactly 3 changes. Do NOT touch TurnSafetyNet, SilenceWatchdog, the threshold constants, or computeEndpointMs's structure. No refactoring.
+
+CHANGE 1 — Add Indic entries to AFFIRMATIONS (fixes self-echo bypass + fast endpoint for Indian-language callers).
+Append to the AFFIRMATIONS set, keeping existing entries:
+Native script: "ஆம்", "ஆமா", "சரி", "இல்ல", "இல்லை", "ஓகே", "நன்றி", "வணக்கம்", "हां", "हाँ", "जी", "जी हां", "नहीं", "ठीक", "ठीक है", "अच्छा", "धन्यवाद", "నమస్తే", "అవును", "కాదు", "సరే", "ಹೌದು", "ಇಲ್ಲ", "ಸರಿ", "হ্যাঁ", "না", "ঠিক আছে", "അതെ", "ഇല്ല", "ശരി", "હા", "ના", "બરાબર", "हो", "नाही", "ठीक आहे"
+Romanized: "haan", "han", "ji", "nahi", "nahin", "theek", "accha", "acha", "aama", "aam", "illa", "illai", "seri", "sari", "avunu", "kadhu", "sare", "houdu", "howdu", "ho", "nako", "ha", "shari"
+Note: computeEndpointMs lowercases the partial before AFFIRMATIONS.has() — native-script entries are unaffected by toLowerCase, romanized entries must be lowercase (they are).
+
+CHANGE 2 — Add Indic entries to DIGIT_KEYWORDS (digit-collection mode currently never triggers when the agent speaks an Indian language).
+Append: "பாலிசி நம்பர்", "போன் நம்பர்", "மொபைல் நம்பர்", "ஆதார்", "ஓடிபி", "பின் நம்பர்", "பிறந்த தேதி", "पॉलिसी नंबर", "फोन नंबर", "मोबाइल नंबर", "आधार", "ओटीपी", "पिन", "जन्म तिथि", "जन्मतिथि", "खाता संख्या", "పాలసీ నంబర్", "ఆధార్", "ಪಾಲಿಸಿ ನಂಬರ್", "ಆಧಾರ್", "নম্বর", "আধার", "aadhaar number", "policy nambar", "mobail nambar"
+isDigitCollectionContext lowercases input before matching — native-script strings pass through toLowerCase unchanged, so includes() works as-is.
+
+CHANGE 3 — Strip trailing punctuation before the DANGLING_WORDS lookup in computeEndpointMs.
+Current: const lastWord = partial.split(/\s+/).pop() ?? "";
+New:     const lastWord = (partial.split(/\s+/).pop() ?? "").replace(/[,.;:…]+$/u, "");
+(The terminal-punctuation fast path above already handled [.?!।]-terminated partials, so this only affects comma/other-terminated partials like "so," which currently miss the 600ms hold.)
+
+VERIFY:
+1. npx tsc --noEmit passes.
+2. computeEndpointMs({lastAgentText:"", partialTranscript:"சரி", audioBufferMs:300, baseSilenceMs:250}) → ms 150, reason "affirmation".
+3. computeEndpointMs({lastAgentText:"உங்க பாலிசி நம்பர் சொல்லுங்க", partialTranscript:"", audioBufferMs:0, baseSilenceMs:250}) → ms 800, reason "digit-collection".
+4. computeEndpointMs({lastAgentText:"", partialTranscript:"i was thinking so,", audioBufferMs:1200, baseSilenceMs:250}) → ms 600, reason "dangling:so".
+5. AFFIRMATIONS.has("சரி") === true, AFFIRMATIONS.has("haan") === true.
+Report a diff of changes only.

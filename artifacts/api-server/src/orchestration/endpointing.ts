@@ -14,13 +14,13 @@
 
 // ── Named threshold constants ─────────────────────────────────────────────────
 /** Snappy flush: "yes", "no", ends in "." / "?" */
-export const ENDPOINT_FAST_MS        = 150;
+export const ENDPOINT_FAST_MS = 150;
 /** Neutral baseline — snappier default endpointing window (was 250ms). */
-export const ENDPOINT_DEFAULT_MS     = 150;
+export const ENDPOINT_DEFAULT_MS = 150;
 /** Mid-thought: ends in conjunction / filler word ("and", "so", "um"). */
-export const ENDPOINT_LONG_MS        = 600;
+export const ENDPOINT_LONG_MS = 600;
 /** Digit-collection: caller is reading a policy/phone/OTP number. */
-export const ENDPOINT_DIGIT_MS       = 800;
+export const ENDPOINT_DIGIT_MS = 800;
 /** Digit-collection AND partial transcript ends in a digit (still reading). */
 export const ENDPOINT_DIGIT_TRAIL_MS = 900;
 
@@ -35,15 +35,63 @@ export interface EndpointDecision {
 // digit-collection mode: the silence window is held long so the caller can
 // read out a number slowly, pausing between digits.
 const DIGIT_KEYWORDS = [
-  "policy number", "phone number", "mobile number", "contact number",
-  "date of birth", "dob", "otp", "one-time password", "pin", "passcode",
-  "id number", "account number", "card number", "aadhaar", "aadhar",
-  "reference number", "registration number", "vehicle number", "claim number",
-  "zip code", "postal code", "passport number", "license number",
-  "membership number", "booking id", "ticket number", "pan number", "gstin",
-  "vin number", "vehicle identification", "employee id", "student id",
-  "order number", "invoice number", "tracking number", "case number",
-  "folio number", "application number",
+  "policy number",
+  "phone number",
+  "mobile number",
+  "contact number",
+  "date of birth",
+  "dob",
+  "otp",
+  "one-time password",
+  "pin",
+  "passcode",
+  "id number",
+  "account number",
+  "card number",
+  "aadhaar",
+  "aadhar",
+  "reference number",
+  "registration number",
+  "vehicle number",
+  "claim number",
+  "zip code",
+  "postal code",
+  "passport number",
+  "license number",
+  "membership number",
+  "booking id",
+  "ticket number",
+  "pan number",
+  "gstin",
+  "vin number",
+  "vehicle identification",
+  "employee id",
+  "student id",
+  "order number",
+  "invoice number",
+  "tracking number",
+  "case number",
+  "folio number",
+  "application number",
+  // ── Indic native-script digit-collection keywords ─────────────────────────
+  // Tamil
+  "பாலிசி நம்பர்", "போன் நம்பர்", "மொபைல் நம்பர்", "ஆதார்", "ஓடிபி",
+  "பின் நம்பர்", "பிறந்த தேதி",
+  // Hindi
+  "पॉलिसी नंबर", "फोन नंबर", "मोबाइल नंबर", "आधार", "ओटीपी", "पिन",
+  "जन्म तिथि", "जन्मतिथि", "खाता संख्या",
+  // Telugu
+  "పాలసీ నంబర్", "ఫోన్ నంబర్", "మొబైల్ నంబర్", "ఆధార్", "ఓటీపీ",
+  "పుట్టిన తేదీ",
+  // Kannada
+  "ಪಾಲಿಸಿ ನಂಬರ್", "ಫೋನ್ ನಂಬರ್", "ಮೊಬೈಲ್ ನಂಬರ್", "ಆಧಾರ್", "ಓಟಿಪಿ",
+  "ಹುಟ್ಟಿದ ದಿನಾಂಕ",
+  // Bengali
+  "পলিসি নম্বর", "ফোন নম্বর", "মোবাইল নম্বর", "আধার", "ওটিপি",
+  "জন্ম তারিখ",
+  // Malayalam
+  "പോളിസി നമ്പർ", "ഫോൺ നമ്പർ", "മൊബൈൽ നമ്പർ", "ആധാർ", "ഒടിപി",
+  "ജനനത്തീയതി",
 ];
 
 /**
@@ -62,14 +110,63 @@ export function isDigitCollectionContext(lastAgentText: string): boolean {
 // If the partial transcript ends with one of these the caller is likely
 // mid-sentence — wait longer before flushing to STT.
 const DANGLING_WORDS = new Set([
-  "and", "so", "but", "or", "my", "the", "a", "an", "its", "it's",
-  "to", "of", "in", "for", "with", "um", "uh", "er", "like", "i",
-  "because", "if", "when", "while", "as", "then", "also", "well",
-  "this", "that", "these", "those", "there", "here",
-  "we", "you", "they", "he", "she", "is", "was", "are",
-  "were", "will", "would", "can", "could", "should",
-  "what", "which", "who", "how", "where",
-  "plus", "however", "actually", "basically",
+  "and",
+  "so",
+  "but",
+  "or",
+  "my",
+  "the",
+  "a",
+  "an",
+  "its",
+  "it's",
+  "to",
+  "of",
+  "in",
+  "for",
+  "with",
+  "um",
+  "uh",
+  "er",
+  "like",
+  "i",
+  "because",
+  "if",
+  "when",
+  "while",
+  "as",
+  "then",
+  "also",
+  "well",
+  "this",
+  "that",
+  "these",
+  "those",
+  "there",
+  "here",
+  "we",
+  "you",
+  "they",
+  "he",
+  "she",
+  "is",
+  "was",
+  "are",
+  "were",
+  "will",
+  "would",
+  "can",
+  "could",
+  "should",
+  "what",
+  "which",
+  "who",
+  "how",
+  "where",
+  "plus",
+  "however",
+  "actually",
+  "basically",
 ]);
 
 // ── Turn safety-net constants (env-configurable) ──────────────────────────────
@@ -85,19 +182,22 @@ function envInt(name: string, def: number): number {
 /** Tight timer: partials arriving but no final → force-close using the best partial.
  *  Default 1800 ms — above the adaptive computeEndpointMs ceiling (900 ms), well
  *  below carrier drop. Override with env FORCE_FINALIZE_MS. */
-export const FORCE_FINALIZE_MS  = envInt("FORCE_FINALIZE_MS", 1800);
+export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 1800);
 /** Loose backstop: no usable transcript at all since we entered "Listening…" →
  *  recovery reprompt (not a hangup). Override with env STALL_BACKSTOP_MS.
  *  Default lowered from 15 000 ms to 10 000 ms so the first reprompt fires
  *  after ~10 s of silence, giving the caller two clear chances (at ~10 s and
  *  ~20 s) before the call ends. */
-export const STALL_BACKSTOP_MS  = envInt("STALL_BACKSTOP_MS", 10000);
+export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 10000);
 /** Max consecutive stall reprompts before ending the call. Override with env
  *  STALL_MAX_REPROMPTS. */
 export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);
 
 /** Reason a user turn closed — emitted in the turn_latency log line. */
-export type TurnCloseReason = "stt_final" | "force_finalized" | "stall_reprompt";
+export type TurnCloseReason =
+  | "stt_final"
+  | "force_finalized"
+  | "stall_reprompt";
 
 // Language-aware recovery reprompt spoken when the stall backstop fires.
 const RECOVERY_REPROMPTS: Record<string, string> = {
@@ -261,7 +361,7 @@ export class TurnSafetyNet {
   private onForceExpire(): void {
     this.forceTimer = null;
     const best = this.bestPartial.trim();
-    if (!best) return;            // empty → let the stall backstop handle it
+    if (!best) return; // empty → let the stall backstop handle it
     this.clearTimers();
     this.bestPartial = "";
     this.repromptCount = 0;
@@ -281,8 +381,14 @@ export class TurnSafetyNet {
   }
 
   private clearTimers(): void {
-    if (this.forceTimer) { clearTimeout(this.forceTimer); this.forceTimer = null; }
-    if (this.stallTimer) { clearTimeout(this.stallTimer); this.stallTimer = null; }
+    if (this.forceTimer) {
+      clearTimeout(this.forceTimer);
+      this.forceTimer = null;
+    }
+    if (this.stallTimer) {
+      clearTimeout(this.stallTimer);
+      this.stallTimer = null;
+    }
   }
 }
 
@@ -290,13 +396,75 @@ export class TurnSafetyNet {
 // Exported so other modules (e.g. the pipeline's self-echo guard) can exempt
 // these common short replies from logic that would otherwise misfire on them.
 export const AFFIRMATIONS = new Set([
-  "yes", "no", "yeah", "nope", "yep", "yup", "sure", "ok", "okay",
-  "correct", "right", "true", "false", "done", "bye", "goodbye",
-  "thanks", "thank", "fine", "good", "great", "perfect", "proceed",
-  "confirm", "confirmed", "agreed", "understood", "hello", "hi", "hey",
-  "alright", "alrighty", "roger", "absolutely", "definitely", "certainly",
-  "negative", "affirmative", "stop", "cancel", "continue", "ready",
-  "received", "noted",
+  "yes",
+  "no",
+  "yeah",
+  "nope",
+  "yep",
+  "yup",
+  "sure",
+  "ok",
+  "okay",
+  "correct",
+  "right",
+  "true",
+  "false",
+  "done",
+  "bye",
+  "goodbye",
+  "thanks",
+  "thank",
+  "fine",
+  "good",
+  "great",
+  "perfect",
+  "proceed",
+  "confirm",
+  "confirmed",
+  "agreed",
+  "understood",
+  "hello",
+  "hi",
+  "hey",
+  "alright",
+  "alrighty",
+  "roger",
+  "absolutely",
+  "definitely",
+  "certainly",
+  "negative",
+  "affirmative",
+  "stop",
+  "cancel",
+  "continue",
+  "ready",
+  "received",
+  "noted",
+  // ── Indic native-script affirmations ──────────────────────────────────────
+  // Tamil
+  "ஆம்", "ஆமா", "சரி", "இல்ல", "இல்லை", "ஓகே", "நன்றி", "வணக்கம்",
+  // Hindi
+  "हां", "हाँ", "जी", "जी हां", "नहीं", "ठीक", "ठीக है", "अच्छा", "धन्यवाद",
+  // Telugu
+  "నమస్తే", "అవును", "కాదు", "సరే",
+  // Kannada
+  "ಹೌದು", "ಇಲ್ಲ", "ಸರಿ",
+  // Bengali
+  "হ্যাঁ", "না", "ঠিক আছে",
+  // Malayalam
+  "അതെ", "ഇല്ല", "ശരി", "നന്ദി",
+  // Gujarati
+  "હા", "ના", "સારું",
+  // Marathi
+  "हो", "नाही", "बरं", "ठीक आहे",
+  // Punjabi
+  "ਹਾਂ", "ਨਹੀਂ", "ਠੀਕ ਹੈ",
+  // Odia
+  "ହଁ", "ନାହିଁ", "ଠିକ ଅଛି",
+  // ── Romanized Indic affirmations / backchannels ────────────────────────────
+  "haan", "han", "ji", "nahi", "nahin", "theek", "accha", "acha",
+  "aama", "aam", "illa", "illai", "seri", "sari", "avunu", "kadhu",
+  "sare", "houdu", "howdu", "ho", "nako", "ha", "shari",
 ]);
 
 /**
@@ -315,14 +483,18 @@ export function computeEndpointMs(opts: {
   /** Agent-configured base silence window (user override). */
   baseSilenceMs: number;
 }): EndpointDecision {
-  const { lastAgentText, partialTranscript, audioBufferMs, baseSilenceMs } = opts;
+  const { lastAgentText, partialTranscript, audioBufferMs, baseSilenceMs } =
+    opts;
 
   // ── 1. Digit-collection context (highest priority) ─────────────────────────
   if (isDigitCollectionContext(lastAgentText)) {
     const partial = partialTranscript.trim();
     if (partial.length > 0 && /\d$/.test(partial)) {
       // Still actively reading digits — extend even further
-      return { ms: ENDPOINT_DIGIT_TRAIL_MS, reason: "digit-collection:trailing-digit" };
+      return {
+        ms: ENDPOINT_DIGIT_TRAIL_MS,
+        reason: "digit-collection:trailing-digit",
+      };
     }
     return { ms: ENDPOINT_DIGIT_MS, reason: "digit-collection" };
   }
@@ -341,7 +513,7 @@ export function computeEndpointMs(opts: {
     }
 
     // Ends in a dangling/filler word — likely mid-utterance
-    const lastWord = partial.split(/\s+/).pop() ?? "";
+    const lastWord = (partial.split(/\s+/).pop() ?? "").replace(/[,.;:…]+$/u, "");
     if (DANGLING_WORDS.has(lastWord)) {
       return { ms: ENDPOINT_LONG_MS, reason: `dangling:${lastWord}` };
     }
@@ -349,7 +521,10 @@ export function computeEndpointMs(opts: {
     // Very short partial (1–2 words) with short audio — might still be mid-thought
     const wordCount = partial.split(/\s+/).length;
     if (wordCount <= 2 && audioBufferMs < 800) {
-      return { ms: Math.max(baseSilenceMs, ENDPOINT_DEFAULT_MS), reason: "short-partial" };
+      return {
+        ms: Math.max(baseSilenceMs, ENDPOINT_DEFAULT_MS),
+        reason: "short-partial",
+      };
     }
   }
 
@@ -402,7 +577,11 @@ export interface SilenceWatchdogOptions {
    * were seen in the trailing window so a false hangup elsewhere is
    * diagnosable directly from call logs instead of requiring code spelunking.
    */
-  onNearMiss?: (info: { cause: "busy" | "recent_speech_energy"; msSinceLastSpeech: number | null; rearmedForMs: number }) => void;
+  onNearMiss?: (info: {
+    cause: "busy" | "recent_speech_energy";
+    msSinceLastSpeech: number | null;
+    rearmedForMs: number;
+  }) => void;
   /** Clock override for tests. */
   now?: () => number;
 }
@@ -452,7 +631,11 @@ export class SilenceWatchdog {
     const { timeoutMs } = this.opts;
     // Agent is mid-speech / mid-turn — not caller abandonment. Re-arm in full.
     if (this.opts.isBusy?.()) {
-      this.opts.onNearMiss?.({ cause: "busy", msSinceLastSpeech: null, rearmedForMs: timeoutMs });
+      this.opts.onNearMiss?.({
+        cause: "busy",
+        msSinceLastSpeech: null,
+        rearmedForMs: timeoutMs,
+      });
       this.arm(timeoutMs);
       return;
     }
@@ -461,7 +644,11 @@ export class SilenceWatchdog {
     const sinceSpeech = this.now() - this.lastSpeechAt;
     if (this.lastSpeechAt > 0 && sinceSpeech < timeoutMs) {
       const rearmedForMs = timeoutMs - sinceSpeech;
-      this.opts.onNearMiss?.({ cause: "recent_speech_energy", msSinceLastSpeech: sinceSpeech, rearmedForMs });
+      this.opts.onNearMiss?.({
+        cause: "recent_speech_energy",
+        msSinceLastSpeech: sinceSpeech,
+        rearmedForMs,
+      });
       this.arm(rearmedForMs);
       return;
     }
