@@ -53,7 +53,7 @@ const FILLER_WORDS = new Set([
   "sir", "madam", "maam",
   // romanized Indic backchannels (Latin script, but not English at all)
   "haan", "han", "ha", "hn", "ji", "hai", "nahi", "nhi",
-  "acha", "accha", "achha", "theek", "thik", "sari", "seri", "sarì",
+  "acha", "accha", "achha", "theek", "thik", "sari", "seri", "sar",
   "ama", "aama", "illa", "illai",
   // continuation / clarification requests (e.g. "please tell me", "tell me more")
   "tell", "me", "more",
