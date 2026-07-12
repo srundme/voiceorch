@@ -3311,6 +3311,15 @@ export class OrchestrationPipeline {
    * drainSentenceJob only ever runs one job at a time, in play order.
    */
   private startSentenceSynthesis(text: string, turnNumber: number, turnContextId?: string, emotions?: string[]): TtsSentenceJob {
+    // ── TTS text normalization ────────────────────────────────────────────────
+    // Strip the ₹ currency symbol before synthesis. TTS engines (especially
+    // Sarvam) expand it to the formal literary word: "ரூபாய்" (Tamil) /
+    // "रुपया" (Hindi) / "rupee" (English) — which sounds stiff and unnatural.
+    // Removing the symbol keeps "₹10 lakhs" as "10 lakhs" which TTS reads
+    // naturally in colloquial style. The LLM language rule below also prevents
+    // ₹ from being generated, but this is a safety net for any that slip through.
+    text = text.replace(/₹\s*/g, "");
+
     // Meter characters at request-dispatch time — TTS providers charge for the
     // text submitted when the HTTP request is sent, not when audio delivery
     // completes. Dispatch may now happen while a prior sentence is still
