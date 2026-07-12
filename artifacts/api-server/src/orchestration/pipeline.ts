@@ -823,6 +823,12 @@ export class OrchestrationPipeline {
   // to quote the previous line and forbid a verbatim repeat, escalating if stuck.
   private lastAssistantSpokenRaw = "";
   private consecutiveRepeats = 0;
+  // Interruption hint (inspired by Bolna): tracks sentences fully played this agent turn.
+  // On barge-in these are captured into _interruptionHint; injected into the next
+  // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
+  // can continue naturally without repeating already-delivered content.
+  private _currentTurnPlayedSentences: string[] = [];
+  private _interruptionHint: string | null = null;
   /** Normalize a reply for repeat comparison: lowercase, strip terminal
    *  punctuation (incl. Devanagari danda), collapse whitespace. */
   private normalizeForRepeat = (s: string): string =>
@@ -844,6 +850,16 @@ export class OrchestrationPipeline {
       this.consecutiveRepeats = 0;
     }
     this.lastAssistantSpokenRaw = spoken;
+  }
+
+  /** Called at every barge-in fire point. Captures the sentences fully played so
+   *  far this agent turn into _interruptionHint so the next processTurn() can tell
+   *  the LLM exactly what the caller heard before interrupting. No-op if nothing
+   *  was played yet (first-sentence barge-in) or already captured. */
+  private captureInterruptionHint(): void {
+    if (this._interruptionHint) return; // already captured (multiple simultaneous events)
+    const played = this._currentTurnPlayedSentences.join(" ").trim();
+    if (played) this._interruptionHint = played;
   }
 
   /** Record a line the agent is about to synthesize so the streaming-STT path can
@@ -1278,6 +1294,7 @@ export class OrchestrationPipeline {
             ) {
               if (isSemanticInterrupt(text)) {
                 this.bargeInRequested = true;
+                this.captureInterruptionHint();
                 this.bargeInCallback?.();
                 this.logExec("Agent", "system", {
                   status: "info",
@@ -1443,6 +1460,7 @@ export class OrchestrationPipeline {
       // them, so they are always a genuine caller interruption.
       if (isSemanticInterrupt(transcript)) {
         this.bargeInRequested = true;
+        this.captureInterruptionHint();
         this.bargeInCallback?.();
         this.logExec("Agent", "system", {
           status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
@@ -1477,6 +1495,7 @@ export class OrchestrationPipeline {
           : (this.agent.wordsForInterruption ?? 2);
         if (this.streamingBargeInWordCount >= threshold) {
           this.bargeInRequested = true;
+          this.captureInterruptionHint();
           this.bargeInCallback?.();
           this.logExec("Agent", "system", {
             status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
@@ -1989,6 +2008,7 @@ export class OrchestrationPipeline {
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.bargeInRequested = true;
+        this.captureInterruptionHint();
         this.bargeInCallback?.();
         this.audioBuffer = [];
         this.audioBufferNative16k = [];
@@ -3105,6 +3125,12 @@ export class OrchestrationPipeline {
         audioDurationMs: _audioDurationMs,
         stopReason: this.closed ? "call_closed" : this.bargeInRequested ? "barge_in" : "completed",
       });
+      // Accumulate fully-played sentences for the interruption hint. Only count
+      // sentences that completed — a mid-sentence barge-in means the caller may
+      // not have heard the whole thing, so we conservatively exclude that one.
+      if (_pbEvent === "Playback Completed") {
+        this._currentTurnPlayedSentences.push(job.text);
+      }
     }
   }
 
@@ -4074,6 +4100,10 @@ export class OrchestrationPipeline {
     // A second reset also happens in handleStreamingTranscript whenever a
     // transcript arrives while the agent is not playing (belt-and-suspenders).
     this.streamingBargeInWordCount = 0;
+    // Reset per-turn sentence tracker. _interruptionHint is NOT reset here —
+    // it was captured at the END of the previous turn and is consumed later in
+    // this call's historyForLlm assembly before the LLM is invoked.
+    this._currentTurnPlayedSentences = [];
     this.firstAudioSentAt = null;
     const _currentTurnIndex = ++this.turnIndex;
     this._activeTurnIndex = _currentTurnIndex;
@@ -4802,6 +4832,22 @@ export class OrchestrationPipeline {
           { ...lastTurn, content: `${lastTurn.content}\n\n${antiRepeat}` },
         ];
       }
+    }
+
+    // Interruption hint: if the previous agent turn was cut short by barge-in,
+    // tell the LLM exactly what the caller already heard so it can continue
+    // naturally without repeating already-delivered content.
+    // Inspired by Bolna's `developer` role interruption message injection.
+    if (this._interruptionHint && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        const hint = `[Context: your previous reply was interrupted mid-sentence. The caller only heard: "${this._interruptionHint.slice(0, 300)}". Continue naturally from where you left off — do not repeat content they already heard.]`;
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${hint}` },
+        ];
+      }
+      this._interruptionHint = null;
     }
 
     // Layer 4: Staged Prompt — override system prompt with active stage block
