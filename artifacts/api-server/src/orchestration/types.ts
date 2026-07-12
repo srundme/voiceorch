@@ -516,6 +516,11 @@ export interface LLMAdapter {
        *  `CachedContent`. `systemPrompt` MUST start with this string. Only
        *  honoured by GoogleLLM; ignored by every other adapter. */
       cacheBase?: string;
+      /** When true, this is a speculative/eager pre-barge-in call. Adapters that
+       *  maintain per-call stateful session state (e.g. OpenAI Responses API
+       *  previousResponseId) MUST bypass that state on speculative calls so a
+       *  spec miss does not corrupt the real turn's conversation context. */
+      speculative?: boolean;
     }
   ): Promise<void>;
   /** Optional: pre-create the provider-side context cache before the first turn

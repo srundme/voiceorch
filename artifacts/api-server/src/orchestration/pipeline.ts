@@ -967,6 +967,10 @@ export class OrchestrationPipeline {
               resolveCompletion();
             },
             onUsage: (u) => { if (!state.aborted) state.storedUsage = u; },
+            // Prevent stateful adapters (e.g. OpenAI Responses API) from
+            // advancing their previousResponseId on a speculative call.
+            // A spec miss must not corrupt the real turn's conversation context.
+            speculative: true,
           },
         );
       } catch {
