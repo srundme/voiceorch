@@ -1147,7 +1147,16 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // ── Setup: provider-init / voice / prompt events (mirror the web-call path) ──
   logExec(EXEC_COMPONENTS.STT, "system", {
     status: "info",
-    metadata: { event: "Provider Initialized", provider: agent.asrProvider, language: agent.asrLanguage ?? agent.language ?? null },
+    metadata: {
+      event: "Provider Initialized", provider: agent.asrProvider,
+      // Use the effective language from agentConfig — may differ from agent.asrLanguage
+      // when caller memory language_pref overrode it at session start.
+      language: agentConfig.language ?? agent.asrLanguage ?? agent.language ?? null,
+      ...(agentConfig.language &&
+          agentConfig.language !== (agent.asrLanguage ?? agent.language)
+        ? { languageOverriddenFromMemory: true, originalLanguage: agent.asrLanguage ?? agent.language ?? null }
+        : {}),
+    },
   });
   logExec(EXEC_COMPONENTS.LLM, "system", {
     status: "info",
@@ -2549,7 +2558,10 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                 });
                 createExecutionLogger(session.callId, call.agentId)("Memory", "response", {
                   status: "success",
-                  metadata: { updated: true, wasDropped },
+                  // wasDropped = call ended without naturalEndTriggered (user hung up
+                  // mid-conversation) — memory is STILL saved; only callback-request
+                  // detection is skipped for short/dropped calls.
+                  metadata: { updated: true, wasDropped, callbackDetectionSkipped: wasDropped },
                 });
                 if (!wasDropped) {
                   await detectCallbackRequest({

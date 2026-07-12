@@ -718,7 +718,7 @@ export class OrchestrationPipeline {
   private _lastEndpointMs: number | null = null;
   private _lastEndpointReason = "";
   // Azure STT endpointing metadata — set in streaming callback, consumed in processTurn
-  private _pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number } | null = null;
+  private _pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number; detectedLang?: string } | null = null;
   /** STT-provider language code for the current in-flight transcript (forwarded to handleStreamingTranscript). */
   private _pendingSttLang: string | null = null;
   private _fillerPlayedThisTurn = false;
@@ -1304,7 +1304,11 @@ export class OrchestrationPipeline {
           // handleStreamingTranscript so a transcript discarded by the echo guards
           // does NOT clear the stall backstop or drive language switching.
           this._pendingSttLang = lang ?? null;
-          this._pendingSttMeta = metadata ?? null;
+          // Fold detected language into meta so it appears in the STT DB call-log
+          // responsePayload (alongside endDetectToFinalMs / mergedSegments etc.).
+          this._pendingSttMeta = lang
+            ? { ...(metadata ?? {}), detectedLang: lang }
+            : (metadata ?? null);
           void this.handleStreamingTranscript(text, Date.now());
         },
         () => {
@@ -1993,14 +1997,18 @@ export class OrchestrationPipeline {
           metadata: {
             event: "Barge-in Detected", trigger: source, frames: this.bargeInSpeechFrames,
             effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
-            echoFloor: Math.round(this.playbackEchoFloor), currentRms: Math.round(currentRms),
+            echoFloor: Math.round(this.playbackEchoFloor),
+            // currentRms is 0 for webcall (AEC path) and batch path — use frameRms()
+            // directly so the log always shows the actual energy level at trigger time.
+            currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
           },
         });
         logger.info(
           {
             callId: this.config.callId, source, frames: this.bargeInSpeechFrames,
             effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
-            echoFloor: Math.round(this.playbackEchoFloor), currentRms: Math.round(currentRms),
+            echoFloor: Math.round(this.playbackEchoFloor),
+            currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
           },
           "Barge-in detected (energy)",
         );

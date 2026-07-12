@@ -1,0 +1,23 @@
+A JSON file — and it came through on the working upload path. Call logs from a real call, presumably the live test. Reading it now.This is a real call log — 17-second Hindi webcall against agent "vikram", and it's a goldmine. It shows the exact failure class we've spent this whole thread fixing, plus two new things. In order of importance:
+
+**1. The headline: memory knew the caller speaks Hindi, but the STT stream opened in English.**
+
+Look at the sequence: Memory hydration at call start returns `language_pref: "hindi"` (a fact your system extracted from this caller's previous calls — 5th call, 6 facts). One millisecond later: `STT Provider Initialized, language: "en-IN"`. The consequence lands on turn 1: the caller says "नमस्ते बोलो" and Sarvam, running an en-IN stream, transcribes it as **"નમસ્તે બોલો" — Gujarati script**. Turn 2 comes out as garbled Hindi ("का है तो"). By turn 3 it stabilizes ("तुम भी ना Bhola भाई।") — and the caller hangs up at 17 seconds.
+
+The auto-detect chain we built would have fixed this by ~turn 3 (gu-IN count 1 → hi-IN count 1 → hi-IN count 2 → switch), but the call died before it could. The real fix is upstream and it's a one-liner conceptually: **when caller memory contains `language_pref`, seed the STT init language from it.** You already hydrate memory before STT init — the ordering is right there in the log. This is also the best possible demo of your differentiator: "returning callers get greeted in their language, no detection lag" is a cross-call-memory story that lands with the D2C investor pitch too. This is the highest-value item to come out of the entire review.
+
+**2. `wasDropped: true` on the final memory update — what does this mean?**
+
+Last log line: `Memory {updated: true, wasDropped: true}`, 800ms after call end on a `user_hangup`. If `wasDropped` means the fact-extraction or profile write was discarded (racing against teardown?), then hangup-terminated calls — which is *most* calls — may be silently losing memory updates. That's a bug in your core differentiator if so. I can't tell from the log alone whether it means "update dropped" or something benign like "a lock was dropped" or "duplicate suppressed." Check `callerMemory.ts` for where `wasDropped` is set — and this bumps `callerMemory.ts` up the review queue, ahead of `llm/sarvam.ts`.
+
+**3. Barge-in diagnostics are broken: all four events log `currentRms: 0, echoFloor: 0`.**
+
+Four barge-ins in 17 seconds, every one with identical metadata — `frames: 8` (exactly `effectiveMinFrames`), `currentRms: 0`. An energy-triggered barge-in with zero RMS is contradictory, so the RMS field is being captured *after* the energy window resets rather than at trigger time. The barge-ins themselves may well be genuine (impatient tester talking over the greeting — you, I assume), but if a false-barge-in bug ever shows up, these logs can't diagnose it. Small fix in the barge-in path: snapshot the RMS value at trigger and log that.
+
+**4. `detectedLang` doesn't appear in these DB payloads — this doesn't mean the adapter change failed.**
+
+The STT response payload here (`transcript`, `endDetectToFinalMs`, `mergedSegments`, `pauseCount`) is the DB call-log, not the pino console log where we added `detectedLang`. Two actions: check Railway console logs for the `detectedLang` field in the coalesce-emit lines to confirm the adapter change is live; and add `detectedLang` to this DB payload too, so future call-log pulls like this one carry it — it would have told us instantly whether Sarvam LID labelled turn 1 as `gu-IN`.
+
+What's healthy in this call: latency is genuinely good — STT-final→filler ~50ms, LLM first token ~950ms, caller hears the real answer ~1.1s after finishing speaking. The memory hydration→prompt injection path works (the prompt preview shows the previous-call summary about the ₹5000 top-up budget). And turns 2–3 got Hindi responses, so the langGuard chain held once script detection had Devanagari to work with.
+
+Next steps in order: ask Replit what sets `wasDropped` in the memory save path (paste its answer here), then the `language_pref` STT seeding fix, then send `callerMemory.ts` via the docx method.
