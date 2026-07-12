@@ -796,6 +796,11 @@ export class OrchestrationPipeline {
   // Seeded from the agent's primary language at construction so turn 1 already
   // has a baseline. Updated each turn via script detection when languageAutoDetect=true.
   private currentLang: string = "";
+  // When the caller switches language mid-call, capture {from, to} here so
+  // processTurn() can annotate the user's history entry with a note that the
+  // transcript was captured while ASR was still locked to the old language.
+  // Consumed (set to null) at the conversationHistory push in processTurn().
+  private _langSwitchThisTurn: { from: string; to: string } | null = null;
   /** Last non-English language the caller spoke this call.
    *  We save THIS (not currentLang) as the caller's preferredLanguage so that
    *  an English "thanks, bye" at call-end doesn't overwrite their regional
@@ -1598,6 +1603,11 @@ export class OrchestrationPipeline {
               { callId: this.config.callId, from: this.currentLang, to: detected, text: transcript.slice(0, 60) },
               "Auto-detect: caller language switch detected",
             );
+            // Capture the switch so processTurn() can annotate the history entry.
+            // Only set when there is a real prior language (not first-turn cold-start).
+            if (this.currentLang) {
+              this._langSwitchThisTurn = { from: this.currentLang, to: detected };
+            }
           }
           this.currentLang = detected;
           if (!detected.startsWith("en-")) {
@@ -4154,7 +4164,21 @@ export class OrchestrationPipeline {
     }
 
     this.config.onTranscript("user", transcript);
-    this.conversationHistory.push({ role: "user", content: transcript });
+    // If the caller just switched language, annotate the history entry so the
+    // LLM knows the transcript may be partially inaccurate (it was captured while
+    // ASR was still locked to the old language) and should respond in the new one.
+    {
+      const langSwitch = this._langSwitchThisTurn;
+      this._langSwitchThisTurn = null; // consume — one-shot per turn
+      if (langSwitch) {
+        const fromName = LANG_DISPLAY_NAMES[langSwitch.from] ?? langSwitch.from;
+        const toName = LANG_DISPLAY_NAMES[langSwitch.to] ?? langSwitch.to;
+        const note = `\n\n[Context: the caller just switched from ${fromName} to ${toName}. This transcript was captured while ASR was still configured for ${fromName} — some words may be inaccurate. Respond in ${toName}.]`;
+        this.conversationHistory.push({ role: "user", content: transcript + note });
+      } else {
+        this.conversationHistory.push({ role: "user", content: transcript });
+      }
+    }
 
     // ── Progressive gender detection — fire after each confirmed user turn ──
     // Non-blocking: updates genderDetector.gender for the next turn's salutation.
