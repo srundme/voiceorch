@@ -19,7 +19,7 @@ import { DtmfDetector } from "./dtmf.js";
 import { processAudioIn, processRawPcm8kIn, destroyAudioSession } from "./audioPool.js";
 import { RecordingBuffer } from "./recorder.js";
 import type { AudioProcessResult } from "./audioPool.js";
-import type { AgentConfig, AgentTool, ConversationTurn, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
+import type { AgentConfig, AgentTool, ConversationTurn, LLMAdapter, LLMUsage, SessionConfig, StreamSTT, STTConfig, ToolDefinition } from "./types.js";
 import { resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
@@ -475,6 +475,27 @@ function isRetryableLlmError(err: unknown): boolean {
   );
 }
 
+// ── Speculative / eager LLM prefill ──────────────────────────────────────────
+// On a SEMANTIC barge-in the partial transcript is often the caller's
+// complete utterance.  Starting the LLM immediately means tokens are already
+// buffered when the STT final arrives — saving the full LLM TTFB (~200-400 ms)
+// for the most common single-word interruptions ("ruko", "stop", "nahi", …).
+// If the final transcript differs enough from the partial, the speculative
+// call is aborted and the real turn proceeds normally (minor wasted cost).
+function isSpeculativeHit(partial: string, final: string): boolean {
+  const p = partial.trim().toLowerCase();
+  const f = final.trim().toLowerCase();
+  if (p === f) return true;
+  // Final is the partial plus a little trailing text (punctuation / filler)
+  if (f.startsWith(p) && f.length - p.length <= 15) return true;
+  // ≥ 75 % of the partial's words appear in the final
+  const pWords = p.split(/\s+/).filter(Boolean);
+  if (pWords.length === 0) return false;
+  const fWordSet = new Set(f.split(/\s+/).filter(Boolean));
+  const overlap = pWords.filter(w => fWordSet.has(w)).length;
+  return overlap / pWords.length >= 0.75;
+}
+
 /**
  * A single sentence's TTS synthesis, decoupled from its playback. Created by
  * startSentenceSynthesis (network fetch + byte-alignment only, safe to run
@@ -834,6 +855,21 @@ export class OrchestrationPipeline {
   // can continue naturally without repeating already-delivered content.
   private _currentTurnPlayedSentences: string[] = [];
   private _interruptionHint: string | null = null;
+  // ── Speculative / eager LLM prefill state ────────────────────────────────
+  // Populated by _launchSpeculativeLlm() at semantic barge-in; consumed (or
+  // aborted) in processTurn() before the LLM retry loop runs.
+  private _specLlmState: {
+    partial: string;
+    storedTokens: string[];
+    storedFullText: string;
+    storedUsage?: LLMUsage;
+    storedToolCall?: { name: string; args: Record<string, unknown> };
+    done: boolean;
+    aborted: boolean;
+    /** Reassign to redirect ongoing stream tokens to the real onToken. */
+    tokenSink: (t: string) => void;
+    completedPromise: Promise<void>;
+  } | null = null;
   /** Normalize a reply for repeat comparison: lowercase, strip terminal
    *  punctuation (incl. Devanagari danda), collapse whitespace. */
   private normalizeForRepeat = (s: string): string =>
@@ -865,6 +901,85 @@ export class OrchestrationPipeline {
     if (this._interruptionHint) return; // already captured (multiple simultaneous events)
     const played = this._currentTurnPlayedSentences.join(" ").trim();
     if (played) this._interruptionHint = played;
+  }
+
+  /**
+   * Launch a speculative / eager LLM call using the barge-in partial text.
+   * Tokens are buffered into `_specLlmState.storedTokens` (via a redirectable
+   * `tokenSink`).  processTurn() checks the state before its own llm.chat
+   * call: if the final transcript is a "hit", it drains the buffer and
+   * redirects the live stream; on a miss it aborts and runs normally.
+   *
+   * Fires only on SEMANTIC barge-in triggers — those carry meaningful partial
+   * text.  Skipped on energy / word-count triggers (no reliable text) and on
+   * the first agent turn (no conversation history yet).
+   */
+  private _launchSpeculativeLlm(partialText: string): void {
+    // Only one speculative call per turn; don't start if session is closing.
+    if (this._specLlmState || this.closed) return;
+    // Need at least one prior assistant turn so the history has context.
+    if (!this.conversationHistory.some(t => t.role === "assistant")) return;
+
+    const history: ConversationTurn[] = [
+      ...this.conversationHistory,
+      { role: "user", content: partialText },
+    ];
+    // Use the same stable base as the Gemini context-cache warm: langGuard +
+    // systemPrompt + langGuard + salutation substitution.  No per-turn KB or
+    // datetime — close enough for short semantic replies and avoids the extra
+    // processTurn assembly work at this (pre-final) point.
+    const systemPrompt = this.buildCacheBase(this.effectiveGender());
+
+    let resolveCompletion!: () => void;
+    const completedPromise = new Promise<void>(r => { resolveCompletion = r; });
+
+    const state = {
+      partial: partialText,
+      storedTokens: [] as string[],
+      storedFullText: "",
+      storedUsage: undefined as LLMUsage | undefined,
+      storedToolCall: undefined as { name: string; args: Record<string, unknown> } | undefined,
+      done: false,
+      aborted: false,
+      tokenSink: (t: string) => state.storedTokens.push(t),
+      completedPromise,
+    };
+
+    const run = async () => {
+      try {
+        await this.llm.chat(
+          history,
+          systemPrompt,
+          (t) => { if (!state.aborted) state.tokenSink(t); },
+          (ft, u) => {
+            if (!state.aborted) {
+              state.storedFullText = ft;
+              if (u) state.storedUsage = u;
+            }
+            state.done = true;
+            resolveCompletion();
+          },
+          {
+            onToolCall: (name, args) => {
+              if (!state.aborted) state.storedToolCall = { name, args };
+              // Tool-call turns also complete the stream.
+              state.done = true;
+              resolveCompletion();
+            },
+            onUsage: (u) => { if (!state.aborted) state.storedUsage = u; },
+          },
+        );
+      } catch {
+        // Swallow errors — the real processTurn will retry normally on a miss.
+        resolveCompletion();
+      }
+    };
+    void run();
+    this._specLlmState = state;
+    logger.info(
+      { callId: this.config.callId, partial: partialText.slice(0, 80) },
+      "Speculative LLM prefill launched",
+    );
   }
 
   /** Record a line the agent is about to synthesize so the streaming-STT path can
@@ -1300,6 +1415,7 @@ export class OrchestrationPipeline {
               if (isSemanticInterrupt(text)) {
                 this.bargeInRequested = true;
                 this.captureInterruptionHint();
+                this._launchSpeculativeLlm(text);
                 this.bargeInCallback?.();
                 this.logExec("Agent", "system", {
                   status: "info",
@@ -1466,6 +1582,7 @@ export class OrchestrationPipeline {
       if (isSemanticInterrupt(transcript)) {
         this.bargeInRequested = true;
         this.captureInterruptionHint();
+        this._launchSpeculativeLlm(transcript);
         this.bargeInCallback?.();
         this.logExec("Agent", "system", {
           status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
@@ -5040,6 +5157,68 @@ export class OrchestrationPipeline {
       },
     });
 
+    // ── Speculative LLM prefill — consume or abort ───────────────────────────
+    // If _launchSpeculativeLlm() fired at barge-in time and the final transcript
+    // is close enough to the partial, replay the already-buffered tokens through
+    // the normal onToken pipeline via a mock adapter.  On a miss, abort the
+    // background speculative call and fall through to the real llm.chat below.
+    //
+    // JS is single-threaded, so the splice(0) + tokenSink redirect is atomic —
+    // no new tokens can arrive between drain and redirect.
+    const _spec = this._specLlmState;
+    this._specLlmState = null;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let effectiveLlm: typeof this.llm = this.llm;
+    if (_spec) {
+      if (!_spec.aborted && !_spec.storedToolCall && isSpeculativeHit(_spec.partial, transcript)) {
+        this.logExec("LLM", "system", {
+          status: "info", turnNumber: _currentTurnIndex,
+          metadata: {
+            event: "Speculative LLM Hit",
+            partial: _spec.partial.slice(0, 80),
+            final: transcript.slice(0, 80),
+            bufferedTokens: _spec.storedTokens.length,
+            done: _spec.done,
+          },
+        });
+        logger.info(
+          { callId: this.config.callId, partial: _spec.partial.slice(0, 60), final: transcript.slice(0, 60), buffered: _spec.storedTokens.length },
+          "Speculative LLM hit — replaying prefill tokens",
+        );
+        const spec = _spec;
+        effectiveLlm = {
+          chat: async (
+            _h: ConversationTurn[],
+            _s: string,
+            realOnToken: (t: string) => void,
+            realOnDone: (ft: string, u?: LLMUsage) => void,
+            realOpts?: Parameters<LLMAdapter["chat"]>[4],
+          ) => {
+            // 1. Drain tokens buffered so far (synchronous — no event-loop yield)
+            const buffered = spec.storedTokens.splice(0);
+            // 2. Redirect future tokens from the still-running speculative stream
+            spec.tokenSink = (t) => realOnToken(t);
+            // 3. Flush buffered tokens through the real filter pipeline
+            for (const t of buffered) realOnToken(t);
+            // 4. Wait for the speculative stream to finish
+            await spec.completedPromise;
+            // 5. Signal completion and report usage
+            realOnDone(spec.storedFullText);
+            if (spec.storedUsage && realOpts?.onUsage) realOpts.onUsage(spec.storedUsage);
+          },
+        } as unknown as typeof this.llm;
+      } else {
+        // Miss (or tool call in speculative): discard speculative tokens.
+        _spec.aborted = true;
+        if (!_spec.done) {
+          logger.info(
+            { callId: this.config.callId, partial: _spec.partial.slice(0, 60), final: transcript.slice(0, 60) },
+            "Speculative LLM miss — aborting prefill",
+          );
+        }
+      }
+    }
+
     // 1 initial + up to 2 same-provider retries for transient (503/429/5xx/network)
     // errors, so a momentary provider blip no longer drops the whole call.
     const MAX_LLM_ATTEMPTS = 3;
@@ -5067,7 +5246,7 @@ export class OrchestrationPipeline {
       });
     }
     try {
-      await this.llm.chat(
+      await effectiveLlm.chat(
         historyForLlm,
         systemPromptForTurn,
         (token) => {
