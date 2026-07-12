@@ -1,0 +1,174 @@
+Analyze the attached call log. This call was triggered through an **Instant Website Trigger Campaign**.
+
+I want to understand why there is a noticeable delay at the beginning of the conversation.
+
+## Current Call Flow
+
+1. A user submits an enquiry on the website.
+2. The campaign immediately triggers an outbound AI call.
+3. Along with the call, the **Lead Context** (customer details) is injected into the agent.
+4. The customer answers the call.
+
+Current conversation:
+
+```
+Agent: Hello
+Customer: Hello
+```
+
+After this, there is a noticeable pause (a few seconds).
+
+Only after the delay does the agent continue with something like:
+
+> "Hi Gopi, we received your enquiry..."
+
+This creates an unnatural conversation experience.
+
+---
+
+## I need you to analyze the implementation.
+
+Please inspect the complete call flow and explain:
+
+### 1. Lead Context Injection
+
+- How is the Lead Context currently generated?
+- At what stage is it being injected?
+- Is it injected before the LLM session starts or after the customer answers?
+- Is it loaded synchronously or asynchronously?
+
+---
+
+### 2. Root Cause of the Delay
+
+Identify exactly where the delay is occurring.
+
+Examples:
+
+- Database lookup
+- Campaign lookup
+- Lead retrieval
+- Memory retrieval
+- Prompt construction
+- Variable injection
+- LLM initialization
+- Context loading
+- TTS initialization
+- Telephony event sequencing
+- Any other blocking operation
+
+Please provide a timeline of what happens between:
+
+```
+Customer answers
+
+↓
+
+Agent says "Hello"
+
+↓
+
+(Delay)
+
+↓
+
+Lead Context loaded
+
+↓
+
+LLM generates response
+
+↓
+
+Agent says
+
+"Hi Gopi, we received your enquiry..."
+```
+
+I want to know exactly which step is causing the delay and how much time each step is taking.
+
+---
+
+### 3. Current Implementation
+
+Show the files, services, and functions responsible for:
+
+- Campaign trigger
+- Lead retrieval
+- Variable injection
+- Prompt construction
+- LLM session initialization
+- TTS generation
+
+---
+
+### 4. Optimization Opportunities
+
+How can we reduce or eliminate this delay?
+
+Examples:
+
+- Preload the Lead Context before the call is connected.
+- Build the system prompt before the customer answers.
+- Initialize the LLM session while the call is ringing.
+- Cache campaign configuration.
+- Cache agent configuration.
+- Pre-fetch customer variables.
+- Stream the first response.
+- Remove synchronous/blocking operations.
+
+Please recommend the best architecture.
+
+---
+
+### 5. Ideal Call Flow
+
+The target experience should be:
+
+```
+Website Enquiry
+
+↓
+
+Lead Created
+
+↓
+
+Campaign Triggered
+
+↓
+
+Lead Context Prepared
+
+↓
+
+LLM Session Ready
+
+↓
+
+Customer Answers
+
+↓
+
+Agent immediately says:
+
+"Hi Gopi, thanks for your enquiry..."
+```
+
+There should be no awkward pause after the customer says "Hello".
+
+---
+
+### Goal
+
+Please analyze the attached call log and the current implementation to identify the exact cause of the delay.
+
+Provide:
+
+- Root cause
+- Code references
+- Timeline of events
+- Recommended optimizations
+- Estimated improvement after implementing the optimizations
+
+Do not make assumptions—inspect the actual implementation and explain the current behavior.
