@@ -1,0 +1,3295 @@
+[
+  {
+    "id": 177108,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "agentId": 166,
+      "agentName": "vikram",
+      "asrProvider": "sarvam",
+      "llmProvider": "google",
+      "ttsProvider": "cartesia",
+      "ttsVoice": "de1f4e6b-1585-4721-934a-8b282b1a10a0"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "event": "Call Started",
+      "callId": 2404,
+      "sessionId": "live-2404",
+      "callType": "Webcall",
+      "direction": "Inbound",
+      "recordingEnabled": true,
+      "webrtcConnected": false,
+      "mediaStreamStarted": true,
+      "connectionEstablishedAt": "2026-07-12T09:11:29.995Z",
+      "telephonyProvider": "webcall"
+    }
+  },
+  {
+    "id": 177114,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "profile": {
+        "name": null,
+        "callCount": 4
+      },
+      "factCount": 5,
+      "facts": {
+        "decision_maker": "self_and_wife",
+        "top_up_interest": "yes",
+        "budget_range": "5000",
+        "existing_insurance": "yes",
+        "language_pref": "hindi"
+      },
+      "recentCallsCount": 3
+    },
+    "metadata": null
+  },
+  {
+    "id": 177110,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "VariableResolver",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "variables": {
+        "to_number": "webcall-agent-166",
+        "from_number": "webcall-user-101122737730832668494",
+        "agent_name": "vikram",
+        "caller_number": "webcall-user-101122737730832668494",
+        "date": "Sunday, July 12, 2026"
+      }
+    },
+    "responsePayload": {
+      "resolvedPromptPreview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 4\n\nPrevious call summary: The caller is looking to add a top-up health insurance with a budget of ₹5000 and will make a decision along with their wife. The caller had some difficulty articulating their needs and concerns regarding health insurance.\n\nKNOWN DETAILS ABOUT THIS CALLER:\n• decision_maker: self_and_wife\n• top_up_interest: yes\n• budget_range: 5000\n• existing_insurance: yes\n\n⚠️ NAME PRIORITY RULE: If the caller states their own name at any point during this call (e.g. \"My name is Gopi\", \"I'm Ravi\", \"This is Priya\"), immediately switch to t"
+    },
+    "metadata": null
+  },
+  {
+    "id": 177109,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "LLM",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  {
+    "id": 177107,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "STT",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "sarvam",
+      "language": "en-IN"
+    }
+  },
+  {
+    "id": 177111,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Voice Loaded",
+      "provider": "cartesia",
+      "voice": "de1f4e6b-1585-4721-934a-8b282b1a10a0"
+    }
+  },
+  {
+    "id": 177112,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "TTS",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Provider Initialized",
+      "provider": "cartesia"
+    }
+  },
+  {
+    "id": 177113,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:30.155Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Prompt Generated",
+      "promptHash": "0013ff412606",
+      "promptLength": 11620,
+      "preview": "=== CALLER MEMORY ===\nName: unknown  |  Calls: 4\n\nPrevious call summary: The caller is looking to add a top-up health insurance with a budget of ₹5000 and will make a decision along with their wife. T"
+    }
+  },
+  {
+    "id": 177116,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:31.297Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "नमस्ते! पिछली बार आप टॉप-अप हेल्थ इंश्योरेंस के बारे में जानकारी ले रहे थे, क्या आप उसी पर आगे बात करना चाहेंगे?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 177115,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:31.297Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 0
+    }
+  },
+  {
+    "id": 177117,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:32.870Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1595,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 204514,
+      "textLength": 112,
+      "firstByteMs": 454
+    },
+    "metadata": {
+      "turnNumber": 0,
+      "durationMs": 1595
+    }
+  },
+  {
+    "id": 177118,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:38.276Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 6391,
+      "turnNumber": 0,
+      "durationMs": 6979
+    }
+  },
+  {
+    "id": 177119,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:40.422Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "जी बताइए",
+      "endDetectToFinalMs": 419,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177120,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:40.422Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "अच्छा"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177121,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:40.422Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177122,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:40.430Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 2,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177123,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:40.471Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177124,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:40.883Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 465,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 5,
+      "firstByteMs": 190
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 465
+    }
+  },
+  {
+    "id": 177125,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:41.162Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 1,
+      "durationMs": 677
+    }
+  },
+  {
+    "id": 177127,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:41.755Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1336,
+      "turnNumber": 1,
+      "durationMs": 1336
+    }
+  },
+  {
+    "id": 177126,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:41.755Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "जी, पिछली बार आप टॉप-अप हेल्थ इंश्योरेंस के बारे में जानकारी ले रहे थे"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177128,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:41.757Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1336,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "जी, पिछली बार आप टॉप-अप हेल्थ इंश्योरेंस के बारे में जानकारी ले रहे थे, क्या आप उसी पर आगे बात करना चाहेंगे?"
+    },
+    "metadata": {
+      "inputTokens": 4339,
+      "outputTokens": 30,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177129,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:41.757Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप उसी पर आगे बात करना चाहेंगे?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177130,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:41.804Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177131,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:42.471Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 713,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 81634,
+      "textLength": 36,
+      "firstByteMs": 151
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 713
+    }
+  },
+  {
+    "id": 177132,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:42.703Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 947,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 130274,
+      "textLength": 70,
+      "firstByteMs": 153
+    },
+    "metadata": {
+      "turnNumber": 1,
+      "durationMs": 947
+    }
+  },
+  {
+    "id": 177134,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:46.072Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 4071,
+      "turnNumber": 1,
+      "durationMs": 4246
+    }
+  },
+  {
+    "id": 177133,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:46.072Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 1
+    }
+  },
+  {
+    "id": 177135,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:48.687Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2551,
+      "turnNumber": 1,
+      "durationMs": 2635
+    }
+  },
+  {
+    "id": 177136,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:49.819Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177137,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:49.819Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "हाँ जी",
+      "endDetectToFinalMs": 64,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177138,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:49.819Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ठीक है"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177139,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:49.819Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 4,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177140,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:49.868Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177141,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:50.238Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 425,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 6,
+      "firstByteMs": 147
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 425
+    }
+  },
+  {
+    "id": 177142,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:50.521Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 2,
+      "durationMs": 652
+    }
+  },
+  {
+    "id": 177143,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:50.942Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1127,
+      "turnNumber": 2,
+      "durationMs": 1127
+    }
+  },
+  {
+    "id": 177144,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:50.976Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके, तो आप टॉप-अप हेल्थ इंश्योरेंस में क्या देख रहे हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177145,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:50.978Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1127,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, तो आप टॉप-अप हेल्थ इंश्योरेंस में क्या देख रहे हैं? मतलब आपकी क्या ज़रूरतें या चिंताएँ हैं?"
+    },
+    "metadata": {
+      "inputTokens": 4389,
+      "outputTokens": 29,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177146,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:51.031Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 2
+    }
+  },
+  {
+    "id": 177147,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:51.746Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 771,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 96994,
+      "textLength": 56,
+      "firstByteMs": 150
+    },
+    "metadata": {
+      "turnNumber": 2,
+      "durationMs": 771
+    }
+  },
+  {
+    "id": 177148,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:52.673Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 200,
+      "configuredThreshold": 200,
+      "echoFloor": 0,
+      "currentRms": 0,
+      "turnNumber": 2,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 177149,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:52.715Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 3031,
+      "turnNumber": 2,
+      "durationMs": 1670,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 177150,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:52.715Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "बताइए।",
+      "endDetectToFinalMs": 93,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177151,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:52.715Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 6,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177152,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:52.715Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177153,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:53.528Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओह"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177154,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:53.585Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177155,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:53.861Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1159,
+      "turnNumber": 3,
+      "durationMs": 1159
+    }
+  },
+  {
+    "id": 177156,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:53.866Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1159,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "आपकी क्या चिंताएं हैं या आपको हेल्थ इंश्योरेंस से क्या चाहिए?"
+    },
+    "metadata": {
+      "inputTokens": 4384,
+      "outputTokens": 17,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177157,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:53.866Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "आपकी क्या चिंताएं हैं या आपको हेल्थ इंश्योरेंस से क्या चाहिए?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177158,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:53.967Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 462,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 15074,
+      "textLength": 2,
+      "firstByteMs": 162
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 462
+    }
+  },
+  {
+    "id": 177159,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:54.148Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 3
+    }
+  },
+  {
+    "id": 177160,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:54.148Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 471,
+      "turnNumber": 3,
+      "durationMs": 528
+    }
+  },
+  {
+    "id": 177161,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:54.666Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 801,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 104674,
+      "textLength": 61,
+      "firstByteMs": 143
+    },
+    "metadata": {
+      "turnNumber": 3,
+      "durationMs": 801
+    }
+  },
+  {
+    "id": 177162,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:11:57.492Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3271,
+      "turnNumber": 3,
+      "durationMs": 3377
+    }
+  },
+  {
+    "id": 177163,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:01.263Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "जे",
+      "endDetectToFinalMs": 103,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 177164,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:01.267Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 177165,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:01.267Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 8,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 177166,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:02.085Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 816,
+      "turnNumber": 4,
+      "durationMs": 816
+    }
+  },
+  {
+    "id": 177167,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:02.086Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 816,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, तो आप अपनी मौजूदा हेल्थ इंश्योरेंस के साथ टॉप-अप प्लान क्यों लेना चाहते हैं?"
+    },
+    "metadata": {
+      "inputTokens": 4403,
+      "outputTokens": 23,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 177168,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:02.086Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके, तो आप अपनी मौजूदा हेल्थ इंश्योरेंस के साथ टॉप-अप प्लान क्यों लेना चाहते हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 177169,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:02.136Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 4
+    }
+  },
+  {
+    "id": 177170,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.322Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1234,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 153314,
+      "textLength": 81,
+      "firstByteMs": 140
+    },
+    "metadata": {
+      "turnNumber": 4,
+      "durationMs": 1234
+    }
+  },
+  {
+    "id": 177171,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.428Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "word_count",
+      "words": 4,
+      "threshold": 1,
+      "turnNumber": 4,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 177174,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.455Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 4791,
+      "turnNumber": 4,
+      "durationMs": 1304,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 177172,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.455Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "Family Health Insurance चाहिए।",
+      "endDetectToFinalMs": 140,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177173,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.455Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177175,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.455Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ठीक है"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177176,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.455Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 10,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177177,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.496Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177178,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:03.931Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 488,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 6,
+      "firstByteMs": 183
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 488
+    }
+  },
+  {
+    "id": 177179,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:04.162Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 5,
+      "durationMs": 667
+    }
+  },
+  {
+    "id": 177180,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:04.579Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1138,
+      "turnNumber": 5,
+      "durationMs": 1138
+    }
+  },
+  {
+    "id": 177181,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:04.583Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके, आपको फैमिली हेल्थ इंश्योरेंस चाहिए।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177182,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:04.612Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1138,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, आपको फैमिली हेल्थ इंश्योरेंस चाहिए। क्या आप मुझे बता सकते हैं कि आपकी फैमिली में कितने लोग हैं?"
+    },
+    "metadata": {
+      "inputTokens": 4437,
+      "outputTokens": 26,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177183,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:04.612Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप मुझे बता सकते हैं कि आपकी फैमिली में कितने लोग हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177184,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:04.655Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177185,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:05.378Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 769,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 91874,
+      "textLength": 59,
+      "firstByteMs": 142
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 769
+    }
+  },
+  {
+    "id": 177186,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:05.507Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 925,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 94434,
+      "textLength": 40,
+      "firstByteMs": 327
+    },
+    "metadata": {
+      "turnNumber": 5,
+      "durationMs": 925
+    }
+  },
+  {
+    "id": 177187,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:07.903Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 5
+    }
+  },
+  {
+    "id": 177188,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:07.903Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2951,
+      "turnNumber": 5,
+      "durationMs": 3248
+    }
+  },
+  {
+    "id": 177189,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:10.811Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2871,
+      "turnNumber": 5,
+      "durationMs": 2900
+    }
+  },
+  {
+    "id": 177190,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:13.943Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "मेरे family में अभी 4 लोग हैं।",
+      "endDetectToFinalMs": 199,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177191,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:13.943Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177192,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:13.959Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 12,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177193,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:14.766Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "हाँ"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177194,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:14.822Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177195,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.036Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1101,
+      "turnNumber": 6,
+      "durationMs": 1101
+    }
+  },
+  {
+    "id": 177196,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.056Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके, आपकी फैमिली में 4 लोग हैं।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177197,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.059Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1101,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, आपकी फैमिली में 4 लोग हैं। और आपका बजट क्या है, मतलब आप हर महीने कितना प्रीमियम देना चाहेंगे?"
+    },
+    "metadata": {
+      "inputTokens": 4476,
+      "outputTokens": 25,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177198,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.059Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "और आपका बजट क्या है, मतलब आप हर महीने कितना प्रीमियम देना चाहेंगे?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177199,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.234Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 469,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 3,
+      "firstByteMs": 156
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 469
+    }
+  },
+  {
+    "id": 177200,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 6,
+      "durationMs": 659
+    }
+  },
+  {
+    "id": 177201,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177202,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:15.887Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 828,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 73954,
+      "textLength": 31,
+      "firstByteMs": 294
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 828
+    }
+  },
+  {
+    "id": 177203,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:16.138Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1081,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 120034,
+      "textLength": 66,
+      "firstByteMs": 351
+    },
+    "metadata": {
+      "turnNumber": 6,
+      "durationMs": 1081
+    }
+  },
+  {
+    "id": 177205,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:17.847Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2311,
+      "turnNumber": 6,
+      "durationMs": 2361
+    }
+  },
+  {
+    "id": 177204,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:17.847Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 6
+    }
+  },
+  {
+    "id": 177206,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:21.707Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3751,
+      "turnNumber": 6,
+      "durationMs": 3862
+    }
+  },
+  {
+    "id": 177207,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:23.771Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "हम्म 3000",
+      "endDetectToFinalMs": 435,
+      "mergedSegments": 2,
+      "pauseCount": 1
+    },
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177208,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:23.771Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "अच्छा"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177209,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:23.773Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177210,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:23.773Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 14,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177211,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:23.820Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177212,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:24.173Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 400,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 5,
+      "firstByteMs": 139
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 400
+    }
+  },
+  {
+    "id": 177213,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:24.448Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 7,
+      "durationMs": 626
+    }
+  },
+  {
+    "id": 177216,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.003Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1229,
+      "turnNumber": 7,
+      "durationMs": 1229
+    }
+  },
+  {
+    "id": 177215,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.003Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके, 3000 रुपये हर महीने।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177214,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.003Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1229,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, 3000 रुपये हर महीने। और क्या आप ही आखिरी फैसला लेंगे या आपकी पत्नी भी इसमें शामिल होंगी?"
+    },
+    "metadata": {
+      "inputTokens": 4510,
+      "outputTokens": 26,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177217,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.003Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "और क्या आप ही आखिरी फैसला लेंगे या आपकी पत्नी भी इसमें शामिल होंगी?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177218,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.048Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177219,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.690Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 694,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 73954,
+      "textLength": 25,
+      "firstByteMs": 170
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 694
+    }
+  },
+  {
+    "id": 177220,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:25.867Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 867,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 117474,
+      "textLength": 67,
+      "firstByteMs": 139
+    },
+    "metadata": {
+      "turnNumber": 7,
+      "durationMs": 867
+    }
+  },
+  {
+    "id": 177221,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:27.513Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2311,
+      "turnNumber": 7,
+      "durationMs": 2465
+    }
+  },
+  {
+    "id": 177222,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:27.514Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 7
+    }
+  },
+  {
+    "id": 177234,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:31.276Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 3671,
+      "turnNumber": 7,
+      "durationMs": 3757
+    }
+  },
+  {
+    "id": 177237,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.173Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "जी",
+      "endDetectToFinalMs": 149,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177236,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.173Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "हम्म"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177238,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.177Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177239,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.177Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 16,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177240,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.224Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177241,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.668Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 468,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 20194,
+      "textLength": 4,
+      "firstByteMs": 174
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 468
+    }
+  },
+  {
+    "id": 177244,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:35.951Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 631,
+      "turnNumber": 8,
+      "durationMs": 724
+    }
+  },
+  {
+    "id": 177245,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.376Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1206,
+      "turnNumber": 8,
+      "durationMs": 1206
+    }
+  },
+  {
+    "id": 177246,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.378Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके, ठीक है।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177247,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.379Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "तो आप और आपकी पत्नी मिलकर फैसला लेंगे।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177248,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.385Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप चाहते हैं कि मैं आपको कुछ प्लान्स के बारे में बताऊँ?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177249,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.385Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1206,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, ठीक है। तो आप और आपकी पत्नी मिलकर फैसला लेंगे। क्या आप चाहते हैं कि मैं आपको कुछ प्लान्स के बारे में बताऊँ?"
+    },
+    "metadata": {
+      "inputTokens": 4556,
+      "outputTokens": 32,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177250,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.433Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177251,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:36.859Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 476,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 32994,
+      "textLength": 12,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 476
+    }
+  },
+  {
+    "id": 177252,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:37.096Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 719,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 38,
+      "firstByteMs": 144
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 719
+    }
+  },
+  {
+    "id": 177254,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:37.293Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 890,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 86754,
+      "textLength": 60,
+      "firstByteMs": 187
+    },
+    "metadata": {
+      "turnNumber": 8,
+      "durationMs": 890
+    }
+  },
+  {
+    "id": 177257,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:37.528Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 1031,
+      "turnNumber": 8,
+      "durationMs": 1095
+    }
+  },
+  {
+    "id": 177258,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:37.528Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177270,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:40.289Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 2711,
+      "turnNumber": 8,
+      "durationMs": 2761
+    }
+  },
+  {
+    "id": 177269,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:40.289Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 8
+    }
+  },
+  {
+    "id": 177277,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:42.647Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 200,
+      "configuredThreshold": 200,
+      "echoFloor": 0,
+      "currentRms": 0,
+      "turnNumber": 8,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 177278,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:42.650Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 2711,
+      "turnNumber": 8,
+      "durationMs": 2360,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 177299,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:47.670Z",
+    "component": "STT",
+    "provider": "sarvam",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": {
+      "transcript": "हाँ बताइए।",
+      "endDetectToFinalMs": 90,
+      "mergedSegments": 1,
+      "pauseCount": 0
+    },
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177300,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:47.672Z",
+    "component": "Knowledge",
+    "provider": null,
+    "direction": "response",
+    "status": "info",
+    "latencyMs": 0,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "KB Context",
+      "hit": true,
+      "source": "baked",
+      "contextChars": 0,
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177301,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:47.680Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "model": "gemini-2.5-flash",
+      "systemPromptPreview": "[LANGUAGE RULE] The caller is currently speaking in Hindi. Respond in Hindi. If the caller switches to a different language (Tamil, Hindi, English, etc.), immediately switch your response to match their new language. If they mix languages (e.g. Hinglish or Tamil+English), match their mix naturally. IMPORTANT — borrowed English words and fillers from the caller (\"okay\", \"ok\", \"thank you\", \"yes\", \"no\", \"right\", \"fine\") are completely normal in Indian speech and are NOT a language switch; do NOT switch to English because of them. Only switch to English when the caller clearly converses in full English sentences or explicitly asks for English. REGISTER — speak in natural, everyday colloquial spoken Hindi, the way real people talk in casual conversation; NEVER use formal, literary, or bookish r",
+      "historyLength": 18,
+      "tools": [
+        "end_call",
+        "schedule_callback"
+      ]
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177303,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.490Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "हाँ"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177304,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.542Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177305,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.744Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "First Token Received",
+      "ttftMs": 1074,
+      "turnNumber": 9,
+      "durationMs": 1074
+    }
+  },
+  {
+    "id": 177306,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.749Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "ओके"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177307,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.895Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "तो आप फैमिली हेल्थ इंश्योरेंस के लिए 3000 रुपये का बजट बता रहे हैं।"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177309,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.899Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "request",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": {
+      "text": "क्या आप मुझे अपनी उम्र और अपनी पत्नी की उम्र बता सकते हैं?"
+    },
+    "responsePayload": null,
+    "metadata": {
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177308,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.899Z",
+    "component": "LLM",
+    "provider": "google",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 1074,
+    "requestPayload": null,
+    "responsePayload": {
+      "text": "ओके, तो आप फैमिली हेल्थ इंश्योरेंस के लिए 3000 रुपये का बजट बता रहे हैं। क्या आप मुझे अपनी उम्र और अपनी पत्नी की उम्र बता सकते हैं?"
+    },
+    "metadata": {
+      "inputTokens": 4581,
+      "outputTokens": 45,
+      "cachedTokens": 3782,
+      "model": "gemini-2.5-flash",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177310,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:48.945Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 456,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 25314,
+      "textLength": 3,
+      "firstByteMs": 165
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 456
+    }
+  },
+  {
+    "id": 177312,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:49.146Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 398,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 17634,
+      "textLength": 3,
+      "firstByteMs": 155
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 398
+    }
+  },
+  {
+    "id": 177313,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:49.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177314,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:49.487Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 791,
+      "turnNumber": 9,
+      "durationMs": 930
+    }
+  },
+  {
+    "id": 177318,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:49.776Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 882,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 109794,
+      "textLength": 67,
+      "firstByteMs": 174
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 882
+    }
+  },
+  {
+    "id": 177319,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:49.784Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "response",
+    "status": "success",
+    "latencyMs": 887,
+    "requestPayload": null,
+    "responsePayload": {
+      "audioBytes": 99554,
+      "textLength": 58,
+      "firstByteMs": 203
+    },
+    "metadata": {
+      "turnNumber": 9,
+      "durationMs": 887
+    }
+  },
+  {
+    "id": 177321,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:50.048Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Completed",
+      "reason": "completed",
+      "audioDurationMs": 551,
+      "turnNumber": 9,
+      "durationMs": 562
+    }
+  },
+  {
+    "id": 177322,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:50.048Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Started",
+      "turnNumber": 9
+    }
+  },
+  {
+    "id": 177325,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:51.096Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Barge-in Detected",
+      "trigger": "streaming_energy",
+      "frames": 8,
+      "effectiveMinFrames": 8,
+      "effectiveThreshold": 200,
+      "configuredThreshold": 200,
+      "echoFloor": 0,
+      "currentRms": 0,
+      "turnNumber": 9,
+      "warningFlags": [
+        "barge_in"
+      ]
+    }
+  },
+  {
+    "id": 177326,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:51.098Z",
+    "component": "TTS",
+    "provider": "cartesia",
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Playback Interrupted",
+      "reason": "barge_in",
+      "audioDurationMs": 3431,
+      "turnNumber": 9,
+      "durationMs": 1064,
+      "warningFlags": [
+        "playback_interrupted"
+      ]
+    }
+  },
+  {
+    "id": 177332,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:58.766Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Started"
+    }
+  },
+  {
+    "id": 177333,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:59.179Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Uploaded",
+      "url": "/api/storage/recordings/2404"
+    }
+  },
+  {
+    "id": 177334,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:59.179Z",
+    "component": "Recording",
+    "provider": null,
+    "direction": "system",
+    "status": "info",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "event": "Recording Saved",
+      "url": "/api/storage/recordings/2404"
+    }
+  },
+  {
+    "id": 177335,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:12:59.281Z",
+    "component": "Agent",
+    "provider": null,
+    "direction": "system",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "callEnded": {
+        "reason": "user_hangup",
+        "reasonLabel": "Caller hung up",
+        "component": "Recording",
+        "provider": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "expected": true,
+        "retryAttempted": false,
+        "fallbackAttempted": false,
+        "recoverySucceeded": null,
+        "outcome": "Call Terminated",
+        "durationSeconds": 88,
+        "turns": 9,
+        "lastComponent": "Recording",
+        "lastUserTranscript": "हाँ बताइए।",
+        "lastAgentResponse": "ओके, तो आप फैमिली हेल्थ इंश्योरेंस के लिए 3000 रुपये का बजट बता रहे हैं। क्या आप मुझे अपनी उम्र और अपनी पत्नी की उम्र बता सकते हैं?",
+        "recordingStatus": "saved",
+        "warningCount": 8,
+        "errorCount": 0,
+        "retryCount": 0,
+        "fallbackCount": 0
+      },
+      "durationSeconds": 88,
+      "turns": 9,
+      "avgSttMs": 0,
+      "avgLlmMs": 1132,
+      "avgTtsMs": 531
+    }
+  },
+  {
+    "id": 177336,
+    "callId": 2404,
+    "agentId": 166,
+    "ts": "2026-07-12T09:13:00.471Z",
+    "component": "Memory",
+    "provider": null,
+    "direction": "response",
+    "status": "success",
+    "latencyMs": null,
+    "requestPayload": null,
+    "responsePayload": null,
+    "metadata": {
+      "updated": true,
+      "wasDropped": true
+    }
+  }
+]
