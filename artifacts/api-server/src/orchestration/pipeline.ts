@@ -24,6 +24,7 @@ import { resolveGoodbyeMessage } from "./types.js";
 import { retrieveKbContext, retrieveKbContextMultiEx, resolveKbTurnBudgetMs, type KbRetrievalResult } from "./kb-retrieval.js";
 import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { getBackchannelFillers, pickBackchannelFiller } from "./backchannel.js";
+import { ConversationHistory } from "./conversation-history.js";
 import { performance } from "perf_hooks";
 import {
   computeEndpointMs,
@@ -769,8 +770,24 @@ export class OrchestrationPipeline {
   // Recording — stereo WAV of both sides (caller=L, agent=R)
   private recording = new RecordingBuffer(8000);
 
-  private conversationHistory: ConversationTurn[] = [];
+  private conversationHistory = new ConversationHistory();
   private closed = false;
+
+  // ── Bolna-parity: conversation-quality metrics ────────────────────────────
+  /** Total characters spoken by the agent across all turns (proxy for speak time). */
+  private _agentSpeakCharsTotal = 0;
+  /** Total characters received from caller across all turns (proxy for listen time). */
+  private _callerSpeakCharsTotal = 0;
+  /** Characters spoken by agent in the current turn (reset each turn). */
+  private _agentSpeakCharsThisTurn = 0;
+  /** Longest uninterrupted agent turn by character count (largest monologue). */
+  private _longestAgentMonologueChars = 0;
+  /** Number of barge-in events fired this call. */
+  private _bargeInFiredCount = 0;
+  /** Number of barge-ins that were fully recovered (agent completed its next reply). */
+  private _bargeInRecoveryCount = 0;
+  /** Whether the immediately-preceding agent turn was interrupted by a barge-in. */
+  private _lastTurnWasBargedIn = false;
 
   /**
    * Set when the configured max-call-duration timer fires while the agent is
@@ -921,7 +938,7 @@ export class OrchestrationPipeline {
     if (!this.conversationHistory.some(t => t.role === "assistant")) return;
 
     const history: ConversationTurn[] = [
-      ...this.conversationHistory,
+      ...this.conversationHistory.messages,
       { role: "user", content: partialText },
     ];
     // Use the same stable base as the Gemini context-cache warm: langGuard +
@@ -1418,6 +1435,9 @@ export class OrchestrationPipeline {
             ) {
               if (isSemanticInterrupt(text)) {
                 this.bargeInRequested = true;
+                this.llm.cancelInFlight?.();
+                this._bargeInFiredCount++;
+                this._lastTurnWasBargedIn = true;
                 this.captureInterruptionHint();
                 this._launchSpeculativeLlm(text);
                 this.bargeInCallback?.();
@@ -1585,6 +1605,9 @@ export class OrchestrationPipeline {
       // them, so they are always a genuine caller interruption.
       if (isSemanticInterrupt(transcript)) {
         this.bargeInRequested = true;
+        this.llm.cancelInFlight?.();
+        this._bargeInFiredCount++;
+        this._lastTurnWasBargedIn = true;
         this.captureInterruptionHint();
         this._launchSpeculativeLlm(transcript);
         this.bargeInCallback?.();
@@ -1621,6 +1644,9 @@ export class OrchestrationPipeline {
           : (this.agent.wordsForInterruption ?? 2);
         if (this.streamingBargeInWordCount >= threshold) {
           this.bargeInRequested = true;
+          this.llm.cancelInFlight?.();
+          this._bargeInFiredCount++;
+          this._lastTurnWasBargedIn = true;
           this.captureInterruptionHint();
           this.bargeInCallback?.();
           this.logExec("Agent", "system", {
@@ -2139,6 +2165,9 @@ export class OrchestrationPipeline {
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.bargeInRequested = true;
+        this.llm.cancelInFlight?.();
+        this._bargeInFiredCount++;
+        this._lastTurnWasBargedIn = true;
         this.captureInterruptionHint();
         this.bargeInCallback?.();
         this.audioBuffer = [];
@@ -2696,10 +2725,10 @@ export class OrchestrationPipeline {
 
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
-      this.conversationHistory.push({ role: "assistant", content: greeting });
+      this.conversationHistory.appendAssistant(greeting);
       this.lastAssistantSpokenRaw = greeting;  // seed repeat guard with the opener
       this.config.onTranscript("agent", greeting);
-      this.config.onConversationUpdate?.(this.conversationHistory);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       this.firstAudioSentAt = null;
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       // Live Call (carrier) path: protect the FULL greeting from streaming-STT and
@@ -3052,8 +3081,7 @@ export class OrchestrationPipeline {
   private scheduleSilenceFlush(): void {
     if (this.silenceTimer) return;
     // ── Adaptive endpoint window ───────────────────────────────────────────
-    const lastAgentText = [...this.conversationHistory].reverse()
-      .find(t => t.role === "assistant")?.content ?? "";
+    const lastAgentText = this.conversationHistory.findLast(t => t.role === "assistant")?.content ?? "";
     const partialTranscript = this.pendingTranscriptQueue.length > 0 ? this.pendingTranscriptQueue[this.pendingTranscriptQueue.length - 1].text : "";
     // audioBuffer holds 8kHz 8-bit PCM: 8000 bytes/s → 1 ms ≈ 8 bytes
     const audioBufferMs = Math.round(
@@ -3202,8 +3230,8 @@ export class OrchestrationPipeline {
   getLastTurnTexts(): { lastUser: string | null; lastAgent: string | null } {
     let lastUser: string | null = null;
     let lastAgent: string | null = null;
-    for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
-      const t = this.conversationHistory[i]!;
+    for (let i = this.conversationHistory.messages.length - 1; i >= 0; i--) {
+      const t = this.conversationHistory.messages[i]!;
       if (lastAgent === null && t.role === "assistant" && t.content) lastAgent = t.content;
       if (lastUser === null && t.role === "user" && t.content) lastUser = t.content;
       if (lastUser !== null && lastAgent !== null) break;
@@ -3676,7 +3704,7 @@ export class OrchestrationPipeline {
           endCallTool?.type === "end_call" ? endCallTool.goodbyeMessage : undefined,
           this.agent.endCallPhrases,
         );
-        this.conversationHistory.push({ role: "assistant", content: goodbye });
+        this.conversationHistory.appendAssistant(goodbye);
         this.config.onTranscript("agent", goodbye);
         await this.speakRaw(goodbye);
         this.config.onCallEnd();
@@ -3878,7 +3906,7 @@ export class OrchestrationPipeline {
     logger.info({ callId: this.config.callId }, "End Call tool invoked by LLM");
     {
       const goodbye = resolveGoodbyeMessage(tool.goodbyeMessage, this.agent.endCallPhrases);
-      this.conversationHistory.push({ role: "assistant", content: goodbye });
+      this.conversationHistory.appendAssistant(goodbye);
       this.config.onTranscript("agent", goodbye);
       await this.speakRaw(goodbye);
     }
@@ -4001,7 +4029,7 @@ export class OrchestrationPipeline {
       const generateSummary = async (llm: NonNullable<typeof this.fallbackLlm>): Promise<string> => {
         let summaryText = "";
         await llm.chat(
-          this.conversationHistory,
+          this.conversationHistory.messages,
           prompt,
           (token) => { summaryText += token; },
           (full)  => { summaryText = full; },
@@ -4044,7 +4072,7 @@ export class OrchestrationPipeline {
       // degrading to a context-free cold transfer.
       if (!operatorSummary) {
         const MAX_BRIEF_CHARS = 1000;
-        let recent = this.conversationHistory
+        let recent = this.conversationHistory.messages
           .filter((t) => t.role === "user" || t.role === "assistant")
           .slice(-6)
           .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`.trim())
@@ -4163,7 +4191,7 @@ export class OrchestrationPipeline {
     try {
       let summaryText = "";
       await this.llm.chat(
-        this.conversationHistory,
+        this.conversationHistory.messages,
         prompt,
         (token) => { summaryText += token; },
         (full)  => { summaryText = full; },
@@ -4295,11 +4323,18 @@ export class OrchestrationPipeline {
         const fromName = LANG_DISPLAY_NAMES[langSwitch.from] ?? langSwitch.from;
         const toName = LANG_DISPLAY_NAMES[langSwitch.to] ?? langSwitch.to;
         const note = `\n\n[Context: the caller just switched from ${fromName} to ${toName}. This transcript was captured while ASR was still configured for ${fromName} — some words may be inaccurate. Respond in ${toName}.]`;
-        this.conversationHistory.push({ role: "user", content: transcript + note });
+        if (!this.conversationHistory.isDuplicateUser(transcript + note)) {
+          this.conversationHistory.appendUser(transcript + note);
+        }
       } else {
-        this.conversationHistory.push({ role: "user", content: transcript });
+        if (!this.conversationHistory.isDuplicateUser(transcript)) {
+          this.conversationHistory.appendUser(transcript);
+        }
       }
     }
+
+    // ── Bolna-parity: caller speak chars metric ───────────────────────────────
+    this._callerSpeakCharsTotal += transcript.length;
 
     // ── Progressive gender detection — fire after each confirmed user turn ──
     // Non-blocking: updates genderDetector.gender for the next turn's salutation.
@@ -4331,9 +4366,9 @@ export class OrchestrationPipeline {
     if (isGarbled) {
       const clarification = pickClarificationPhrase();
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
-      this.conversationHistory.push({ role: "assistant", content: clarification });
+      this.conversationHistory.appendAssistant(clarification);
       this.config.onTranscript("agent", clarification);
-      this.config.onConversationUpdate?.(this.conversationHistory);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try { await this.playSentence(clarification); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
@@ -4373,9 +4408,9 @@ export class OrchestrationPipeline {
     const guardrailResponse = this.checkGuardrailRoutes(transcript);
     if (guardrailResponse !== null) {
       logger.info({ callId: this.config.callId, transcript }, "Guardrail route triggered");
-      this.conversationHistory.push({ role: "assistant", content: guardrailResponse });
+      this.conversationHistory.appendAssistant(guardrailResponse);
       this.config.onTranscript("agent", guardrailResponse);
-      this.config.onConversationUpdate?.(this.conversationHistory);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try { await this.playSentence(guardrailResponse); } finally { this.isPlaying = false; this.armTailEchoGrace(); }
@@ -4916,12 +4951,12 @@ export class OrchestrationPipeline {
 
     // ── Token Optimization (Layers 1-4) ──────────────────────────────────────
     const tokenOptEnabled = await fetchTokenOptEnabled();
-    const fullHistoryLen = this.conversationHistory.length;
+    const fullHistoryLen = this.conversationHistory.messages.length;
 
     // Layer 2: Sliding Window — trim context to last N turns
-    let historyForLlm = this.conversationHistory;
+    let historyForLlm: ConversationTurn[] = this.conversationHistory.sanitizeToolMessages();
     if (tokenOptEnabled && this.agent.contextWindowTurns && this.agent.contextWindowTurns > 0) {
-      historyForLlm = this.conversationHistory.slice(-this.agent.contextWindowTurns);
+      historyForLlm = historyForLlm.slice(-this.agent.contextWindowTurns);
     }
     const sentHistoryLen = historyForLlm.length;
 
@@ -5036,7 +5071,7 @@ export class OrchestrationPipeline {
       this.agent.systemPrompt.includes("THIS IS A RETURNING CALLER") ||
       this.agent.systemPrompt.includes("RESUME, DO NOT RESTART") ||
       this.agent.systemPrompt.includes("=== RESUME DIRECTIVE ===");
-    const openerAlreadySpoken = this.conversationHistory.some((t) => t.role === "assistant");
+    const openerAlreadySpoken = this.conversationHistory.messages.some((t) => t.role === "assistant");
     if (hasOpeningOnlyDirective && openerAlreadySpoken) {
       systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
     }
@@ -5140,7 +5175,7 @@ export class OrchestrationPipeline {
         "Resume your call flow from the last content topic you were explaining before the confusion — " +
         "do not re-introduce yourself, do not restart the call from the beginning, " +
         "and do not ask about language preferences again. Continue from where you left off.";
-      this.conversationHistory.push({ role: "user", content: recoveryNote });
+      this.conversationHistory.appendUser(recoveryNote);
       this._recoveryNoteInjected = true;
       this._consecutiveHeldFillerTurns = 0;
       logger.info(
@@ -5558,9 +5593,7 @@ export class OrchestrationPipeline {
       // a matching tool_call_id. Without this they return 400 or loop on the tool call.
       const _toolCallId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const assistantTextContent = stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))).trim();
-      this.conversationHistory.push({
-        role: "assistant",
-        content: assistantTextContent,
+      this.conversationHistory.appendAssistant(assistantTextContent, {
         toolCalls: [{ id: _toolCallId, name: triggeredToolName, args: JSON.stringify(triggeredToolArgs) }],
       });
 
@@ -5674,10 +5707,40 @@ export class OrchestrationPipeline {
     // guard truncated this turn, store only the spoken portion so the agent
     // resumes from the dropped step next turn instead of believing it covered it.
     const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
-    this.conversationHistory.push({ role: "assistant", content: spokenResponse });
+    this.conversationHistory.appendAssistant(spokenResponse);
     this.trackRepeat(spokenResponse);
     this.config.onTranscript("agent", spokenResponse);
-    this.config.onConversationUpdate?.(this.conversationHistory);
+    this.config.onConversationUpdate?.(this.conversationHistory.messages);
+
+    // ── Bolna-parity: per-turn speak metrics ──────────────────────────────
+    this._agentSpeakCharsThisTurn = spokenResponse.length;
+    this._agentSpeakCharsTotal += spokenResponse.length;
+    if (spokenResponse.length > this._longestAgentMonologueChars) {
+      this._longestAgentMonologueChars = spokenResponse.length;
+    }
+    if (this._lastTurnWasBargedIn) {
+      this._bargeInRecoveryCount++;
+      this._lastTurnWasBargedIn = false;
+    }
+    this.logExec("Agent", "system", {
+      status: "info",
+      turnNumber: _currentTurnIndex,
+      metadata: {
+        event: "Turn Metrics",
+        bargeInFiredTotal: this._bargeInFiredCount,
+        bargeInRecoveryTotal: this._bargeInRecoveryCount,
+        bargeInRecoveryRate: this._bargeInFiredCount > 0
+          ? Math.round((this._bargeInRecoveryCount / this._bargeInFiredCount) * 100) / 100
+          : null,
+        agentSpeakCharsThisTurn: this._agentSpeakCharsThisTurn,
+        agentSpeakCharsTotal: this._agentSpeakCharsTotal,
+        callerSpeakCharsTotal: this._callerSpeakCharsTotal,
+        talkListenRatio: this._callerSpeakCharsTotal > 0
+          ? Math.round((this._agentSpeakCharsTotal / this._callerSpeakCharsTotal) * 100) / 100
+          : null,
+        longestAgentMonologueChars: this._longestAgentMonologueChars,
+      },
+    });
 
     // ── Token Optimization: Stage detection ───────────────────────────────
     if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
@@ -5699,12 +5762,12 @@ export class OrchestrationPipeline {
     // No longer gated by a user-visible toggle — uses the default threshold (20 turns).
     if (tokenOptEnabled) {
       const threshold = this.agent.tokenSummarizationThresholdTurns ?? 20;
-      const histLen = this.conversationHistory.length;
+      const histLen = this.conversationHistory.messages.length;
       if (histLen >= threshold) {
         const keepTurns = this.agent.contextWindowTurns ?? Math.ceil(threshold / 2);
         const replaceCount = Math.max(0, histLen - keepTurns);
         if (replaceCount >= 2) {
-          const turnsToSummarize = this.conversationHistory.slice(0, replaceCount);
+          const turnsToSummarize = this.conversationHistory.messages.slice(0, replaceCount);
           void this.summarizeOldTurns(turnsToSummarize, replaceCount);
         }
       }
@@ -5851,7 +5914,7 @@ export class OrchestrationPipeline {
   }
 
   getHistory(): ConversationTurn[] {
-    return this.conversationHistory;
+    return this.conversationHistory.messages;
   }
 
   /** Returns the BCP-47 language code the pipeline ended on this call. */
@@ -5950,12 +6013,12 @@ export class OrchestrationPipeline {
         }
       );
       if (summary.trim()) {
-        this.conversationHistory.splice(0, replaceCount, {
+        this.conversationHistory.replaceRangeWithSummary(replaceCount, {
           role: "assistant",
           content: `[CONVERSATION SUMMARY] ${summary.trim()}`,
         });
         logger.info(
-          { callId: this.config.callId, summarizedTurns: replaceCount, historyNow: this.conversationHistory.length },
+          { callId: this.config.callId, summarizedTurns: replaceCount, historyNow: this.conversationHistory.messages.length },
           "Token summarization: old turns compressed"
         );
       }
@@ -5965,7 +6028,7 @@ export class OrchestrationPipeline {
   }
 
   getTranscript(): string {
-    return this.conversationHistory
+    return this.conversationHistory.messages
       // Internal tool plumbing must never surface as a spoken turn in the
       // human-readable transcript:
       //  - role "tool": the raw structured tool-result string fed back to the
@@ -5987,7 +6050,7 @@ export class OrchestrationPipeline {
     // A genuine user turn is a role:"user" message that is NOT a tool-result
     // injection (those start with "[Tool result for"). This blocks Pattern A:
     // LLM chains check_availability×N → book_appointment after a single "Hello".
-    const genuineUserTurns = this.conversationHistory.filter(
+    const genuineUserTurns = this.conversationHistory.messages.filter(
       (m) => m.role === "user" && !m.content.startsWith("[Tool result for"),
     ).length;
     if (genuineUserTurns < 2) {
@@ -6060,11 +6123,11 @@ export class OrchestrationPipeline {
     if (toolCallId) {
       // Native tool call: use proper "tool" role with matching tool_call_id so
       // OpenAI-compatible APIs (Sarvam, Groq, Mistral, etc.) accept the follow-up call.
-      this.conversationHistory.push({ role: "tool", content: result, toolCallId, toolName });
+      this.conversationHistory.appendToolResult(result, toolCallId, toolName);
     } else {
       // Inline function tag (text-based): no tool_call_id — use user message format
       // which the instruction-following model already understands from its system prompt.
-      this.conversationHistory.push({ role: "user", content: `[Tool result for ${toolName}]: ${result}` });
+      this.conversationHistory.appendUser(`[Tool result for ${toolName}]: ${result}`);
     }
     // Track whether a booking tool has already fired in this agentic chain so the
     // duplicate-booking guard below can block Pattern B (bulk slot booking).
@@ -6076,7 +6139,7 @@ export class OrchestrationPipeline {
     const completedKey = toolName + ":" + JSON.stringify(
       Object.fromEntries(Object.entries(
         (() => { try { return JSON.parse(
-          this.conversationHistory.at(-1)?.toolCalls?.[0]?.args ?? "{}",
+          this.conversationHistory.messages.at(-1)?.toolCalls?.[0]?.args ?? "{}",
         ) as Record<string, unknown>; } catch { return {}; } })(),
       ).sort()),
     );
@@ -6220,7 +6283,7 @@ export class OrchestrationPipeline {
 
     try {
       await this.llm.chat(
-        this.conversationHistory,
+        this.conversationHistory.messages,
         toolSystemPrompt,
         (token) => {
           llmResponse += token;
@@ -6348,9 +6411,7 @@ export class OrchestrationPipeline {
           "Tool loop guard: same tool+args called too many times in chain — breaking loop",
         );
         const loopError = `error: ${chainedName} was already called ${priorCalls} time(s) with these same arguments — you already have the data, speak your response to the caller now without calling the tool again`;
-        this.conversationHistory.push({
-          role: "assistant",
-          content: cleanResponse || "",
+        this.conversationHistory.appendAssistant(cleanResponse || "", {
           toolCalls: [{ id: chainedCallId, name: chainedName, args: JSON.stringify(triggeredToolArgs) }],
         });
         await this.continueWithToolResult(
@@ -6389,9 +6450,7 @@ export class OrchestrationPipeline {
         // Push the error as a tool result so the LLM sees it and speaks the
         // first booking's confirmation to the caller rather than booking again.
         const dupError = "error: a booking was already made in this turn — speak the confirmation to the caller and wait for their response before booking again";
-        this.conversationHistory.push({
-          role: "assistant",
-          content: cleanResponse || "",
+        this.conversationHistory.appendAssistant(cleanResponse || "", {
           toolCalls: [{ id: chainedCallId, name: chainedName, args: JSON.stringify(triggeredToolArgs) }],
         });
         await this.continueWithToolResult(
@@ -6404,9 +6463,7 @@ export class OrchestrationPipeline {
         return;
       }
 
-      this.conversationHistory.push({
-        role: "assistant",
-        content: cleanResponse || "",
+      this.conversationHistory.appendAssistant(cleanResponse || "", {
         toolCalls: [{ id: chainedCallId, name: chainedName, args: JSON.stringify(triggeredToolArgs) }],
       });
       const chainedResult = await this.handleToolCall(chainedName, triggeredToolArgs);
@@ -6424,10 +6481,10 @@ export class OrchestrationPipeline {
 
     if (cleanResponse) {
       const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
-      this.conversationHistory.push({ role: "assistant", content: spokenResponse });
+      this.conversationHistory.appendAssistant(spokenResponse);
       this.trackRepeat(spokenResponse);
       this.config.onTranscript("agent", spokenResponse);
-      this.config.onConversationUpdate?.(this.conversationHistory);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
 
       // ── End-call phrase detection (agent-side) ──
       // Same behavior as the normal turn: if the agent naturally used a

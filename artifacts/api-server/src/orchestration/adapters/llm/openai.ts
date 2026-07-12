@@ -18,13 +18,29 @@ import { logger } from "../../../lib/logger.js";
  *   Turn 2 saves ~(sys_prompt + turn1_tokens) ≈ 600–2 000 input tokens.
  *   Turn N saves all prior turns. For gpt-4o-mini this is ~20–60 ms TTFT/turn.
  *
+ * Barge-in cancel:
+ *   cancelInFlight() aborts the local stream AND calls responses.cancel() so
+ *   OpenAI stops generating tokens server-side immediately (saves input+output
+ *   tokens for the abandoned turn). Modelled after Bolna's OpenAIWSConnection.
+ *
  * Speculative (pre-barge-in) calls always use chat.completions so a spec miss
  * does NOT advance previousResponseId and corrupt the real turn's state.
  *
  * Set OPENAI_USE_CHAT_COMPLETIONS=1 to force the legacy path (e.g. for debugging).
+ *
+ * compact_threshold: when set (env OPENAI_COMPACT_THRESHOLD, integer token count),
+ * passed to responses.create() so OpenAI automatically compacts the stored context
+ * when it exceeds that many tokens, keeping per-turn input cost bounded for long calls.
  */
 
 const USE_RESPONSES_API = process.env.OPENAI_USE_CHAT_COMPLETIONS !== "1";
+
+/** When set, OpenAI auto-compacts the server-side context when it exceeds this
+ *  token count. Keeps per-turn input cost bounded on very long calls. */
+const COMPACT_THRESHOLD = (() => {
+  const v = parseInt(process.env.OPENAI_COMPACT_THRESHOLD ?? "", 10);
+  return Number.isFinite(v) && v > 0 ? v : undefined;
+})();
 
 export class OpenAILLM implements LLMAdapter {
   private readonly client: OpenAI;
@@ -38,12 +54,40 @@ export class OpenAILLM implements LLMAdapter {
   private previousResponseId: string | null = null;
   private pendingToolCallId: string | null = null;
 
+  // In-flight cancel support — set just before responses.create(), cleared after.
+  private _inFlightAbort: AbortController | null = null;
+  private _inFlightResponseId: string | null = null;
+
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({ apiKey });
     this.model = model ?? "gpt-4o-mini";
     const t = genParams?.temperature;
     this.temperature =
       typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+  }
+
+  /**
+   * Abort the in-flight streaming call and send a server-side response.cancel()
+   * so OpenAI stops generating tokens immediately on barge-in.
+   * Fire-and-forget — the caller (pipeline barge-in handler) does not await this.
+   */
+  cancelInFlight(): void {
+    // 1. Abort the local HTTP stream so the for-await loop exits.
+    if (this._inFlightAbort) {
+      this._inFlightAbort.abort();
+      this._inFlightAbort = null;
+    }
+    // 2. Server-side cancel: tell OpenAI to stop generating tokens.
+    // This saves the output tokens for the abandoned turn.
+    if (this._inFlightResponseId) {
+      const rid = this._inFlightResponseId;
+      this._inFlightResponseId = null;
+      // Best-effort, fire-and-forget — we don't await or surface errors.
+      this.client.responses.cancel(rid).catch((err: unknown) => {
+        logger.debug({ model: this.model, responseId: rid, err: (err as any)?.message ?? err },
+          "openai_responses_cancel_error (best-effort, ignored)");
+      });
+    }
   }
 
   async chat(
@@ -68,6 +112,10 @@ export class OpenAILLM implements LLMAdapter {
     try {
       await this.chatResponses(messages, systemPrompt, onToken, onDone, options);
     } catch (err: any) {
+      if (err?.name === "AbortError") {
+        // Barge-in cancel — not an error; caller already stopped caring about this turn.
+        return;
+      }
       if (this.previousResponseId) {
         // Stale / expired previousResponseId — reset and replay with full history.
         logger.warn(
@@ -156,10 +204,30 @@ export class OpenAILLM implements LLMAdapter {
       ...(instructions !== undefined ? { instructions } : {}),
       ...(this.previousResponseId ? { previous_response_id: this.previousResponseId } : {}),
       ...(responsesTools ? { tools: responsesTools, tool_choice: "auto" } : {}),
-      ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
+      // Float → integer coercion: the Responses API rejects float temperatures
+      // (e.g. 0.7 → 400). Round to 1 decimal to keep control while satisfying the API.
+      ...(this.temperature !== undefined
+        ? { temperature: Math.round(this.temperature * 10) / 10 }
+        : {}),
+      // compact_threshold: when set, OpenAI automatically compacts the server-side
+      // context when it exceeds this token count, bounding per-turn input cost on
+      // very long calls. Modelled after Bolna's compact_threshold param.
+      ...(COMPACT_THRESHOLD ? { compact_threshold: COMPACT_THRESHOLD } : {}),
     };
 
-    const stream = (await this.client.responses.create(createParams)) as unknown as AsyncIterable<any>;
+    // Set up AbortController so cancelInFlight() can abort this stream.
+    const abort = new AbortController();
+    this._inFlightAbort = abort;
+
+    let stream: AsyncIterable<any>;
+    try {
+      stream = (await this.client.responses.create(createParams, {
+        signal: abort.signal,
+      })) as unknown as AsyncIterable<any>;
+    } catch (err) {
+      this._inFlightAbort = null;
+      throw err;
+    }
 
     let full = "";
     let toolCallName = "";
@@ -169,47 +237,65 @@ export class OpenAILLM implements LLMAdapter {
     let newResponseId: string | null = null;
     let newToolCallId: string | null = null;
 
-    for await (const event of stream) {
-      switch (event.type as string) {
-        case "response.output_text.delta": {
-          const delta = (event.delta as string) ?? "";
-          if (delta) {
-            full += delta;
-            onToken(delta);
-          }
-          break;
+    try {
+      for await (const event of stream) {
+        // Track the response ID as soon as it's available so cancelInFlight()
+        // can send a server-side cancel even if the stream is mid-flight.
+        if (!this._inFlightResponseId && event.type === "response.created") {
+          this._inFlightResponseId = (event.response as any)?.id ?? null;
         }
-        case "response.function_call_arguments.delta":
-          isToolCall = true;
-          toolCallArgs += (event.delta as string) ?? "";
-          break;
-        case "response.function_call_arguments.done":
-          isToolCall = true;
-          if (!toolCallName) toolCallName = (event.name as string) ?? "";
-          if (!toolCallArgs) toolCallArgs = (event.arguments as string) ?? "";
-          break;
-        case "response.completed": {
-          const response = event.response as any;
-          newResponseId = response?.id ?? null;
-          if (response?.usage) {
-            usage = {
-              inputTokens: response.usage.input_tokens ?? 0,
-              outputTokens: response.usage.output_tokens ?? 0,
-              cachedTokens: response.usage.input_tokens_details?.cached_tokens,
-            };
+
+        switch (event.type as string) {
+          case "response.output_text.delta": {
+            const delta = (event.delta as string) ?? "";
+            if (delta) {
+              full += delta;
+              onToken(delta);
+            }
+            break;
           }
-          // Extract call_id for the next function_call_output (tool continuation).
-          if (isToolCall && response?.output) {
-            const fnItem = (response.output as any[]).find(
-              (it: any) => it.type === "function_call",
-            );
-            newToolCallId = fnItem?.call_id ?? null;
+          case "response.function_call_arguments.delta":
+            isToolCall = true;
+            toolCallArgs += (event.delta as string) ?? "";
+            break;
+          case "response.function_call_arguments.done":
+            isToolCall = true;
+            if (!toolCallName) toolCallName = (event.name as string) ?? "";
+            if (!toolCallArgs) toolCallArgs = (event.arguments as string) ?? "";
+            break;
+          case "response.completed": {
+            const response = event.response as any;
+            newResponseId = response?.id ?? null;
+            if (response?.usage) {
+              usage = {
+                inputTokens: response.usage.input_tokens ?? 0,
+                outputTokens: response.usage.output_tokens ?? 0,
+                cachedTokens: response.usage.input_tokens_details?.cached_tokens,
+              };
+            }
+            // Log service tier for latency diagnosis (mirrors Bolna's service_tier tracking).
+            if (response?.service_tier && response.service_tier !== "default") {
+              logger.info({ model: this.model, service_tier: response.service_tier },
+                "openai_responses_service_tier");
+            }
+            // Extract call_id for the next function_call_output (tool continuation).
+            if (isToolCall && response?.output) {
+              const fnItem = (response.output as any[]).find(
+                (it: any) => it.type === "function_call",
+              );
+              newToolCallId = fnItem?.call_id ?? null;
+            }
+            break;
           }
-          break;
+          default:
+            break;
         }
-        default:
-          break;
       }
+    } finally {
+      // Always clear the AbortController and in-flight response ID once the
+      // stream has finished (normally or via abort).
+      this._inFlightAbort = null;
+      this._inFlightResponseId = null;
     }
 
     // Advance stateful context only after a clean stream completion.

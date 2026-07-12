@@ -528,6 +528,14 @@ export interface LLMAdapter {
    *  passed to `chat()`. Non-blocking and best-effort — only implemented by
    *  GoogleLLM (Gemini). Adapters without it are simply not warmed early. */
   warmContextCache?(base: string, tools?: ToolDefinition[]): void;
+  /**
+   * Optional: abort the in-flight streaming chat() call and, where the provider
+   * supports it, send a server-side cancel so the model stops generating tokens
+   * immediately (saving cost). Called on barge-in before the caller's transcript
+   * arrives so the pipeline doesn't wait for the current LLM stream to finish.
+   * Only implemented by OpenAILLM (Responses API cancel endpoint).
+   */
+  cancelInFlight?(): void;
 }
 
 export interface TTSAdapter {
