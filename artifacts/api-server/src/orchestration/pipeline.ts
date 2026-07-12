@@ -356,9 +356,11 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string):
 
 /**
  * Detect the dominant BCP-47 language from the Unicode script of a transcript.
- * Sarvam STT does NOT return a detected language in its callback, so we infer it
- * from the script of the transcribed text. This drives per-turn language injection
- * when `languageAutoDetect` is ON.
+ * Used as a fallback when the STT provider does not return a language code.
+ * Sarvam saaras:v3 now forwards `language_code` via `coalesceLang` in the adapter,
+ * so for Sarvam calls `lang` is non-null and this function is only consulted when
+ * the provider returns no LID (older models, non-Sarvam providers).
+ * This drives per-turn language injection when `languageAutoDetect` is ON.
  *
  * Priority: Tamil > Devanagari (Hindi) > Malayalam > Telugu > Kannada > Bengali >
  *           Gujarati > Gurmukhi (Punjabi) > Odia > Latin-only (English) > null.
@@ -717,6 +719,8 @@ export class OrchestrationPipeline {
   private _lastEndpointReason = "";
   // Azure STT endpointing metadata — set in streaming callback, consumed in processTurn
   private _pendingSttMeta: { endDetectToFinalMs?: number; lastPartialToFinalMs?: number } | null = null;
+  /** STT-provider language code for the current in-flight transcript (forwarded to handleStreamingTranscript). */
+  private _pendingSttLang: string | null = null;
   private _fillerPlayedThisTurn = false;
   // ── Language-confusion recovery (Task 4) ──────────────────────────────────
   // Counts consecutive turns where the filler guard held the current language
@@ -1295,115 +1299,10 @@ export class OrchestrationPipeline {
           if (!text.trim()) return;
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
-          // Auto-detect mode: update currentLang from the transcript's Unicode script.
-          // Sarvam STT does NOT return a detectedLanguage — the `lang` arg is always
-          // undefined. So we infer the caller's language from what they actually said.
-          // This drives the per-turn LLM language instruction on the next turn.
-          if (this.agent.languageAutoDetect) {
-            let detected = lang ?? detectScriptLanguage(text);
-            // Explicit language request (e.g. "speak in English", "Hindi me baat
-            // karo") LATCHES the caller's chosen output language so it STICKS for
-            // the rest of the call. Without the latch, the very next Indic-script
-            // utterance flips currentLang back via script detection and the agent
-            // reverts — the caller asks for English, gets one English reply, then
-            // is dragged back to Hindi (prod call 1022). The latch only changes on
-            // another explicit request, never via passive script detection.
-            const requested = detectExplicitLanguageRequest(text);
-            if (requested) {
-              if (requested !== this.requestedLangLatch) {
-                logger.info(
-                  { callId: this.config.callId, requested, text: text.slice(0, 60) },
-                  "Auto-detect: explicit language request latched",
-                );
-                // Make the latch drive speech recognition too — otherwise the
-                // streaming STT stays on its call-start language for the rest of
-                // the call and mistranscribes the caller's requested language
-                // into the old script (call 1881: Tamil speech → Devanagari →
-                // script detection reads Hindi → agent locked in Hindi).
-                this.switchStreamSTTLanguage(requested);
-              }
-              this.requestedLangLatch = requested;
-            }
-            // A latched explicit request overrides per-turn script detection.
-            // Otherwise, a short Latin-only filler/backchannel ("okay", "thank
-            // you", "haan ok") must NOT flip an established non-English
-            // conversation to English — only a real English utterance (3+ words
-            // with at least one non-filler word) switches passively. First-turn
-            // English (no non-English currentLang yet) passes through unchanged.
-            const resolved = resolveAutoDetectLanguage({
-              detected,
-              latchedLang: this.requestedLangLatch,
-              currentLang: this.currentLang,
-              text,
-            });
-            if (resolved.heldFiller) {
-              logger.info(
-                { callId: this.config.callId, heldLang: this.currentLang, text: text.slice(0, 60) },
-                "Auto-detect: English filler/backchannel — holding current language",
-              );
-              // Task 4: count consecutive held-filler turns so the recovery
-              // message can be injected when ≥ 2 such turns accumulate.
-              this._consecutiveHeldFillerTurns++;
-            } else {
-              this._consecutiveHeldFillerTurns = 0;
-            }
-            detected = resolved.lang;
-            if (detected) {
-              if (detected !== this.currentLang) {
-                logger.info(
-                  { callId: this.config.callId, from: this.currentLang, to: detected, text: text.slice(0, 60) },
-                  "Auto-detect: caller language switch detected",
-                );
-              }
-              this.currentLang = detected;
-              if (!detected.startsWith("en-")) {
-                this.lastNonEnglishLang = detected;
-                // Switch the streaming STT to the detected language so it
-                // transcribes in the correct script instead of translating
-                // (e.g. Sarvam en-IN translates "புரியுது" → "I understood").
-                // Only switch passively to non-English — switching BACK to
-                // English requires an explicit caller request to avoid repeated
-                // WebSocket reconnects when the caller mixes English fillers.
-                //
-                // Consecutive-detection guard: require the SAME non-English
-                // language in 2 back-to-back transcripts before switching the
-                // STT socket. Sarvam en-IN occasionally emits a stray Telugu
-                // glyph while transcribing Tamil audio; a single stray character
-                // used to flip the STT connection to te-IN (this bug). A genuine
-                // Tamil caller will trigger the switch within their first 2 turns.
-                if (detected === this._pendingSttSwitchLang) {
-                  this._pendingSttSwitchCount++;
-                } else {
-                  this._pendingSttSwitchLang = detected;
-                  this._pendingSttSwitchCount = 1;
-                }
-                if (this._pendingSttSwitchCount >= 2) {
-                  this.switchStreamSTTLanguage(detected);
-                }
-              }
-            }
-          } else {
-            // Strict single-language mode — still honor an EXPLICIT caller request
-            // to switch to English. Without this the caller saying "speak in English"
-            // is silently ignored because languageAutoDetect=false skips the latch
-            // entirely, and the ABSOLUTE RULE stays locked forever.
-            // autoSwitchToEnglish being false/absent is intentional — it controls
-            // whether English is the default fallback, NOT whether explicit requests
-            // are respected. A caller who explicitly says "speak English" must always
-            // be heard, regardless of agent config.
-            const requested = detectExplicitLanguageRequest(text);
-            if (requested && requested !== this.requestedLangLatch) {
-              const requestedName = LANG_DISPLAY_NAMES[requested] ?? requested;
-              logger.info(
-                { callId: this.config.callId, requested, text: text.slice(0, 60) },
-                `Strict mode: caller requested ${requestedName} — latching (overrides ABSOLUTE RULE this call)`,
-              );
-              this.requestedLangLatch = requested;
-              this.currentLang = requested;
-            }
-          }
-          // NB: safetyNet.onFinal() is DEFERRED to handleStreamingTranscript so a
-          // transcript that is later discarded (tail-echo) does NOT clear the stall.
+          // NB: safetyNet.onFinal() and language auto-detection are DEFERRED to
+          // handleStreamingTranscript so a transcript discarded by the echo guards
+          // does NOT clear the stall backstop or drive language switching.
+          this._pendingSttLang = lang ?? null;
           this._pendingSttMeta = metadata ?? null;
           void this.handleStreamingTranscript(text, Date.now());
         },
@@ -1604,6 +1503,127 @@ export class OrchestrationPipeline {
       return;
     }
 
+    // Language auto-detection — runs AFTER all discard guards so echoed transcripts
+    // can never drive language switching or increment the consecutive-detection counter.
+    {
+      // Sarvam saaras:v3 now forwards language_code via coalesceLang; other providers
+      // may leave this null. Fall back to Unicode-script detection on the text.
+      // Normalize Sarvam's non-standard Odia code (od-IN → or-IN) so that
+      // LANG_DISPLAY_NAMES lookups and the consecutive-detection guard resolve
+      // correctly (od-IN vs or-IN would never match → guard never fires → oscillation).
+      let sttLang = this._pendingSttLang;
+      if (sttLang === "od-IN") sttLang = "or-IN";
+
+      if (this.agent.languageAutoDetect) {
+        let detected = sttLang ?? detectScriptLanguage(transcript);
+        // Explicit language request (e.g. "speak in English", "Hindi me baat
+        // karo") LATCHES the caller's chosen output language so it STICKS for
+        // the rest of the call. Without the latch, the very next Indic-script
+        // utterance flips currentLang back via script detection and the agent
+        // reverts — the caller asks for English, gets one English reply, then
+        // is dragged back to Hindi (prod call 1022). The latch only changes on
+        // another explicit request, never via passive script detection.
+        const requested = detectExplicitLanguageRequest(transcript);
+        if (requested) {
+          if (requested !== this.requestedLangLatch) {
+            logger.info(
+              { callId: this.config.callId, requested, text: transcript.slice(0, 60) },
+              "Auto-detect: explicit language request latched",
+            );
+            // Make the latch drive speech recognition too — otherwise the
+            // streaming STT stays on its call-start language for the rest of
+            // the call and mistranscribes the caller's requested language
+            // into the old script (call 1881: Tamil speech → Devanagari →
+            // script detection reads Hindi → agent locked in Hindi).
+            this.switchStreamSTTLanguage(requested);
+          }
+          this.requestedLangLatch = requested;
+        }
+        // A latched explicit request overrides per-turn script detection.
+        // Otherwise, a short Latin-only filler/backchannel ("okay", "thank
+        // you", "haan ok") must NOT flip an established non-English
+        // conversation to English — only a real English utterance (3+ content
+        // words outside the filler stoplist) switches passively. First-turn
+        // English (no non-English currentLang yet) passes through unchanged.
+        const resolved = resolveAutoDetectLanguage({
+          detected,
+          latchedLang: this.requestedLangLatch,
+          currentLang: this.currentLang,
+          text: transcript,
+        });
+        if (resolved.heldFiller) {
+          logger.info(
+            { callId: this.config.callId, heldLang: this.currentLang, text: transcript.slice(0, 60) },
+            "Auto-detect: English filler/backchannel — holding current language",
+          );
+          // Task 4: count consecutive held-filler turns so the recovery
+          // message can be injected when ≥ 2 such turns accumulate.
+          this._consecutiveHeldFillerTurns++;
+        } else {
+          this._consecutiveHeldFillerTurns = 0;
+        }
+        detected = resolved.lang;
+        if (detected) {
+          if (detected !== this.currentLang) {
+            logger.info(
+              { callId: this.config.callId, from: this.currentLang, to: detected, text: transcript.slice(0, 60) },
+              "Auto-detect: caller language switch detected",
+            );
+          }
+          this.currentLang = detected;
+          if (!detected.startsWith("en-")) {
+            this.lastNonEnglishLang = detected;
+            // Switch the streaming STT to the detected language so it
+            // transcribes in the correct script instead of translating
+            // (e.g. Sarvam en-IN translates "புரியுது" → "I understood").
+            // Only switch passively to non-English — switching BACK to
+            // English requires an explicit caller request to avoid repeated
+            // WebSocket reconnects when the caller mixes English fillers.
+            //
+            // Consecutive-detection guard: require the SAME non-English
+            // language in 2 back-to-back transcripts before switching the
+            // STT socket. Sarvam en-IN occasionally emits a stray Telugu
+            // glyph while transcribing Tamil audio; a single stray character
+            // used to flip the STT connection to te-IN (this bug). A genuine
+            // Tamil caller will trigger the switch within their first 2 turns.
+            if (detected === this._pendingSttSwitchLang) {
+              this._pendingSttSwitchCount++;
+            } else {
+              this._pendingSttSwitchLang = detected;
+              this._pendingSttSwitchCount = 1;
+            }
+            if (this._pendingSttSwitchCount >= 2) {
+              this.switchStreamSTTLanguage(detected);
+            }
+          }
+        }
+      } else {
+        // Strict single-language mode — still honor an EXPLICIT caller request
+        // to switch language. Without this, the caller saying "speak in English"
+        // is silently ignored because languageAutoDetect=false skips the latch
+        // entirely and the ABSOLUTE RULE stays locked forever.
+        // autoSwitchToEnglish being false/absent is intentional — it controls
+        // whether English is the default fallback, NOT whether explicit requests
+        // are respected. A caller who explicitly says "speak English" must always
+        // be heard, regardless of agent config.
+        const requested = detectExplicitLanguageRequest(transcript);
+        if (requested && requested !== this.requestedLangLatch) {
+          const requestedName = LANG_DISPLAY_NAMES[requested] ?? requested;
+          logger.info(
+            { callId: this.config.callId, requested, text: transcript.slice(0, 60) },
+            `Strict mode: caller requested ${requestedName} — latching (overrides ABSOLUTE RULE this call)`,
+          );
+          this.requestedLangLatch = requested;
+          this.currentLang = requested;
+          // Switch the STT socket to transcribe in the requested language.
+          // Without this, a Tamil-locked agent whose caller asks for English
+          // keeps transcribing through ta-IN — English speech gets mis-scripted
+          // and the conversation degrades (same mechanism as call 1881).
+          this.switchStreamSTTLanguage(requested);
+        }
+      }
+    }
+
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
     this.safetyNet.onFinal();
@@ -1656,7 +1676,7 @@ export class OrchestrationPipeline {
       turnNumber: this._activeTurnIndex,
       detail: { reason: "no usable transcript — prompting caller again" },
     });
-    const text = recoveryReprompt(this.currentLang ?? this.agent.language);
+    const text = recoveryReprompt(this.currentLang || this.agent.language);
     this.firstAudioSentAt = null;
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
     this.isPlaying = true;
@@ -2937,7 +2957,7 @@ export class OrchestrationPipeline {
       turnNumber: this._activeTurnIndex,
       detail: { reason: "silence-hangup window expired — checking if caller is still there" },
     });
-    const text = inactivityReprompt(this.currentLang ?? this.agent.language);
+    const text = inactivityReprompt(this.currentLang || this.agent.language);
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
     this.isPlaying = true;
     try {
@@ -2987,7 +3007,7 @@ export class OrchestrationPipeline {
   private async playInactivityMessageAndEnd(): Promise<void> {
     this.endReasonHint ??= "silence_timeout";
     const farewell = this.agent.inactivityMessage?.trim()
-      || inactivityFarewell(this.currentLang ?? this.agent.language);
+      || inactivityFarewell(this.currentLang || this.agent.language);
     if (!this.closed) {
       try {
         await this.playSentence(farewell);
@@ -5284,7 +5304,7 @@ export class OrchestrationPipeline {
         gu: "એક ક્ષણ…", bn: "একটু অপেক্ষা করুন…", ml: "ഒരു നിമിഷം…",
         es: "Un momento…", fr: "Un instant…", de: "Einen Moment…", ar: "لحظة…",
       };
-      const langPrefix = (this.agent.language ?? "en").split("-")[0] ?? "en";
+      const langPrefix = ((this.currentLang || this.agent.language) ?? "en").split("-")[0] ?? "en";
       // Strict, language-based fillers only — no English fallback for non-English agents.
       // Skip entirely for end_call: the call is terminating anyway, so a "One moment…"
       // filler just plays an awkward extra phrase right before/instead of the goodbye.

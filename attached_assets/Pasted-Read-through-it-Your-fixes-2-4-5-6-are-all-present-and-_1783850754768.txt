@@ -1,0 +1,31 @@
+Read through it. Your fixes #2, #4, #5, #6 are all present and correctly implemented here. But I found one real ordering bug that undermines fix #2, plus a few smaller issues.
+
+**1. Language detection runs BEFORE the echo-discard guards — the agent's own echo can drive language switching. (Highest priority)**
+
+In the STT callback, this order happens: transcript arrives → auto-detect block updates `currentLang` and increments `_pendingSttSwitchCount` → *then* `handleStreamingTranscript` runs the tail-echo and self-echo guards and possibly discards the transcript. So a discarded echo of the agent's own Tamil sentence still counted toward the consecutive-detection guard. Two echoed lines on a bad carrier and the STT socket switches based on the agent's own voice — the exact class of false switch you built the guard to stop. You already defer `safetyNet.onFinal()` into `handleStreamingTranscript` for precisely this reason ("so a transcript that is later discarded does NOT clear the stall") — the language block needs the same treatment. Move the entire `if (this.agent.languageAutoDetect) {...} else {...}` block out of the callback and into `handleStreamingTranscript`, after both echo guards and the `transferInitiated` check, right before `safetyNet.onFinal()`.
+
+**2. `??` vs `||` bug on currentLang fallbacks.**
+
+`currentLang` is initialized to `""` (empty string), never null. So `this.currentLang ?? this.agent.language` in `stallReprompt`, `silenceCheckIn`, and `playInactivityMessageAndEnd` never falls back — it passes `""` to `recoveryReprompt`/`inactivityReprompt`/`inactivityFarewell` on any turn-1 auto-detect call. Change all three to `this.currentLang || this.agent.language`. (You already use `||` correctly in the greeting path.)
+
+**3. Tool fillers didn't get fix #6.**
+
+You fixed backchannel and dead-air fillers to use `currentLang`, but the tool filler still does `const langPrefix = (this.agent.language ?? "en").split("-")[0]`. Conversation switches to Hindi mid-call → tool call → "ஒரு நிமிடம்…" in Tamil (or English "One moment…" in a Tamil call). Change to `((this.currentLang || this.agent.language) ?? "en").split("-")[0]`.
+
+**4. Strict mode: explicit language request latches the LLM but not the STT.**
+
+In the auto-detect branch, an explicit request calls `switchStreamSTTLanguage(requested)`. In the strict-mode branch (`else`), you set `requestedLangLatch` and `currentLang` but never switch the STT socket. So a Tamil-locked agent whose caller says "speak in English" replies in English but keeps *transcribing* through the ta-IN stream — English speech gets mis-scripted/translated and the conversation degrades (same mechanism as call 1881). Add `this.switchStreamSTTLanguage(requested)` in that branch too.
+
+**5. Normalize Sarvam's LID code before using it.**
+
+`let detected = lang ?? detectScriptLanguage(text)` now takes Sarvam's `language_code` raw. Two problems: Sarvam uses `od-IN` for Odia while this file's `LANG_DISPLAY_NAMES` / `LANG_SCRIPT_DIRECTIVE` use `or-IN` — an Odia LID verdict would flip-flop against script detection (`or-IN` vs `od-IN` never match, so the consecutive guard never fires and currentLang oscillates). And any unexpected code from Sarvam flows into `LANG_DISPLAY_NAMES[detected]` returning undefined → langGuard says "Respond in od-IN" literally. Add a small normalize at the point of use: `if (lang === "od-IN") lang = "or-IN";` or a tiny map, before the `??`.
+
+**6. Stale comments (cosmetic but misleading).**
+
+Two places still say Sarvam never returns a detected language: the `detectScriptLanguage` doc comment and the inline comment above `let detected = lang ?? ...` ("the `lang` arg is always undefined"). Both are now false after the adapter change — update them or the next person (or you in 3 months) will "fix" the code back.
+
+What's correct and shouldn't be touched: the consecutive-detection guard logic itself (reset-on-change, ≥2 threshold, passive-to-non-English-only), the latch overriding script detection, the latch re-apply after stream reconnect (`streamSTTLang = null` then re-switch — nice catch, most people miss that), the held-filler counter feeding the Task-4 recovery note, and the backchannel Tamil frequency cap.
+
+One thing I still can't verify from here: the filler exclusion list in `language-filler-guard.ts` (`resolveAutoDetectLanguage`). With Sarvam LID now driving `detected`, confirm that guard checks the *detected* value, not just Latin-script heuristics — if Sarvam labels a Tamil-conversation "ஓகே" segment as `ta-IN`, your English-filler hold won't fire and that's actually fine; but if it labels English "okay" as `en-IN` with 1 word, the hold must still catch it. Upload that file if you want it checked.
+
+Order of fixes: #1 first (it's a correctness bug in the feature you just shipped), then #2/#3/#4 are five-minute changes, #5/#6 cleanup.
