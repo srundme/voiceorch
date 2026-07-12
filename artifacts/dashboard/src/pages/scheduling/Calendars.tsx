@@ -86,6 +86,7 @@ const TIMEZONES = [
 type FormState = {
   agentId: string;
   name: string;
+  description: string;
   timezone: string;
   hostEmail: string;
   additionalHosts: string[];
@@ -101,7 +102,7 @@ function getBrowserTimezone(): string {
 }
 
 function defaultForm(): FormState {
-  return { agentId: "", name: "My Calendar", timezone: getBrowserTimezone(), hostEmail: "", additionalHosts: [], isActive: true };
+  return { agentId: "", name: "My Calendar", description: "", timezone: getBrowserTimezone(), hostEmail: "", additionalHosts: [], isActive: true };
 }
 
 function CalendarFormDialog({
@@ -128,7 +129,7 @@ function CalendarFormDialog({
 
   const [form, setForm] = useState<FormState>(() =>
     editing
-      ? { agentId: String(editing.agentId), name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive }
+      ? { agentId: editing.agentId != null ? String(editing.agentId) : "", description: editing.description ?? "", name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive }
       : { ...defaultForm(), agentId: defaultAgentId != null ? String(defaultAgentId) : "" }
   );
 
@@ -173,9 +174,6 @@ function CalendarFormDialog({
   }
 
   async function submit() {
-    if (!editing && !form.agentId) {
-      toast({ title: "Select an agent", variant: "destructive" }); return;
-    }
     if (!form.name.trim()) {
       toast({ title: "Name is required", variant: "destructive" }); return;
     }
@@ -190,10 +188,10 @@ function CalendarFormDialog({
       const hostEmail = form.hostEmail.trim() || null;
       const additionalHosts = form.additionalHosts.map(h => h.trim()).filter(Boolean);
       if (editing) {
-        await update.mutateAsync({ id: editing.id, data: { name: form.name, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
+        await update.mutateAsync({ id: editing.id, data: { name: form.name, description: form.description.trim() || null, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
         toast({ title: "Calendar updated" });
       } else {
-        await create.mutateAsync({ data: { agentId: parseInt(form.agentId), name: form.name, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
+        await create.mutateAsync({ data: { ...(form.agentId ? { agentId: parseInt(form.agentId) } : {}), description: form.description.trim() || null, name: form.name, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
         toast({ title: "Calendar created" });
       }
       await qc.invalidateQueries({ queryKey: getListCalendarsQueryKey() });
@@ -218,8 +216,8 @@ function CalendarFormDialog({
           <DialogTitle>{editing ? "Edit Calendar" : "New Calendar"}</DialogTitle>
           <DialogDescription>
             {editing
-              ? "Update this calendar's name, timezone, or active status."
-              : "Create a calendar linked to one of your agents. Each agent can have one calendar."}
+              ? "Update this calendar's name, description, timezone, or active status."
+              : "Create a calendar. Optionally link it to an agent, or leave unlinked for a workspace-level calendar you assign from the agent's Tools tab."}
           </DialogDescription>
         </DialogHeader>
 
@@ -244,7 +242,7 @@ function CalendarFormDialog({
 
           {!editing && (
             <div className="space-y-1.5">
-              <Label>Agent <span className="text-foreground">*</span></Label>
+              <Label>Agent <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
               {defaultAgentId != null ? (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-input bg-muted/50 text-sm">
                   {agents?.find(a => a.id === defaultAgentId)?.name ?? `Agent #${defaultAgentId}`}
@@ -266,7 +264,7 @@ function CalendarFormDialog({
                 <p className="text-xs text-destructive">{agentError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  One calendar per agent. Choose the agent that will handle bookings.
+                  Optional. Link for legacy 1:1 mode, or leave blank and assign from the agent's Tools tab.
                 </p>
               )}
             </div>
@@ -279,6 +277,16 @@ function CalendarFormDialog({
               onChange={e => set("name", e.target.value)}
               placeholder="e.g. Sales Calls, Demo Bookings"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Description</Label>
+            <Input
+              value={form.description}
+              onChange={e => set("description", e.target.value)}
+              placeholder="e.g. Handles inbound demo booking requests"
+            />
+            <p className="text-xs text-muted-foreground">Optional. Shown on the calendar card.</p>
           </div>
 
           <div className="space-y-1.5">
@@ -461,6 +469,9 @@ function CalendarCard({
                 <Badge variant="outline" className="text-xs bg-muted text-foreground border-border">Active</Badge>
               )}
             </div>
+            {(calendar as any).description && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">{(calendar as any).description}</p>
+            )}
             <div className="flex items-center gap-3 mt-0.5 flex-wrap">
               {agentName && (
                 <span className="text-xs text-muted-foreground">Agent: {agentName}</span>

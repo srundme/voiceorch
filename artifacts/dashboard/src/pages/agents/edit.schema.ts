@@ -121,6 +121,9 @@ export const agentFormSchema = z.object({
   // Sarvam STT mode (only relevant when asrProvider === "sarvam")
   sarvamSttMode: z.enum(["codemix", "verbatim", "transcribe"]).optional(),
 
+  // Workspace calendar assigned to this agent for native scheduling tools
+  schedulingCalendarId: z.number().optional().nullable(),
+
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);
   if (asrErr) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asrModel"], message: asrErr });

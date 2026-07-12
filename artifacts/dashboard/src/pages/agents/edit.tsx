@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -84,7 +84,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     autoRedialEnabled, autoRedialMaxAttempts,
-    sarvamSttMode, kbBakedOnly,
+    sarvamSttMode, kbBakedOnly, schedulingCalendarId,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -144,6 +144,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     dpdp:  !!complianceDpdp,
     trai:  !!complianceTrai,
   };
+  if (schedulingCalendarId != null) {
+    agentConfig["calendarCapability"] = { defaultCalendarId: schedulingCalendarId };
+  }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
 
@@ -364,6 +367,7 @@ export default function AgentEdit() {
       kbBakedOnly: false,
       autoRedialEnabled: false,
       autoRedialMaxAttempts: 3,
+      schedulingCalendarId: null,
     },
   });
 
@@ -373,7 +377,10 @@ export default function AgentEdit() {
   });
 
   const { data: calendarsData } = useListCalendars();
-  const agentCalendar = (calendarsData ?? []).find((cal: any) => cal.agentId === id);
+  const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const agentCalendar = schedulingCalendarId != null
+    ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
+    : id ? (calendarsData ?? []).find((cal: any) => cal.agentId === id) : undefined;
   const calendarIdForEt = agentCalendar?.id;
   const { data: agentEventTypes } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
@@ -589,6 +596,7 @@ export default function AgentEdit() {
       complianceTrai:  ((agent as any).agentConfig?.compliance?.trai  as boolean | undefined) ?? false,
       autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
+      schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
     });
   }, [agent]);
 
@@ -1564,6 +1572,27 @@ export default function AgentEdit() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Scheduling & Bookings</p>
                 <div className="space-y-2">
+                  {/* Calendar assignment picker */}
+                  <div className="rounded-xl border border-border/60 bg-card/20 px-4 py-3 flex items-center gap-3">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-[11px] text-muted-foreground/70">Calendar used by booking tools</p>
+                      <Select
+                        value={schedulingCalendarId != null ? String(schedulingCalendarId) : "__none__"}
+                        onValueChange={v => form.setValue("schedulingCalendarId", v === "__none__" ? null : Number(v))}
+                      >
+                        <SelectTrigger className="h-7 text-xs bg-background/50">
+                          <SelectValue placeholder="Auto-detect (legacy: match by agent)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__" className="text-xs text-muted-foreground">Auto-detect (legacy: match by agent)</SelectItem>
+                          {(calendarsData ?? []).map((cal: any) => (
+                            <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   {BOOKING_TOOLS.map(({ type, fnName, icon, color, description }) => {
                     const isOn = hasNativeTool(type);
                     const c = bookingColorMap[color];

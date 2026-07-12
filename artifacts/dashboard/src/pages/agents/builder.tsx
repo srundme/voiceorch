@@ -1522,7 +1522,10 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   const { toast } = useToast();
 
   const { data: calendarsData } = useListCalendars();
-  const agentCalendar = agentId ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : undefined;
+  const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const agentCalendar = schedulingCalendarId != null
+    ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
+    : agentId ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : undefined;
   const calendarIdForEt = agentCalendar?.id;
   const { data: agentEventTypes } = useListEventTypes(
     calendarIdForEt ? { calendarId: calendarIdForEt } : undefined,
@@ -1703,6 +1706,27 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
         {/* ── Booking Tools ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
+        {/* Calendar assignment picker */}
+        <div className="rounded-xl border border-border/40 bg-card/20 px-4 py-3 flex items-center gap-3 mb-2">
+          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0 space-y-1">
+            <p className="text-[11px] text-muted-foreground/70">Calendar used by booking tools</p>
+            <Select
+              value={schedulingCalendarId != null ? String(schedulingCalendarId) : "__none__"}
+              onValueChange={v => form.setValue("schedulingCalendarId", v === "__none__" ? null : Number(v))}
+            >
+              <SelectTrigger className="h-7 text-xs bg-background/50">
+                <SelectValue placeholder="Auto-detect (legacy: match by agent)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__" className="text-xs text-muted-foreground">Auto-detect (legacy: match by agent)</SelectItem>
+                {(calendarsData ?? []).map((cal: any) => (
+                  <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         {BOOKING_TOOLS.map(({ type, fnName, icon, color, label, description }) => {
           const isOn = hasNativeTool(type);
           const c = colorMap[color];
@@ -4647,6 +4671,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
+      schedulingCalendarId: null,
     },
   });
 
@@ -4725,6 +4750,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
       sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
+      schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
     });
     if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
       form.setError("webhookUrl", {
