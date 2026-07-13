@@ -1,0 +1,38 @@
+Task:
+Perform the final UI/UX polish for the Command Center to achieve a premium enterprise SaaS experience.
+
+Changes:
+- Keep the existing SnapServe dark theme and current color palette. Do NOT introduce new colors, gradients, glow effects, or glassmorphism.
+- Improve spacing, alignment, and typography across the entire dashboard using a consistent 8px spacing system.
+- Make all KPI cards perfectly aligned with identical height, padding, and border radius.
+- Add very subtle hover interactions to cards and table rows (slight background change + 2px lift + 180ms transition).
+- Keep "Recent Calls" as the visual focal point and improve table readability with better spacing and typography.
+- Rename "System Event Log" to "Recent Activity" and simplify its presentation.
+- Replace the right sidebar with a workflow-oriented layout:
+  1. Next Steps
+  2. Provider Health
+  3. Active Agents
+- Rename "Quick Actions" to "Next Steps" and show:
+  • Create Agent
+  • Connect Provider
+  • Buy Phone Number
+  • Create Campaign
+- Present each Next Step as a compact clickable action card with a short description below the title.
+- Improve all empty states with professional, action-oriented copy and a clear CTA button.
+- Remove unnecessary labels such as "Last 25 calls" and "Last 25 events".
+- Add a "View All" action to Recent Calls and Recent Activity.
+- Reduce unnecessary empty space throughout the page and balance the left and right columns.
+- Use typography, spacing, and layout hierarchy instead of colors to draw attention.
+- Keep the dashboard clean, minimal, and immediately understandable for first-time customers.
+
+Goal:
+The Command Center should feel like a production-ready enterprise SaaS product inspired by Linear, Stripe, GitHub Enterprise, and Bolna. A customer should understand the platform status and know exactly what to do next within 5 seconds.
+
+Don't Change:
+- Backend
+- APIs
+- Business logic
+- Existing functionality
+- Existing SnapServe components
+- Existing SnapServe dark theme
+- Existing color palette

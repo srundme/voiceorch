@@ -542,7 +542,21 @@ export class SarvamSTT implements STTAdapter {
           const text = stripDiarizationLabels(msg.data?.transcript ?? "");
           // Capture the language Sarvam identified for this segment (saaras:v3 LID).
           // Last seen language_code wins across coalesced segments; reset in emitCoalesced().
-          coalesceLang = msg.data?.language_code ?? coalesceLang;
+          //
+          // IMPORTANT: only forward the reported code when it DIFFERS from the
+          // init language (langCode). When Sarvam is initialised with
+          // language_code=en-IN it echoes "en-IN" on every response regardless
+          // of what the caller actually spoke — this is NOT real LID; it is just
+          // the init-language echoed back. Forwarding that echo would suppress
+          // detectScriptLanguage() in the pipeline: the pipeline short-circuits on
+          // a non-null sttLang and never reads Unicode script blocks in the
+          // transcript. Leaving coalesceLang undefined on "same-as-init" responses
+          // lets detectScriptLanguage() run and catch actual Indic-script characters
+          // (Tamil, Hindi, etc.) in the transcript text.
+          const reportedLang = msg.data?.language_code;
+          if (reportedLang && reportedLang !== langCode) {
+            coalesceLang = reportedLang;
+          }
           if (!text) return;
           const meta: SttFinalMetadata = {
             endDetectToFinalMs: speechEndAt > 0 ? Date.now() - speechEndAt : undefined,
