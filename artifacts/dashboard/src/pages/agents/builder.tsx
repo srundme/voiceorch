@@ -5223,8 +5223,29 @@ export default function AgentBuilder() {
     navigate(`/app/agents/${target}`, { replace: true });
   }, [selectedId, agentsLoading, agents, navigate]);
 
-  const [showCreate, setShowCreate] = useState(false);
+  // Auto-open the create dialog when the URL contains ?create=1
+  // (used by the post-login redirect for new users with no agents).
+  const [showCreate, setShowCreate] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("create") === "1";
+    } catch {
+      return false;
+    }
+  });
   const handleCreate = () => setShowCreate(true);
+
+  // Strip the ?create=1 param from the URL once we've consumed it so that
+  // the browser history is clean (Back button works normally).
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("create") === "1") {
+        sp.delete("create");
+        const next = sp.toString() ? `?${sp.toString()}` : window.location.pathname;
+        window.history.replaceState(null, "", next);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   return (
     <div className="flex h-full overflow-hidden">

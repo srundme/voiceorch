@@ -330,7 +330,7 @@ function AppRoot() {
   const { data: agents, isLoading } = useListAgents({});
   if (isLoading) return <SnapServeLoader />;
   const list = Array.isArray(agents) ? agents : (agents as any)?.agents ?? [];
-  if (!list.length) return <Redirect to="/app/vibe" />;
+  if (!list.length) return <Redirect to="/app/agents?create=1" />;
   return <Redirect to="/app/agents" />;
 }
 
