@@ -542,7 +542,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const agentName = form.watch("name") as string | undefined;
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col">
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -556,7 +556,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
       />
 
       {/* ── Left: Vapi-style config ──────────────────────────────────────────── */}
-      <div className="relative flex-1 overflow-y-auto min-w-0 border-r border-border/50">
+      <div className="relative min-w-0">
         <div className="p-5 space-y-5">
 
           {/* ── Three provider cards ─────────────────────────────────────────── */}
@@ -993,7 +993,7 @@ function PromptTab({ form }: { form: any }) {
   const agentLang  = form.watch("language") as string | undefined;
 
   return (
-    <div className="relative flex flex-col h-full p-6 gap-4 overflow-y-auto">
+    <div className="relative flex flex-col p-6 gap-4">
       <GeneratePromptSheet
         open={generateOpen}
         onOpenChange={setGenerateOpen}
@@ -1297,7 +1297,7 @@ function VoiceTab({ form }: { form: any }) {
   );
 
   return (
-    <div className="relative p-6 overflow-y-auto h-full space-y-6">
+    <div className="relative p-6 space-y-6">
 
       {/* ── Provider & Voice ── */}
       <div className="space-y-3">
@@ -1695,7 +1695,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
   };
 
   return (
-    <div className="relative p-6 overflow-y-auto h-full space-y-6">
+    <div className="relative p-6 space-y-6">
 
       {/* ── Platform Tools ─── */}
       <div>
@@ -2153,7 +2153,7 @@ function VoicemailTab({ form }: { form: any }) {
   const mode   = form.watch("machineDetectionMode");
   const action = form.watch("voicemailAction");
   return (
-    <div className="relative p-6 overflow-y-auto h-full space-y-5 max-w-xl">
+    <div className="relative p-6 space-y-5 max-w-xl">
       <div>
         <h3 className="text-sm font-semibold">Voicemail Detection (AMD)</h3>
         <p className="text-xs text-muted-foreground mt-1">Outbound calls only — detects answering machines and takes action.</p>
@@ -2297,7 +2297,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   ];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       {/* ── Sub-nav ── */}
       <div className="flex items-center gap-1 px-4 pt-4 pb-3 border-b border-border/40 flex-shrink-0">
         {nav.map(n => (
@@ -2319,7 +2319,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+      <div className="px-5 py-5 space-y-4">
 
         {/* ── TIMING ── */}
         {section === "timing" && (
@@ -2901,7 +2901,7 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
     setDirty(true);
   }
   return (
-    <div className="relative p-6 overflow-y-auto h-full space-y-8">
+    <div className="relative p-6 space-y-8">
 
       {/* ── Webhook ── */}
       <div>
@@ -4288,7 +4288,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
   const selectedV2 = versions.find(v => v.id === selectedArr[1]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       {/* Header strip */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -4359,7 +4359,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
               </p>
             </div>
           )}
-          <div className="flex-1 overflow-y-auto">
+          <div>
             {isLoading && (
               <div className="flex items-center justify-center h-40">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -4432,7 +4432,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
       {/* Draft History sub-tab */}
       {activeSubTab === "drafts" && (
-        <div className="flex-1 overflow-y-auto">
+        <div>
           {isLoading && (
             <div className="flex items-center justify-center h-40">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -4593,6 +4593,15 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 function AgentEditorPanel({ agentId }: { agentId: number }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Partial<Record<TabId, HTMLElement>>>({});
+
+  const scrollToSection = (tabId: TabId) => {
+    setActiveTab(tabId);
+    const el = sectionRefs.current[tabId];
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const [callDialog, setCallDialog] = useState(false);
   const [callNumber, setCallNumber] = useState("");
   const [otpOpen, setOtpOpen] = useState(false);
@@ -4613,6 +4622,28 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const { data: agent, isLoading } = useGetAgent(agentId, {
     query: { queryKey: getGetAgentQueryKey(agentId) },
   });
+
+  useEffect(() => {
+    if (isLoading) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter(e => e.isIntersecting);
+        if (!visible.length) return;
+        visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        const topId = visible[0].target.id.replace("section-", "") as TabId;
+        setActiveTab(topId);
+      },
+      { root: container, rootMargin: "-44px 0px -60% 0px", threshold: 0 },
+    );
+    TABS.forEach(tab => {
+      const el = sectionRefs.current[tab.id];
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [isLoading]);
+
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
   const initiateOutbound = useInitiateOutboundCall();
@@ -4790,7 +4821,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       };
       const firstFieldName = Object.keys(errors)[0];
       const targetTab = firstFieldName ? (fieldTabMap[firstFieldName] ?? null) : null;
-      if (targetTab) setActiveTab(targetTab);
+      if (targetTab) scrollToSection(targetTab);
       const firstError = Object.values(errors)[0];
       const msg = firstError && typeof firstError === "object" && "message" in firstError
         ? String((firstError as any).message)
@@ -4960,44 +4991,56 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         </div>
       )}
 
-      <Form {...form}>
-        <div className="px-6 pt-3 pb-0 shrink-0">
-          <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
-        </div>
-      </Form>
-
-      {/* Tab strip */}
-      <div className="flex items-center gap-1 px-6 border-b border-border/60 shrink-0 overflow-x-auto">
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              activeTab === tab.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}>
-            {tab.icon}{tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === "versions" ? (
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <VersionsTab agentId={agent.id} />
-        </div>
-      ) : (
+      {/* Unified scroll container: cost card + sticky tab strip + all sections */}
+      <div className="flex-1 min-h-0 overflow-y-auto" ref={scrollContainerRef}>
         <Form {...form}>
-          <form onSubmit={e => e.preventDefault()} className="flex-1 min-h-0 overflow-hidden">
-            {activeTab === "overview"  && <OverviewTab form={form} rateMap={rateMap} agent={agent} />}
-            {activeTab === "prompt"    && <PromptTab form={form} />}
-            {activeTab === "voice"     && <VoiceTab form={form} />}
-            {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
-            {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
-            {activeTab === "voicemail" && <VoicemailTab form={form} />}
-            {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+          <div className="px-6 pt-3 pb-0">
+            <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
+          </div>
+
+          {/* Tab strip — sticky */}
+          <div className="flex items-center gap-1 px-6 border-b border-border/60 overflow-x-auto sticky top-0 z-10 bg-background/90 backdrop-blur-sm shadow-sm transition-[background,box-shadow] duration-150">
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => scrollToSection(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                  activeTab === tab.id
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}>
+                {tab.icon}{tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* All sections stacked */}
+          <form onSubmit={e => e.preventDefault()}>
+            <section id="section-overview" ref={(el) => { sectionRefs.current.overview = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <OverviewTab form={form} rateMap={rateMap} agent={agent} />
+            </section>
+            <section id="section-prompt" ref={(el) => { sectionRefs.current.prompt = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <PromptTab form={form} />
+            </section>
+            <section id="section-voice" ref={(el) => { sectionRefs.current.voice = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <VoiceTab form={form} />
+            </section>
+            <section id="section-tools" ref={(el) => { sectionRefs.current.tools = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <ToolsTab form={form} agentId={agentId} />
+            </section>
+            <section id="section-analysis" ref={(el) => { sectionRefs.current.analysis = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <AnalysisTab form={form} agentId={agentId} />
+            </section>
+            <section id="section-voicemail" ref={(el) => { sectionRefs.current.voicemail = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <VoicemailTab form={form} />
+            </section>
+            <section id="section-advanced" ref={(el) => { sectionRefs.current.advanced = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <AdvancedTab form={form} agent={agent} />
+            </section>
+            <section id="section-versions" ref={(el) => { sectionRefs.current.versions = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+              <VersionsTab agentId={agent.id} />
+            </section>
           </form>
         </Form>
-      )}
+      </div>
 
       {/* Outbound call dialog */}
       <Dialog open={callDialog} onOpenChange={setCallDialog}>
@@ -5029,7 +5072,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         agentId={agentId}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
-          setActiveTab("versions");
+          scrollToSection("versions");
         }}
       />
     </div>
