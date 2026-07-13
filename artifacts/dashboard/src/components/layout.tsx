@@ -1,17 +1,19 @@
 import React, { useState, useEffect, Component } from "react";
 import { Link, useLocation } from "wouter";
+import { useTheme } from "@/components/theme-provider";
 import { GlobalSearch, useGlobalSearchTrigger } from "@/components/GlobalSearch";
 import {
   Monitor, Users, Zap, CalendarDays, Brain, Phone,
   Settings, Key, Webhook, Wallet, TrendingUp, ShieldCheck,
   Mic2, Menu, ChevronDown, ChevronLeft, ChevronRight,
-  LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap,
+  LogOut, Bell, Search, SlidersHorizontal, BookOpen, PhoneMissed, PlugZap, Sun, Moon, Sparkles,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
 import { useGetWallet } from "@workspace/api-client-react";
 import { useMinuteRatesMap, useUserProviderNames } from "@/hooks/use-minute-rates";
 import { SnapServeIcon } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /* ─── Error boundary ─────────────────────────────────────────────────────── */
 interface ErrorBoundaryState { hasError: boolean; error: unknown }
@@ -58,6 +60,7 @@ const LS_SETTINGS     = "snapserve:settings-open";
 
 const NAV_PRIMARY = [
   { name: "Command Center",  href: "/app/command-center",  icon: Monitor },
+  { name: "Vibe Build",      href: "/app/vibe",            icon: Sparkles },
   { name: "Agents",          href: "/app/agents",          icon: Users },
   { name: "Agent Knowledge", href: "/app/knowledge-bases", icon: BookOpen },
   { name: "Campaigns",       href: "/app/campaigns",       icon: Zap },
@@ -82,6 +85,7 @@ const NAV_SETTINGS = [
 
 const ROUTE_TITLES: [string, string][] = [
   ["/app/command-center",  "Command Center"],
+  ["/app/vibe",            "Vibe Build"],
   ["/app/agents",          "Agents"],
   ["/app/knowledge-bases", "Agent Knowledge"],
   ["/app/campaigns",       "Campaigns"],
@@ -174,6 +178,7 @@ function BellButton() {
 /* ─── Topbar user menu ───────────────────────────────────────────────────── */
 function TopbarUser() {
   const { signOut, user } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const email    = user?.email ?? "";
   const name     = user?.name ?? (email ? email.split("@")[0]! : "Account");
@@ -200,6 +205,27 @@ function TopbarUser() {
               <p className="text-[12.5px] font-semibold text-foreground truncate">{name}</p>
               {email && <p className="text-[10.5px] text-muted-foreground/60 truncate mt-0.5">{email}</p>}
             </div>
+            <Link href="/app/settings">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Settings
+              </button>
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setTheme(theme === "dark" ? "light" : "dark");
+                setOpen(false);
+              }}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              {theme === "dark" ? "Light appearance" : "Dark appearance"}
+            </button>
             <button
               onClick={() => { void signOut(); setOpen(false); }}
               className="flex items-center gap-2.5 px-3.5 py-2.5 w-full text-left text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
@@ -222,6 +248,7 @@ function Topbar({ location }: { location: string }) {
 
       <div className="flex items-center gap-1">
         <WalletChip />
+        <ThemeToggle />
         <BellButton />
         <TopbarUser />
       </div>
@@ -476,6 +503,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="ml-auto flex items-center gap-1">
             <WalletChip />
+            <ThemeToggle />
             <TopbarUser />
           </div>
         </div>

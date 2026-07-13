@@ -5145,15 +5145,20 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create a new agent</DialogTitle>
-          <DialogDescription>Choose how you want to build your voice agent.</DialogDescription>
+          <DialogDescription>
+            Recommended: Vibe Build walks you through everything in a short chat. Manual builder gives you every toggle — multilingual, tools, scheduling, and more.
+          </DialogDescription>
         </DialogHeader>
 
         {step === "pick" ? (
-          <div className="grid grid-cols-2 gap-3 py-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
             <button
               onClick={handleVibe}
-              className="group flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card p-5 text-center hover:border-primary/50 hover:bg-primary/5 transition-colors"
+              className="group relative flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-5 text-center hover:border-primary hover:bg-primary/10 transition-colors"
             >
+              <span className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                Recommended
+              </span>
               <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                 <Sparkles className="h-5 w-5 text-primary" />
               </div>
@@ -5203,17 +5208,25 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
 }
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const [, navigate] = useLocation();
   return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center max-w-sm">
-        <div className="h-16 w-16 rounded-2xl bg-muted/40 border border-border/60 flex items-center justify-center mx-auto mb-4">
-          <Bot className="h-8 w-8 text-muted-foreground/40" />
+    <div className="flex-1 flex items-center justify-center p-8 bg-background">
+      <div className="text-center max-w-md">
+        <div className="h-20 w-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-5">
+          <Sparkles className="h-9 w-9 text-primary" />
         </div>
-        <h3 className="text-base font-semibold mb-1">No agent selected</h3>
-        <p className="text-sm text-muted-foreground mb-4">Pick an agent from the list or create a new one to get started.</p>
-        <Button onClick={onCreate} size="sm">
-          <Plus className="h-4 w-4 mr-1.5" /> Create Agent
-        </Button>
+        <h3 className="text-xl font-semibold mb-2 text-foreground">Create your first voice agent</h3>
+        <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+          Start with Vibe Build — answer a few questions and we configure Sarvam, Groq, Cartesia, multilingual mode, tools, and your prompt. Or open the full builder for manual control.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Button onClick={() => navigate("/app/vibe")} className="gap-2">
+            <Sparkles className="h-4 w-4" /> Build with AI
+          </Button>
+          <Button variant="outline" onClick={onCreate} className="gap-2">
+            <Plus className="h-4 w-4" /> Manual builder
+          </Button>
+        </div>
       </div>
     </div>
   );

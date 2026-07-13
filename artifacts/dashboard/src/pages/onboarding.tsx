@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { useCompleteOnboarding, useGetOnboardingStatus, getGetOnboardingStatusQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ArrowRight } from "lucide-react";
+import { Check } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -379,52 +379,6 @@ function PlatformsStep({ value, onChange, onNext, loading }: {
   );
 }
 
-/* ── Done screen ────────────────────────────────────────────────────────── */
-
-function DoneScreen({ name }: { name: string }) {
-  const [, setLocation] = useLocation();
-
-  const goToDashboard = useCallback(() => {
-    // Use Wouter navigation; the AppRoutes gate re-checks status from server
-    setLocation("/app");
-  }, [setLocation]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Enter") goToDashboard();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [goToDashboard]);
-
-  return (
-    <div className="flex flex-col items-center text-center max-w-md">
-      <motion.div
-        initial={{ scale: 0, rotate: -20 }}
-        animate={{ scale: 1, rotate: 0, transition: { type: "spring", stiffness: 260, damping: 18 } }}
-        className="w-20 h-20 rounded-full bg-black flex items-center justify-center mb-8 shadow-xl"
-      >
-        <Check className="h-10 w-10 text-black/85" strokeWidth={2.5} />
-      </motion.div>
-      <h2 className="text-4xl font-bold text-foreground mb-3">
-        You're all set{name ? `, ${name.split(" ")[0]}` : ""}!
-      </h2>
-      <p className="text-muted-foreground text-lg mb-10 leading-relaxed">
-        Welcome to SnapServe. Let's build your first AI voice agent.
-      </p>
-      <motion.button
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-        onClick={goToDashboard}
-        className="flex items-center gap-2.5 px-8 py-4 bg-black text-foreground rounded-xl font-semibold text-base hover:bg-black/60 transition-colors shadow-md cursor-pointer"
-      >
-        Go to Dashboard
-        <ArrowRight className="h-5 w-5" />
-      </motion.button>
-    </div>
-  );
-}
-
 /* ── Main page ──────────────────────────────────────────────────────────── */
 
 export default function OnboardingPage() {
@@ -447,7 +401,7 @@ export default function OnboardingPage() {
   // rather than jumping straight into the questionnaire.
   useEffect(() => {
     if (!statusLoading && status?.completed) {
-      setLocation("/app");
+      setLocation("/app/command-center");
     } else if (!statusLoading && status?.completed === false) {
       setStep(1);
     }
@@ -456,6 +410,14 @@ export default function OnboardingPage() {
   const totalSteps = answers.usedVoiceAgents === true ? 5 : 4;
 
   const submitOnboarding = useCallback((finalAnswers: Answers) => {
+    const goToVibe = () => {
+      try {
+        if (finalAnswers.name.trim()) {
+          sessionStorage.setItem("vibe:welcomeName", finalAnswers.name.trim());
+        }
+      } catch { /* ignore */ }
+      setLocation("/app/vibe");
+    };
     complete(
       {
         data: {
@@ -468,20 +430,19 @@ export default function OnboardingPage() {
       },
       {
         onSuccess: (result) => {
-          // Update the cache directly so AppRoutes immediately sees completed=true
-          // without needing a network round-trip when the user clicks Go to Dashboard
           qc.setQueryData(getGetOnboardingStatusQueryKey(), result);
-          setStep(6);
+          goToVibe();
         },
-        onError: () => setStep(6),   // non-blocking — still show done screen
+        onError: goToVibe,
       }
     );
-  }, [complete, qc]);
+  }, [complete, qc, setLocation]);
 
-  if (statusLoading || step === 0) {
+  if (statusLoading || step === 0 || isPending) {
     return (
-      <div className="min-h-screen bg-card/70 backdrop-blur-lg flex items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-2 border-border border-t-black animate-spin" />
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-border border-t-primary animate-spin" />
+        <p className="text-sm text-muted-foreground">{isPending ? "Opening Vibe Build…" : "Loading…"}</p>
       </div>
     );
   }
@@ -490,7 +451,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-card/70 backdrop-blur-lg flex flex-col select-none">
-      {step < 6 && (
+      {step >= 1 && step <= totalSteps && (
         <>
           <ProgressBar current={stepNum - 1} total={totalSteps} />
           <header className="flex items-center justify-between px-6 pt-6 pb-2 max-w-6xl mx-auto w-full">
@@ -502,12 +463,7 @@ export default function OnboardingPage() {
 
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <AnimatePresence mode="wait" initial={false}>
-          {step === 6 ? (
-            <motion.div key="done" {...SLIDE_IN}>
-              <DoneScreen name={answers.name} />
-            </motion.div>
-
-          ) : step === 1 ? (
+          {step === 1 ? (
             <motion.div key="q1" {...SLIDE_IN} className="w-full flex justify-center">
               <NameStep
                 value={answers.name}
@@ -553,16 +509,13 @@ export default function OnboardingPage() {
                     // Has prior experience → ask which platforms
                     setTimeout(() => setStep(5), 80);
                   } else {
-                    // No prior experience → skip Q5, submit now
-                    setTimeout(() => {
-                      submitOnboarding(updated);
-                      setStep(6);
-                    }, 180);
+                    // No prior experience → skip Q5, submit and go straight to Vibe Build
+                    setTimeout(() => submitOnboarding(updated), 180);
                   }
                 }}
                 onNext={() => {
                   if (answers.usedVoiceAgents === true) setStep(5);
-                  else if (answers.usedVoiceAgents === false) { submitOnboarding(answers); setStep(6); }
+                  else if (answers.usedVoiceAgents === false) submitOnboarding(answers);
                 }}
               />
             </motion.div>
@@ -572,7 +525,7 @@ export default function OnboardingPage() {
               <PlatformsStep
                 value={answers.priorPlatforms}
                 onChange={(v) => setAnswers(a => ({ ...a, priorPlatforms: v }))}
-                onNext={() => { submitOnboarding(answers); setStep(6); }}
+                onNext={() => submitOnboarding(answers)}
                 loading={isPending}
               />
             </motion.div>
@@ -581,7 +534,7 @@ export default function OnboardingPage() {
         </AnimatePresence>
       </main>
 
-      {step < 6 && (
+      {step >= 1 && step <= totalSteps && (
         <footer className="flex items-center justify-center gap-4 pb-6 text-[12px] text-muted-foreground">
           <span className="flex items-center gap-1">
             <kbd className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]">↵ Enter</kbd>

@@ -11,10 +11,12 @@ import {
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
-  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X,
+  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X, LayoutDashboard,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { BrandMark } from "@/components/logo";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
@@ -214,18 +216,7 @@ export default function VibePage() {
   const [, navigate]     = useLocation();
   const queryClient      = useQueryClient();
   const { toast }        = useToast();
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [spotlight, setSpotlight] = useState({ x: 50, y: 35, active: false });
-  const landingRef = useRef<HTMLDivElement>(null);
-  const handleLandingMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = landingRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setSpotlight({
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
-      active: true,
-    });
-  }, []);
+  const [welcomeName, setWelcomeName] = useState("");
   const refineId = useMemo(() => {
     try {
       const v = new URLSearchParams(window.location.search).get("refine");
@@ -310,6 +301,16 @@ export default function VibePage() {
 
   useEffect(() => {
     chatInputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const name = sessionStorage.getItem("vibe:welcomeName");
+      if (name) {
+        setWelcomeName(name);
+        sessionStorage.removeItem("vibe:welcomeName");
+      }
+    } catch { /* ignore */ }
   }, []);
 
   // Keep mirror refs in sync with state so callbacks see fresh data without stale closures
@@ -1193,10 +1194,10 @@ export default function VibePage() {
         disabled={phase === "done" || phase === "building"}
         rows={isLanding ? 4 : 3}
         className={cn(
-          "resize-none pr-20 bg-muted/20 border-border/50 placeholder:text-muted-foreground/40 transition-all duration-200",
+          "resize-none pr-20 bg-card border-border/70 placeholder:text-muted-foreground/50 transition-all duration-200",
           isLanding
-            ? "text-base rounded-2xl px-5 pt-5 pb-14 shadow-lg focus-visible:ring-1 focus-visible:ring-primary/40 border-border/60 hover:border-border hover:shadow-xl"
-            : "text-sm pr-20 rounded-xl focus-visible:ring-1 focus-visible:ring-primary/50",
+            ? "text-[15px] rounded-xl px-4 pt-4 pb-14 min-h-[120px] shadow-sm focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:border-primary/40"
+            : "text-sm pr-20 rounded-xl bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50",
         )}
       />
       <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html,.pdf,.docx" className="hidden" onChange={handleFileUpload} />
@@ -1270,152 +1271,112 @@ export default function VibePage() {
 
       {/* ══ Landing view — before first message ════════════════════════════ */}
       {!chatStarted && (
-        <div
-          ref={landingRef}
-          onMouseMove={handleLandingMouseMove}
-          onMouseLeave={() => setSpotlight(s => ({ ...s, active: false }))}
-          className="relative flex flex-col h-full overflow-hidden"
-        >
-          {/* Ambient background — glow + grid texture, so the page reads as designed, not empty */}
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:28px_28px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_10%,transparent_75%)]" />
-            <div className={cn(
-              "absolute left-1/2 top-[30%] h-[570px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[110px] transition-opacity duration-700",
-              isThinking ? "bg-primary/22 opacity-100" : "bg-primary/11 opacity-90",
-            )} />
-            <div className="absolute left-1/2 top-[30%] h-[310px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/11 blur-[80px]" />
-            {/* Cursor-following spotlight — very low intensity, no visible edge */}
-            <div
-              className="absolute inset-0 transition-opacity duration-300"
-              style={{
-                opacity: spotlight.active ? 1 : 0,
-                background: `radial-gradient(circle 420px at ${spotlight.x}% ${spotlight.y}%, rgba(255,255,255,0.05), transparent 70%)`,
-              }}
-            />
-          </div>
+        <div className="relative flex flex-col h-full overflow-hidden bg-background">
+          {/* Top bar */}
+          <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0 border-b border-border/60 bg-background/80 backdrop-blur-md">
+            <BrandMark iconSize={22} wordmarkHeight={15} gapClass="gap-2" />
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={() => navigate("/app/command-center")}
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Explore dashboard</span>
+              </Button>
+            </div>
+          </header>
 
-          {/* Back button */}
-          <div className="relative z-10 flex items-center px-6 h-14 shrink-0">
-            <button
-              onClick={() => navigate("/app/agents")}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" /> Agents
-            </button>
-          </div>
+          <div className="relative z-10 flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10 lg:py-14">
+              <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-10 lg:gap-14 items-start">
+                {/* Left — prompt */}
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground mb-5">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    Vibe Build · AI agent setup
+                  </div>
 
-          {/* Centered content */}
-          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-16">
-            {/* Animated logo — one-time entrance on mount */}
-            <motion.div
-              className="relative mb-8"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            >
-              <div className={cn(
-                "h-[72px] w-[72px] rounded-[22px] border flex items-center justify-center overflow-hidden p-3.5 transition-all duration-500 bg-gradient-to-b from-muted/60 to-muted/10 backdrop-blur-sm",
-                isThinking
-                  ? "border-primary/50 shadow-[0_0_48px_rgba(var(--primary)/0.35)]"
-                  : "border-border/60 shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
-              )}>
-                <img src="/snapserve-icon.png" alt="SnapServe" className={cn("h-full w-full object-contain transition-opacity", isThinking ? "opacity-100" : "opacity-90")} />
-              </div>
-              {isThinking && (
-                <div className="absolute inset-0 rounded-[22px] border-2 border-primary/40 animate-ping" />
-              )}
-            </motion.div>
+                  <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.15]">
+                    {isThinking
+                      ? "Configuring your agent…"
+                      : welcomeName
+                        ? `Hey ${welcomeName.split(" ")[0]}, what should your agent do?`
+                        : "What should your voice agent do?"}
+                  </h1>
+                  <p className="mt-3 text-base text-muted-foreground leading-relaxed max-w-xl">
+                    Describe the use case in plain language. We configure STT, LLM, TTS, multilingual mode, tools, and your system prompt — then you can fine-tune everything in the full builder.
+                  </p>
 
-            {/* Title */}
-            <h1 className="text-4xl font-semibold tracking-tight mb-3 text-center bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
-              {isThinking ? (
-                <span className="text-muted-foreground bg-none">Building your agent…</span>
-              ) : (
-                "Build AI Voice Agents"
-              )}
-            </h1>
-            <p className="text-muted-foreground text-center mb-10 max-w-md leading-relaxed">
-              Describe your use case and SnapServe will configure your complete voice agent automatically.
-            </p>
+                  <div className="mt-8">
+                    {inputBlock(true)}
+                    <p className="mt-2.5 text-[11px] text-muted-foreground/60 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span>Enter to send</span>
+                      <span className="text-border">·</span>
+                      <span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> URL for KB</span>
+                      <span className="text-border">·</span>
+                      <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" /> Upload docs</span>
+                    </p>
+                  </div>
 
-            {/* Input */}
-            <div className="w-full max-w-2xl">
-              <div className="rounded-2xl bg-gradient-to-b from-border/40 to-border/10 p-px shadow-2xl shadow-black/30">
-                {inputBlock(true)}
+                  {!isThinking && (
+                    <div className="mt-6 flex flex-wrap gap-2">
+                      {QUICK_SUGGESTIONS.slice(0, 5).map(s => (
+                        <button
+                          key={s.label}
+                          type="button"
+                          onClick={() => send(s.message)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right — templates */}
+                {!isThinking && (
+                  <div className="lg:pt-10">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">
+                      Or start from a template
+                    </p>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-2.5">
+                      {VIBE_TEMPLATES.slice(0, 6).map(t => (
+                        <button
+                          key={t.title}
+                          type="button"
+                          onClick={() => send(t.message)}
+                          className="group text-left rounded-xl border border-border/60 bg-card/40 p-4 hover:border-primary/35 hover:bg-primary/[0.04] transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                              {t.title}
+                            </p>
+                            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-0.5" />
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                            {t.desc}
+                          </p>
+                          <p className="mt-2 text-[10px] font-medium text-muted-foreground/55 uppercase tracking-wide">
+                            {t.tag}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/app/agents?create=1")}
+                      className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
+                    >
+                      Prefer full manual control? Open the agent builder →
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Quick suggestion chips */}
-            {!isThinking && (
-              <div className="mt-5 w-full max-w-2xl">
-                <div className="flex flex-wrap justify-center gap-2">
-                  {QUICK_SUGGESTIONS.map(s => (
-                    <button
-                      key={s.label}
-                      onClick={() => send(s.message)}
-                      className={cn(
-                        "px-3.5 py-1.5 rounded-full text-xs font-medium border border-border/50 bg-muted/15 text-muted-foreground",
-                        "hover:text-foreground hover:border-primary/40 hover:bg-primary/8 hover:-translate-y-[2px]",
-                        "transition-all duration-[175ms]",
-                      )}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Compact action row */}
-            {!isThinking && (
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button
-                  onClick={() => toast({ title: "Language", description: "Set the agent's language during the build conversation, or fine-tune it later in agent settings." })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground/80 border border-transparent hover:text-foreground hover:bg-muted/40 hover:border-border/50 transition-all duration-200"
-                >
-                  <Globe className="h-3.5 w-3.5" /> Language
-                </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground/80 border border-transparent hover:text-foreground hover:bg-muted/40 hover:border-border/50 transition-all duration-200"
-                >
-                  <Paperclip className="h-3.5 w-3.5" /> Upload Knowledge
-                </button>
-                <button
-                  onClick={() => toast({ title: "Voice", description: "Pick and preview a voice once your agent's languages are configured, right here in the build flow." })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground/80 border border-transparent hover:text-foreground hover:bg-muted/40 hover:border-border/50 transition-all duration-200"
-                >
-                  <Mic className="h-3.5 w-3.5" /> Voice
-                </button>
-                <button
-                  onClick={() => setAdvancedOpen(v => !v)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200",
-                    advancedOpen
-                      ? "text-foreground bg-primary/10 border-primary/30"
-                      : "text-muted-foreground/80 border-transparent hover:text-foreground hover:bg-muted/40 hover:border-border/50",
-                  )}
-                >
-                  <Zap className="h-3.5 w-3.5" /> Advanced
-                </button>
-              </div>
-            )}
-            {!isThinking && advancedOpen && (
-              <div className="mt-3 max-w-md text-center text-xs text-muted-foreground/70 leading-relaxed px-4 py-2.5 rounded-lg border border-border/40 bg-muted/15">
-                Advanced options (turn-taking, retries, call limits, and more) are available after your agent is created — you'll find them in the agent's settings.
-              </div>
-            )}
-
-            {!isThinking && (
-              <div className="mt-10 mb-2 text-center animate-in fade-in slide-in-from-bottom-1 duration-300">
-                <p className="text-sm font-semibold text-white/85">
-                  SnapServe Voice Engine
-                </p>
-                <p className="mt-1.5 text-[11px] font-normal text-white/40">
-                  Real-time Voice • Knowledge Powered • Enterprise Ready
-                </p>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1442,12 +1403,15 @@ export default function VibePage() {
 
             {/* Header */}
             <div className="flex items-center gap-3 px-4 h-14 border-b border-border/60 shrink-0">
-              <button
-                onClick={() => navigate("/app/agents")}
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground -ml-2"
+                onClick={() => navigate("/app/command-center")}
               >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Dashboard
+              </Button>
               {/* Animated logo in header */}
               <div className="relative flex-shrink-0">
                 <div className={cn(
