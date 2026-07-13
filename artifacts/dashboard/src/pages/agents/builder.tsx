@@ -4576,18 +4576,23 @@ function VersionsTab({ agentId }: { agentId: number }) {
 
 function AgentEditorPanel({ agentId }: { agentId: number }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Partial<Record<TabId, HTMLElement>>>({});
-  const tabStripRef = useRef<HTMLDivElement>(null);
-  const [tabH, setTabH] = useState(44);
-  const tabHRef = useRef(44);
+  const tabContentRef = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef<Partial<Record<TabId, number>>>({});
   const agentResetSigRef = useRef<string | null>(null);
 
-  const scrollToSection = (tabId: TabId) => {
+  const handleTabClick = (tabId: TabId) => {
+    if (tabContentRef.current) {
+      scrollPositions.current[activeTab] = tabContentRef.current.scrollTop;
+    }
     setActiveTab(tabId);
-    const el = sectionRefs.current[tabId];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  useEffect(() => {
+    const el = tabContentRef.current;
+    if (!el) return;
+    const saved = scrollPositions.current[activeTab] ?? 0;
+    el.scrollTop = saved;
+  }, [activeTab]);
 
   const [callDialog, setCallDialog] = useState(false);
   const [callNumber, setCallNumber] = useState("");
@@ -4610,42 +4615,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     query: { queryKey: getGetAgentQueryKey(agentId) },
   });
 
-  useEffect(() => {
-    const strip = tabStripRef.current;
-    if (!strip) return;
-    const ro = new ResizeObserver(() => {
-      const h = strip.offsetHeight || 44;
-      tabHRef.current = h;
-      setTabH(h);
-    });
-    ro.observe(strip);
-    const h = strip.offsetHeight || 44;
-    tabHRef.current = h;
-    setTabH(h);
-    return () => ro.disconnect();
-  }, [isLoading]);
-
-  useEffect(() => {
-    if (isLoading) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const margin = tabHRef.current;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter(e => e.isIntersecting);
-        if (!visible.length) return;
-        visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        const topId = visible[0].target.id.replace("section-", "") as TabId;
-        setActiveTab(topId);
-      },
-      { root: container, rootMargin: `-${margin}px 0px -60% 0px`, threshold: 0 },
-    );
-    TABS.forEach(tab => {
-      const el = sectionRefs.current[tab.id];
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, [isLoading, tabH]);
 
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
@@ -4836,7 +4805,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       };
       const firstFieldName = Object.keys(errors)[0];
       const targetTab = firstFieldName ? (fieldTabMap[firstFieldName] ?? null) : null;
-      if (targetTab) scrollToSection(targetTab);
+      if (targetTab) handleTabClick(targetTab);
       const firstError = Object.values(errors)[0];
       const msg = firstError && typeof firstError === "object" && "message" in firstError
         ? String((firstError as any).message)
@@ -5024,56 +4993,40 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         </div>
       )}
 
-      {/* Unified scroll container: cost card + sticky tab strip + all sections */}
-      <div className="flex-1 min-h-0 overflow-y-auto" ref={scrollContainerRef}>
-        <Form {...form}>
-          <div className="px-6 pt-2 pb-0">
-            <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
-          </div>
+      <Form {...form}>
+        {/* Cost card — fixed, never scrolls */}
+        <div className="px-6 pt-2 pb-0 shrink-0">
+          <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
+        </div>
 
-          {/* Tab strip — sticky */}
-          <div ref={tabStripRef} className="flex items-center gap-1 px-6 border-b border-border/60 overflow-x-auto sticky top-0 z-10 bg-background/90 backdrop-blur-sm shadow-sm transition-[background,box-shadow] duration-150">
-            {TABS.map(tab => (
-              <button key={tab.id} onClick={() => scrollToSection(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                  activeTab === tab.id
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}>
-                {tab.icon}{tab.label}
-              </button>
-            ))}
-          </div>
+        {/* Tab strip — shrink-0 sibling, no sticky needed */}
+        <div className="flex items-center gap-1 px-6 border-b border-border/60 overflow-x-auto shrink-0 bg-background/90 backdrop-blur-sm">
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => handleTabClick(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}>
+              {tab.icon}{tab.label}
+            </button>
+          ))}
+        </div>
 
-          {/* All sections stacked */}
+        {/* Isolated tab content — each tab gets its own scroll container */}
+        <div ref={tabContentRef} className="flex-1 min-h-0 overflow-y-auto">
           <form onSubmit={e => e.preventDefault()}>
-            <section id="section-overview" ref={(el) => { sectionRefs.current.overview = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <OverviewTab form={form} rateMap={rateMap} agent={agent} />
-            </section>
-            <section id="section-prompt" ref={(el) => { sectionRefs.current.prompt = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <PromptTab form={form} />
-            </section>
-            <section id="section-voice" ref={(el) => { sectionRefs.current.voice = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <VoiceTab form={form} />
-            </section>
-            <section id="section-tools" ref={(el) => { sectionRefs.current.tools = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <ToolsTab form={form} agentId={agentId} />
-            </section>
-            <section id="section-analysis" ref={(el) => { sectionRefs.current.analysis = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <AnalysisTab form={form} agentId={agentId} />
-            </section>
-            <section id="section-voicemail" ref={(el) => { sectionRefs.current.voicemail = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <VoicemailTab form={form} />
-            </section>
-            <section id="section-advanced" ref={(el) => { sectionRefs.current.advanced = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <AdvancedTab form={form} agent={agent} />
-            </section>
-            <section id="section-versions" ref={(el) => { sectionRefs.current.versions = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
-              <VersionsTab agentId={agent.id} />
-            </section>
+            {activeTab === "overview"  && <OverviewTab form={form} rateMap={rateMap} agent={agent} />}
+            {activeTab === "prompt"    && <PromptTab form={form} />}
+            {activeTab === "voice"     && <VoiceTab form={form} />}
+            {activeTab === "tools"     && <ToolsTab form={form} agentId={agentId} />}
+            {activeTab === "analysis"  && <AnalysisTab form={form} agentId={agentId} />}
+            {activeTab === "voicemail" && <VoicemailTab form={form} />}
+            {activeTab === "advanced"  && <AdvancedTab form={form} agent={agent} />}
+            {activeTab === "versions"  && <VersionsTab agentId={agent.id} />}
           </form>
-        </Form>
-      </div>
+        </div>
+      </Form>
 
       {/* Outbound call dialog */}
       <Dialog open={callDialog} onOpenChange={setCallDialog}>
@@ -5105,7 +5058,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         agentId={agentId}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: getListAgentVersionsQueryKey(agentId) });
-          scrollToSection("versions");
+          handleTabClick("versions");
         }}
       />
     </div>
