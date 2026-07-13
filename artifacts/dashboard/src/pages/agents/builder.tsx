@@ -338,13 +338,13 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
         const primaryPct = totalPerMin > 0 ? Math.min(100, Math.max(4, (primary?.cost ?? 0) / totalPerMin * 100)) : 0;
 
         return (
-          <div className="group relative rounded-2xl border border-border/50 bg-card/60 px-6 py-[15px] shadow-sm transition-shadow duration-150 hover:shadow-md">
+          <div className="group relative rounded-2xl border border-border/50 bg-card/60 px-6 py-[11px] shadow-sm transition-shadow duration-150 hover:shadow-md">
             {/* Managed/BYOP pill */}
             <span className="absolute top-3 right-4 text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground">
               {isByop ? "BYOP" : "Managed"}
             </span>
 
-            <div className="flex flex-col items-start text-left gap-3">
+            <div className="flex flex-col items-start text-left gap-2">
               {/* Label + value */}
               <div className="flex flex-col items-start gap-1.5">
                 <span className="text-[12px] text-muted-foreground">Estimated Cost / Minute</span>
@@ -4578,6 +4578,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Partial<Record<TabId, HTMLElement>>>({});
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  const [tabH, setTabH] = useState(44);
   const agentResetSigRef = useRef<string | null>(null);
 
   const scrollToSection = (tabId: TabId) => {
@@ -4608,6 +4610,17 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   });
 
   useEffect(() => {
+    const strip = tabStripRef.current;
+    if (!strip) return;
+    const ro = new ResizeObserver(() => {
+      setTabH(strip.offsetHeight || 44);
+    });
+    ro.observe(strip);
+    setTabH(strip.offsetHeight || 44);
+    return () => ro.disconnect();
+  }, [isLoading]);
+
+  useEffect(() => {
     if (isLoading) return;
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -4619,14 +4632,14 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         const topId = visible[0].target.id.replace("section-", "") as TabId;
         setActiveTab(topId);
       },
-      { root: container, rootMargin: "-44px 0px -60% 0px", threshold: 0 },
+      { root: container, rootMargin: `-${tabH}px 0px -60% 0px`, threshold: 0 },
     );
     TABS.forEach(tab => {
       const el = sectionRefs.current[tab.id];
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, [isLoading]);
+  }, [isLoading, tabH]);
 
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
@@ -4889,7 +4902,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
-        className="flex flex-col gap-0.5 px-6 py-2 border-b border-border/60 shrink-0"
+        className="flex flex-col gap-0 px-6 py-1 border-b border-border/60 shrink-0"
       >
         <div className="flex flex-col min-w-0">
           <button
@@ -4899,9 +4912,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           >
             ← Agents
           </button>
-          <div className="flex items-center gap-2 min-w-0 mt-0.5">
+          <div className="flex items-center gap-2 min-w-0 mt-0">
             <h1
-              className="text-[32px] lg:text-[40px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
+              className="text-[27px] lg:text-[34px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
               title={agent.name}
             >
               {agent.name}
@@ -4917,7 +4930,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             </button>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-4 mt-0.5">
+        <div className="flex items-center justify-between gap-4 mt-0">
           <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
             <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
@@ -5008,12 +5021,12 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       {/* Unified scroll container: cost card + sticky tab strip + all sections */}
       <div className="flex-1 min-h-0 overflow-y-auto" ref={scrollContainerRef}>
         <Form {...form}>
-          <div className="px-6 pt-3 pb-0">
+          <div className="px-6 pt-2 pb-0">
             <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
           </div>
 
           {/* Tab strip — sticky */}
-          <div className="flex items-center gap-1 px-6 border-b border-border/60 overflow-x-auto sticky top-0 z-10 bg-background/90 backdrop-blur-sm shadow-sm transition-[background,box-shadow] duration-150">
+          <div ref={tabStripRef} className="flex items-center gap-1 px-6 border-b border-border/60 overflow-x-auto sticky top-0 z-10 bg-background/90 backdrop-blur-sm shadow-sm transition-[background,box-shadow] duration-150">
             {TABS.map(tab => (
               <button key={tab.id} onClick={() => scrollToSection(tab.id)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
@@ -5028,28 +5041,28 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
           {/* All sections stacked */}
           <form onSubmit={e => e.preventDefault()}>
-            <section id="section-overview" ref={(el) => { sectionRefs.current.overview = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-overview" ref={(el) => { sectionRefs.current.overview = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <OverviewTab form={form} rateMap={rateMap} agent={agent} />
             </section>
-            <section id="section-prompt" ref={(el) => { sectionRefs.current.prompt = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-prompt" ref={(el) => { sectionRefs.current.prompt = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <PromptTab form={form} />
             </section>
-            <section id="section-voice" ref={(el) => { sectionRefs.current.voice = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-voice" ref={(el) => { sectionRefs.current.voice = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <VoiceTab form={form} />
             </section>
-            <section id="section-tools" ref={(el) => { sectionRefs.current.tools = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-tools" ref={(el) => { sectionRefs.current.tools = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <ToolsTab form={form} agentId={agentId} />
             </section>
-            <section id="section-analysis" ref={(el) => { sectionRefs.current.analysis = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-analysis" ref={(el) => { sectionRefs.current.analysis = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <AnalysisTab form={form} agentId={agentId} />
             </section>
-            <section id="section-voicemail" ref={(el) => { sectionRefs.current.voicemail = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-voicemail" ref={(el) => { sectionRefs.current.voicemail = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <VoicemailTab form={form} />
             </section>
-            <section id="section-advanced" ref={(el) => { sectionRefs.current.advanced = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-advanced" ref={(el) => { sectionRefs.current.advanced = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <AdvancedTab form={form} agent={agent} />
             </section>
-            <section id="section-versions" ref={(el) => { sectionRefs.current.versions = el ?? undefined; }} style={{ scrollMarginTop: 44 }}>
+            <section id="section-versions" ref={(el) => { sectionRefs.current.versions = el ?? undefined; }} style={{ scrollMarginTop: tabH }}>
               <VersionsTab agentId={agent.id} />
             </section>
           </form>
