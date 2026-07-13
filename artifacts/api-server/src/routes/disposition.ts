@@ -39,7 +39,7 @@ router.get("/disposition/config/:agentId", requireAuth, async (req, res): Promis
     .where(eq(agentDispositionsTable.agentId, agentId));
 
   if (!row) {
-    res.status(404).json({ error: "No disposition config for this agent" });
+    res.json({ agentId, taxonomy: {}, domainFields: [], rules: [] });
     return;
   }
 

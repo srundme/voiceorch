@@ -1888,10 +1888,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           const c = colorMap[color];
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleNativeTool(type)}
-                className="w-full text-left p-4 flex items-start gap-3"
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNativeTool(type); } }}
+                className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
               >
                 <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
                   <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
@@ -1903,9 +1905,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
+                  <Switch checked={isOn} onCheckedChange={e => { e.stopPropagation?.(); toggleNativeTool(type); }} onClick={e => e.stopPropagation()} />
                 </div>
-              </button>
+              </div>
             </div>
           );
         })}
@@ -1913,10 +1915,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Recording</p>
         {/* Call Recording card */}
         <div className={cn("rounded-xl border transition-all duration-150", recordingEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true })}
-            className="w-full text-left p-4 flex items-start gap-3"
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); } }}
+            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
           >
             <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
               <Mic className={cn("h-4 w-4", recordingEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
@@ -1936,16 +1940,18 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 onClick={e => e.stopPropagation()}
               />
             </div>
-          </button>
+          </div>
         </div>
 
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-4">Caller Intelligence</p>
         {/* Gender Identification card */}
         <div className={cn("rounded-xl border transition-all duration-150", genderEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true })}
-            className="w-full text-left p-4 flex items-start gap-3"
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); } }}
+            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
           >
             <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
               <User2 className={cn("h-4 w-4", genderEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
@@ -1971,7 +1977,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                 onClick={e => e.stopPropagation()}
               />
             </div>
-          </button>
+          </div>
         </div>
 
       </div>
