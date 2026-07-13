@@ -4665,6 +4665,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
       schedulingCalendarId: null,
+      schedulingEventTypeId: null,
     },
   });
 
@@ -4744,6 +4745,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
       sarvamSttMode:          ((agent as any).agentConfig?.sarvamSttMode as AgentFormValues["sarvamSttMode"]) ?? undefined,
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
+      schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
     });
     if (agent.webhookUrl && !agent.webhookUrl.startsWith("https://")) {
       form.setError("webhookUrl", {
