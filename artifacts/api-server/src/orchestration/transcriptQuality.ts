@@ -69,6 +69,57 @@ function checkScriptMismatch(text: string, expectedLang?: string | null): { isGa
 /** Max word count to consider for truncation-dangling check. */
 const MAX_TRUNCATION_WORDS = 6;
 
+/** English wh-words / intent phrases that often arrive as a split STT final. */
+const ENGLISH_INCOMPLETE_FRAGMENT_RE =
+  /\b(how|what|why|where|when|who|whom|whose)\s*[,.]?\s*$/i;
+
+function isEnglishExpectedLang(expectedLang?: string | null): boolean {
+  const bare = expectedLang?.split("-")[0]?.toLowerCase() ?? "";
+  return bare === "en";
+}
+
+/**
+ * Short English utterance that looks like the first half of a question
+ * (e.g. "I want to know how" before "…I can benefit from insurance").
+ */
+export function isLikelyIncompleteEnglishFragment(text: string): boolean {
+  const t = text.trim();
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 2 || wordCount > 8) return false;
+  if (!/[A-Za-z]/.test(t)) return false;
+  if (ENGLISH_INCOMPLETE_FRAGMENT_RE.test(t)) return true;
+  // Trailing preposition only when the phrase is clearly an in-progress question.
+  if (
+    wordCount >= 3
+    && /\b(i want to know|want to know|tell me|can you tell|how (can|do|to)|what (is|are))\b/i.test(t)
+    && /\b(to|for|about|with)\s*[,.]?\s*$/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Hold a short fragment briefly so a follow-up STT final can be merged
+ * (common when Sarvam splits one English thought across two finals).
+ */
+export function shouldHoldFragmentForCoalesce(
+  text: string,
+  opts?: TranscriptQualityOptions,
+): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 8) return false;
+
+  if (isEnglishExpectedLang(opts?.expectedLang) || isLikelyIncompleteEnglishFragment(t)) {
+    return isLikelyIncompleteEnglishFragment(t);
+  }
+
+  const q = checkTranscriptQuality(t, opts);
+  return q.reason === "truncated-dangling";
+}
+
 /**
  * Heuristic quality check on a raw STT transcript.
  * Catches noise, very short non-meaningful outputs, heavy repetition, and
@@ -124,6 +175,11 @@ export function checkTranscriptQuality(
   // false-positives on longer sentences that happen to end on these words.
   const wordCount = t.split(/\s+/).filter(Boolean).length;
   if (wordCount <= MAX_TRUNCATION_WORDS && TRUNCATION_DANGLER_RE.test(t)) {
+    // English question fragments ("I want to know how") are valid partials —
+    // coalesce or the LLM should handle them, not a clarification reprompt.
+    if (isEnglishExpectedLang(opts?.expectedLang) && isLikelyIncompleteEnglishFragment(t)) {
+      return { isGarbled: false, reason: "" };
+    }
     return { isGarbled: true, reason: "truncated-dangling" };
   }
 

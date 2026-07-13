@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkTranscriptQuality, pickClarificationPhrase } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isLikelyIncompleteEnglishFragment, shouldHoldFragmentForCoalesce } from "./transcriptQuality.js";
 
 describe("checkTranscriptQuality", () => {
   it("flags Sarvam phantom silence hallucinations", () => {
@@ -19,6 +19,21 @@ describe("checkTranscriptQuality", () => {
 
   it("accepts Tamil on ta-IN", () => {
     expect(checkTranscriptQuality("எனக்கு ஒரு அப்பாயிண்ட்மெண்ட் வேணும்", { expectedLang: "ta-IN" }).isGarbled).toBe(false);
+  });
+
+  it("does not flag English question fragments ending in how/what", () => {
+    expect(checkTranscriptQuality("I want to know how", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("I want to know how", { expectedLang: "en-IN" }).reason).toBe("");
+  });
+
+  it("still flags short English dangling prepositions", () => {
+    expect(checkTranscriptQuality("concerned about", { expectedLang: "en-IN" }).reason).toBe("truncated-dangling");
+  });
+
+  it("coalesces likely incomplete English fragments", () => {
+    expect(shouldHoldFragmentForCoalesce("I want to know how", { expectedLang: "en-IN" })).toBe(true);
+    expect(isLikelyIncompleteEnglishFragment("I want to know how")).toBe(true);
+    expect(shouldHoldFragmentForCoalesce("I can benefit in health insurance.", { expectedLang: "en-IN" })).toBe(false);
   });
 });
 

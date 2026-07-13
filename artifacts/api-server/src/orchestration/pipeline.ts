@@ -38,7 +38,7 @@ import {
   AFFIRMATIONS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce } from "./transcriptQuality.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -104,6 +104,9 @@ const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
 const FILLER_THRESHOLD_MS     = 800;    // play a filler phrase if LLM has not returned a first
                                         // token within this window (and backchannel didn't fire)
+const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
+                                        // arrives within this window after filler was enqueued
+const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments for a follow-up STT final
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
                                          // prevents a hung Cartesia/ElevenLabs connection from
                                          // silencing the call until Vobiz times out and drops it
@@ -766,6 +769,11 @@ export class OrchestrationPipeline {
   /** STT-provider language code for the current in-flight transcript (forwarded to handleStreamingTranscript). */
   private _pendingSttLang: string | null = null;
   private _fillerPlayedThisTurn = false;
+  /** Short English fragment held for merge with the next STT final. */
+  private _fragmentCoalesce: { text: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  /** When set, skip dead-air filler jobs still in the play queue. */
+  private _skipPendingFillerPlayback = false;
+  private _deadAirFillerEnqueuedAt: number | null = null;
   // ── Language-confusion recovery (Task 4) ──────────────────────────────────
   // Counts consecutive turns where the filler guard held the current language
   // (caller spoke a short English phrase in a non-English conversation). When
@@ -951,6 +959,40 @@ export class OrchestrationPipeline {
     if (played) this._interruptionHint = played;
   }
 
+  private clearFragmentCoalesce(): void {
+    if (this._fragmentCoalesce) {
+      clearTimeout(this._fragmentCoalesce.timer);
+      this._fragmentCoalesce = null;
+    }
+  }
+
+  private isEnglishStrictAckMode(): boolean {
+    return this.requestedLangLatch === "en-IN" || this.requestedLangLatch === "en-US";
+  }
+
+  private backchannelFillerOpts(): { englishStrictAck?: boolean } {
+    return { englishStrictAck: this.isEnglishStrictAckMode() };
+  }
+
+  /** Skip dead-air filler still in the play queue when LLM responds immediately after. */
+  private onLlmFirstTokenReceived(): void {
+    if (
+      this._deadAirFillerEnqueuedAt !== null
+      && Date.now() - this._deadAirFillerEnqueuedAt < DEAD_AIR_FILLER_CANCEL_MS
+    ) {
+      this._skipPendingFillerPlayback = true;
+      for (const ac of this.activeTtsAborts) {
+        try { ac.abort(); } catch { /* noop */ }
+      }
+      this.activeTtsAborts.clear();
+      logger.info(
+        { callId: this.config.callId, msSinceFiller: Date.now() - this._deadAirFillerEnqueuedAt },
+        "Dead-air filler skipped — LLM first token arrived within cancel window",
+      );
+    }
+    this._deadAirFillerEnqueuedAt = null;
+  }
+
   /**
    * Bolna __cleanup_downstream_tasks equivalent — strict teardown order:
    * 1) invalidate sequence (stale-audio gate)
@@ -962,7 +1004,7 @@ export class OrchestrationPipeline {
   private triggerBargeIn(
     trigger: string,
     partial?: string,
-    opts?: { speculative?: boolean },
+    opts?: { speculative?: boolean; energyDetails?: Record<string, unknown> },
   ): void {
     if (this.bargeInRequested) return;
     const invalidatedSeq = this.interruptionMgr.invalidateCurrentTurn();
@@ -996,6 +1038,7 @@ export class OrchestrationPipeline {
         sequenceInvalidated: invalidatedSeq,
         heardPreview: heard.slice(0, 80) || null,
         transcriptPreview: partial?.slice(0, 80) ?? null,
+        ...opts?.energyDetails,
       },
     });
   }
@@ -1899,6 +1942,43 @@ export class OrchestrationPipeline {
       }
     }
 
+    const coalesceLang = this.currentLang || this.agent.sttConfig.language;
+    if (
+      closeReason !== "coalesced_fragment"
+      && shouldHoldFragmentForCoalesce(transcript, { expectedLang: coalesceLang })
+    ) {
+      if (this._fragmentCoalesce) {
+        clearTimeout(this._fragmentCoalesce.timer);
+        transcript = `${this._fragmentCoalesce.text} ${transcript}`.trim();
+        this._fragmentCoalesce = null;
+        logger.info(
+          { callId: this.config.callId, merged: transcript.slice(0, 120) },
+          "STT fragment coalesced with follow-up final",
+        );
+      } else {
+        this._fragmentCoalesce = {
+          text: transcript,
+          timer: setTimeout(() => {
+            const pending = this._fragmentCoalesce?.text;
+            this._fragmentCoalesce = null;
+            if (pending && !this.closed) {
+              void this.handleStreamingTranscript(pending, Date.now(), "coalesced_fragment");
+            }
+          }, FRAGMENT_COALESCE_MS),
+        };
+        logger.info(
+          { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs: FRAGMENT_COALESCE_MS },
+          "STT fragment coalesce hold — awaiting follow-up final",
+        );
+        this.safetyNet.onFinal();
+        this.clearEagerPartialTimer();
+        this.interruptionMgr.onUserSpeechEnd();
+        return;
+      }
+    } else {
+      this.clearFragmentCoalesce();
+    }
+
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
     this.safetyNet.onFinal();
@@ -2255,20 +2335,19 @@ export class OrchestrationPipeline {
         );
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        this.triggerBargeIn(source, undefined, { speculative: false });
-        this.audioBuffer = [];
-        this.audioBufferNative16k = [];
-        this.logExec("Agent", "system", {
-          status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
-          metadata: {
-            event: "Barge-in Detected", trigger: source, frames: this.bargeInSpeechFrames,
-            effectiveMinFrames, effectiveThreshold, configuredThreshold: this.bargeInEnergyThreshold,
+        this.triggerBargeIn(source, undefined, {
+          speculative: false,
+          energyDetails: {
+            frames: this.bargeInSpeechFrames,
+            effectiveMinFrames,
+            effectiveThreshold,
+            configuredThreshold: this.bargeInEnergyThreshold,
             echoFloor: Math.round(this.playbackEchoFloor),
-            // currentRms is 0 for webcall (AEC path) and batch path — use frameRms()
-            // directly so the log always shows the actual energy level at trigger time.
             currentRms: Math.round(isWebcallStreaming ? frameRms(pcm8k) : currentRms),
           },
         });
+        this.audioBuffer = [];
+        this.audioBufferNative16k = [];
         logger.info(
           {
             callId: this.config.callId, source, frames: this.bargeInSpeechFrames,
@@ -3576,6 +3655,7 @@ export class OrchestrationPipeline {
    * Returns the audio duration in milliseconds (from TTS bytes), or undefined.
    */
   private async drainSentenceJob(job: TtsSentenceJob): Promise<number | undefined> {
+    if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) return;
     if (this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) return;
 
     // Extend echo-grace to cover estimated sentence playback duration.
@@ -4378,6 +4458,9 @@ export class OrchestrationPipeline {
     this._tTurnTtsFirstByte   = null;
     this._tTurnFirstAudioOut  = null;
     this._fillerPlayedThisTurn = false;
+    this._skipPendingFillerPlayback = false;
+    this._deadAirFillerEnqueuedAt = null;
+    this.clearFragmentCoalesce();
     // Capture adaptive endpoint decision for this turn (set by scheduleSilenceFlush);
     // null when turn was triggered by streaming STT (Deepgram handles endpointing there).
     const _thisEndpointMs = this._lastEndpointMs;
@@ -4822,9 +4905,9 @@ export class OrchestrationPipeline {
         const freq = isTamil ? Math.min(baseFreq, 0.25) : baseFreq;
         if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.
-          const pool = getBackchannelFillers(fillerLang);
+          const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
           if (pool.length > 0) {
-            const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase)!;
+            const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase, this.backchannelFillerOpts())!;
             this.lastFillerPhrase = phrase;
             logger.info(
               {
@@ -5221,8 +5304,8 @@ export class OrchestrationPipeline {
             );
             return;
           }
-          const pool = getBackchannelFillers(fillerLang);
-          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase);
+          const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
+          const phrase = pickBackchannelFiller(fillerLang, this.lastFillerPhrase, this.backchannelFillerOpts());
           if (!phrase) {
             logger.info(
               {
@@ -5250,6 +5333,7 @@ export class OrchestrationPipeline {
           );
           enqueue(phrase, FILLER_SEQUENCE_ID);
           this.lastFillerPhrase = phrase;
+          this._deadAirFillerEnqueuedAt = Date.now();
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
         }
@@ -5403,6 +5487,7 @@ export class OrchestrationPipeline {
           if (!llmFirstTokenAt) {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
+            this.onLlmFirstTokenReceived();
             // LLM responded in time — cancel the dead-air filler before it fires
             if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
             this.logExec("LLM", "system", {
@@ -5558,6 +5643,7 @@ export class OrchestrationPipeline {
               if (!llmFirstTokenAt) {
                 llmFirstTokenAt = Date.now();
                 this._tTurnLlmFirstToken = performance.now();
+                this.onLlmFirstTokenReceived();
               }
               llmResponse += token;
               const afterThink = filterThinkToken(token);
@@ -6902,6 +6988,7 @@ export class OrchestrationPipeline {
       this.streamSTTReconnectTimer = null;
     }
     this.safetyNet?.clear();
+    this.clearFragmentCoalesce();
     this.streamSTT?.close();
     this.streamSTT = null;
     logger.info({ callId: this.config.callId }, "Pipeline closed");

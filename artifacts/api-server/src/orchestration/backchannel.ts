@@ -88,14 +88,23 @@ const BACKCHANNEL_FILLERS: Record<string, string[]> = {
   ],
 };
 
+export interface BackchannelFillerOptions {
+  /** When caller explicitly requested English, only "Okay." is permitted. */
+  englishStrictAck?: boolean;
+}
+
 /**
  * Resolve the predefined backchannel filler set for an agent's language.
  * Returns an empty array when the language has no predefined set (caller must
  * then skip injecting a filler — never fall back to another language).
  */
-export function getBackchannelFillers(language: string | null | undefined): string[] {
+export function getBackchannelFillers(
+  language: string | null | undefined,
+  opts?: BackchannelFillerOptions,
+): string[] {
   if (!language) return [];
   const base = language.toLowerCase().split(/[-_]/)[0]!;
+  if (base === "en" && opts?.englishStrictAck) return ["Okay."];
   return BACKCHANNEL_FILLERS[base] ?? [];
 }
 
@@ -109,8 +118,9 @@ export function getBackchannelFillers(language: string | null | undefined): stri
 export function pickBackchannelFiller(
   language: string | null | undefined,
   lastPhrase?: string | null,
+  opts?: BackchannelFillerOptions,
 ): string | null {
-  const pool = getBackchannelFillers(language);
+  const pool = getBackchannelFillers(language, opts);
   if (pool.length === 0) return null;
   if (pool.length === 1) return pool[0]!;
   let choices = pool;

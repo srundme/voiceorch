@@ -197,7 +197,8 @@ export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);
 export type TurnCloseReason =
   | "stt_final"
   | "force_finalized"
-  | "stall_reprompt";
+  | "stall_reprompt"
+  | "coalesced_fragment";
 
 // Language-aware recovery reprompt spoken when the stall backstop fires.
 const RECOVERY_REPROMPTS: Record<string, string> = {
