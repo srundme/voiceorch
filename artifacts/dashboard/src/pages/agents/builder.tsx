@@ -4779,6 +4779,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Saved", description: `${data.name} updated.` });
+        setSavedFlash(true);
+        setTimeout(() => setSavedFlash(false), 2500);
       } catch (err) {
         const mapped = mapApiErrors(err);
         if (Object.keys(mapped).length > 0) { Object.entries(mapped).forEach(([k, v]) => form.setError(k as any, { message: v })); }
@@ -4857,6 +4859,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   };
 
   const [showWebcall, setShowWebcall] = useState(() => _autoWebcall);
+  const [savedFlash, setSavedFlash] = useState(false);
   const isDirty   = form.formState.isDirty;
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -4927,10 +4930,27 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
             <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
               <Sparkles className="h-3.5 w-3.5" /> Refine with AI
             </Button>
-            <Button size="sm" className="h-7 text-xs gap-1.5" onClick={onSave} disabled={updateAgent.isPending} title={!isDirty ? "No unsaved changes" : undefined}>
-              <Save className="h-3.5 w-3.5" />
-              {updateAgent.isPending ? "Saving…" : "Save"}
-            </Button>
+            <div className="relative">
+              <Button
+                size="sm"
+                className={cn(
+                  "h-7 text-xs gap-1.5 transition-colors",
+                  savedFlash && "bg-green-600 hover:bg-green-700 text-white",
+                )}
+                onClick={onSave}
+                disabled={updateAgent.isPending}
+                title={!isDirty ? "No unsaved changes" : "Save changes"}
+              >
+                {savedFlash
+                  ? <Check className="h-3.5 w-3.5" />
+                  : <Save className="h-3.5 w-3.5" />
+                }
+                {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
+              </Button>
+              {isDirty && !updateAgent.isPending && !savedFlash && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
+              )}
+            </div>
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setPublishModalOpen(true)}>
               <Upload className="h-3.5 w-3.5" /> Publish
             </Button>
