@@ -123,6 +123,7 @@ export const agentFormSchema = z.object({
 
   // Workspace calendar assigned to this agent for native scheduling tools
   schedulingCalendarId: z.number().optional().nullable(),
+  schedulingEventTypeId: z.number().optional().nullable(),
 
 }).superRefine((data, ctx) => {
   const asrErr = getModelError(data.asrProvider, data.asrModel, ASR_MODELS);

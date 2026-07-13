@@ -84,7 +84,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     preferredManagedNumber,
     asrEndpointingSilenceMs, llmMaxTokens, ttsMinSentenceChars, linearDelayMs, ttsSpeed,
     autoRedialEnabled, autoRedialMaxAttempts,
-    sarvamSttMode, kbBakedOnly, schedulingCalendarId,
+    sarvamSttMode, kbBakedOnly, schedulingCalendarId, schedulingEventTypeId,
     // Inbound/outbound phone number assignment is read-only in the agent form —
     // it's managed exclusively from the Phone Numbers page now. Never forward
     // these to the server: they're populated from the agent's own (potentially
@@ -145,7 +145,10 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
     trai:  !!complianceTrai,
   };
   if (schedulingCalendarId != null) {
-    agentConfig["calendarCapability"] = { defaultCalendarId: schedulingCalendarId };
+    agentConfig["calendarCapability"] = {
+      defaultCalendarId: schedulingCalendarId,
+      ...(schedulingEventTypeId != null ? { defaultEventTypeId: schedulingEventTypeId } : {}),
+    };
   }
 
   const NATIVE_BOOKING_TYPES = new Set(["native_booking", "native_check_availability", "native_list_bookings", "native_reschedule", "native_cancel"]);
@@ -368,6 +371,7 @@ export default function AgentEdit() {
       autoRedialEnabled: false,
       autoRedialMaxAttempts: 3,
       schedulingCalendarId: null,
+      schedulingEventTypeId: null,
     },
   });
 
@@ -378,6 +382,7 @@ export default function AgentEdit() {
 
   const { data: calendarsData } = useListCalendars();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
     ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
     : id ? (calendarsData ?? []).find((cal: any) => cal.agentId === id) : undefined;
@@ -597,6 +602,7 @@ export default function AgentEdit() {
       autoRedialEnabled:      ((agent as any).agentConfig?.autoRedial?.enabled as boolean | undefined) ?? false,
       autoRedialMaxAttempts:  ((agent as any).agentConfig?.autoRedial?.maxAttempts as number | undefined) ?? 3,
       schedulingCalendarId:   ((agent as any).agentConfig?.calendarCapability?.defaultCalendarId as number | null | undefined) ?? null,
+      schedulingEventTypeId:  ((agent as any).agentConfig?.calendarCapability?.defaultEventTypeId as number | null | undefined) ?? null,
     });
   }, [agent]);
 
@@ -1572,25 +1578,33 @@ export default function AgentEdit() {
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-2">Scheduling & Bookings</p>
                 <div className="space-y-2">
-                  {/* Calendar assignment picker */}
+                  {/* Event type picker — shared across all booking tools */}
                   <div className="rounded-xl border border-border/60 bg-card/20 px-4 py-3 flex items-center gap-3">
                     <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div className="flex-1 min-w-0 space-y-1">
-                      <p className="text-[11px] text-muted-foreground/70">Calendar used by booking tools</p>
+                      <p className="text-[11px] text-muted-foreground/70">
+                        {agentCalendar ? (
+                          <>Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span></>
+                        ) : "Event type used by booking tools"}
+                      </p>
                       <Select
-                        value={schedulingCalendarId != null ? String(schedulingCalendarId) : "__none__"}
-                        onValueChange={v => form.setValue("schedulingCalendarId", v === "__none__" ? null : Number(v))}
+                        value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+                        onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v))}
+                        disabled={!calendarIdForEt}
                       >
                         <SelectTrigger className="h-7 text-xs bg-background/50">
-                          <SelectValue placeholder="Auto-detect (legacy: match by agent)" />
+                          <SelectValue placeholder="Any event type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__" className="text-xs text-muted-foreground">Auto-detect (legacy: match by agent)</SelectItem>
-                          {(calendarsData ?? []).map((cal: any) => (
-                            <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
+                          <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                          {(agentEventTypes ?? []).map((et: any) => (
+                            <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
+                        <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+                      )}
                     </div>
                   </div>
                   {BOOKING_TOOLS.map(({ type, fnName, icon, color, description }) => {
@@ -1623,66 +1637,35 @@ export default function AgentEdit() {
                           </div>
                         </button>
                         {isOn && (() => {
-                          const idx = nativeToolIndex(type);
-                          const toolTimezone = watchedTools[idx]?.timezone;
-                          const toolEventTypeId = watchedTools[idx]?.eventTypeId;
                           return (
                             <div className="px-4 pb-4 -mt-1">
-                              <div className="border-t border-border/30 pt-3 space-y-2">
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {!agentCalendar ? (
-                                      <p className="text-[10px] text-amber-400/80">No calendar found. Go to <span className="font-medium">Settings → Calendar</span> to create one.</p>
-                                    ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                                      <>
-                                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
-                                        <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
-                                        <span className="text-[10px] text-muted-foreground/60">
-                                          {(agentCalendar as any).connectedGoogleAccountsCount > 1
-                                            ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
-                                            : (agentCalendar as any).connectedGoogleEmail}
-                                        </span>
-                                      </>
-                                    )}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setSchemaViewType(type); }}
-                                    className="text-[10px] text-muted-foreground/60 hover:text-foreground/80 underline underline-offset-2 transition-colors"
-                                  >
-                                    View schema
-                                  </button>
+                              <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {!agentCalendar ? (
+                                    <p className="text-[10px] text-amber-400/80">No calendar found for this agent.</p>
+                                  ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                                    <>
+                                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
+                                      <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
+                                      <span className="text-[10px] text-muted-foreground/60">
+                                        {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                                          ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                                          : (agentCalendar as any).connectedGoogleEmail}
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
-                                {type === "native_list_bookings" && (
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] text-muted-foreground block">Event Type (optional)</label>
-                                    <Select
-                                      value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
-                                      onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
-                                      disabled={!agentCalendar}
-                                    >
-                                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Any event type" /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
-                                        {(agentEventTypes ?? []).map((et: any) => (
-                                          <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    {agentCalendar && (agentEventTypes ?? []).length === 0 && (
-                                      <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
-                                    )}
-                                  </div>
-                                )}
-                                {agentCalendar && (agentEventTypes ?? []).length === 0 && type !== "native_list_bookings" && ["native_booking", "native_check_availability"].includes(type) && (
-                                  <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setSchemaViewType(type); }}
+                                  className="text-[10px] text-muted-foreground/60 hover:text-foreground/80 underline underline-offset-2 transition-colors"
+                                >
+                                  View schema
+                                </button>
                               </div>
                             </div>
                           );

@@ -7,6 +7,7 @@ import {
   useCreateCalendar,
   useUpdateCalendar,
   useDeleteCalendar,
+  useListAvailability,
   getListCalendarsQueryKey,
   customFetch,
 } from "@workspace/api-client-react";
@@ -136,11 +137,29 @@ function CalendarFormDialog({
 
   const [form, setForm] = useState<FormState>(() =>
     editing
-      ? { description: editing.description ?? "", name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive, availabilitySlots: [] }
+      ? { description: editing.description ?? "", name: editing.name, timezone: editing.timezone, hostEmail: editing.hostEmail ?? "", additionalHosts: editing.additionalHosts ?? [], isActive: editing.isActive, availabilitySlots: defaultSlots() }
       : defaultForm()
   );
   // Tracks whether the user has manually edited hostEmail so we never stomp their input
   const hostEmailTouched = useRef(false);
+
+  // Load existing availability for the calendar being edited
+  const { data: existingAvailability } = useListAvailability(
+    editing ? { calendarId: editing.id } : ({} as any),
+    { query: { enabled: !!editing, queryKey: ["calendar-availability", editing?.id ?? null] } }
+  );
+  useEffect(() => {
+    if (!editing || !existingAvailability) return;
+    // Merge fetched slots into the default 7-day grid
+    setForm(f => ({
+      ...f,
+      availabilitySlots: defaultSlots().map(def => {
+        const fetched = existingAvailability.find((s: any) => s.dayOfWeek === def.dayOfWeek);
+        if (fetched) return { dayOfWeek: def.dayOfWeek, startTime: fetched.startTime, endTime: fetched.endTime, isActive: fetched.isActive };
+        return { ...def, isActive: false };
+      }),
+    }));
+  }, [existingAvailability, editing?.id]);
 
   // Pre-populate hostEmail with the session user's email when creating a new calendar.
   // Uses a ref guard so this only fires once (when user loads) and never overwrites a value the user typed.
@@ -195,7 +214,20 @@ function CalendarFormDialog({
       const additionalHosts = form.additionalHosts.map(h => h.trim()).filter(Boolean);
       if (editing) {
         await update.mutateAsync({ id: editing.id, data: { name: form.name, description: form.description.trim() || null, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
-        toast({ title: "Calendar updated" });
+        // Delete all existing availability slots then recreate from form
+        const deleteOps = (existingAvailability ?? []).map((s: any) =>
+          customFetch(`${API}/scheduling/availability/${s.id}`, { method: "DELETE" })
+        );
+        await Promise.allSettled(deleteOps);
+        const activeSlots = form.availabilitySlots.filter(s => s.isActive);
+        await Promise.allSettled(activeSlots.map(s =>
+          customFetch(`${API}/scheduling/availability`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ calendarId: editing.id, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime }),
+          })
+        ));
+        toast({ title: "Calendar updated", description: activeSlots.length > 0 ? `Availability set for ${activeSlots.length} day(s).` : "No availability days set." });
       } else {
         const cal = await create.mutateAsync({ data: { description: form.description.trim() || null, name: form.name, timezone: form.timezone, hostEmail, additionalHosts, isActive: form.isActive } });
         // Create availability slots in parallel (fire-and-forget errors individually)
@@ -341,44 +373,42 @@ function CalendarFormDialog({
             </p>
           </div>
 
-          {/* Weekly availability — only shown when creating a new calendar */}
-          {!editing && (
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2 pt-1">
-                <div className="h-px flex-1 bg-border" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Weekly Availability</span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-              <p className="text-xs text-muted-foreground">Toggle days on/off and set the hours. You can change this any time from the Availability tab.</p>
-              <div className="space-y-1">
-                {form.availabilitySlots.map(slot => (
-                  <div key={slot.dayOfWeek} className={`flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${slot.isActive ? "bg-muted/40" : "opacity-50"}`}>
-                    <Switch
-                      checked={slot.isActive}
-                      onCheckedChange={() => toggleSlot(slot.dayOfWeek)}
-                      className="scale-75 origin-left"
-                    />
-                    <span className="w-8 text-xs font-medium text-foreground">{DAYS_SHORT[slot.dayOfWeek]}</span>
-                    <input
-                      type="time"
-                      value={slot.startTime}
-                      onChange={e => setSlotTime(slot.dayOfWeek, "startTime", e.target.value)}
-                      disabled={!slot.isActive}
-                      className="h-7 w-24 rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <span className="text-xs text-muted-foreground">–</span>
-                    <input
-                      type="time"
-                      value={slot.endTime}
-                      onChange={e => setSlotTime(slot.dayOfWeek, "endTime", e.target.value)}
-                      disabled={!slot.isActive}
-                      className="h-7 w-24 rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                  </div>
-                ))}
-              </div>
+          {/* Weekly availability */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2 pt-1">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Weekly Availability</span>
+              <div className="h-px flex-1 bg-border" />
             </div>
-          )}
+            <p className="text-xs text-muted-foreground">Toggle days on/off and set the hours.</p>
+            <div className="space-y-1">
+              {form.availabilitySlots.map(slot => (
+                <div key={slot.dayOfWeek} className={`flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${slot.isActive ? "bg-muted/40" : "opacity-50"}`}>
+                  <Switch
+                    checked={slot.isActive}
+                    onCheckedChange={() => toggleSlot(slot.dayOfWeek)}
+                    className="scale-75 origin-left"
+                  />
+                  <span className="w-8 text-xs font-medium text-foreground">{DAYS_SHORT[slot.dayOfWeek]}</span>
+                  <input
+                    type="time"
+                    value={slot.startTime}
+                    onChange={e => setSlotTime(slot.dayOfWeek, "startTime", e.target.value)}
+                    disabled={!slot.isActive}
+                    className="h-7 w-24 rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <input
+                    type="time"
+                    value={slot.endTime}
+                    onChange={e => setSlotTime(slot.dayOfWeek, "endTime", e.target.value)}
+                    disabled={!slot.isActive}
+                    className="h-7 w-24 rounded border border-input bg-background px-2 text-xs text-foreground disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="flex items-center gap-2">
             <Switch checked={form.isActive} onCheckedChange={v => set("isActive", v)} />

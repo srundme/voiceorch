@@ -1523,6 +1523,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
   const { data: calendarsData } = useListCalendars();
   const schedulingCalendarId = form.watch("schedulingCalendarId");
+  const schedulingEventTypeId = form.watch("schedulingEventTypeId");
   const agentCalendar = schedulingCalendarId != null
     ? (calendarsData ?? []).find((cal: any) => cal.id === schedulingCalendarId)
     : agentId ? (calendarsData ?? []).find((cal: any) => cal.agentId === agentId) : undefined;
@@ -1706,25 +1707,33 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
 
         {/* ── Booking Tools ── */}
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 px-0.5 mb-1 mt-3">Scheduling & Bookings</p>
-        {/* Calendar assignment picker */}
+        {/* Event type picker — shared across all booking tools */}
         <div className="rounded-xl border border-border/40 bg-card/20 px-4 py-3 flex items-center gap-3 mb-2">
           <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
           <div className="flex-1 min-w-0 space-y-1">
-            <p className="text-[11px] text-muted-foreground/70">Calendar used by booking tools</p>
+            <p className="text-[11px] text-muted-foreground/70">
+              {agentCalendar ? (
+                <>Calendar: <span className="font-medium text-foreground/80">{agentCalendar.name}</span></>
+              ) : "Event type used by booking tools"}
+            </p>
             <Select
-              value={schedulingCalendarId != null ? String(schedulingCalendarId) : "__none__"}
-              onValueChange={v => form.setValue("schedulingCalendarId", v === "__none__" ? null : Number(v))}
+              value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
+              onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v))}
+              disabled={!calendarIdForEt}
             >
               <SelectTrigger className="h-7 text-xs bg-background/50">
-                <SelectValue placeholder="Auto-detect (legacy: match by agent)" />
+                <SelectValue placeholder="Any event type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__" className="text-xs text-muted-foreground">Auto-detect (legacy: match by agent)</SelectItem>
-                {(calendarsData ?? []).map((cal: any) => (
-                  <SelectItem key={cal.id} value={String(cal.id)} className="text-xs">{cal.name}</SelectItem>
+                <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
+                {(agentEventTypes ?? []).map((et: any) => (
+                  <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.title || et.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {calendarIdForEt && (agentEventTypes ?? []).length === 0 && (
+              <p className="text-[10px] text-amber-400/80">No event types yet. Create one in Scheduling → Event Types.</p>
+            )}
           </div>
         </div>
         {BOOKING_TOOLS.map(({ type, fnName, icon, color, label, description }) => {
@@ -1766,63 +1775,28 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               </button>
               {isOn && (
                 <div className="px-4 pb-4 -mt-1">
-                  <div className="border-t border-border/30 pt-3 space-y-2">
-                    {/* Calendar status block */}
-                    {!agentId ? (
-                      <p className="text-[10px] text-amber-400/80">
-                        Save this agent first, then configure calendar tools in <span className="font-medium">Settings → Calendar</span>.
-                      </p>
-                    ) : !agentCalendar ? (
-                      <p className="text-[10px] text-amber-400/80">
-                        No calendar found for this agent. Go to <span className="font-medium">Settings → Calendar</span> to create one.
-                      </p>
-                    ) : !(agentCalendar as any).connectedGoogleEmail ? (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
-                          {agentCalendar.name || "Calendar"}
-                        </span>
-                        <span className="text-[10px] text-amber-400/80">No Google account connected to this calendar.</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] text-muted-foreground">Assigned calendar:</span>
-                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>
-                          {agentCalendar.name || "Calendar"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground/60">
-                          {(agentCalendar as any).connectedGoogleAccountsCount > 1
-                            ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
-                            : (agentCalendar as any).connectedGoogleEmail}
-                        </span>
-                      </div>
-                    )}
-                    {/* Event Type (all booking tools) */}
-                    {(() => {
-                      const idx = nativeToolIndex(type);
-                      const toolEventTypeId = watchedTools[idx]?.eventTypeId;
-                      return (
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-muted-foreground block">Event Type (optional)</label>
-                          <Select
-                            value={toolEventTypeId != null ? String(toolEventTypeId) : "__none__"}
-                            onValueChange={(v) => form.setValue(`tools.${idx}.eventTypeId` as any, v === "__none__" ? undefined : Number(v))}
-                            disabled={!agentCalendar}
-                          >
-                            <SelectTrigger className="h-7 text-xs bg-background/50"><SelectValue placeholder="Any event type" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__" className="text-xs">Any event type</SelectItem>
-                              {(agentEventTypes ?? []).map((et: any) => (
-                                <SelectItem key={et.id} value={String(et.id)} className="text-xs">{et.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {agentCalendar && (agentEventTypes ?? []).length === 0 && (
-                            <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
-                          )}
-                        </div>
-                      );
-                    })()}
+                  <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {!agentId ? (
+                        <p className="text-[10px] text-amber-400/80">Save agent first to link calendar tools.</p>
+                      ) : !agentCalendar ? (
+                        <p className="text-[10px] text-amber-400/80">No calendar found for this agent.</p>
+                      ) : !(agentCalendar as any).connectedGoogleEmail ? (
+                        <>
+                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
+                          <span className="text-[10px] text-amber-400/80">No Google account connected.</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded", c.badge, c.badgeText)}>{agentCalendar.name || "Calendar"}</span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {(agentCalendar as any).connectedGoogleAccountsCount > 1
+                              ? `${(agentCalendar as any).connectedGoogleAccountsCount} accounts`
+                              : (agentCalendar as any).connectedGoogleEmail}
+                          </span>
+                        </>
+                      )}
+                    </div>
                     {/* Action buttons */}
                     <div className="flex items-center gap-2">
                       <Button
