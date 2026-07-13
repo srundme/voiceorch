@@ -6017,7 +6017,16 @@ export class OrchestrationPipeline {
     } else {
       flushText = pendingText;
     }
-    { const g = stepGuard.push(flushText); if (g.trim()) enqueue(g); }
+    {
+      const g = stepGuard.push(flushText);
+      if (g.trim()) {
+        enqueue(g);
+      } else if (flushText.trim() && stepGuard.truncated()) {
+        // Micro-clauses during streaming exhausted the sentence cap — still speak
+        // the unsent tail so the caller does not hear a prefix then silence.
+        enqueue(flushText.trim());
+      }
+    }
     allEnqueued = true;
     finalizeTurnCtx();
     const finalWake = wakePlayer as (() => void) | null;
@@ -6739,7 +6748,14 @@ export class OrchestrationPipeline {
     } else {
       flushText = pendingText;
     }
-    { const g = stepGuard.push(flushText); if (g.trim()) enqueue(g); }
+    {
+      const g = stepGuard.push(flushText);
+      if (g.trim()) {
+        enqueue(g);
+      } else if (flushText.trim() && stepGuard.truncated()) {
+        enqueue(flushText.trim());
+      }
+    }
     allEnqueued = true;
     ctFinalizeTurnCtx();
     const wFinal = wakePlayer as (() => void) | null; wakePlayer = null; if (wFinal) wFinal();
@@ -7906,20 +7922,8 @@ export function tryEarlyPhraseDispatch(
     }
   }
 
-  // Word-boundary flush: once we have enough chars, ship the first phrase so
-  // Cartesia/ElevenLabs streaming TTS can start while tokens still arrive.
-  const softMax = Math.min(remainder.length, minChars + 18);
-  let sp = remainder.lastIndexOf(" ", softMax);
-  if (sp < minChars) {
-    if (remainder.length < minChars + 12) return null;
-    sp = remainder.lastIndexOf(" ");
-  }
-  if (sp >= minChars) {
-    const clause = remainder.slice(0, sp).trim();
-    if (clause.length >= minChars) {
-      return { clause, rest: remainder.slice(sp + 1) };
-    }
-  }
-
+  // No word-boundary split here — micro-clauses were consuming the 2-sentence
+  // per-turn cap and silencing the final flush (call 2541). Comma/semicolon
+  // breaks are enough for early TTS without starving the tail.
   return null;
 }

@@ -77,6 +77,20 @@ export function truncateToSingleStep(text: string): { text: string; truncated: b
 /** Default cap on spoken sentences per agent turn (voice latency). */
 export const VOICE_MAX_SENTENCES_PER_TURN = 2;
 
+/** Terminal punctuation for a speakable sentence unit (Latin + Indic danda). */
+const SPEAKABLE_TERMINAL_RE = /[.!?।]\s*$/;
+
+/**
+ * Streaming micro-clauses (early TTS dispatch before .!?) must not consume the
+ * per-turn sentence budget — otherwise two word chunks block the final flush and
+ * the caller hears a prefix then silence (call 2541).
+ */
+export function isSpeakableSentenceUnit(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return SPEAKABLE_TERMINAL_RE.test(t) || t.length >= 48;
+}
+
 export interface FlowStepGuardOptions {
   /** Max sentences to speak before suppressing the rest of the turn. */
   maxSentences?: number;
@@ -106,10 +120,14 @@ export function makeFlowStepGuard(opts?: FlowStepGuardOptions): { push: (sentenc
           return "";
         }
       }
-      sentenceCount++;
-      if (sentenceCount > maxSentences) {
-        suppressed = true;
-        return "";
+      // Early phrase dispatch emits clause fragments without .!? — let them stream
+      // to TTS but only count completed sentences toward the monologue cap.
+      if (isSpeakableSentenceUnit(sentence)) {
+        sentenceCount++;
+        if (sentenceCount > maxSentences) {
+          suppressed = true;
+          return "";
+        }
       }
       return sentence;
     },

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   truncateToSingleStep,
   makeFlowStepGuard,
+  isSpeakableSentenceUnit,
   isHoldRequest,
   isQuestionUtterance,
   isBareAcknowledgement,
@@ -76,6 +77,18 @@ describe("makeFlowStepGuard (streaming)", () => {
     expect(g.push("Point one.")).toBe("Point one.");
     expect(g.push("Point two.")).toBe("Point two.");
     expect(g.push("Point three.")).toBe("");
+    expect(g.truncated()).toBe(true);
+  });
+
+  it("streams micro-clauses without consuming the sentence cap (call 2541)", () => {
+    const g = makeFlowStepGuard({ maxSentences: 2 });
+    expect(isSpeakableSentenceUnit("আপনি যদি Meridian")).toBe(false);
+    expect(g.push("আপনি যদি Meridian")).toBe("আপনি যদি Meridian");
+    expect(g.push("Vitality প্রোগ্রাম")).toBe("Vitality প্রোগ্রাম");
+    expect(g.truncated()).toBe(false);
+    expect(g.push("Full sentence with a question?")).toBe("Full sentence with a question?");
+    expect(g.push("Second complete sentence here.")).toBe("Second complete sentence here.");
+    expect(g.push("Third should be blocked.")).toBe("");
     expect(g.truncated()).toBe(true);
   });
 });

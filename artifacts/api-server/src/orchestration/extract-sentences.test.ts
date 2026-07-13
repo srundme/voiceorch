@@ -68,13 +68,9 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
     expect(r?.rest).toMatch(/^I'm Aisha/);
   });
 
-  it("dispatches at word boundary when no punctuation yet", () => {
+  it("does not word-split without a comma or semicolon", () => {
     const text = "Sure I can help you with that appointment";
-    const r = tryEarlyPhraseDispatch(text, 15);
-    expect(r).not.toBeNull();
-    expect(r!.clause.length).toBeGreaterThanOrEqual(15);
-    expect(text.startsWith(r!.clause)).toBe(true);
-    expect(text).toBe(`${r!.clause} ${r!.rest}`);
+    expect(tryEarlyPhraseDispatch(text, 15)).toBeNull();
   });
 
   it("does not dispatch very short buffers", () => {
@@ -83,17 +79,16 @@ describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
 });
 
 describe("extractSentences — early dispatch during simulated stream", () => {
-  it("enqueues first clause before period arrives", () => {
-    const full = "I can help you schedule that appointment for tomorrow afternoon.";
+  it("enqueues first clause at comma before period arrives", () => {
+    const full = "I can help you schedule that appointment, just tell me your preferred time.";
     let pending = "";
     const enqueued: string[] = [];
-    const chunk = "I can help you schedule that appointment";
+    const chunk = "I can help you schedule that appointment, just tell";
     pending += chunk;
     const { sentences, remainder } = extractSentences(pending, 15);
     enqueued.push(...sentences);
     pending = remainder;
     expect(enqueued.length).toBeGreaterThan(0);
-    expect(enqueued[0]!.length).toBeGreaterThanOrEqual(15);
     expect(full.startsWith(enqueued.join(" "))).toBe(true);
     expect(pending.length).toBeGreaterThan(0);
   });
