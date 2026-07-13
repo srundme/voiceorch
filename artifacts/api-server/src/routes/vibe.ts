@@ -14,6 +14,7 @@ import { generateLayeredAgentPrompt } from "../services/prompt-template.js";
 import { getActiveLayer } from "../services/system-prompt-template.js";
 import { resolveAmdConfig } from "../orchestration/telephony/dial.js";
 import { trackEvent } from "../services/track-event.js";
+import { parseVibeGeminiJson, extractGeminiResponseText } from "./vibe-gemini-parse.js";
 
 const router = Router();
 
@@ -349,6 +350,20 @@ class VibeGeminiError extends Error {
 const VIBE_RECOVERY_NOTE =
   "IMPORTANT: Your previous response was cut off or was not valid JSON. Respond again to the conversation above with ONLY the complete, compact, valid JSON object matching the required schema — no markdown fences, no commentary, and keep the \"reply\" text brief.";
 
+/** Flash-Lite fully disables thinking (thinkingBudget:0); 2.5 Flash may still emit thought-only parts. */
+const VIBE_GEMINI_MODEL = "gemini-2.5-flash-lite";
+
+const VIBE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    reply:  { type: "string" },
+    phase:  { type: "string" },
+    ready:  { type: "boolean" },
+    config: { type: "object", nullable: true },
+  },
+  required: ["reply", "phase", "ready", "config"],
+} as const;
+
 async function callGemini(key: string, messages: VibeChatMessage[]): Promise<GeminiVibeResponse> {
   const baseContents = messages.map(m => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -371,7 +386,8 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
       contents,
       generationConfig: {
         responseMimeType: "application/json",
-        temperature: 0.7,
+        responseSchema: VIBE_RESPONSE_SCHEMA,
+        temperature: 0.4,
         maxOutputTokens: 16384,
         thinkingConfig: { thinkingBudget: 0 },
       },
@@ -380,10 +396,10 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
     try {
       const resp = await Promise.race([
         fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${VIBE_GEMINI_MODEL}:generateContent?key=${key}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body },
         ),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 30000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 45000)),
       ]);
 
       if (!resp.ok) {
@@ -409,42 +425,43 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
       };
       const candidate = data.candidates?.[0];
       const finishReason = candidate?.finishReason;
-      // Gemini 2.5 Flash (thinking model) may return a thought part before the real output part
       const parts = candidate?.content?.parts ?? [];
-      const textPart = parts.find(p => !p.thought && p.text) ?? parts[parts.length - 1];
-      const text = textPart?.text ?? "{}";
-      let jsonText = text.trim();
-      // Strip markdown code fences if present
-      if (jsonText.startsWith("```")) {
-        jsonText = jsonText.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
-      }
-      try {
-        const parsed = JSON.parse(jsonText) as GeminiVibeResponse;
-        // A MAX_TOKENS response that still happens to parse is accepted as-is.
-        return parsed;
-      } catch {
-        const truncated = finishReason === "MAX_TOKENS";
+      const text = extractGeminiResponseText(parts);
+      if (!text.trim() || text.trim() === "{}") {
         logger.warn(
-          {
-            evt: "vibe_gemini_attempt_failed",
-            attempt,
-            httpStatus: 200,
-            finishReason: finishReason ?? "unknown",
-            truncated,
-            snippet: jsonText.slice(0, 500),
-          },
-          truncated
-            ? "vibe-chat: Gemini response truncated at token cap (MAX_TOKENS), JSON unparseable"
-            : "vibe-chat: Gemini JSON parse failed",
+          { evt: "vibe_gemini_empty_candidate", attempt, finishReason: finishReason ?? "unknown", partCount: parts.length },
+          "vibe-chat: Gemini returned no usable text parts",
         );
-        lastErr = new VibeGeminiError(
-          `JSON parse failed (finishReason=${finishReason ?? "unknown"}): ${jsonText.slice(0, 200)}`,
-          "malformed",
-        );
+        lastErr = new VibeGeminiError("empty candidate", "malformed");
         needsRecovery = true;
         if (attempt < MAX_ATTEMPTS) { await sleep(attempt * 1000); continue; }
         throw lastErr;
       }
+      const parsed = parseVibeGeminiJson(text);
+      if (parsed) {
+        return parsed as GeminiVibeResponse;
+      }
+      const truncated = finishReason === "MAX_TOKENS";
+      logger.warn(
+        {
+          evt: "vibe_gemini_attempt_failed",
+          attempt,
+          httpStatus: 200,
+          finishReason: finishReason ?? "unknown",
+          truncated,
+          snippet: text.slice(0, 500),
+        },
+        truncated
+          ? "vibe-chat: Gemini response truncated at token cap (MAX_TOKENS), JSON unparseable"
+          : "vibe-chat: Gemini JSON parse failed",
+      );
+      lastErr = new VibeGeminiError(
+        `JSON parse failed (finishReason=${finishReason ?? "unknown"}): ${text.slice(0, 200)}`,
+        "malformed",
+      );
+      needsRecovery = true;
+      if (attempt < MAX_ATTEMPTS) { await sleep(attempt * 1000); continue; }
+      throw lastErr;
     } catch (err) {
       if (err instanceof VibeGeminiError) throw err;
       const isTransient = (err as Error).message === "gemini_timeout" || (err as Error).message?.includes("fetch failed");

@@ -18,6 +18,7 @@ import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BrandMark } from "@/components/logo";
+import { DottedSurface } from "@/components/ui/dotted-surface";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AGENT_TIMEZONES } from "@/lib/agent-providers";
@@ -216,11 +217,19 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 function VibeAmbientBg() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 vibe-dot-grid opacity-40 dark:opacity-25" />
-      <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#6366f1]/[0.06] dark:bg-[#6366f1]/[0.1] blur-[120px]" />
-      <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#14b8a6]/[0.05] dark:bg-[#14b8a6]/[0.08] blur-[100px]" />
-      <div className="absolute top-[20%] left-[-10%] h-[40vh] w-[45vw] max-w-[550px] rounded-full bg-[#ff9933]/[0.04] dark:bg-[#ff9933]/[0.06] blur-[90px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.08),transparent_65%)] dark:bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.14),transparent_65%)]" />
+      <DottedSurface className="opacity-70 dark:opacity-90" />
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute -top-10 left-1/2 size-full -translate-x-1/2 rounded-full",
+          "bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.08),transparent_55%)]",
+          "blur-[40px]",
+        )}
+      />
+      <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#6366f1]/[0.05] dark:bg-[#6366f1]/[0.08] blur-[120px]" />
+      <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#14b8a6]/[0.04] dark:bg-[#14b8a6]/[0.06] blur-[100px]" />
+      <div className="absolute top-[20%] left-[-10%] h-[40vh] w-[45vw] max-w-[550px] rounded-full bg-[#ff9933]/[0.03] dark:bg-[#ff9933]/[0.05] blur-[90px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.06),transparent_65%)] dark:bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.1),transparent_65%)]" />
     </div>
   );
 }
@@ -788,6 +797,7 @@ export default function VibePage() {
       const decoder = new TextDecoder();
       let buf       = "";
       let aiReply   = "";
+      let streamHadError = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1009,6 +1019,7 @@ export default function VibePage() {
               break;
 
             case "error":
+              streamHadError = true;
               setMessages(prev => prev.map(m =>
                 !m.done && m.role === "ai" ? { ...m, content: `Sorry, something went wrong — ${evt.message as string}`, done: true } : m
               ));
@@ -1019,8 +1030,10 @@ export default function VibePage() {
       }
 
       setMessages(prev => prev.map(m => !m.done && m.role === "ai" ? { ...m, done: true } : m));
-      historyRef.current = [...history, { role: "assistant", content: aiReply }];
-      if (phaseRef.current !== "done") setPhase("idle");
+      if (!streamHadError && aiReply.trim()) {
+        historyRef.current = [...history, { role: "assistant", content: aiReply }];
+      }
+      if (phaseRef.current !== "done" && !streamHadError) setPhase("idle");
 
       // Fire-and-forget: save the completed user+assistant turn to the session
       const sid = activeSessionIdRef.current;
