@@ -721,17 +721,24 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 )} />
               )}
               {asrProvider === "sarvam" && (
-                <FormField control={form.control} name="sarvamSttMode" render={({ field }) => (
+                <FormField control={form.control} name="sarvamSttMode" render={({ field }) => {
+                  const lang = form.watch("language") ?? "";
+                  const autoDefault = lang.toLowerCase().startsWith("en") ? "transcribe" : "codemix";
+                  return (
                   <FormItem className="space-y-1">
                     <FormLabel className="text-[10px] text-muted-foreground">STT Mode</FormLabel>
-                    <SmallSelect value={field.value ?? "codemix"} onChange={field.onChange}
+                    <SmallSelect value={field.value ?? autoDefault} onChange={field.onChange}
                       options={[
                         { value: "codemix", label: "Codemix (Regional + English)" },
                         { value: "verbatim", label: "Verbatim (exact words)" },
-                        { value: "transcribe", label: "Transcribe (basic)" },
+                        { value: "transcribe", label: "Transcribe (English / strict)" },
                       ]} />
+                    <p className="text-[9px] text-muted-foreground">
+                      Auto: English agents use Transcribe; Indic agents use Codemix.
+                    </p>
                   </FormItem>
-                )} />
+                  );
+                }} />
               )}
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">

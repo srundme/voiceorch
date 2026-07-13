@@ -43,6 +43,9 @@ import { pcmToWav } from "../../audio.js";
 import type { STTAdapter, SttFinalMetadata } from "./base.js";
 import type { STTConfig, StreamSTT } from "../../types.js";
 import { logger } from "../../../lib/logger.js";
+import { resolveSarvamSttMode, type SarvamSttMode } from "./sarvam-mode.js";
+
+export { resolveSarvamSttMode } from "./sarvam-mode.js";
 
 function envInt(name: string, def: number): number {
   const v = process.env[name];
@@ -101,7 +104,8 @@ export class SarvamSTT implements STTAdapter {
   private readonly key: string;
   private readonly model: string;
   private readonly langCode: string;
-  private readonly mode: string;
+  private readonly mode: SarvamSttMode;
+  private readonly explicitMode: string | null;
   private readonly cfg: STTConfig;
   /** Native sample rate to actually stream to Sarvam — 8000 for telephony, 16000 for webcall. */
   private readonly sampleRate: 8000 | 16000;
@@ -127,10 +131,18 @@ export class SarvamSTT implements STTAdapter {
       : "saaras:v3";
 
     this.langCode = normaliseLang(cfg.language);
+    this.explicitMode = extra.mode ?? null;
 
-    // Default mode: codemix handles Tamil+English code-switching naturally.
-    // Only saaras:v3 supports mode; legacy models ignore it.
-    this.mode = MODE_CAPABLE.has(this.model) ? (extra.mode ?? "codemix") : "transcribe";
+    // Mode: explicit agent config wins; else language-aware default (en-IN →
+    // transcribe to avoid codemix writing English speech in Tamil script).
+    this.mode = MODE_CAPABLE.has(this.model)
+      ? resolveSarvamSttMode(this.langCode, this.explicitMode)
+      : "transcribe";
+
+    logger.info(
+      { langCode: this.langCode, mode: this.mode, model: this.model, explicitMode: this.explicitMode },
+      "Sarvam STT: mode resolved",
+    );
   }
 
   // ── Batch REST ──────────────────────────────────────────────────────────────
@@ -144,6 +156,9 @@ export class SarvamSTT implements STTAdapter {
     formData.append("file", new Blob([wavBuf], { type: "audio/wav" }), "audio.wav");
     formData.append("model", this.model === "saaras:v3" ? "saaras:v3" : "saarika:v2.5");
     formData.append("language_code", this.langCode);
+    if (MODE_CAPABLE.has(this.model)) {
+      formData.append("mode", this.mode);
+    }
 
     const resp = await fetch(BATCH_URL, {
       method: "POST",
@@ -176,8 +191,9 @@ export class SarvamSTT implements STTAdapter {
     // langCode is MUTABLE: setLanguage() live-switches it mid-call (explicit
     // caller language request) and reconnects the socket with the new hint.
     let   langCode   = this.langCode;
+    let   mode       = this.mode;
+    const explicitMode = this.explicitMode;
     const model      = this.model;
-    const mode       = this.mode;
     const key        = this.key;
     const sampleRate = this.sampleRate;
 
@@ -704,8 +720,9 @@ export class SarvamSTT implements STTAdapter {
         if (intentionallyClosed) return;         // stream already torn down
         const prev = langCode;
         langCode = next;
+        mode = resolveSarvamSttMode(langCode, explicitMode);
         logger.info(
-          { from: prev, to: next, model },
+          { from: prev, to: next, mode, model },
           "Sarvam STT: live language switch — reconnecting stream with new language hint",
         );
         // Drain any transcript held in the OLD language before switching.

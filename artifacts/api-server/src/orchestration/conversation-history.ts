@@ -187,6 +187,16 @@ export class ConversationHistory {
     }
   }
 
+  /** Replace the most recent assistant turn (barge-in: store only what was heard). */
+  replaceLastAssistant(content: string): void {
+    for (let i = this._messages.length - 1; i >= 0; i--) {
+      if (this._messages[i]!.role === "assistant") {
+        this._messages[i]!.content = content;
+        return;
+      }
+    }
+  }
+
   /**
    * Replace the first `deleteCount` entries with a single summary turn.
    * Used by the context-summarisation path.

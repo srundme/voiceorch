@@ -8,6 +8,7 @@ import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
+import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { toReadableError } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
@@ -38,6 +39,7 @@ import {
   type TurnCloseReason,
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt } from "./transcriptQuality.js";
+import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
 import { toZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -502,6 +504,19 @@ function isSpeculativeHit(partial: string, final: string): boolean {
   return overlap / pWords.length >= 0.75;
 }
 
+/** Bolna Flux EagerEndOfTurn analogue — stable partial before STT final. */
+const EAGER_PARTIAL_STABLE_MS = Number(process.env.EAGER_PARTIAL_STABLE_MS ?? 400);
+
+function isEagerCommitReady(partial: string): boolean {
+  const t = partial.trim();
+  if (t.length < 3) return false;
+  if (/[.?!।]$/.test(t)) return true;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 4) return true;
+  if (words.length === 1 && /^(yes|no|ok|okay|sure|சரி|ஆம்|हाँ|हां)$/iu.test(words[0]!)) return true;
+  return false;
+}
+
 /**
  * A single sentence's TTS synthesis, decoupled from its playback. Created by
  * startSentenceSynthesis (network fetch + byte-alignment only, safe to run
@@ -512,6 +527,8 @@ function isSpeculativeHit(partial: string, final: string): boolean {
 type TtsSentenceJob = {
   text: string;
   turnNumber: number;
+  /** Bolna sequence_id — stale frames from invalidated turns are BLOCKed. */
+  sequenceId: number;
   /** True if this.tts.synthesizeStream was used (vs the one-shot synthesize()). */
   streaming: boolean;
   /** Streaming path: 4-byte-aligned pcm16k blocks awaiting drain-time processing. */
@@ -892,6 +909,15 @@ export class OrchestrationPipeline {
     tokenSink: (t: string) => void;
     completedPromise: Promise<void>;
   } | null = null;
+  /** Bolna-parity interruption manager (sequence ids + grace gating). */
+  private interruptionMgr: InterruptionManager;
+  /** Sequence id for the in-flight agent reply turn. */
+  private activeAgentSequenceId = 0;
+  /** Active TTS fetch abort controllers — aborted on barge-in teardown. */
+  private readonly activeTtsAborts = new Set<AbortController>();
+  /** Eager LLM: last partial text + stability timer (Flux EagerEndOfTurn analogue). */
+  private eagerPartialText = "";
+  private eagerPartialTimer: ReturnType<typeof setTimeout> | null = null;
   /** Normalize a reply for repeat comparison: lowercase, strip terminal
    *  punctuation (incl. Devanagari danda), collapse whitespace. */
   private normalizeForRepeat = (s: string): string =>
@@ -923,6 +949,91 @@ export class OrchestrationPipeline {
     if (this._interruptionHint) return; // already captured (multiple simultaneous events)
     const played = this._currentTurnPlayedSentences.join(" ").trim();
     if (played) this._interruptionHint = played;
+  }
+
+  /**
+   * Bolna __cleanup_downstream_tasks equivalent — strict teardown order:
+   * 1) invalidate sequence (stale-audio gate)
+   * 2) abort in-flight LLM
+   * 3) abort all in-flight TTS fetches
+   * 4) abort eager/speculative LLM
+   * 5) capture interruption hint + telephony clear
+   */
+  private triggerBargeIn(
+    trigger: string,
+    partial?: string,
+    opts?: { speculative?: boolean },
+  ): void {
+    if (this.bargeInRequested) return;
+    const invalidatedSeq = this.interruptionMgr.invalidateCurrentTurn();
+    this.interruptionMgr.onUserSpeechStart();
+    for (const ac of this.activeTtsAborts) {
+      try { ac.abort(); } catch { /* noop */ }
+    }
+    this.activeTtsAborts.clear();
+    this.llm.cancelInFlight?.();
+    if (this._specLlmState) {
+      this._specLlmState.aborted = true;
+      this._specLlmState = null;
+    }
+    this.clearEagerPartialTimer();
+    this.bargeInRequested = true;
+    this._bargeInFiredCount++;
+    this._lastTurnWasBargedIn = true;
+    this.captureInterruptionHint();
+    const heard = this._currentTurnPlayedSentences.join(" ").trim();
+    if (opts?.speculative !== false && partial?.trim()) {
+      this._launchSpeculativeLlm(partial);
+    }
+    this.bargeInCallback?.();
+    this.logExec("Agent", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      warningFlags: ["barge_in"],
+      metadata: {
+        event: "Barge-in Detected",
+        trigger,
+        sequenceInvalidated: invalidatedSeq,
+        heardPreview: heard.slice(0, 80) || null,
+        transcriptPreview: partial?.slice(0, 80) ?? null,
+      },
+    });
+  }
+
+  private clearEagerPartialTimer(): void {
+    if (this.eagerPartialTimer) {
+      clearTimeout(this.eagerPartialTimer);
+      this.eagerPartialTimer = null;
+    }
+    this.eagerPartialText = "";
+  }
+
+  /** Schedule eager LLM when a partial stabilizes (Bolna Flux EagerEndOfTurn analogue). */
+  private scheduleEagerLlm(partial: string): void {
+    if (this.isPlaying || this.isSendingTtsAudio || this.closed || this.isProcessing) return;
+    if (this._specLlmState) return;
+    if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
+    this.eagerPartialText = partial;
+    if (this.eagerPartialTimer) clearTimeout(this.eagerPartialTimer);
+    this.eagerPartialTimer = setTimeout(() => {
+      this.eagerPartialTimer = null;
+      if (this.eagerPartialText !== partial) return;
+      if (!isEagerCommitReady(partial)) return;
+      if (this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+      this._launchSpeculativeLlm(partial);
+      logger.info(
+        { callId: this.config.callId, partial: partial.slice(0, 80) },
+        "Eager LLM prefill launched on stable partial",
+      );
+    }, EAGER_PARTIAL_STABLE_MS);
+  }
+
+  private canEmitAudio(sequenceId: number): boolean {
+    const status = this.interruptionMgr.getAudioSendStatus(
+      sequenceId,
+      this.conversationHistory.length,
+    );
+    return status === "SEND" && this.interruptionMgr.isValidSequence(sequenceId);
   }
 
   /**
@@ -1149,6 +1260,10 @@ export class OrchestrationPipeline {
       if (combinedFrames > 0) this.bargeInMinFrames = combinedFrames;
       if (sp.backOffSeconds >= 0) this.bargeInEchoGraceMs = Math.round(sp.backOffSeconds * 1000);
     }
+    this.interruptionMgr = new InterruptionManager({
+      incrementalDelayMs: config.agentConfig.incrementalDelay ?? 900,
+      wordsForInterruption: config.agentConfig.wordsForInterruption ?? 2,
+    });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
     // otherwise there is nothing to fill in and we must NOT call the gender service.
     this.genderSalutationInPrompt =
@@ -1196,8 +1311,11 @@ export class OrchestrationPipeline {
       : this.agent.sttConfig;
 
     const providerExtraConfig = keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null;
-    const sttExtraConfig = (this.agent.asrProvider === "sarvam" && this.agent.sarvamSttMode)
-      ? JSON.stringify({ ...(providerExtraConfig ? JSON.parse(providerExtraConfig) : {}), mode: this.agent.sarvamSttMode })
+    const sttExtraConfig = this.agent.asrProvider === "sarvam"
+      ? JSON.stringify({
+          ...(providerExtraConfig ? JSON.parse(providerExtraConfig) : {}),
+          mode: resolveSarvamSttMode(sttCfg.language, this.agent.sarvamSttMode),
+        })
       : providerExtraConfig;
     this.stt = createSTTAdapter(
       this.agent.asrProvider, sttKey, this.agent.asrModel,
@@ -1423,10 +1541,11 @@ export class OrchestrationPipeline {
           // Non-empty interim → drive the force-finalize timer, but ONLY while we
           // are actually listening (not during agent playback, where partials are
           // barge-in candidates handled separately). Don't process yet.
-          if (!isFinal) {
+            if (!isFinal) {
             if (!this.isPlaying && text.trim()) {
               this.safetyNet.onPartial(text);
               this.resetHangupTimer();
+              this.scheduleEagerLlm(text);
             }
             // P0-C: Semantic barge-in on interims — detect caller interruption
             // immediately during playback, before the STT provider finalizes.
@@ -1439,23 +1558,7 @@ export class OrchestrationPipeline {
               text.trim()
             ) {
               if (isSemanticInterrupt(text)) {
-                this.bargeInRequested = true;
-                this.llm.cancelInFlight?.();
-                this._bargeInFiredCount++;
-                this._lastTurnWasBargedIn = true;
-                this.captureInterruptionHint();
-                this._launchSpeculativeLlm(text);
-                this.bargeInCallback?.();
-                this.logExec("Agent", "system", {
-                  status: "info",
-                  turnNumber: this._activeTurnIndex,
-                  warningFlags: ["barge_in"],
-                  metadata: {
-                    event: "Barge-in Detected",
-                    trigger: "semantic_interim",
-                    transcriptPreview: text.slice(0, 80),
-                  },
-                });
+                this.triggerBargeIn("semantic_interim", text);
                 logger.info(
                   { callId: this.config.callId, text },
                   "Semantic barge-in triggered (streaming STT interim)",
@@ -1609,17 +1712,7 @@ export class OrchestrationPipeline {
       // BOTH the word-count gate AND the echo grace: our own audio never utters
       // them, so they are always a genuine caller interruption.
       if (isSemanticInterrupt(transcript)) {
-        this.bargeInRequested = true;
-        this.llm.cancelInFlight?.();
-        this._bargeInFiredCount++;
-        this._lastTurnWasBargedIn = true;
-        this.captureInterruptionHint();
-        this._launchSpeculativeLlm(transcript);
-        this.bargeInCallback?.();
-        this.logExec("Agent", "system", {
-          status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
-          metadata: { event: "Barge-in Detected", trigger: "semantic", transcriptPreview: transcript.slice(0, 80) },
-        });
+        this.triggerBargeIn("semantic", transcript);
         logger.info({ callId: this.config.callId, transcript }, "Semantic barge-in triggered (streaming STT)");
       } else if (
         Date.now() < this.bargeInSentenceStartAt + this.bargeInEchoGraceMs ||
@@ -1648,16 +1741,7 @@ export class OrchestrationPipeline {
           ? planNumWords
           : (this.agent.wordsForInterruption ?? 2);
         if (this.streamingBargeInWordCount >= threshold) {
-          this.bargeInRequested = true;
-          this.llm.cancelInFlight?.();
-          this._bargeInFiredCount++;
-          this._lastTurnWasBargedIn = true;
-          this.captureInterruptionHint();
-          this.bargeInCallback?.();
-          this.logExec("Agent", "system", {
-            status: "info", turnNumber: this._activeTurnIndex, warningFlags: ["barge_in"],
-            metadata: { event: "Barge-in Detected", trigger: "word_count", words: this.streamingBargeInWordCount, threshold },
-          });
+          this.triggerBargeIn("word_count", transcript, { speculative: false });
           logger.info(
             { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
             "Barge-in detected (streaming STT)",
@@ -1818,6 +1902,8 @@ export class OrchestrationPipeline {
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
     this.safetyNet.onFinal();
+    this.clearEagerPartialTimer();
+    this.interruptionMgr.onUserSpeechEnd();
     if (this.isProcessing) {
       this.pendingTranscriptQueue.push({ text: transcript, emittedAt: sttEmittedAt, closeReason });
       return;
@@ -2169,12 +2255,7 @@ export class OrchestrationPipeline {
         );
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
-        this.bargeInRequested = true;
-        this.llm.cancelInFlight?.();
-        this._bargeInFiredCount++;
-        this._lastTurnWasBargedIn = true;
-        this.captureInterruptionHint();
-        this.bargeInCallback?.();
+        this.triggerBargeIn(source, undefined, { speculative: false });
         this.audioBuffer = [];
         this.audioBufferNative16k = [];
         this.logExec("Agent", "system", {
@@ -3251,7 +3332,9 @@ export class OrchestrationPipeline {
    * mirroring the web-call playback lifecycle.
    */
   private playSentence(text: string, emotions?: string[]): Promise<void> {
-    return this.playJob(this.startSentenceSynthesis(text, this._activeTurnIndex, undefined, emotions));
+    const seqId = this.interruptionMgr.beginAgentTurn();
+    this.activeAgentSequenceId = seqId;
+    return this.playJob(this.startSentenceSynthesis(text, this._activeTurnIndex, seqId, undefined, emotions));
   }
 
   /**
@@ -3315,7 +3398,13 @@ export class OrchestrationPipeline {
    * "now" yet. Deferring them to drainSentenceJob keeps both correct because
    * drainSentenceJob only ever runs one job at a time, in play order.
    */
-  private startSentenceSynthesis(text: string, turnNumber: number, turnContextId?: string, emotions?: string[]): TtsSentenceJob {
+  private startSentenceSynthesis(
+    text: string,
+    turnNumber: number,
+    sequenceId: number,
+    turnContextId?: string,
+    emotions?: string[],
+  ): TtsSentenceJob {
     // ── TTS text normalization ────────────────────────────────────────────────
     // Strip the ₹ currency symbol before synthesis. TTS engines (especially
     // Sarvam) expand it to the formal literary word: "ரூபாய்" (Tamil) /
@@ -3344,6 +3433,7 @@ export class OrchestrationPipeline {
     const job: TtsSentenceJob = {
       text,
       turnNumber,
+      sequenceId,
       streaming: !!this.tts.synthesizeStream,
       pcmQueue: [],
       synthDone: false,
@@ -3397,6 +3487,7 @@ export class OrchestrationPipeline {
       // Without this, a hung Cartesia/ElevenLabs fetch blocks synthesis
       // indefinitely and the caller hears complete silence until Vobiz drops.
       const ttsAbort = new AbortController();
+      this.activeTtsAborts.add(ttsAbort);
       const ttsTimerId = setTimeout(() => {
         logger.warn({ callId: this.config.callId }, "TTS streaming timed out — aborting fetch");
         ttsAbort.abort();
@@ -3435,6 +3526,7 @@ export class OrchestrationPipeline {
         } finally {
           clearTimeout(ttsTimerId);
           clearInterval(closedWatcher);
+          this.activeTtsAborts.delete(ttsAbort);
           flush(); // flush any leftover accumulator bytes after aborts
           job.audioDurationMs = Math.round((_ttsAccumBytes / 2 / 16000) * 1000);
           if (!job.synthError) {
@@ -3484,7 +3576,7 @@ export class OrchestrationPipeline {
    * Returns the audio duration in milliseconds (from TTS bytes), or undefined.
    */
   private async drainSentenceJob(job: TtsSentenceJob): Promise<number | undefined> {
-    if (this.bargeInRequested) return;
+    if (this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) return;
 
     // Extend echo-grace to cover estimated sentence playback duration.
     // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
@@ -3549,10 +3641,11 @@ export class OrchestrationPipeline {
       // Without this, late-firing timers cause VoBiz's playout buffer to underrun
       // (gaps/glitches) because audio delivery slows below real-time.
       let nextTick = Date.now() + 20;
-      while (!this.closed && !this.bargeInRequested) {
+      while (!this.closed && !this.bargeInRequested && this.canEmitAudio(job.sequenceId)) {
         if (wireQueue.length === 0) processNextBlock();
         if (wireQueue.length > 0) {
           const chunk = wireQueue.shift()!;
+          if (!this.canEmitAudio(job.sequenceId)) break;
           this.markFirstAudioSent();
           if (this._tTurnFirstAudioOut === null) this._tTurnFirstAudioOut = performance.now();
           // Ambient mixing only applies to mulaw output; skip when sending raw PCM
@@ -3588,7 +3681,7 @@ export class OrchestrationPipeline {
     } else {
       await job.ready;
       if (job.synthError) throw job.synthError;
-      if (this.bargeInRequested) return;
+      if (this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) return;
       const ttsPcm16k = job.nonStreamAudio!;
       const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
@@ -3602,7 +3695,7 @@ export class OrchestrationPipeline {
           : ttsPcm8k;
         const PCM_CHUNK = CHUNK_SIZE_MULAW * 2; // 320 bytes = 20ms @ 8kHz 16-bit
         for (let i = 0; i < out8k.length; i += PCM_CHUNK) {
-          if (this.closed || this.bargeInRequested) break;
+          if (this.closed || this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) break;
           this.markFirstAudioSent();
           this.config.onAudioOut(out8k.slice(i, i + PCM_CHUNK));
           this.lastTtsFrameAt = Date.now(); // mark real audio out for the keepalive watchdog
@@ -3618,7 +3711,7 @@ export class OrchestrationPipeline {
       } else {
         const ttsMusaw = encodeMulaw(ttsPcm8k);
         for (let i = 0; i < ttsMusaw.length; i += CHUNK_SIZE_MULAW) {
-          if (this.closed || this.bargeInRequested) break;
+          if (this.closed || this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) break;
           this.markFirstAudioSent();
           const chunk = ttsMusaw.slice(i, i + CHUNK_SIZE_MULAW);
           const outChunk = this.ambientStream ? this.ambientStream.mixIntoMulaw(chunk) : chunk;
@@ -4376,9 +4469,10 @@ export class OrchestrationPipeline {
     // Fast word-overlap classifier — runs before the main LLM to intercept
     // sensitive or off-topic utterances and play a canned response instead.
     // P0-A: Garbled transcript recovery — catch noise/garbage before it reaches the LLM
-    const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript);
+    const sttLang = this.currentLang || this.agent.sttConfig.language;
+    const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
     if (isGarbled) {
-      const clarification = pickClarificationPhrase();
+      const clarification = pickClarificationPhrase(sttLang);
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
       this.conversationHistory.appendAssistant(clarification);
       this.config.onTranscript("agent", clarification);
@@ -4492,7 +4586,8 @@ export class OrchestrationPipeline {
     const sentenceQueue: TtsSentenceJob[] = [];
     let wakePlayer: (() => void) | null = null;
 
-    const enqueue = (text: string): void => {
+    const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
+      if (this.bargeInRequested) return;
       if (llmFirstTokenAt !== null && this._tTurnLlmFirstClause === null) {
         this._tTurnLlmFirstClause = performance.now();
       }
@@ -4506,7 +4601,7 @@ export class OrchestrationPipeline {
           "Emotion tag forwarded to TTS",
         );
       }
-      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, turnContextId, emotions));
+      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, sequenceId, turnContextId, emotions));
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
@@ -4743,7 +4838,7 @@ export class OrchestrationPipeline {
               },
               "Backchannel filler selected (language-aware)",
             );
-            enqueue(phrase);
+            enqueue(phrase, FILLER_SEQUENCE_ID);
             backchanneledThisTurn = true;
           } else {
             logger.info(
@@ -5153,7 +5248,7 @@ export class OrchestrationPipeline {
             },
             "Dead-air filler enqueued (language-aware, LLM > 800 ms)",
           );
-          enqueue(phrase);
+          enqueue(phrase, FILLER_SEQUENCE_ID);
           this.lastFillerPhrase = phrase;
           this.fillerPlayedCount++;
           this._fillerPlayedThisTurn = true;
@@ -5211,6 +5306,7 @@ export class OrchestrationPipeline {
     });
 
     // ── Speculative LLM prefill — consume or abort ───────────────────────────
+    this.activeAgentSequenceId = this.interruptionMgr.beginAgentTurn();
     // If _launchSpeculativeLlm() fired at barge-in time and the final transcript
     // is close enough to the partial, replay the already-buffered tokens through
     // the normal onToken pipeline via a mock adapter.  On a miss, abort the
@@ -5303,6 +5399,7 @@ export class OrchestrationPipeline {
         historyForLlm,
         systemPromptForTurn,
         (token) => {
+          if (this.bargeInRequested) return;
           if (!llmFirstTokenAt) {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
@@ -5457,6 +5554,7 @@ export class OrchestrationPipeline {
             historyForLlm,
             systemPromptForTurn,
             (token) => {
+              if (this.bargeInRequested) return;
               if (!llmFirstTokenAt) {
                 llmFirstTokenAt = Date.now();
                 this._tTurnLlmFirstToken = performance.now();
@@ -5635,7 +5733,7 @@ export class OrchestrationPipeline {
           },
           "Tool filler enqueued (language-aware)",
         );
-        enqueue(filler);
+        enqueue(filler, FILLER_SEQUENCE_ID);
       } else if (!filler) {
         logger.info(
           { callId: this.config.callId, fillerType: "tool", language: langPrefix },
@@ -5660,6 +5758,7 @@ export class OrchestrationPipeline {
     // Computed BEFORE the final flush so the spoken tail and the stored history
     // are derived from the exact same fully-cleaned text.
     const cleanResponse = stripJsonMessageWrapper(stripToolArtifacts(stripBracketedInstructions(stripMarkupTags(stripFunctionTags(stripReasoningBlocks(llmResponse))))).trim());
+    const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
 
     // Final flush: the LLM token stream occasionally ends a few words early while
     // llmResponse (set by the onComplete callback) holds the complete text. Re-run
@@ -5717,14 +5816,19 @@ export class OrchestrationPipeline {
       "LLM complete"
     );
 
-    // Keep stored history in sync with what was actually SPOKEN: if the one-step
-    // guard truncated this turn, store only the spoken portion so the agent
-    // resumes from the dropped step next turn instead of believing it covered it.
-    const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
-    this.conversationHistory.appendAssistant(spokenResponse);
-    this.trackRepeat(spokenResponse);
-    this.config.onTranscript("agent", spokenResponse);
-    this.config.onConversationUpdate?.(this.conversationHistory.messages);
+    await playPromise;
+
+    // Bolna parity: store only what the caller actually heard (defer until playback ends).
+    const heardOnly = this._currentTurnPlayedSentences.join(" ").trim();
+    const spokenResponse = this.bargeInRequested
+      ? heardOnly
+      : baseSpokenResponse;
+    if (spokenResponse) {
+      this.conversationHistory.appendAssistant(spokenResponse);
+      this.trackRepeat(spokenResponse);
+      this.config.onTranscript("agent", spokenResponse);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+    }
 
     // ── Bolna-parity: per-turn speak metrics ──────────────────────────────
     this._agentSpeakCharsThisTurn = spokenResponse.length;
@@ -5786,8 +5890,6 @@ export class OrchestrationPipeline {
         }
       }
     }
-
-    await playPromise;
 
     // ── End-call phrase detection (agent-side) ──
     // The agent finished speaking this turn; if it naturally used a configured
@@ -5915,6 +6017,8 @@ export class OrchestrationPipeline {
 
       this.safetyNet.onFinal();          // real (batch) final — clear safety timers
       this._turnCloseReason = "stt_final";
+      this.clearEagerPartialTimer();
+      this.interruptionMgr.onUserSpeechEnd();
       await this.processTurn(transcript, sttLatencyMs);
       processed = true;
 
@@ -6198,7 +6302,8 @@ export class OrchestrationPipeline {
     const sentenceQueue: TtsSentenceJob[] = [];
     let wakePlayer: (() => void) | null = null;
 
-    const enqueue = (text: string): void => {
+    const enqueue = (text: string, sequenceId: number = this.activeAgentSequenceId): void => {
+      if (this.bargeInRequested) return;
       // Extract any leading <emotion value="…"/> tag so the clean sentence goes
       // to TTS while the emotion array is forwarded to Cartesia's voice controls.
       const { emotion, text: cleanText } = extractEmotionTag(text);
@@ -6209,7 +6314,7 @@ export class OrchestrationPipeline {
           "Emotion tag forwarded to TTS",
         );
       }
-      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, ctTurnContextId, emotions));
+      sentenceQueue.push(this.startSentenceSynthesis(cleanText, this._activeTurnIndex, sequenceId, ctTurnContextId, emotions));
       if (wakePlayer) { const w = wakePlayer; wakePlayer = null; w(); }
     };
 
@@ -6246,6 +6351,8 @@ export class OrchestrationPipeline {
     };
 
     const playPromise = playTask();
+
+    this.activeAgentSequenceId = this.interruptionMgr.beginAgentTurn();
 
     // Build a system prompt with {caller_salutation} substituted, same as processTurn.
     const _ctDetectedGender = this.genderDetector?.gender ?? null;
@@ -6300,6 +6407,7 @@ export class OrchestrationPipeline {
         this.conversationHistory.messages,
         toolSystemPrompt,
         (token) => {
+          if (this.bargeInRequested) return;
           llmResponse += token;
           const afterThink = filterThinkToken(token);
           if (!afterThink) return;
@@ -6494,20 +6602,24 @@ export class OrchestrationPipeline {
     }
 
     if (cleanResponse) {
-      const spokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
-      this.conversationHistory.appendAssistant(spokenResponse);
-      this.trackRepeat(spokenResponse);
-      this.config.onTranscript("agent", spokenResponse);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      const baseSpokenResponse = stepGuard.truncated() ? truncateToSingleStep(cleanResponse).text : cleanResponse;
+      const heardOnly = this._currentTurnPlayedSentences.join(" ").trim();
+      const spokenResponse = this.bargeInRequested ? heardOnly : baseSpokenResponse;
+      if (spokenResponse) {
+        this.conversationHistory.appendAssistant(spokenResponse);
+        this.trackRepeat(spokenResponse);
+        this.config.onTranscript("agent", spokenResponse);
+        this.config.onConversationUpdate?.(this.conversationHistory.messages);
 
-      // ── End-call phrase detection (agent-side) ──
-      // Same behavior as the normal turn: if the agent naturally used a
-      // configured End-Call Phrase in its post-tool-result response, hang up now
-      // that playback + tail drain (await playPromise, above) have completed.
-      if (this.agentSaidEndCallPhrase(spokenResponse)) {
-        logger.info({ callId: this.config.callId, response: spokenResponse.slice(0, 80) }, "Agent used end-call phrase after tool result — hanging up after playback");
-        this.config.onCallEnd();
-        return;
+        // ── End-call phrase detection (agent-side) ──
+        // Same behavior as the normal turn: if the agent naturally used a
+        // configured End-Call Phrase in its post-tool-result response, hang up now
+        // that playback + tail drain (await playPromise, above) have completed.
+        if (this.agentSaidEndCallPhrase(spokenResponse)) {
+          logger.info({ callId: this.config.callId, response: spokenResponse.slice(0, 80) }, "Agent used end-call phrase after tool result — hanging up after playback");
+          this.config.onCallEnd();
+          return;
+        }
       }
     }
 

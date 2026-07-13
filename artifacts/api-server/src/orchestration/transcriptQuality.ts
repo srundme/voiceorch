@@ -6,6 +6,11 @@
  *   C) Semantic barge-in keyword detection → instant TTS interruption
  */
 
+export interface TranscriptQualityOptions {
+  /** BCP-47 language the STT stream was configured for (e.g. en-IN, ta-IN). */
+  expectedLang?: string | null;
+}
+
 // ── P0-A: Garbled transcript detection ──────────────────────────────────────
 
 /**
@@ -18,7 +23,48 @@
  * is nearly always a truncation signal, not an ambiguous one.
  */
 const TRUNCATION_DANGLER_RE =
-  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|yet|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan)\s*[,.]?\s*$/i;
+  /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|yet|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.]?\s*$/i;
+
+/** Known Sarvam silence/noise hallucinations — too short to be a real turn. */
+const PHANTOM_UTTERANCE_RE =
+  /^(out of|thank you|thanks|hello|hi there|are you there|can you hear me)\.?$/i;
+
+function countScriptLetters(text: string): { latin: number; devanagari: number; tamil: number; telugu: number; other: number } {
+  const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, other: 0 };
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if ((cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)) counts.latin++;
+    else if (cp >= 0x0900 && cp <= 0x097f) counts.devanagari++;
+    else if (cp >= 0x0b80 && cp <= 0x0bff) counts.tamil++;
+    else if (cp >= 0x0c00 && cp <= 0x0c7f) counts.telugu++;
+    else if (/\p{L}/u.test(ch)) counts.other++;
+  }
+  return counts;
+}
+
+/**
+ * Flags transcripts whose Unicode script disagrees with the configured STT language.
+ * Common Sarvam failure: en-IN + codemix → Gujarati/Tamil script for English speech.
+ */
+function checkScriptMismatch(text: string, expectedLang?: string | null): { isGarbled: boolean; reason: string } {
+  if (!expectedLang) return { isGarbled: false, reason: "" };
+  const bare = expectedLang.split("-")[0]?.toLowerCase() ?? "";
+  const c = countScriptLetters(text);
+  const indic = c.devanagari + c.tamil + c.telugu + c.other;
+  const total = c.latin + indic;
+  if (total < 4) return { isGarbled: false, reason: "" };
+
+  if (bare === "en" && indic / total >= 0.65) {
+    return { isGarbled: true, reason: "script-mismatch-en" };
+  }
+  if (bare === "ta" && c.tamil / total < 0.25 && c.devanagari / total >= 0.5) {
+    return { isGarbled: true, reason: "script-mismatch-ta" };
+  }
+  if (bare === "hi" && c.devanagari / total < 0.25 && c.tamil / total >= 0.5) {
+    return { isGarbled: true, reason: "script-mismatch-hi" };
+  }
+  return { isGarbled: false, reason: "" };
+}
 
 /** Max word count to consider for truncation-dangling check. */
 const MAX_TRUNCATION_WORDS = 6;
@@ -30,11 +76,22 @@ const MAX_TRUNCATION_WORDS = 6;
  * Does NOT cover every bad case — just the most common ones that would
  * cause the LLM to produce a confused/hallucinated reply.
  */
-export function checkTranscriptQuality(text: string): { isGarbled: boolean; reason: string } {
+export function checkTranscriptQuality(
+  text: string,
+  opts?: TranscriptQualityOptions,
+): { isGarbled: boolean; reason: string } {
   const t = text.trim();
 
   // Empty after trim — caller might have been silent/muted
   if (t.length < 2) return { isGarbled: true, reason: "too-short" };
+
+  // Sarvam silence hallucinations (e.g. "Out of" during carrier noise)
+  if (t.length <= 24 && PHANTOM_UTTERANCE_RE.test(t)) {
+    return { isGarbled: true, reason: "phantom-utterance" };
+  }
+
+  const scriptMismatch = checkScriptMismatch(t, opts?.expectedLang);
+  if (scriptMismatch.isGarbled) return scriptMismatch;
 
   // Only punctuation / special chars — no actual linguistic content
   // Use \p{L} (Unicode letter) + \p{N} (Unicode digit) so Indic scripts
@@ -81,11 +138,57 @@ const CLARIFICATION_PHRASES = [
   "I'm sorry — could you say that again, please?",
 ];
 
+const CLARIFICATION_BY_LANG: Record<string, string[]> = {
+  "ta-IN": [
+    "மன்னிக்கவும், சரியாக கேட்கவில்லை — மீண்டும் சொல்ல முடியுமா?",
+    "ஒரு நிமிஷம், தெளிவாக கேட்கவில்லை — தயவுசெய்து மீண்டும் சொல்லுங்கள்.",
+    "மன்னிக்கவும், கொஞ்சம் தெளிவாக மீண்டும் சொல்ல முடியுமா?",
+  ],
+  "hi-IN": [
+    "माफ़ कीजिए, मैं ठीक से सुन नहीं पाया — क्या आप दोबारा बोल सकते हैं?",
+    "क्षमा करें, आवाज़ साफ़ नहीं आई — कृपया फिर से बोलिए।",
+    "माफ़ कीजिए, एक बार और बोलिएगा?",
+  ],
+  "te-IN": [
+    "క్షమించండి, స్పష్టంగా వినలేదు — మళ్ళీ చెప్పగలరా?",
+    "సారీ, మీ మాట సరిగ్గా వినపడలేదు — దయచేసి మళ్ళీ చెప్పండి.",
+  ],
+  "kn-IN": [
+    "ಕ್ಷಮಿಸಿ, ಸ್ಪಷ್ಟವಾಗಿ ಕೇಳಿಸಲಿಲ್ಲ — ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಹೇಳಬಹುದೇ?",
+  ],
+  "ml-IN": [
+    "ക്ഷമിക്കണം, വ്യക്തമായി കേട്ടില്ല — ദയവായി വീണ്ടും പറയാമോ?",
+  ],
+  "mr-IN": [
+    "माफ करा, मला नीट ऐकू आले नाही — कृपया पुन्हा सांगाल का?",
+  ],
+  "bn-IN": [
+    "দুঃখিত, ঠিকমতো শুনতে পাইনি — আবার বলবেন?",
+  ],
+  "gu-IN": [
+    "માફ કરશો, સ્પષ્ટ સાંભળાયું નહીં — ફરી કહેશો?",
+  ],
+};
+
+function clarificationLangKey(lang?: string | null): string {
+  if (!lang) return "en-IN";
+  const t = lang.trim();
+  if (CLARIFICATION_BY_LANG[t]) return t;
+  const bare = t.split("-")[0]?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    ta: "ta-IN", hi: "hi-IN", te: "te-IN", kn: "kn-IN", ml: "ml-IN",
+    mr: "mr-IN", bn: "bn-IN", gu: "gu-IN",
+  };
+  return map[bare] ?? "en-IN";
+}
+
 let _clarificationIdx = 0;
 
-/** Returns a rotating clarification phrase (non-random so it's predictable in tests). */
-export function pickClarificationPhrase(): string {
-  const phrase = CLARIFICATION_PHRASES[_clarificationIdx % CLARIFICATION_PHRASES.length]!;
+/** Returns a rotating clarification phrase in the caller's language when known. */
+export function pickClarificationPhrase(lang?: string | null): string {
+  const key = clarificationLangKey(lang);
+  const pool = CLARIFICATION_BY_LANG[key] ?? CLARIFICATION_PHRASES;
+  const phrase = pool[_clarificationIdx % pool.length]!;
   _clarificationIdx++;
   return phrase;
 }

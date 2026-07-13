@@ -381,7 +381,7 @@ export interface AgentConfig {
   llmMaxTokens: number | null;
   /** Min chars before a comma-clause triggers an early TTS dispatch (default 15). */
   ttsMinSentenceChars: number;
-  /** Per-agent Sarvam STT transcription mode: codemix | verbatim | transcribe. null = provider default. */
+  /** Per-agent Sarvam STT mode. null = auto (en-IN → transcribe, Indic → codemix). */
   sarvamSttMode: string | null;
   /**
    * When true, skip per-turn pgvector retrieval entirely — the KB is already baked into

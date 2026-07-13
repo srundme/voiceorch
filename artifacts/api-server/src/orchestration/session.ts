@@ -8,6 +8,7 @@ import { KRUTRIM_AUTO_SUMMARY_TITLE } from "../services/kb-source-summary.js";
 import { decryptKey } from "../lib/crypto.js";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { OrchestrationPipeline } from "./pipeline.js";
+import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
 import { withDbRetry } from "./db-retry.js";
 import { CONVERSATION_DISCIPLINE_BLOCK } from "./conversationDiscipline.js";
 import { buildLeadContextBlock, resolvePromptVariables } from "./prompt-vars.js";
@@ -531,7 +532,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 300,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 15,
-    sarvamSttMode: (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
+    sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
+      ? resolveSarvamSttMode(
+          agent.asrLanguage || agent.language || "en-IN",
+          (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
+        )
+      : ((agentCfg["sarvamSttMode"] as string | undefined) ?? null),
     kbBakedOnly: (agentCfg["kbBakedOnly"] as boolean | undefined) ?? false,
   };
   // Propagate endpointing silence into STTConfig so Azure adapter picks it up
@@ -672,6 +678,12 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
           { agentId: params.agentId, callerPhone, langPref: langPrefRaw, from: prevSttLang, to: mappedSttLang },
           "STT language overridden from caller memory language_pref",
         );
+        if ((agent.asrProvider ?? "").toLowerCase() === "sarvam") {
+          agentConfig.sarvamSttMode = resolveSarvamSttMode(
+            mappedSttLang,
+            (agentCfg["sarvamSttMode"] as string | undefined) ?? null,
+          );
+        }
       }
     }
 
