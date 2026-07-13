@@ -1683,21 +1683,6 @@ export default function AgentEdit() {
                                 {agentCalendar && (agentEventTypes ?? []).length === 0 && type !== "native_list_bookings" && ["native_booking", "native_check_availability"].includes(type) && (
                                   <p className="text-[10px] text-amber-400/80">No event types found for this calendar. Create one in Scheduling.</p>
                                 )}
-                                <div className="space-y-1">
-                                  <label className="text-[10px] text-muted-foreground block">Timezone (optional)</label>
-                                  <Select
-                                    value={toolTimezone || "__none__"}
-                                    onValueChange={(v) => form.setValue(`tools.${idx}.timezone` as any, v === "__none__" ? undefined : v)}
-                                  >
-                                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Use caller timezone" /></SelectTrigger>
-                                    <SelectContent className="max-h-[280px] overflow-y-auto">
-                                      <SelectItem value="__none__" className="text-xs">Use caller timezone</SelectItem>
-                                      {AGENT_TIMEZONES.map((tz) => (
-                                        <SelectItem key={tz.value} value={tz.value} className="text-xs">{tz.label}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
                               </div>
                             </div>
                           );

@@ -1,0 +1,179 @@
+You are a Senior Frontend Engineer and Product Designer.
+
+Implement a premium sticky navigation experience for the Agent Details page.
+
+IMPORTANT
+
+- UI/UX improvements ONLY.
+- Do NOT modify backend logic.
+- Do NOT modify APIs.
+- Do NOT modify routing.
+- Do NOT redesign the page.
+- Preserve all existing functionality.
+- Do NOT change any existing components except the scrolling behavior.
+
+==================================================
+GOAL
+==================================================
+
+The Agent Details page should feel like a modern enterprise SaaS product.
+
+The user should always know which section they are editing while scrolling.
+
+==================================================
+SCROLL BEHAVIOR
+==================================================
+
+At the top of the page:
+
+-------------------------------------------------
+
+Header
+
+Estimated Cost Card
+
+Navigation Tabs
+
+Overview Content
+
+-------------------------------------------------
+
+When the user scrolls down:
+
+• The Header remains visible.
+• The Estimated Cost card scrolls away naturally.
+• The Navigation Tabs become sticky and remain visible below the header.
+• The content scrolls underneath the sticky tabs.
+
+When the user scrolls back to the top:
+
+• The Estimated Cost card appears again.
+• The Navigation Tabs return to their original position.
+
+==================================================
+STICKY NAVIGATION
+==================================================
+
+Only the following tabs become sticky:
+
+Overview
+
+Prompt
+
+Voice
+
+Tools
+
+Analysis
+
+Voicemail
+
+Advanced
+
+Versions
+
+Do NOT duplicate the tabs.
+
+Do NOT create a second navigation.
+
+Use the existing navigation.
+
+==================================================
+ACTIVE SECTION HIGHLIGHT
+==================================================
+
+As the user scrolls through the page:
+
+Conversation
+↓
+
+Prompt tab highlights.
+
+Knowledge
+↓
+
+Knowledge-related tab highlights.
+
+Advanced
+↓
+
+Advanced tab highlights.
+
+The active tab should update automatically based on scroll position.
+
+Do not require clicking.
+
+==================================================
+SMOOTH SCROLL
+==================================================
+
+Clicking a tab should smoothly scroll to the corresponding section.
+
+Use smooth scrolling.
+
+Do not instantly jump.
+
+==================================================
+STICKY BAR DESIGN
+==================================================
+
+When sticky:
+
+• Slight backdrop blur
+• Dark background (same theme)
+• Thin bottom border
+• Small shadow
+• No gradients
+• No glow
+
+It should look subtle and premium.
+
+==================================================
+ANIMATION
+==================================================
+
+Sticky transition:
+
+150–200ms
+
+No flicker.
+
+No layout jump.
+
+No duplicated content.
+
+==================================================
+DO NOT CHANGE
+==================================================
+
+Do not redesign:
+
+• Header
+• Estimated Cost Card
+• Configuration Cards
+• Conversation
+• Prompt
+• Knowledge
+• Buttons
+
+Only implement the sticky navigation behavior.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+✓ Header remains visible.
+
+✓ Estimated Cost scrolls away.
+
+✓ Navigation becomes sticky.
+
+✓ Active tab updates automatically.
+
+✓ Clicking tabs smoothly scrolls.
+
+✓ No duplicated navigation.
+
+✓ No layout shift.
+
+✓ Premium enterprise scrolling experience similar to GitHub, Linear, Stripe and Vercel.

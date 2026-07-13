@@ -1823,22 +1823,6 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                         </div>
                       );
                     })()}
-                    {/* Timezone */}
-                    {(() => {
-                      const idx = nativeToolIndex(type);
-                      const toolTimezone = watchedTools[idx]?.timezone;
-                      return (
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-muted-foreground block">Timezone (optional)</label>
-                          <SmallSelect
-                            value={toolTimezone || "__none__"}
-                            onChange={(v) => form.setValue(`tools.${idx}.timezone` as any, v === "__none__" ? undefined : v)}
-                            options={[{ value: "__none__", label: "Use caller timezone" }, ...AGENT_TIMEZONES]}
-                            placeholder="Use caller timezone"
-                          />
-                        </div>
-                      );
-                    })()}
                     {/* Action buttons */}
                     <div className="flex items-center gap-2">
                       <Button

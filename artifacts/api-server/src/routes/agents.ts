@@ -1,7 +1,7 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
 import { eq, and, count, desc, asc, isNull, inArray, max } from "drizzle-orm";
-import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, type AgentConfig } from "@workspace/db";
+import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, type AgentConfig } from "@workspace/db";
 import {
   CreateAgentBody,
   UpdateAgentBody,
@@ -224,7 +224,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [agent] = await db
+  let [agent] = await db
     .insert(agentsTable)
     .values(insertData as typeof agentsTable.$inferInsert)
     .returning();
@@ -233,6 +233,34 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     await setAgentKnowledgeSources(agent.id, createSourceIds);
     createdSourceIds = Array.from(new Set(createSourceIds.filter((n) => Number.isInteger(n))));
   }
+
+  // Auto-create a workspace calendar for the new agent and link it via calendarCapability.
+  // Non-fatal: a calendar creation failure never blocks the agent from being created.
+  try {
+    const calTz = (insertAgentConfig["timezone"] as string | undefined) || "Asia/Kolkata";
+    const [newCal] = await db
+      .insert(schedulingCalendarsTable)
+      .values({ userId: clerkId, name: `${agent.name} Calendar`, timezone: calTz, isActive: true })
+      .returning();
+    // Seed Mon-Fri 09:00-17:00 availability
+    const weekdays = [1, 2, 3, 4, 5];
+    await db.insert(availabilitySchedulesTable).values(
+      weekdays.map((d) => ({ calendarId: newCal.id, dayOfWeek: d, startTime: "09:00", endTime: "17:00", isActive: true }))
+    );
+    // Link calendar to agent via calendarCapability
+    const existingConfig = (agent.agentConfig as Record<string, unknown> | null) ?? {};
+    const updatedConfig = { ...existingConfig, calendarCapability: { enabled: true, defaultCalendarId: newCal.id } };
+    const [updatedAgent] = await db
+      .update(agentsTable)
+      .set({ agentConfig: updatedConfig })
+      .where(eq(agentsTable.id, agent.id))
+      .returning();
+    agent = updatedAgent;
+    req.log.info({ agentId: agent.id, calendarId: newCal.id }, "Auto-created workspace calendar for new agent");
+  } catch (err) {
+    req.log.warn({ err, agentId: agent.id }, "Auto-calendar creation failed (non-fatal)");
+  }
+
   await logActivity({ userId: clerkId, eventType: "agent.created", resourceType: "agent", resourceId: String(agent.id), description: `Agent "${agent.name}" created` });
   res.status(201).json(GetAgentResponse.parse(prepareAgentForResponse(agent, createdSourceIds)));
 });
