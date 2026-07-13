@@ -329,6 +329,14 @@ router.patch("/agents/:id", requireAuth, async (req, res): Promise<void> => {
         ...(existing.agentConfig as AgentConfig ?? {}),
         ...(updateData.agentConfig as AgentConfig),
       };
+      // Deep-merge calendarCapability so the Scheduling tab picker
+      // (which sends a partial shape) doesn't clobber fields set by
+      // auto-creation: enabled, accessibleCalendarIds, permissions.
+      const incomingCal = (updateData.agentConfig as AgentConfig)?.calendarCapability;
+      const existingCal = (existing.agentConfig as AgentConfig)?.calendarCapability;
+      if (incomingCal != null && existingCal != null) {
+        merged.calendarCapability = { ...existingCal, ...incomingCal };
+      }
       // IRDAI advisory prompt check (informational only — never blocks the save).
       // When IRDAI is enabled, statically analyze the resulting system prompt
       // against the IRDAI disclosure checklist and persist the result. When
