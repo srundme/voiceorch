@@ -418,7 +418,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
   const ttsVoice              = form.watch("ttsVoice");
   const ttsModel              = form.watch("ttsModel");
   const language              = form.watch("language");
-  const langAutoDetect        = form.watch("languageAutoDetect") ?? false;
   const temperature           = form.watch("temperature") ?? 0.4;
   const llmOptions    = LLM_MODELS[llmProvider]  ?? [];
   const ttsModelOpts  = TTS_MODELS[ttsProvider]  ?? [];
