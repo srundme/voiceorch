@@ -742,7 +742,7 @@ export default function CallsList() {
                             )}
                             {((call as any).tokensSaved ?? 0) > 0 && (
                               <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1 rounded bg-amber-500/15 text-amber-400">
-                                ↓{((call as any).tokensSaved as number).toLocaleString()} tok saved
+                                {((call as any).tokensSaved as number).toLocaleString()} tok saved
                               </span>
                             )}
                           </div>

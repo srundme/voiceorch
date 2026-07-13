@@ -11,7 +11,7 @@ export const LLM_PROVIDERS = [
   { value: "sarvam",    label: "Sarvam" },
   { value: "together",  label: "Together AI (Qwen3.6 / MiniMax M3)" },
   { value: "openrouter", label: "OpenRouter (Qwen3.5 / Qwen3.6)" },
-  { value: "krutrim",    label: "Krutrim 🇮🇳 (Bangalore-hosted — lowest latency for India)" },
+  { value: "krutrim",    label: "Krutrim (India-hosted — lowest latency for India)" },
 ];
 
 export const TTS_PROVIDERS = [
@@ -36,8 +36,8 @@ export const ASR_MODELS: Record<string, { value: string; label: string }[]> = {
 
 export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
   openai:    [
-    { value: "gpt-4.1-nano",  label: "GPT-4.1 Nano ⚡ — ultra-fast, lowest cost" },
-    { value: "gpt-4.1-mini",  label: "GPT-4.1 Mini ⚡ — fast, low cost" },
+    { value: "gpt-4.1-nano",  label: "GPT-4.1 Nano — ultra-fast, lowest cost" },
+    { value: "gpt-4.1-mini",  label: "GPT-4.1 Mini — fast, low cost" },
     { value: "gpt-4.1",       label: "GPT-4.1 — flagship, best quality" },
     { value: "gpt-4o-mini",   label: "GPT-4o Mini" },
     { value: "gpt-4o",        label: "GPT-4o" },
@@ -59,7 +59,7 @@ export const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "qwen/qwen3.5-397b-a17b", label: "Qwen3.5 397B-A17B — ~535ms, ~$0.0083/min, best for agentic use" },
   ],
   krutrim: [
-    { value: "gpt-oss-20b",        label: "GPT-OSS 20B ⭐ — Krutrim proprietary, fast, tool-capable (recommended)" },
+    { value: "gpt-oss-20b",        label: "GPT-OSS 20B — Krutrim proprietary, fast, tool-capable (recommended)" },
     { value: "gpt-oss-120b",       label: "GPT-OSS 120B — Krutrim proprietary, highest quality, tool-capable" },
     { value: "gemma-4-E4B-it",     label: "Gemma 4 4B-A4B — ultra-fast MoE" },
     { value: "gemma-4-31b-it",     label: "Gemma 4 31B — balanced quality/speed" },

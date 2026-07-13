@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck } from "lucide-react";
+import { Wallet, Plus, RefreshCw, ArrowDownLeft, ArrowUpRight, Zap, CreditCard, ToggleLeft, ToggleRight, AlertCircle, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -187,7 +187,7 @@ export default function WalletPage() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-2">
-                  {wallet?.freeCreditsGranted && <span className="text-foreground mr-2">✓ $5 free credit applied</span>}
+                  {wallet?.freeCreditsGranted && <span className="text-foreground mr-2 inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />$5 free credit applied</span>}
                   Approx. {Math.floor((wallet?.balanceCents ?? 0) / 3)} minutes of orchestration remaining <span className="text-muted-foreground">(platform fee only — provider costs billed separately to your keys)</span>
                 </p>
               </div>

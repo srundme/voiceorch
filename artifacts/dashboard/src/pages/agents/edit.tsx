@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Save, Bot, Plus, Trash2, PhoneForwarded, PhoneCall, Webhook, ChevronDown, ChevronUp, BookOpen, Sparkles, List, Pencil, X, ToggleLeft, ToggleRight, Calendar as CalendarIcon, AlertTriangle } from "lucide-react";
 import {
   useGetAgent,
   useUpdateAgent,
@@ -987,17 +987,17 @@ export default function AgentEdit() {
                           </FormControl>
                           {wasCleared && (
                             <p className="text-xs text-amber-500 flex items-center gap-1">
-                              ⚠ A previously saved URL was cleared because it didn't start with https://. Please re-enter a valid URL.
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />A previously saved URL was cleared because it didn't start with https://. Please re-enter a valid URL.
                             </p>
                           )}
                           {isEmail && (
                             <p className="text-xs text-destructive flex items-center gap-1">
-                              ⚠ That looks like an email address, not a URL. Enter an <code>https://</code> endpoint.
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />That looks like an email address, not a URL. Enter an <code>https://</code> endpoint.
                             </p>
                           )}
                           {isHttp && !isEmail && (
                             <p className="text-xs text-amber-500 flex items-center gap-1">
-                              ⚠ HTTP URLs are not allowed — must be <code>https://</code>
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />HTTP URLs are not allowed — must be <code>https://</code>
                             </p>
                           )}
                           <FormDescription>Receives a JSON summary when each call ends. Must be HTTPS.</FormDescription>
@@ -1296,7 +1296,7 @@ export default function AgentEdit() {
                         <button key={v} type="button"
                           onClick={() => field.onChange(v)}
                           className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${field.value === v ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border hover:border-primary/50"}`}>
-                          {v === 50 ? "⚡ Ultra" : v === 100 ? "🚀 Fast" : v === 200 ? "Normal" : "Slow"} {v}ms
+                          {v === 50 ? "Ultra" : v === 100 ? "Fast" : v === 200 ? "Normal" : "Slow"} {v}ms
                         </button>
                       ))}
                     </div>

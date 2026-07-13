@@ -11,7 +11,7 @@ import {
   Building2, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Zap, UserCheck,
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
-  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket,
+  PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -114,7 +114,6 @@ const GREETING: ChatMsg = {
 
 /* ── landing template recommendations ──────────────────────────────────────── */
 interface VibeTemplate {
-  emoji: string;
   title: string;
   desc: string;
   tag: string;
@@ -122,56 +121,48 @@ interface VibeTemplate {
 }
 const VIBE_TEMPLATES: VibeTemplate[] = [
   {
-    emoji: "📞",
     title: "Insurance Sales",
     desc: "Follow up on leads, qualify intent, handle objections",
     tag: "Outbound · Hindi / English",
     message: "Build an outbound insurance sales agent in Hindi and English. Her name is Priya, she works for PolicyFirst. She follows up on enquiry leads, qualifies interest level, handles price and trust objections naturally, and books a callback for hot leads. She must ask: what plan they enquired about, their age, and if they already have any insurance.",
   },
   {
-    emoji: "🏥",
     title: "Clinic Appointments",
     desc: "Book, reschedule & cancel patient slots",
     tag: "Inbound · English",
     message: "Build an inbound appointment booking agent for a dental clinic called Smile Care. Her name is Riya. She helps patients book, reschedule, or cancel appointments — collecting their name, preferred date and time, and reason for the visit — then reads back a confirmation summary before ending the call.",
   },
   {
-    emoji: "🏠",
     title: "Real Estate Leads",
     desc: "Qualify buyers on budget, location & timeline",
     tag: "Outbound · English / Hindi",
     message: "Build an outbound real estate lead qualification agent in English and Hindi. His name is Arjun, he works for PropConnect. He calls leads who enquired about properties and qualifies them on budget, preferred location and configuration (2BHK/3BHK), and purchase timeline. He tags them as Hot Lead, Warm Lead, or Not Interested and books a site-visit callback for hot leads.",
   },
   {
-    emoji: "💼",
     title: "SaaS Support",
     desc: "Resolve account, billing & upgrade issues",
     tag: "Inbound · English",
     message: "Build an inbound customer support agent for a B2B SaaS product. Her name is Tara, she works for Snappy. She handles account issues, billing queries, and plan upgrade questions. She must always collect the caller's registered email first, then identify the issue type (account/billing/feature), and either resolve it on the call or escalate to the right team.",
   },
   {
-    emoji: "🍽️",
     title: "Restaurant Bookings",
     desc: "Take table reservations & answer menu queries",
     tag: "Inbound · English / Tamil",
     message: "Build an inbound restaurant reservation agent in English and Tamil for a restaurant called Spice Garden. Her name is Meera. She takes table bookings by collecting the guest's name, date, time, number of guests, and any dietary needs, then confirms the reservation. She can also answer basic questions about the menu and location.",
   },
   {
-    emoji: "📊",
     title: "Loan Pre-qualification",
     desc: "Check eligibility, collect income & EMI details",
     tag: "Outbound · Hindi",
     message: "Build an outbound Hindi loan eligibility agent for a fintech company called QuickCredit. His name is Rahul. He calls loan applicants to pre-qualify them by asking about monthly income, employment type (salaried/self-employed), existing EMIs, and rough credit history. He then tells them if they likely qualify and books a video call with a loan advisor for eligible leads.",
   },
   {
-    emoji: "🎓",
     title: "EdTech Enrolment",
     desc: "Convert trial users into paid course enrolments",
     tag: "Outbound · English / Hindi",
     message: "Build an outbound EdTech enrolment agent in English and Hindi. Her name is Shruti, she works for SkillPath. She calls free trial users who haven't converted yet, asks what they liked about the course, handles pricing objections (a 15% discount is available this week), and books a demo call with a counsellor for undecided leads.",
   },
   {
-    emoji: "🛒",
     title: "E-commerce Support",
     desc: "Handle order tracking, returns & refunds",
     tag: "Inbound · English",
@@ -1198,7 +1189,7 @@ export default function VibePage() {
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={handleKey}
-        placeholder={phase === "done" ? "Your agent is ready! ✓" : "Describe the AI voice agent you want to build…"}
+        placeholder={phase === "done" ? "Your agent is ready!" : "Describe the AI voice agent you want to build…"}
         disabled={phase === "done" || phase === "building"}
         rows={isLanding ? 4 : 3}
         className={cn(
@@ -1230,7 +1221,7 @@ export default function VibePage() {
           <button
             onClick={() => { setUrlInputOpen(false); setUrlInputValue(""); }}
             className="h-8 px-2 rounded-lg text-muted-foreground hover:bg-muted/60 text-xs transition-colors"
-          >✕</button>
+          ><X className="h-3.5 w-3.5" /></button>
         </div>
       )}
       <button
@@ -1540,7 +1531,7 @@ export default function VibePage() {
                 <>
                   {inputBlock(false)}
                   <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
-                    Enter to send · Shift+Enter for newline · 📎 to upload KB docs
+                    Enter to send · Shift+Enter for newline · <Paperclip className="h-3 w-3 inline align-middle" /> to upload KB docs
                   </p>
                 </>
               )}
@@ -1558,8 +1549,8 @@ export default function VibePage() {
                   <p className="font-semibold text-sm leading-none">Agent Preview</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {showTestCall                    ? "Live test in progress" :
-                     postBuildStep === "hype"        ? "Your agent is ready! 🎉" :
-                     postBuildStep === "rating"      ? "Launch your agent 🚀" :
+                     postBuildStep === "hype"        ? "Your agent is ready!" :
+                     postBuildStep === "rating"      ? "Launch your agent" :
                      !hasRightContent               ? "Waiting for your description…" :
                      phase === "building"            ? (statusMsg || "Configuring…") :
                      phase === "done"               ? "Ready to deploy" :
@@ -1718,7 +1709,7 @@ export default function VibePage() {
                             {isNonTerminal
                               ? <Loader2 className="h-3.5 w-3.5 text-amber-500 animate-spin shrink-0" />
                               : isFailed
-                              ? <span className="text-[10px] text-destructive font-medium shrink-0">✕</span>
+                              ? <X className="h-3.5 w-3.5 text-destructive shrink-0" />
                               : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
                           </div>
                         );
@@ -2481,9 +2472,9 @@ function HypePanel({ name, fields, selectedVoice, onTest, onSkip, navigate, agen
   const initial   = (name || "A").charAt(0).toUpperCase();
 
   const badges = [
-    direction && { label: direction === "inbound" ? "📞 Inbound" : "📤 Outbound" },
-    language  && { label: `🌐 ${language}` },
-    selectedVoice && { label: `🎙️ ${selectedVoice}` },
+    direction && { label: direction === "inbound" ? "Inbound" : "Outbound" },
+    language  && { label: language },
+    selectedVoice && { label: selectedVoice },
   ].filter(Boolean) as { label: string }[];
 
   return (

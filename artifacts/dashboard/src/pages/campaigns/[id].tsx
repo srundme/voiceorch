@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { getIrdaiBlockedError } from "@/lib/irdai-block";
 import {
   ArrowLeft, Copy, Check, Megaphone, Upload, FileText, Layers,
-  ChevronRight, Calendar, Trash2, Users, Clock, AlertCircle,
+  ChevronRight, ChevronDown, Calendar, Trash2, Users, Clock, AlertCircle,
   CheckCircle2, X, BarChart3, PhoneCall, ArrowRight, Hash,
   Activity, PlayCircle, PauseCircle, XCircle, Info, Settings,
   Phone, Globe, Building2, Zap, ListFilter, Plus,
@@ -240,7 +240,7 @@ function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaig
             </div>
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-medium text-muted-foreground">
-                Webhook Secret{conn.hasWebhookSecret && <span className="ml-1 text-emerald-400">✓ configured</span>}
+                Webhook Secret{conn.hasWebhookSecret && <span className="ml-1 text-emerald-400 inline-flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3 shrink-0" />configured</span>}
               </p>
               <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-muted-foreground"
                 disabled={regenSaving} onClick={() => void handleRegenSecret(conn)}>
@@ -266,14 +266,14 @@ function CrmIntegrationCard({ campaignId, triggerMode, webhookToken }: { campaig
                   className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
                   onClick={() => setShowGuide(g => !g)}
                 >
-                  {showGuide ? "▾" : "▸"} How to set this up in Zoho CRM
+                  {showGuide ? <ChevronDown className="h-3 w-3 inline" /> : <ChevronRight className="h-3 w-3 inline" />} How to set this up in Zoho CRM
                 </button>
                 {showGuide && (
                   <div className="mt-2 space-y-2 text-[11px] text-muted-foreground leading-relaxed">
                     <p className="font-semibold text-foreground/80">Zoho CRM → Workflow Rule setup</p>
                     <ol className="space-y-1.5 list-none">
                       {[
-                        <>In Zoho CRM, click the <strong className="text-foreground">⚙️ Setup</strong> icon (top-right) → <strong className="text-foreground">Automation → Workflow Rules</strong></>,
+                        <>In Zoho CRM, click the <strong className="text-foreground"><Settings className="h-3 w-3 inline mr-0.5" />Setup</strong> icon (top-right) → <strong className="text-foreground">Automation → Workflow Rules</strong></>,
                         <>Click <strong className="text-foreground">Create Rule</strong>. Module: <strong className="text-foreground">Leads</strong>. Give it a name like &quot;SnapServe Auto-Call&quot;</>,
                         <>Trigger: <strong className="text-foreground">A record action is performed</strong> → tick <strong className="text-foreground">Create</strong> (fires when a new lead is added)</>,
                         <>Under <strong className="text-foreground">Actions</strong>, click <strong className="text-foreground">+</strong> → choose <strong className="text-foreground">Webhook</strong> → Create new</>,

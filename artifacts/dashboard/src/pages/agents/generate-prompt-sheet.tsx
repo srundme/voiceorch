@@ -305,10 +305,12 @@ export function GeneratePromptSheet({
                     Call flow description <span className="text-red-400">*</span>
                   </Label>
                   <span className={cn(
-                    "text-[10px]",
+                    "text-[10px] inline-flex items-center gap-0.5",
                     form.callFlowDescription.trim().length >= 12 ? "text-muted-foreground" : "text-amber-400",
                   )}>
-                    {form.callFlowDescription.trim().length >= 12 ? "✓ enough detail" : "describe more to generate"}
+                    {form.callFlowDescription.trim().length >= 12
+                      ? <><CheckCircle2 className="h-3 w-3 shrink-0" />enough detail</>
+                      : "describe more to generate"}
                   </span>
                 </div>
                 <Textarea

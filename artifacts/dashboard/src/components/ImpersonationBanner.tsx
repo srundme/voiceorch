@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 
 interface ImpersonationData {
   sessionToken: string;
@@ -79,7 +80,7 @@ export function ImpersonationBanner() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: "1rem" }}>⚠</span>
+        <AlertTriangle style={{ width: "1rem", height: "1rem", flexShrink: 0 }} />
         <span>
           Admin Mode — Viewing as{" "}
           <strong>{imp.name || imp.email || "Unknown User"}</strong>

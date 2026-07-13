@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { CheckCircle2 } from "lucide-react";
 
 export default function PricingPage() {
   return (
@@ -65,7 +66,7 @@ export default function PricingPage() {
             <ul className="space-y-2">
               {plan.features.map(f => (
                 <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="text-emerald-400 shrink-0">✓</span>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                   {f}
                 </li>
               ))}

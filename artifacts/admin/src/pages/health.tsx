@@ -873,7 +873,7 @@ function FeatureRolloutTracker() {
     .flatMap((d) => {
       const msg = d.message;
       if (/^feat[(:]/i.test(msg)) return [msg.replace(/^feat[(:]\s*/i, "")];
-      if (/^fix[(:]/i.test(msg)) return [`🛠 Fix: ${msg.replace(/^fix[(:]\s*/i, "")}`];
+      if (/^fix[(:]/i.test(msg)) return [`Fix: ${msg.replace(/^fix[(:]\s*/i, "")}`];
       if (/^add[s]?\s+/i.test(msg)) return [msg];
       return [];
     })

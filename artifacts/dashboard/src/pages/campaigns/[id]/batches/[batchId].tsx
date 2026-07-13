@@ -23,7 +23,7 @@ import {
   TrendingUp, Bell, PhoneIncoming, Voicemail,
   Eye, Database, RefreshCw, DollarSign,
   User, Search, X, CheckCircle2, Clock, Pencil,
-  Info, ChevronDown, FileDown,
+  Info, ChevronDown, FileDown, Package, Lock, BarChart2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -409,17 +409,17 @@ function LeadsTab({ campaignId, batchId, maxAttempts, agentId }: { campaignId: n
               <p className="text-xs font-semibold text-foreground/80 mb-1.5">What is a Batch?</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px] text-muted-foreground/70 leading-relaxed">
                 <div>
-                  <span className="font-semibold text-foreground/60 block mb-0.5">📦 A batch = one upload</span>
+                  <span className="font-semibold text-foreground/60 flex items-center gap-1 mb-0.5"><Package className="h-3 w-3 shrink-0" />A batch = one upload</span>
                   Each time you add leads to a campaign, that group is called a batch.
                   One campaign can have many batches — "Week 1 list", "Re-engagement list", etc.
                 </div>
                 <div>
-                  <span className="font-semibold text-foreground/60 block mb-0.5">🔒 Fully isolated</span>
+                  <span className="font-semibold text-foreground/60 flex items-center gap-1 mb-0.5"><Lock className="h-3 w-3 shrink-0" />Fully isolated</span>
                   Each batch tracks its own progress, retries, and results independently.
                   Pausing or stopping one batch never affects another.
                 </div>
                 <div>
-                  <span className="font-semibold text-foreground/60 block mb-0.5">📊 This view = one batch</span>
+                  <span className="font-semibold text-foreground/60 flex items-center gap-1 mb-0.5"><BarChart2 className="h-3 w-3 shrink-0" />This view = one batch</span>
                   You're looking at a single batch workspace. Use the Attempts, Duration, and Cost
                   columns to see exactly what happened on each call.
                 </div>

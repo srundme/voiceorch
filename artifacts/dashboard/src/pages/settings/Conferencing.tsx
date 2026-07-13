@@ -244,7 +244,7 @@ export default function ConferencingPage({ embedded = false, returnPath = "confe
                 </div>
               ) : hasScopedAccount ? (
                 <div className="p-3 bg-muted border border-border rounded-lg text-xs text-foreground">
-                  <p className="font-medium">✓ Active — Google Meet links are generated for new bookings</p>
+                  <p className="font-medium flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />Active — Google Meet links are generated for new bookings</p>
                   <p className="mt-0.5 text-foreground">
                     Assign a specific account to each calendar from the{" "}
                     <a href={`${BASE}/app/scheduling/calendars`} className="underline underline-offset-2">Calendars</a>{" "}

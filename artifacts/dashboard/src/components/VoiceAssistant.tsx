@@ -97,7 +97,7 @@ function ProposalCard({
       <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: applied ? "#166534" : "#1e293b", background: applied ? "#064e1b" : "#1e293b" }}>
         <Wrench className="w-3.5 h-3.5 shrink-0" style={{ color: applied ? "#4ade80" : "#94a3b8" }} />
         <span className="text-xs font-medium" style={{ color: applied ? "#4ade80" : "#e2e8f0" }}>
-          {applied ? "Changes applied ✓" : `Update: ${proposal.agentName}`}
+          {applied ? <><CheckCircle2 className="h-3 w-3 inline mr-1" />Changes applied</> : `Update: ${proposal.agentName}`}
         </span>
       </div>
 

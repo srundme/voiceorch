@@ -16,7 +16,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { Users, TrendingUp, Phone, Clock, AlertTriangle, CheckCircle2, Search } from "lucide-react";
+import { Users, TrendingUp, Phone, Clock, AlertTriangle, CheckCircle2, Search, Key, PauseCircle } from "lucide-react";
 import { formatCentsToDollars } from "@/lib/api";
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -314,7 +314,7 @@ function DropoffTab() {
       label: "Cold Drop-off",
       desc: "Signed up, never opened Vibe Builder or created an agent",
       value: Number(d?.cold_dropoff ?? 0),
-      icon: "😶",
+      icon: <Users className="h-6 w-6" />,
       suggestion: "Send onboarding email — nudge them to try Vibe Builder",
       color: "border-l-red-400",
     },
@@ -322,7 +322,7 @@ function DropoffTab() {
       label: "Vibe Builder Abandoned",
       desc: "Started Vibe Builder but didn't finish creating an agent",
       value: Number(d?.vibe_abandoned ?? 0),
-      icon: "🚧",
+      icon: <AlertTriangle className="h-6 w-6" />,
       suggestion: "Simplify the Vibe Builder first message or add better templates",
       color: "border-l-orange-400",
     },
@@ -330,7 +330,7 @@ function DropoffTab() {
       label: "No Provider Keys",
       desc: "Created agent but never added any provider API keys",
       value: Number(d?.no_provider ?? 0),
-      icon: "🔑",
+      icon: <Key className="h-6 w-6" />,
       suggestion: "Show a 'Add your first provider' prompt right after agent creation",
       color: "border-l-yellow-400",
     },
@@ -338,7 +338,7 @@ function DropoffTab() {
       label: "No Telephony Set Up",
       desc: "Has agent + provider but no phone number / telephony configured",
       value: Number(d?.no_telephony ?? 0),
-      icon: "📵",
+      icon: <Phone className="h-6 w-6" />,
       suggestion: "Prompt them to configure Twilio/Plivo or buy a managed number",
       color: "border-l-violet-400",
     },
@@ -346,7 +346,7 @@ function DropoffTab() {
       label: "Configured but Never Called",
       desc: "Fully configured (agent + provider + telephony) but made 0 calls",
       value: Number(d?.configured_no_call ?? 0),
-      icon: "⏸️",
+      icon: <PauseCircle className="h-6 w-6" />,
       suggestion: "Send a 'Your agent is ready — make your first call' push / email",
       color: "border-l-blue-400",
     },
@@ -354,7 +354,7 @@ function DropoffTab() {
       label: "One-and-Done",
       desc: "Made at least 1 call but fewer than 5 — not yet active",
       value: Number(d?.one_and_done ?? 0),
-      icon: "☝️",
+      icon: <TrendingUp className="h-6 w-6" />,
       suggestion: "Trigger a re-engagement campaign after 3 days of inactivity",
       color: "border-l-indigo-400",
     },
@@ -362,7 +362,7 @@ function DropoffTab() {
       label: "Active Users",
       desc: "5+ calls — genuinely using the platform",
       value: Number(d?.active_users ?? 0),
-      icon: "✅",
+      icon: <CheckCircle2 className="h-6 w-6" />,
       suggestion: "Focus on retention and upsell to BYOP or higher tier",
       color: "border-l-emerald-400",
     },
@@ -382,7 +382,7 @@ function DropoffTab() {
               <div className="animate-pulse h-10 bg-muted/50 rounded" />
             ) : (
               <div className="flex items-start gap-4">
-                <span className="text-2xl mt-0.5">{c.icon}</span>
+                <span className="text-muted-foreground mt-0.5 shrink-0">{c.icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-4">
                     <p className="font-semibold text-sm">{c.label}</p>

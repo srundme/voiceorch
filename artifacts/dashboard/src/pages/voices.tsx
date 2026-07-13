@@ -55,16 +55,6 @@ function inferAccent(language: string): string {
   return ACCENT_BY_LANG_PREFIX[key] ?? ACCENT_BY_LANG_PREFIX[key.split("-")[0] ?? key] ?? "Neutral";
 }
 
-const ACCENT_FLAG_EMOJI: Record<string, string> = {
-  Indian: "🇮🇳",
-  American: "🇺🇸",
-  British: "🇬🇧",
-  Australian: "🇦🇺",
-  Neutral: "🌐",
-};
-function accentFlagEmoji(accent: string): string {
-  return ACCENT_FLAG_EMOJI[accent] ?? ACCENT_FLAG_EMOJI.Neutral;
-}
 
 const METADATA_PILL_CLASS =
   "h-5 px-1.5 inline-flex items-center justify-center gap-1 rounded-full text-[10px] font-medium leading-none";
@@ -357,7 +347,7 @@ export default function VoicesPage() {
                             title={accent}
                             aria-label={accent}
                           >
-                            {accentFlagEmoji(accent)}
+                            {accent}
                           </Badge>
                         </div>
                       </div>

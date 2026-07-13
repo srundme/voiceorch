@@ -36,6 +36,7 @@ import {
 import {
   ArrowLeft, Wallet, PhoneCall, Bot, Activity, Zap, ShieldAlert, LogIn,
   ClipboardList, Key, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Pencil, Plus, Mail,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
@@ -695,8 +696,8 @@ export default function UserDetail() {
                       <TableCell><Badge variant="outline" className="text-[10px]">{row.emailType}</Badge></TableCell>
                       <TableCell>
                         {row.status === "sent"
-                          ? <span className="text-emerald-400 text-xs">✓ Sent</span>
-                          : <span className="text-destructive text-xs">✗ Failed</span>}
+                          ? <span className="text-emerald-400 text-xs inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 shrink-0" />Sent</span>
+                          : <span className="text-destructive text-xs inline-flex items-center gap-1"><XCircle className="h-3 w-3 shrink-0" />Failed</span>}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{row.sentBy}</TableCell>
                     </TableRow>

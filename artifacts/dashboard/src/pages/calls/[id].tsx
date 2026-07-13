@@ -491,7 +491,7 @@ function LogDataCell({ preview }: { preview: string | null }) {
       <span className="text-white/60 text-xs leading-relaxed whitespace-pre-wrap break-words">{shown}</span>
       {isLong && (
         <button className="ml-1.5 text-[10px] text-primary/60 hover:text-primary underline-offset-2 hover:underline whitespace-nowrap">
-          {expanded ? "↑ Show less" : "↓ Show more"}
+          {expanded ? <><ChevronUp className="h-3 w-3 inline" /> Show less</> : <><ChevronDown className="h-3 w-3 inline" /> Show more</>}
         </button>
       )}
     </div>
@@ -578,7 +578,7 @@ function CallEndedCard({ summary }: { summary: CallEndedSummary }) {
           )}
           {summary.recoverySucceeded != null && (
             <span className={`inline-flex items-center rounded text-[10px] font-medium px-1.5 py-0.5 border ${summary.recoverySucceeded ? "bg-emerald-500/15 text-emerald-300/80 border-emerald-500/25" : "bg-red-500/15 text-red-300/80 border-red-500/25"}`}>
-              {summary.recoverySucceeded ? "✓ recovered" : "✗ recovery failed"}
+              {summary.recoverySucceeded ? <><CheckCircle2 className="h-3 w-3 inline mr-0.5" />recovered</> : <><XCircle className="h-3 w-3 inline mr-0.5" />recovery failed</>}
             </span>
           )}
         </div>
@@ -643,8 +643,8 @@ function ExecLogRow({ entry }: { entry: ExecutionLogEvent }) {
           {(en.warningFlags?.length || en.retryCount || en.errorMessage) && (
             <div className="flex flex-wrap items-center gap-1 mt-1">
               {en.warningFlags?.map(f => (
-                <span key={f} className="inline-flex items-center rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[9px] font-medium px-1 py-px">
-                  ⚠ {f}
+                <span key={f} className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 text-amber-300/80 border border-amber-500/25 text-[9px] font-medium px-1 py-px">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />{f}
                 </span>
               ))}
               {en.retryCount != null && en.retryCount > 0 && (

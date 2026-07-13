@@ -200,7 +200,7 @@ function VobizWalletCard() {
                 <TrendingDown className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${statusConfig.color}`} />
                 <p className={`text-xs ${statusConfig.color}`}>
                   {status === "critical"
-                    ? `⚠️ Critically low — top up at least ₹${shortfallInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} immediately to prevent call failures.`
+                    ? `Critically low — top up at least ₹${shortfallInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} immediately to prevent call failures.`
                     : `Top up ₹${shortfallInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} to restore the ${thresholdPct}% safety buffer.`}
                 </p>
               </div>

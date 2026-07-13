@@ -10,7 +10,7 @@ import {
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
-  Upload, Archive, Info, AlertCircle, Calendar,
+  Upload, Archive, Info, AlertCircle, Calendar, Star,
 } from "lucide-react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
@@ -594,7 +594,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
           {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-2.5">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-sm shrink-0 text-amber-400">★</span>
+              <Star className="h-4 w-4 shrink-0 text-amber-400 fill-amber-400" />
               <div className="min-w-0">
                 <p className="text-[11.5px] font-semibold text-amber-300/90 leading-snug">
                   Using managed API keys
@@ -656,7 +656,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                   const displayLabel = assigned
                     ? assigned.number
                     : preferredManaged
-                    ? `${preferredManaged} ★ Platform`
+                    ? `${preferredManaged} · Platform`
                     : null;
                   return (
                   <FormItem className="space-y-1">
@@ -2945,13 +2945,15 @@ function AnalysisTab({ form, agentId }: { form: any; agentId: number }) {
                   />
                 </FormControl>
                 {isEmail && (
-                  <p className="text-xs text-destructive">
-                    ⚠ That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.
+                  <p className="text-xs text-destructive flex items-start gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>That looks like an email address, not a URL. Enter an <code className="font-mono">https://</code> endpoint.</span>
                   </p>
                 )}
                 {isHttp && !isEmail && (
-                  <p className="text-xs text-amber-500">
-                    ⚠ HTTP is not allowed — must be <code className="font-mono">https://</code>
+                  <p className="text-xs text-amber-500 flex items-start gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>HTTP is not allowed — must be <code className="font-mono">https://</code></span>
                   </p>
                 )}
                 <FormDescription className="text-[10px]">

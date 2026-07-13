@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock } from "lucide-react";
+import { Phone, Plus, Trash2, Link2, Link2Off, Search, Loader2, Globe, AlertCircle, GitFork, ShieldCheck, ShieldAlert, ExternalLink, CheckCircle2, Lock, X } from "lucide-react";
 import {
   useListPhoneNumbers,
   useListAvailablePhoneNumbers,
@@ -660,7 +660,7 @@ function RoutingRulesDialog({ number, onClose }: { number: PhoneNumber; onClose:
                       <SelectItem value="always" className="text-xs">Always (catch-all)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <button type="button" onClick={() => removeRule(i)} className="text-muted-foreground hover:text-foreground text-xs px-1 transition-colors">✕</button>
+                  <button type="button" onClick={() => removeRule(i)} className="text-muted-foreground hover:text-foreground text-xs px-1 transition-colors"><X className="h-3.5 w-3.5" /></button>
                 </div>
                 {rule.condition === "caller_prefix" && (
                   <Input value={rule.value ?? ""} onChange={e => updateRule(i, { value: e.target.value })}
