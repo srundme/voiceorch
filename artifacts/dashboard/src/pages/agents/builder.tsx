@@ -1534,6 +1534,25 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
     { query: { enabled: !!calendarIdForEt, queryKey: ["agent-event-types", calendarIdForEt ?? null] } }
   );
 
+  // ── Issue 1: Auto-link calendar when none is set ──────────────────────────
+  // When the agent has no calendar linked yet, find a calendar whose name
+  // case-insensitively contains the agent name (or vice versa). If exactly one
+  // match is found it is auto-linked and the form is marked dirty so the user
+  // sees the amber save dot and can persist it.
+  const agentNameForAutoLink = (form.watch("name") as string | undefined) ?? "";
+  useEffect(() => {
+    if (!agentId || !agentNameForAutoLink.trim() || !calendarsData?.length) return;
+    if (schedulingCalendarId != null) return; // already linked
+    const normalized = agentNameForAutoLink.trim().toLowerCase();
+    const matches = (calendarsData as any[]).filter((cal: any) => {
+      const calName = (cal.name ?? "").toLowerCase();
+      return calName.includes(normalized) || normalized.includes(calName);
+    });
+    if (matches.length === 1) {
+      form.setValue("schedulingCalendarId", matches[0].id, { shouldDirty: true });
+    }
+  }, [agentId, agentNameForAutoLink, calendarsData, schedulingCalendarId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset eventTypeId on booking tools whenever the assigned calendar changes
   const prevCalendarIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -1719,7 +1738,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
             </p>
             <Select
               value={schedulingEventTypeId != null ? String(schedulingEventTypeId) : "__none__"}
-              onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v))}
+              onValueChange={v => form.setValue("schedulingEventTypeId", v === "__none__" ? null : Number(v), { shouldDirty: true })}
               disabled={!calendarIdForEt}
             >
               <SelectTrigger className="h-7 text-xs bg-background/50">
@@ -1756,13 +1775,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           };
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { if (!e.nativeEvent.isTrusted) return; toggleNativeTool(type); }}
-                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNativeTool(type); } }}
-                className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
-              >
+              <div className="w-full text-left p-4 flex items-start gap-3">
                 <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
                   <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
                 </div>
@@ -1773,7 +1786,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
               {isOn && (
@@ -1888,13 +1901,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           const c = colorMap[color];
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { if (!e.nativeEvent.isTrusted) return; toggleNativeTool(type); }}
-                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNativeTool(type); } }}
-                className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
-              >
+              <div className="w-full text-left p-4 flex items-start gap-3">
                 <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
                   <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
                 </div>
@@ -1905,7 +1912,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} />
                 </div>
               </div>
             </div>
