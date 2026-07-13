@@ -12,6 +12,7 @@ import {
   PhoneForwarded, Voicemail, Calendar, ShieldCheck,
   Play, Volume2, FileText, BookOpen, ArrowUpRight, Paperclip,
   PlusCircle, History, PhoneIncoming, Info, PhoneOutgoing, Star, Rocket, X, LayoutDashboard,
+  PanelRightOpen, PanelRightClose,
 } from "lucide-react";
 import { WebcallPanel } from "@/components/webcall-panel";
 import { OutboundCallDialog } from "@/components/outbound-call-dialog";
@@ -210,6 +211,21 @@ async function previewVoice(voiceId: string, setPlaying: (id: string | null) => 
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Ambient background (landing + chat)                                        */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+function VibeAmbientBg() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 vibe-dot-grid opacity-40 dark:opacity-25" />
+      <div className="absolute top-[-25%] left-1/2 -translate-x-1/2 h-[60vh] w-[90vw] max-w-[1000px] rounded-full bg-[#6366f1]/[0.06] dark:bg-[#6366f1]/[0.1] blur-[120px]" />
+      <div className="absolute bottom-[-15%] right-[-8%] h-[45vh] w-[55vw] max-w-[700px] rounded-full bg-[#14b8a6]/[0.05] dark:bg-[#14b8a6]/[0.08] blur-[100px]" />
+      <div className="absolute top-[20%] left-[-10%] h-[40vh] w-[45vw] max-w-[550px] rounded-full bg-[#ff9933]/[0.04] dark:bg-[#ff9933]/[0.06] blur-[90px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.08),transparent_65%)] dark:bg-[radial-gradient(ellipse_70%_45%_at_50%_0%,rgba(99,102,241,0.14),transparent_65%)]" />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 /*  Main component                                                             */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 export default function VibePage() {
@@ -249,6 +265,7 @@ export default function VibePage() {
   const [vibeRating,   setVibeRating]   = useState(0);
   const [vibeComment,  setVibeComment]  = useState("");
   const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
@@ -1177,6 +1194,13 @@ export default function VibePage() {
     || vibeTools.length > 0 || dispositions.length > 0 || promptPreview.length > 0 || createdId !== null
     || callFlowNotes.length > 0 || kbNotes.length > 0 || vibeKbSources.length > 0;
 
+  const previewWorthy = hasRightContent || showTestCall || showKbPanel || showCalPanel
+    || postBuildStep !== null || lastSavedAgentId !== null;
+
+  useEffect(() => {
+    if (previewWorthy) setPreviewOpen(true);
+  }, [previewWorthy]);
+
   // Landing = no user message yet and not refine mode
   const chatStarted = messages.length > 1 || !!refineId || refineLoading;
 
@@ -1210,9 +1234,8 @@ export default function VibePage() {
 
     if (isLanding) {
       return (
-        <div className="relative w-full group">
-          <div className="pointer-events-none absolute -inset-px rounded-[26px] bg-gradient-to-br from-[#6366f1]/25 via-[#14b8a6]/10 to-[#ff9933]/20 opacity-60 blur-[1px] transition-opacity group-focus-within:opacity-100" />
-          <div className="relative rounded-[26px] border border-border/40 bg-card/70 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.35)] transition-all group-focus-within:border-border/70 group-focus-within:shadow-[0_12px_48px_rgba(0,0,0,0.45)]">
+        <div className="relative w-full group vibe-input-glow rounded-[26px]">
+          <div className="relative rounded-[26px] border border-border/30 bg-card/60 dark:bg-card/50 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.45)] transition-all group-focus-within:border-border/50">
             <Textarea
               ref={chatInputRef}
               value={input}
@@ -1321,13 +1344,7 @@ export default function VibePage() {
       {/* ══ Landing view — before first message ════════════════════════════ */}
       {!chatStarted && (
         <div className="relative flex flex-col h-full overflow-hidden bg-background">
-          {/* Ambient background — Gemini-style gradient mesh */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[55vh] w-[80vw] max-w-[900px] rounded-full bg-[#6366f1]/[0.05] dark:bg-[#6366f1]/[0.08] blur-[100px]" />
-            <div className="absolute bottom-[-10%] right-[-5%] h-[40vh] w-[50vw] max-w-[600px] rounded-full bg-[#14b8a6]/[0.04] dark:bg-[#14b8a6]/[0.07] blur-[90px]" />
-            <div className="absolute top-[30%] left-[-8%] h-[35vh] w-[40vw] max-w-[500px] rounded-full bg-[#ff9933]/[0.03] dark:bg-[#ff9933]/[0.05] blur-[80px]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(99,102,241,0.06),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(99,102,241,0.1),transparent)]" />
-          </div>
+          <VibeAmbientBg />
 
           {/* Floating top bar */}
           <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0">
@@ -1346,65 +1363,66 @@ export default function VibePage() {
             </div>
           </header>
 
-          {/* Centered hero — Groq / Gemini chat landing */}
-          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 sm:px-8 pb-10 overflow-y-auto">
-            <div className="w-full max-w-2xl mx-auto flex flex-col items-center text-center">
-              {/* Icon glow */}
+          {/* Centered hero */}
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 sm:px-8 pb-8 overflow-y-auto">
+            <div className="w-full max-w-3xl mx-auto flex flex-col items-center text-center">
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.85 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4 }}
-                className="mb-6 relative"
+                transition={{ duration: 0.5 }}
+                className="mb-8 vibe-orb relative"
               >
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#6366f1]/30 via-[#14b8a6]/20 to-[#ff9933]/30 blur-xl scale-150 opacity-60" />
-                <div className="relative h-14 w-14 rounded-2xl border border-border/30 bg-card/60 backdrop-blur-xl flex items-center justify-center shadow-lg">
-                  <Sparkles className="h-6 w-6 text-foreground/80" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#6366f1]/40 via-[#14b8a6]/30 to-[#ff9933]/35 blur-2xl scale-[2] opacity-50" />
+                <div className="relative h-16 w-16 rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl flex items-center justify-center shadow-2xl">
+                  <Sparkles className="h-7 w-7 text-foreground/90" />
                 </div>
               </motion.div>
 
               <motion.h1
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, delay: 0.05 }}
-                className="text-3xl sm:text-[2.75rem] font-semibold tracking-tight leading-[1.12] text-foreground"
+                transition={{ duration: 0.5, delay: 0.08 }}
+                className="font-display text-4xl sm:text-5xl md:text-[3.25rem] font-semibold tracking-tight leading-[1.08] text-foreground"
               >
                 {isThinking ? (
-                  "Configuring your agent…"
+                  <span className="text-muted-foreground">Configuring your agent…</span>
                 ) : welcomeName ? (
                   <>
-                    <span className="text-muted-foreground font-normal">Hi </span>
-                    {welcomeName.split(" ")[0]}
-                    <span className="text-muted-foreground font-normal">, </span>
-                    <span className="bg-gradient-to-r from-[#a5b4fc] via-[#5eead4] to-[#fcd34d] bg-clip-text text-transparent">
-                      build your agent
+                    <span className="block text-muted-foreground/80 font-normal text-2xl sm:text-3xl mb-1">
+                      Hi {welcomeName.split(" ")[0]}
+                    </span>
+                    <span className="bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#fbbf24] bg-clip-text text-transparent">
+                      what are we building?
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="bg-gradient-to-r from-[#a5b4fc] via-[#5eead4] to-[#fcd34d] bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#fbbf24] bg-clip-text text-transparent">
                       Build a voice agent
                     </span>
-                    <span className="text-muted-foreground font-normal"> with AI</span>
+                    <span className="block text-muted-foreground/70 font-normal text-2xl sm:text-3xl mt-1">
+                      in plain English
+                    </span>
                   </>
                 )}
               </motion.h1>
 
               {!isThinking && (
                 <motion.p
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.12 }}
-                  className="mt-3 text-sm sm:text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                  transition={{ duration: 0.45, delay: 0.16 }}
+                  className="mt-4 text-[15px] sm:text-base text-muted-foreground/80 leading-relaxed max-w-lg"
                 >
-                  Describe what it should do — we handle STT, LLM, TTS, tools, and multilingual setup.
+                  Tell me the use case — I&apos;ll wire up speech, language, tools, and your system prompt.
                 </motion.p>
               )}
 
               <motion.div
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, delay: 0.18 }}
-                className="mt-8 w-full"
+                transition={{ duration: 0.5, delay: 0.22 }}
+                className="mt-10 w-full max-w-2xl"
               >
                 {inputBlock(true)}
               </motion.div>
@@ -1413,19 +1431,22 @@ export default function VibePage() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4, delay: 0.28 }}
-                  className="mt-5 w-full"
+                  transition={{ duration: 0.45, delay: 0.32 }}
+                  className="mt-6 w-full max-w-2xl"
                 >
                   <div className="flex flex-wrap justify-center gap-2">
-                    {QUICK_SUGGESTIONS.slice(0, 6).map(s => (
-                      <button
+                    {QUICK_SUGGESTIONS.slice(0, 5).map((s, i) => (
+                      <motion.button
                         key={s.label}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.35 + i * 0.04 }}
                         type="button"
                         onClick={() => send(s.message)}
-                        className="px-4 py-2 rounded-full text-[13px] font-medium border border-border/50 bg-card/30 text-muted-foreground hover:text-foreground hover:border-border hover:bg-card/60 backdrop-blur-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        className="px-4 py-2 rounded-full text-[13px] font-medium border border-border/40 bg-background/40 text-muted-foreground hover:text-foreground hover:border-border/70 hover:bg-card/50 backdrop-blur-md transition-all hover:scale-[1.03] active:scale-[0.97]"
                       >
                         {s.label}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </motion.div>
@@ -1435,43 +1456,43 @@ export default function VibePage() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4, delay: 0.36 }}
-                  className="mt-10 w-full"
+                  transition={{ duration: 0.45, delay: 0.42 }}
+                  className="mt-12 w-full"
                 >
-                  <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/50 mb-3">
-                    Templates
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40 mb-4">
+                    Start from a template
                   </p>
-                  <div className="relative -mx-2">
-                    <div className="flex gap-2.5 overflow-x-auto pb-2 px-2 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {VIBE_TEMPLATES.map(t => (
-                        <button
-                          key={t.title}
-                          type="button"
-                          onClick={() => send(t.message)}
-                          className="group snap-start shrink-0 w-[200px] sm:w-[220px] text-left rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md p-4 hover:border-border/70 hover:bg-card/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                          <p className="text-sm font-medium text-foreground group-hover:text-foreground/90 transition-colors truncate">
-                            {t.title}
-                          </p>
-                          <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                            {t.desc}
-                          </p>
-                          <p className="mt-2.5 text-[10px] text-muted-foreground/45 font-medium">
-                            {t.tag}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-background to-transparent" />
-                    <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent" />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-3xl mx-auto">
+                    {VIBE_TEMPLATES.slice(0, 4).map(t => (
+                      <button
+                        key={t.title}
+                        type="button"
+                        onClick={() => send(t.message)}
+                        className="group relative text-left rounded-2xl border border-border/30 bg-card/20 backdrop-blur-md p-4 overflow-hidden transition-all hover:border-border/60 hover:bg-card/40 hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#6366f1]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <p className="text-[13px] font-semibold text-foreground truncate">{t.title}</p>
+                        <p className="mt-1.5 text-[11px] text-muted-foreground/70 line-clamp-2 leading-snug">{t.desc}</p>
+                      </button>
+                    ))}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/app/agents?create=1")}
-                    className="mt-4 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                  >
-                    Prefer manual setup? Open the full builder →
-                  </button>
+                  <div className="mt-3 flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => send(VIBE_TEMPLATES[4]!.message)}
+                      className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                    >
+                      + Restaurant bookings
+                    </button>
+                    <span className="text-border/60">·</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/app/agents?create=1")}
+                      className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                    >
+                      Manual builder →
+                    </button>
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -1479,137 +1500,150 @@ export default function VibePage() {
         </div>
       )}
 
-      {/* ══ Chat + Preview split — after first message ══════════════════════ */}
+      {/* ══ Chat — Gemini-style centered conversation ════════════════════ */}
       {chatStarted && (
-        <div className="flex h-full animate-in fade-in duration-300">
+        <div className="relative flex flex-col h-full overflow-hidden animate-in fade-in duration-300">
+          <VibeAmbientBg />
 
-          {/* ── Sidebar: chat history — refine mode only ─────────────────── */}
-          {refineId != null && sessions.length > 0 && (
-            <VibeSidebar
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              viewMode={viewMode}
-              onSelectSession={loadHistorySession}
-              onNewChat={startNewChat}
-              open={sidebarOpen}
-              onToggle={() => setSidebarOpen(o => !o)}
-            />
-          )}
-
-          {/* ── Left: Chat panel ─────────────────────────────────────────── */}
-          <div className="flex flex-col w-[430px] min-w-[380px] border-r border-border/60 bg-background">
-
-            {/* Header */}
-            <div className="flex items-center gap-3 px-4 h-14 border-b border-border/60 shrink-0">
+          {/* Floating header */}
+          <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 h-14 shrink-0 border-b border-border/20 bg-background/60 backdrop-blur-xl">
+            <div className="flex items-center gap-2 min-w-0">
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground -ml-2"
+                size="icon"
+                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground shrink-0"
                 onClick={() => navigate("/app/command-center")}
               >
-                <LayoutDashboard className="h-3.5 w-3.5" />
-                Dashboard
+                <LayoutDashboard className="h-4 w-4" />
               </Button>
-              {/* Animated logo in header */}
-              <div className="relative flex-shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className={cn(
-                  "h-7 w-7 rounded-lg border flex items-center justify-center overflow-hidden p-1 transition-all",
-                  isThinking ? "border-primary/40 bg-primary/10" : "border-border/50 bg-muted/20",
+                  "h-7 w-7 rounded-lg border flex items-center justify-center overflow-hidden p-1 shrink-0 transition-all",
+                  isThinking ? "border-primary/40 bg-primary/10" : "border-border/40 bg-card/40",
                 )}>
-                  <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain" />
+                  <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain" />
                 </div>
-                {isThinking && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
-                )}
-              </div>
-              <div>
-                <p className="font-semibold text-sm leading-none tracking-tight">Vibe Build</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {refineId ? "Refining existing agent" : "AI agent builder"}
-                </p>
-              </div>
-              {refineLoading && (
-                <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Loading…
-                </div>
-              )}
-              {!refineLoading && isThinking && (
-                <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                  {phase === "thinking" ? "Thinking…" : phase === "streaming" ? "Responding…" : statusMsg || "Configuring…"}
-                </div>
-              )}
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-4 py-6 space-y-5">
-                {messages.map(msg => (
-                  <MessageBubble
-                    key={msg.id}
-                    msg={msg}
-                    selectedVoice={selectedVoice}
-                    playingVoice={playingVoice}
-                    onPreview={vid => previewVoice(vid, setPlayingVoice)}
-                    onSelect={v => {
-                      // Optimistic collapse: reflect the pick immediately, even if the
-                      // server can't confirm (e.g. re-picking the agent's current voice)
-                      collapseVoicePickers();
-                      selectedVoiceIdRef.current = v.voiceId;
-                      setSelectedVoice(v.voiceName);
-                      send(`I'll go with ${v.voiceName}`);
-                    }}
-                    selectedNumber={selectedNumber}
-                    onAssignNumber={n => {
-                      collapsePhonePickers();
-                      setSelectedNumber(n.number);
-                      send(`Assign ${n.number} (number id ${n.id}) as the inbound number`);
-                    }}
-                    onSkipNumber={() => {
-                      collapsePhonePickers();
-                      send("Skip the phone number for now");
-                    }}
-                  />
-                ))}
-                {phase === "thinking" && <ThinkingLogo />}
-                <div ref={chatEndRef} />
-              </div>
-            </div>
-
-            {/* Input */}
-            <div className="border-t border-border/60 px-4 py-3 shrink-0">
-              {viewMode === "history" ? (
-                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-4 py-3 gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <p className="text-xs text-muted-foreground truncate">Historical conversation · read only</p>
-                  </div>
-                  <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg shrink-0"
-                    onClick={startNewChat}>
-                    <PlusCircle className="h-3 w-3" /> New Chat
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {inputBlock(false)}
-                  <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
-                    Enter to send · Shift+Enter for newline · <Paperclip className="h-3 w-3 inline align-middle" /> to upload KB docs
+                <div className="min-w-0 hidden sm:block">
+                  <p className="font-semibold text-sm leading-none truncate">Vibe Build</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                    {refineId ? "Refining agent" : "AI agent builder"}
                   </p>
-                </>
-              )}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* ── Right: Live preview ───────────────────────────────────────── */}
-          <div className="flex-1 flex flex-col min-w-0 bg-muted/10">
+            <div className="flex items-center gap-1.5">
+              {(refineLoading || isThinking) && (
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mr-1">
+                  {refineLoading
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading…</>
+                    : <><span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                      {phase === "thinking" ? "Thinking…" : phase === "streaming" ? "Responding…" : statusMsg || "Configuring…"}</>}
+                </div>
+              )}
+              {previewWorthy && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-full text-muted-foreground hover:text-foreground"
+                  onClick={() => setPreviewOpen(v => !v)}
+                >
+                  {previewOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline text-xs">{previewOpen ? "Hide" : "Preview"}</span>
+                </Button>
+              )}
+              <ThemeToggle />
+            </div>
+          </header>
+
+          <div className="relative z-10 flex flex-1 min-h-0">
+            {refineId != null && sessions.length > 0 && (
+              <VibeSidebar
+                sessions={sessions}
+                activeSessionId={activeSessionId}
+                viewMode={viewMode}
+                onSelectSession={loadHistorySession}
+                onNewChat={startNewChat}
+                open={sidebarOpen}
+                onToggle={() => setSidebarOpen(o => !o)}
+              />
+            )}
+
+            {/* Centered chat column */}
+            <div className={cn(
+              "flex flex-col flex-1 min-w-0 transition-all duration-300 ease-out",
+              previewOpen && previewWorthy && "lg:max-w-[calc(100%-min(520px,42vw))]",
+            )}>
+              <div className="flex-1 overflow-y-auto">
+                <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-7">
+                  {messages.map(msg => (
+                    <MessageBubble
+                      key={msg.id}
+                      msg={msg}
+                      selectedVoice={selectedVoice}
+                      playingVoice={playingVoice}
+                      onPreview={vid => previewVoice(vid, setPlayingVoice)}
+                      onSelect={v => {
+                        collapseVoicePickers();
+                        selectedVoiceIdRef.current = v.voiceId;
+                        setSelectedVoice(v.voiceName);
+                        send(`I'll go with ${v.voiceName}`);
+                      }}
+                      selectedNumber={selectedNumber}
+                      onAssignNumber={n => {
+                        collapsePhonePickers();
+                        setSelectedNumber(n.number);
+                        send(`Assign ${n.number} (number id ${n.id}) as the inbound number`);
+                      }}
+                      onSkipNumber={() => {
+                        collapsePhonePickers();
+                        send("Skip the phone number for now");
+                      }}
+                    />
+                  ))}
+                  {phase === "thinking" && <ThinkingLogo />}
+                  <div ref={chatEndRef} className="h-4" />
+                </div>
+              </div>
+
+              {/* Bottom input — same premium card as landing */}
+              <div className="shrink-0 px-4 sm:px-6 pb-5 pt-2 bg-gradient-to-t from-background via-background/95 to-transparent">
+                <div className="max-w-2xl mx-auto">
+                  {viewMode === "history" ? (
+                    <div className="flex items-center justify-between rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl px-4 py-3 gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <p className="text-xs text-muted-foreground truncate">Historical conversation · read only</p>
+                      </div>
+                      <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full shrink-0"
+                        onClick={startNewChat}>
+                        <PlusCircle className="h-3 w-3" /> New Chat
+                      </Button>
+                    </div>
+                  ) : (
+                    inputBlock(true)
+                  )}
+                </div>
+              </div>
+            </div>
+
+          {/* ── Preview panel — slides in when agent config appears ─────── */}
+          {previewOpen && previewWorthy && (
+          <div className={cn(
+            "flex flex-col border-border/30 bg-background/95 backdrop-blur-xl animate-in slide-in-from-right duration-300",
+            "fixed inset-0 z-40 lg:relative lg:inset-auto lg:z-auto",
+            "lg:w-[min(520px,42vw)] lg:shrink-0 lg:border-l",
+          )}>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-8 h-14 border-b border-border/60 shrink-0 bg-background">
-              <div className="flex items-center gap-3">
-                <Zap className="h-4 w-4 text-primary" />
+            <div className="flex items-center justify-between px-6 h-14 shrink-0 border-b border-border/20">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Zap className="h-3.5 w-3.5 text-primary" />
+                </div>
                 <div>
                   <p className="font-semibold text-sm leading-none">Agent Preview</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">
                     {showTestCall                    ? "Live test in progress" :
                      postBuildStep === "hype"        ? "Your agent is ready!" :
                      postBuildStep === "rating"      ? "Launch your agent" :
@@ -1621,8 +1655,17 @@ export default function VibePage() {
                   </p>
                 </div>
               </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full lg:hidden text-muted-foreground shrink-0"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               {lastSavedAgentId !== null && (
-                <div className="flex items-center gap-1.5">
+                <>
                   <Button
                     size="sm"
                     variant={showTestCall ? "default" : "outline"}
@@ -1648,8 +1691,9 @@ export default function VibePage() {
                       <Settings2 className="h-3 w-3" /> Edit
                     </Button>
                   )}
-                </div>
+                </>
               )}
+              </div>
             </div>
 
             <div className={cn("flex-1 min-h-0", showTestCall ? "flex flex-col overflow-hidden p-4" : "overflow-y-auto px-8 py-8")}>
@@ -1887,21 +1931,24 @@ export default function VibePage() {
               )}
             </div>
           )}
-        </div>
-      </div>
+            </div>
+          </div>
+          )}
 
-      {/* Outbound telephony call dialog */}
-      {lastSavedAgentId !== null && (
-        <OutboundCallDialog
-          agentId={lastSavedAgentId}
-          agentName={createdName || "Agent"}
-          telephonyProvider={savedTelephonyProvider}
-          open={callDialogOpen}
-          onOpenChange={setCallDialogOpen}
-        />
+          </div>{/* flex row: chat + preview */}
+
+          {/* Outbound telephony call dialog */}
+          {lastSavedAgentId !== null && (
+            <OutboundCallDialog
+              agentId={lastSavedAgentId}
+              agentName={createdName || "Agent"}
+              telephonyProvider={savedTelephonyProvider}
+              open={callDialogOpen}
+              onOpenChange={setCallDialogOpen}
+            />
+          )}
+        </div>
       )}
-    </div>
-  )}
 
   </div>
   );
@@ -1926,30 +1973,30 @@ function MessageBubble({ msg, selectedVoice, playingVoice, onPreview, onSelect, 
   if (!isAi) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-primary/10 border border-primary/15 px-4 py-2.5">
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.content}</p>
+        <div className="max-w-[85%] rounded-3xl rounded-br-md bg-foreground/[0.06] dark:bg-foreground/[0.08] px-4 py-3">
+          <p className="text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.content}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-3 items-start">
-      {/* Logo avatar */}
-      <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden p-1">
-        <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain" />
+    <div className="space-y-3">
+      <div className="flex gap-3 items-start">
+        <div className="h-8 w-8 rounded-xl bg-card/60 border border-border/30 flex items-center justify-center shrink-0 overflow-hidden p-1.5">
+          <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain" />
+        </div>
+        <div className="flex-1 min-w-0 pt-0.5">
+          <p className="text-[15px] leading-[1.65] text-foreground/95 whitespace-pre-wrap">
+            {msg.content}
+            {!msg.done && msg.content.length > 0 && (
+              <span className="inline-block w-0.5 h-[1.1em] bg-foreground/50 ml-0.5 align-middle animate-pulse rounded-sm" />
+            )}
+          </p>
+        </div>
       </div>
 
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Text */}
-        <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-          {msg.content}
-          {!msg.done && msg.content.length > 0 && (
-            <span className="inline-block w-0.5 h-4 bg-foreground/40 ml-0.5 align-middle animate-pulse rounded-sm" />
-          )}
-        </p>
-
-        {/* Voice picker — collapsed once picked */}
+      <div className="pl-11 space-y-3">
         {msg.voices && msg.voices.length > 0 && !msg.voicePicked && (
           <VoicePickerList
             voices={msg.voices}
@@ -2169,18 +2216,15 @@ function VoicePill({ voice, isSelected, isPlaying, onPreview, onSelect }: {
 
 function ThinkingLogo() {
   return (
-    <div className="flex gap-3 items-center pl-0.5">
-      <div className="relative shrink-0">
-        <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center overflow-hidden p-1 shadow-[0_0_12px_rgba(var(--primary)/0.2)]">
-          <img src="/snapserve-icon.png" alt="Thinking" className="h-full w-full object-contain" />
-        </div>
-        <span className="absolute inset-0 rounded-lg border-2 border-primary/30 animate-ping" />
+    <div className="flex gap-3 items-center">
+      <div className="h-8 w-8 rounded-xl bg-card/60 border border-border/30 flex items-center justify-center overflow-hidden p-1.5 shrink-0">
+        <img src="/snapserve-icon.png" alt="" className="h-full w-full object-contain opacity-80" />
       </div>
-      <div className="flex gap-1.5 items-center">
-        {[0, 160, 320].map(d => (
+      <div className="flex gap-1 items-center py-2">
+        {[0, 150, 300].map(d => (
           <span
             key={d}
-            className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce"
+            className="h-2 w-2 rounded-full bg-foreground/30 animate-bounce"
             style={{ animationDelay: `${d}ms` }}
           />
         ))}
@@ -2298,34 +2342,31 @@ function DispositionRow({ d, i }: { d: DispositionCard; i: number }) {
 
 function EmptyState() {
   const items = [
-    "Voice selection with live audio preview",
-    "Call flow & script generation",
-    "Knowledge base integration",
-    "Gender detection · transfer · voicemail",
-    "Scheduling & compliance setup",
-    "Call outcome dispositions",
-    "System prompt auto-generated",
+    "Voice & language",
+    "Call flow & script",
+    "Knowledge base",
+    "Tools & scheduling",
+    "System prompt",
   ];
   return (
-    <div className="flex flex-col items-center justify-center min-h-full py-24 text-center gap-6">
+    <div className="flex flex-col items-center justify-center min-h-full py-16 text-center gap-8">
       <div className="relative">
-        <div className="h-16 w-16 rounded-2xl bg-primary/8 border border-primary/15 flex items-center justify-center overflow-hidden p-2.5">
-          <img src="/snapserve-icon.png" alt="SnapServe" className="h-full w-full object-contain opacity-60" />
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#6366f1]/20 via-[#14b8a6]/15 to-transparent blur-2xl scale-150" />
+        <div className="relative h-20 w-20 rounded-3xl border border-border/30 bg-card/30 backdrop-blur-xl flex items-center justify-center p-3">
+          <Sparkles className="h-8 w-8 text-muted-foreground/60" />
         </div>
-        <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary/80 ring-2 ring-background" />
       </div>
-      <div className="max-w-sm">
-        <p className="font-semibold text-base">Your agent preview</p>
-        <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-          Start the conversation and watch everything take shape here in real time.
+      <div className="max-w-xs">
+        <p className="font-display font-semibold text-lg">Live preview</p>
+        <p className="text-sm text-muted-foreground/70 mt-2 leading-relaxed">
+          Your agent config will appear here as we chat.
         </p>
       </div>
-      <div className="flex flex-col gap-2 text-[11px] text-muted-foreground text-left max-w-xs">
+      <div className="flex flex-wrap justify-center gap-2 max-w-sm">
         {items.map(t => (
-          <div key={t} className="flex items-start gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-primary/50 mt-1.5 shrink-0" />
-            <span>{t}</span>
-          </div>
+          <span key={t} className="px-3 py-1.5 rounded-full text-[11px] text-muted-foreground/60 border border-border/30 bg-card/20">
+            {t}
+          </span>
         ))}
       </div>
     </div>
