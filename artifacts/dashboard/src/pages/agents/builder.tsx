@@ -737,13 +737,15 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             </div>
             <div className="flex items-center justify-between border-t border-white/10 pt-2 mt-1">
               <div>
-                <p className="text-[10px] font-medium text-foreground/80">Auto-detect Language</p>
-                <p className="text-[9px] text-muted-foreground">Follow caller's language mid-call — off enforces a single language</p>
+                <p className="text-[10px] font-medium text-foreground/80">Multilingual</p>
+                <p className="text-[9px] text-muted-foreground">Automatically detects and switches between supported languages during the conversation.</p>
               </div>
-              <Switch
-                checked={langAutoDetect}
-                onCheckedChange={(v) => form.setValue("languageAutoDetect", v, { shouldDirty: true })}
-              />
+              <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
+                <Switch
+                  checked={field.value ?? false}
+                  onCheckedChange={(v) => field.onChange(v)}
+                />
+              )} />
             </div>
           </EditConfigDialog>
 
@@ -4755,7 +4757,8 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     async (data) => {
       try {
         const payload = buildUpdateAgentPayload(data);
-        await updateAgent.mutateAsync({ id: agentId, data: payload as any });
+        const saved = await updateAgent.mutateAsync({ id: agentId, data: payload as any });
+        form.setValue("languageAutoDetect", (saved as any)?.agentConfig?.languageAutoDetect ?? false, { shouldDirty: false });
         queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Saved", description: `${data.name} updated.` });

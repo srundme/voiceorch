@@ -1106,8 +1106,8 @@ export default function AgentEdit() {
             )} />
             <div className="flex items-center justify-between border-t pt-4 mt-2">
               <div>
-                <p className="text-xs font-medium">Auto-detect Language</p>
-                <p className="text-[11px] text-muted-foreground">Follow caller's language mid-call — off enforces a single language</p>
+                <p className="text-xs font-medium">Multilingual</p>
+                <p className="text-[11px] text-muted-foreground">Automatically detects and switches between supported languages during the conversation.</p>
               </div>
               <FormField control={form.control} name="languageAutoDetect" render={({ field }) => (
                 <Switch
