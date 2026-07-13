@@ -1759,7 +1759,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => toggleNativeTool(type)}
+                onClick={(e) => { if (!e.nativeEvent.isTrusted) return; toggleNativeTool(type); }}
                 onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNativeTool(type); } }}
                 className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
               >
@@ -1773,7 +1773,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={e => { e.stopPropagation?.(); toggleNativeTool(type); }} onClick={e => e.stopPropagation()} />
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
                 </div>
               </div>
               {isOn && (
@@ -1891,7 +1891,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => toggleNativeTool(type)}
+                onClick={(e) => { if (!e.nativeEvent.isTrusted) return; toggleNativeTool(type); }}
                 onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNativeTool(type); } }}
                 className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
               >
@@ -1905,7 +1905,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={e => { e.stopPropagation?.(); toggleNativeTool(type); }} onClick={e => e.stopPropagation()} />
+                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
                 </div>
               </div>
             </div>
@@ -1918,7 +1918,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           <div
             role="button"
             tabIndex={0}
-            onClick={() => form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true })}
+            onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("recordingEnabled", !recordingEnabled, { shouldDirty: true }); } }}
             className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
           >
@@ -1949,7 +1949,7 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           <div
             role="button"
             tabIndex={0}
-            onClick={() => form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true })}
+            onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); }}
             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("genderDetectionEnabled", !genderEnabled, { shouldDirty: true }); } }}
             className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
           >
@@ -2607,7 +2607,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                         ? "border-primary/40 bg-primary/5"
                         : "border-border/50 bg-card/40 hover:border-border",
                     )}
-                    onClick={() => setValue(!field.value)}
+                    onClick={(e) => { if (!e.nativeEvent.isTrusted) return; setValue(!field.value); }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
@@ -4578,6 +4578,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Partial<Record<TabId, HTMLElement>>>({});
+  const agentResetSigRef = useRef<string | null>(null);
 
   const scrollToSection = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -4678,6 +4679,13 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
   useEffect(() => {
     if (!agent) return;
+    // Only reset when the agent's DATA actually changes (id + server updatedAt),
+    // not on every render. `agent` from useGetAgent can be a fresh object
+    // reference across renders; a bare `[agent]` dep made form.reset() run every
+    // render → re-render → loop (React #185 "Maximum update depth exceeded").
+    const resetSig = `${agent.id}:${(agent as any).updatedAt ?? ""}`;
+    if (agentResetSigRef.current === resetSig) return;
+    agentResetSigRef.current = resetSig;
     form.reset({
       name:                     agent.name,
       description:              agent.description ?? "",
