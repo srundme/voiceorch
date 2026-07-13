@@ -4,7 +4,15 @@ import { checkTranscriptQuality, pickClarificationPhrase, isLikelyIncompleteEngl
 describe("checkTranscriptQuality", () => {
   it("flags Sarvam phantom silence hallucinations", () => {
     expect(checkTranscriptQuality("Out of").isGarbled).toBe(true);
-    expect(checkTranscriptQuality("thank you").reason).toBe("phantom-utterance");
+    expect(checkTranscriptQuality("are you there").reason).toBe("phantom-utterance");
+  });
+
+  it("accepts normal greetings and short acks (not clarification bait)", () => {
+    expect(checkTranscriptQuality("Hi", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("Hello", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("Hi Madam", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("Okay.", { expectedLang: "en-IN" }).isGarbled).toBe(false);
+    expect(checkTranscriptQuality("thank you", { expectedLang: "en-IN" }).isGarbled).toBe(false);
   });
 
   it("flags Indic script when STT is configured for English", () => {

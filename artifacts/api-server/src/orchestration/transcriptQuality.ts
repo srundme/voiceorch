@@ -25,9 +25,15 @@ export interface TranscriptQualityOptions {
 const TRUNCATION_DANGLER_RE =
   /\b(about|with|for|from|into|through|of|to|and|but|or|because|although|though|a|an|the|just|like|so|also|even|only|already|still|yet|both|either|neither|nor|since|until|unless|whether|while|as|if|then|than|that|this|these|those|which|who|whom|whose|when|where|how|what|why|ke|ki|ka|ko|mein|pe|par|se|ne|aur|lekin|jo|ek|toh|bhi|hi|na|kya|kaise|kyun|kyunki|jab|jahan|என்|உன்|என்|எனக்கு|உங்களுக்கு|என்ன|எந்த|இந்த|அந்த|ஒரு|மற்றும்|ஆனால்|அல்லது|ஏனெனில்|எப்படி|எங்கே|எப்போது)\s*[,.]?\s*$/i;
 
-/** Known Sarvam silence/noise hallucinations — too short to be a real turn. */
+/** Known Sarvam silence/noise hallucinations — too short to be a real turn.
+ *  Deliberately excludes normal greetings/acks ("hello", "thanks") — those are
+ *  valid caller speech and must reach the LLM. */
 const PHANTOM_UTTERANCE_RE =
-  /^(out of|thank you|thanks|hello|hi there|are you there|can you hear me)\.?$/i;
+  /^(out of|hi there|are you there|can you hear me)\.?$/i;
+
+/** Complete short greetings, acks, and backchannels — never clarification-bait. */
+const VALID_COMPLETE_SHORT_UTTERANCE_RE =
+  /^(hi|hello|hey|hiya|yo|yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|thanks|thank you|bye|goodbye|namaste|vanakkam)([,.]|\s+(madam|ma'?am|sir|there))?\.?$/i;
 
 function countScriptLetters(text: string): { latin: number; devanagari: number; tamil: number; telugu: number; other: number } {
   const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, other: 0 };
@@ -136,6 +142,11 @@ export function checkTranscriptQuality(
   // Empty after trim — caller might have been silent/muted
   if (t.length < 2) return { isGarbled: true, reason: "too-short" };
 
+  // Normal one-word greetings / acks ("Hi", "Hello", "Okay") — complete turns.
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) {
+    return { isGarbled: false, reason: "" };
+  }
+
   // Sarvam silence hallucinations (e.g. "Out of" during carrier noise)
   if (t.length <= 24 && PHANTOM_UTTERANCE_RE.test(t)) {
     return { isGarbled: true, reason: "phantom-utterance" };
@@ -175,6 +186,10 @@ export function checkTranscriptQuality(
   // false-positives on longer sentences that happen to end on these words.
   const wordCount = t.split(/\s+/).filter(Boolean).length;
   if (wordCount <= MAX_TRUNCATION_WORDS && TRUNCATION_DANGLER_RE.test(t)) {
+    // English greeting "Hi" must not match the Hindi emphatic-particle dangler `hi`.
+    if (wordCount === 1 && /^hi\.?$/i.test(t)) {
+      return { isGarbled: false, reason: "" };
+    }
     // English question fragments ("I want to know how") are valid partials —
     // coalesce or the LLM should handle them, not a clarification reprompt.
     if (isEnglishExpectedLang(opts?.expectedLang) && isLikelyIncompleteEnglishFragment(t)) {
