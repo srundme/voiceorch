@@ -5,7 +5,7 @@ import {
   AlertTriangle, Server, Key, Bot,
   Cpu, Radio, AudioWaveform, Phone,
   ArrowUpRight, ArrowDownLeft,
-  Rocket, Inbox,
+  Rocket, Inbox, LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -14,11 +14,15 @@ import {
   useListProviders,
   useListAgents,
   useListActivityLogs,
+  useListPhoneNumbers,
+  useListCampaigns,
   getGetDashboardStatsQueryKey,
   getListCallsQueryKey,
   getListProvidersQueryKey,
   getListAgentsQueryKey,
   getListActivityLogsQueryKey,
+  getListPhoneNumbersQueryKey,
+  getListCampaignsQueryKey,
 } from "@workspace/api-client-react";
 import type { Call, ProviderConfig, ActivityLog, Agent } from "@workspace/api-client-react";
 
@@ -302,6 +306,8 @@ export default function CommandCenterPage() {
   const providers = useListProviders({ query: { queryKey: getListProvidersQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
   const agents = useListAgents({ query: { queryKey: getListAgentsQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
   const activity = useListActivityLogs({ limit: 25 }, { query: { queryKey: getListActivityLogsQueryKey({ limit: 25 }), refetchInterval: 15_000, staleTime: 12_000 } });
+  const phoneNumbersQ = useListPhoneNumbers({ query: { queryKey: getListPhoneNumbersQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
+  const campaignsQ = useListCampaigns({ query: { queryKey: getListCampaignsQueryKey(), refetchInterval: 30_000, staleTime: 25_000 } });
 
   const s = stats.data;
   const calls: Call[] = callsQ.data ?? [];
@@ -309,6 +315,14 @@ export default function CommandCenterPage() {
   const allProviders: ProviderConfig[] = providers.data ?? [];
   const allAgents: Agent[] = agents.data ?? [];
   const events: ActivityLog[] = activity.data ?? [];
+  const phoneNumbers = phoneNumbersQ.data ?? [];
+  const campaigns = campaignsQ.data ?? [];
+
+  /* next-steps completion flags */
+  const hasAgent = allAgents.length > 0;
+  const hasProvider = allProviders.length > 0;
+  const hasPhoneNumber = phoneNumbers.length > 0;
+  const hasCampaign = campaigns.length > 0;
 
   const isLoading = stats.isLoading;
   const isFetching = stats.isFetching || callsQ.isFetching;
@@ -343,7 +357,7 @@ export default function CommandCenterPage() {
           <Terminal className="w-4 h-4 text-muted-foreground/50" />
           <div>
             <h1 className="text-[15px] font-semibold text-foreground leading-tight">Command Center</h1>
-            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-1">Live overview of your voice platform.</p>
+            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-1">Monitor your agents, calls, and pipeline health in real time.</p>
           </div>
         </div>
         <LiveIndicator isFetching={isFetching} />
@@ -351,7 +365,7 @@ export default function CommandCenterPage() {
 
       {/* ── KPI Row ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`/ ${s?.totalAgents ?? 0}`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} countUp />
+        <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`of ${s?.totalAgents ?? 0} total`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} countUp />
         <KpiCard label="Calls Today"     value={s?.callsToday ?? 0}                                        icon={Activity} color="text-blue-400"    href="/app/calls"    loading={isLoading} countUp />
         <KpiCard label="Success Rate"    value={s ? `${s.successRate.toFixed(1)}%` : "—"}                  icon={CheckCircle2} color="text-green-400"                    loading={isLoading} />
         <KpiCard label="Avg STT Latency" value={avgStt != null ? fmtMs(avgStt) : "—"}                      icon={Zap}      color="text-amber-400"                        loading={callsQ.isLoading} />
@@ -362,7 +376,7 @@ export default function CommandCenterPage() {
       {(avgStt != null || avgLlm != null || avgTts != null) && (
         <div className="flex items-center gap-4 px-4 py-2 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
           <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">
-            Voice Pipeline Health <span className="text-muted-foreground/25 normal-case font-normal tracking-normal">· last {callsWithLatency.length} calls</span>
+            Voice Pipeline Health
           </span>
           <div className="flex items-center gap-1.5">
             <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", stageDotColor(avgStt))} />
@@ -544,6 +558,30 @@ export default function CommandCenterPage() {
               </div>
             </div>
           </div>
+
+          {/* Workspace Overview */}
+          <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
+              <LayoutGrid className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+              <span className="text-[12px] font-semibold text-foreground/70">Workspace Overview</span>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-border/30 p-px">
+              {[
+                { label: "Total Agents",        value: allAgents.length },
+                { label: "Published",           value: allAgents.filter(a => a.status === "active").length },
+                { label: "Drafts",              value: allAgents.filter(a => a.status !== "active").length },
+                { label: "Connected Providers", value: allProviders.filter(p => p.isActive).length },
+                { label: "Campaigns",           value: campaigns.length },
+                { label: "Phone Numbers",       value: phoneNumbers.length },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex flex-col gap-1 px-4 py-3 bg-card">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/35 leading-none">{label}</span>
+                  <span className="text-[16px] font-bold tabular-nums text-foreground/80 leading-none">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         {/* ── Right sidebar ─────────────────────────────────────────────────── */}
@@ -554,21 +592,35 @@ export default function CommandCenterPage() {
             <SidebarCardHeading icon={Rocket} title="Next Steps" />
             <div className="p-3 flex flex-col gap-2">
               {[
-                { label: "Create Agent",      desc: "Build and configure a new voice agent",    icon: Bot,      href: "/app/agents?create=1" },
-                { label: "Connect Provider",  desc: "Add your ASR, LLM, or TTS keys",           icon: Key,      href: "/app/providers" },
-                { label: "Buy Phone Number",  desc: "Get a number to receive or place calls",    icon: Phone,    href: "/app/phone-numbers" },
-                { label: "Create Campaign",   desc: "Launch an outbound call campaign",          icon: Activity, href: "/app/campaigns" },
-              ].map(({ label, desc, icon: Icon, href }) => (
+                { label: "Create Agent",      desc: "Build and configure a new voice agent",    icon: Bot,      href: "/app/agents?create=1",  done: hasAgent },
+                { label: "Connect Provider",  desc: "Add your ASR, LLM, or TTS keys",           icon: Key,      href: "/app/providers",         done: hasProvider },
+                { label: "Buy Phone Number",  desc: "Get a number to receive or place calls",    icon: Phone,    href: "/app/phone-numbers",     done: hasPhoneNumber },
+                { label: "Create Campaign",   desc: "Launch an outbound call campaign",          icon: Activity, href: "/app/campaigns",         done: hasCampaign },
+              ].map(({ label, desc, icon: Icon, href, done }) => (
                 <button
                   key={href}
                   onClick={() => navigate(href)}
-                  className="flex items-start gap-3 px-3 py-2.5 rounded-lg text-left w-full border border-border/40 bg-card hover:bg-accent/30 hover:-translate-y-0.5 hover:shadow-sm hover:border-border/70 transition-all duration-[180ms] ease-out group"
+                  className={cn(
+                    "flex items-start gap-3 px-3 py-2.5 rounded-lg text-left w-full border transition-all duration-[180ms] ease-out group",
+                    done
+                      ? "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/30"
+                      : "border-border/40 bg-card hover:bg-accent/30 hover:-translate-y-0.5 hover:shadow-sm hover:border-border/70",
+                  )}
                 >
-                  <div className="mt-0.5 rounded-md p-1.5 bg-muted/60 shrink-0 group-hover:bg-accent/60 transition-colors duration-[180ms]">
-                    <Icon className="w-3 h-3 text-muted-foreground/60 group-hover:text-foreground/60 transition-colors duration-[180ms]" />
+                  <div className={cn(
+                    "mt-0.5 rounded-md p-1.5 shrink-0 transition-colors duration-[180ms]",
+                    done ? "bg-emerald-500/10" : "bg-muted/60 group-hover:bg-accent/60",
+                  )}>
+                    {done
+                      ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      : <Icon className="w-3 h-3 text-muted-foreground/60 group-hover:text-foreground/60 transition-colors duration-[180ms]" />
+                    }
                   </div>
                   <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="text-[12px] font-medium text-foreground/75 leading-tight group-hover:text-foreground/90 transition-colors duration-[180ms]">{label}</span>
+                    <span className={cn(
+                      "text-[12px] font-medium leading-tight transition-colors duration-[180ms]",
+                      done ? "text-foreground/45 line-through decoration-foreground/25" : "text-foreground/75 group-hover:text-foreground/90",
+                    )}>{label}</span>
                     <span className="text-[10px] text-muted-foreground/40 leading-snug">{desc}</span>
                   </div>
                 </button>
