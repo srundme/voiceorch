@@ -205,7 +205,7 @@ function ProviderRow({ providers }: { providers: ProviderConfig[] }) {
   const Icon = PROVIDER_TYPE_ICON[providers[0].providerType] ?? Server;
   const label = PROVIDER_TYPE_LABEL[providers[0].providerType] ?? providers[0].providerType;
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0">
+    <div className="flex items-center gap-3 py-1.5 border-b border-border/40 last:border-0">
       <div className="flex items-center gap-1.5 w-20 shrink-0">
         <Icon className="w-3 h-3 text-muted-foreground/40" />
         <span className="text-[11px] font-semibold text-muted-foreground/60">{label}</span>
@@ -236,7 +236,7 @@ function AgentRow({ agent }: { agent: Agent }) {
   const [, navigate] = useLocation();
   return (
     <div
-      className="flex items-center gap-2.5 py-2 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-1 -mx-1 rounded-md"
+      className="flex items-center gap-2.5 py-1.5 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-1 -mx-1 rounded-md"
       onClick={() => navigate(`/app/agents/${agent.id}`)}
     >
       <span className={cn(
@@ -297,7 +297,7 @@ export default function CommandCenterPage() {
   const avgTts = avg(c => c.ttsFirstChunkMs);
 
   return (
-    <div className="flex flex-col gap-5 p-6 min-h-full">
+    <div className="flex flex-col gap-4 p-5 min-h-full">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
@@ -322,9 +322,9 @@ export default function CommandCenterPage() {
 
       {/* ── Latency strip ───────────────────────────────────────────────────── */}
       {(avgStt != null || avgLlm != null || avgTts != null) && (
-        <div className="flex items-center gap-7 px-4 py-3 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
+        <div className="flex items-center gap-5 px-4 py-2 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
           <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">
-            Pipeline P50 <span className="text-muted-foreground/25 normal-case font-normal tracking-normal">· last {callsWithLatency.length} calls</span>
+            Voice Pipeline Health <span className="text-muted-foreground/25 normal-case font-normal tracking-normal">· last {callsWithLatency.length} calls</span>
           </span>
           <div className="flex items-center gap-1.5">
             <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", stageDotColor(avgStt))} />
@@ -348,7 +348,7 @@ export default function CommandCenterPage() {
       )}
 
       {/* ── Main body ───────────────────────────────────────────────────────── */}
-      <div className="flex gap-5 min-h-0">
+      <div className="flex gap-4 min-h-0">
 
         {/* ── Calls feed ──────────────────────────────────────────────────── */}
         <div className="flex flex-col gap-3 flex-1 min-w-0">
@@ -470,10 +470,10 @@ export default function CommandCenterPage() {
         </div>
 
         {/* ── Right panel ─────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-4 w-64 shrink-0">
+        <div className="flex flex-col gap-3 w-56 shrink-0">
 
           {/* Provider Health */}
-          <div className="rounded-xl border border-border/60 bg-card p-4 flex flex-col gap-2">
+          <div className="rounded-xl border border-border/60 bg-card p-3 flex flex-col gap-2">
             <div className="flex items-center gap-2 mb-1">
               <Layers className="w-3.5 h-3.5 text-muted-foreground/40" />
               <span className="text-[12px] font-semibold text-foreground/80">Provider Health</span>
@@ -505,7 +505,7 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Agent Status */}
-          <div className="rounded-xl border border-border/60 bg-card p-4 flex flex-col gap-2">
+          <div className="rounded-xl border border-border/60 bg-card p-3 flex flex-col gap-2">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <Bot className="w-3.5 h-3.5 text-muted-foreground/40" />
@@ -517,7 +517,7 @@ export default function CommandCenterPage() {
                 <span className="text-zinc-500">{allAgents.filter(a => a.status !== "active").length} off</span>
               </div>
             </div>
-            <div className="max-h-[240px] overflow-y-auto -mx-1 px-1">
+            <div className="max-h-[180px] overflow-y-auto -mx-1 px-1">
               {agents.isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="h-4 rounded animate-pulse bg-muted my-1.5" />
