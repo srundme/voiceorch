@@ -161,24 +161,24 @@ function KpiCard({
     <button
       onClick={() => href && navigate(href)}
       className={cn(
-        "group flex h-[104px] flex-col justify-between gap-3 rounded-xl border border-border/60 bg-card px-4 py-3.5 text-left transition-all duration-[180ms] ease-out",
+        "group flex h-[88px] flex-col justify-between gap-2 rounded-xl border border-border/60 bg-card px-4 py-3 text-left transition-all duration-[180ms] ease-out",
         href
           ? "cursor-pointer hover:-translate-y-0.5 hover:border-border hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.35)]"
           : "cursor-default hover:border-border/60",
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold tracking-[0.09em] uppercase text-muted-foreground/45">{label}</span>
-        <div className={cn("rounded-lg p-1.5 opacity-90 transition-colors", color.replace("text-", "bg-").replace("-400", "-500/10"))}>
-          <Icon className={cn("w-3.5 h-3.5", color)} />
+        <span className="text-[9px] font-semibold tracking-[0.09em] uppercase text-muted-foreground/45">{label}</span>
+        <div className={cn("rounded-lg p-1 opacity-90 transition-colors", color.replace("text-", "bg-").replace("-400", "-500/10"))}>
+          <Icon className={cn("w-3 h-3", color)} />
         </div>
       </div>
       {loading ? (
         <div className="h-8 w-24 rounded-md animate-pulse bg-muted" />
       ) : (
         <div className="flex items-baseline gap-2">
-          <span className="text-[28px] font-bold tabular-nums leading-none text-foreground tracking-tight">{displayValue}</span>
-          {sub && <span className="text-[11px] text-muted-foreground/45 leading-none">{sub}</span>}
+          <span className="text-[30px] font-bold tabular-nums leading-none text-foreground tracking-tight">{displayValue}</span>
+          {sub && <span className="text-[10px] text-muted-foreground/45 leading-none">{sub}</span>}
         </div>
       )}
     </button>
@@ -312,7 +312,7 @@ export default function CommandCenterPage() {
       </div>
 
       {/* ── KPI Row ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
         <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`/ ${s?.totalAgents ?? 0}`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} countUp />
         <KpiCard label="Calls Today"     value={s?.callsToday ?? 0}                                        icon={Activity} color="text-blue-400"    href="/app/calls"    loading={isLoading} countUp />
         <KpiCard label="Success Rate"    value={s ? `${s.successRate.toFixed(1)}%` : "—"}                  icon={CheckCircle2} color="text-green-400"                    loading={isLoading} />
