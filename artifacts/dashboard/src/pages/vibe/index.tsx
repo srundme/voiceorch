@@ -275,6 +275,7 @@ export default function VibePage() {
   const [vibeComment,  setVibeComment]  = useState("");
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [slowThink, setSlowThink] = useState(false);
 
   const phaseRef    = useRef<string>("idle");
   const chatEndRef  = useRef<HTMLDivElement>(null);
@@ -1219,6 +1220,16 @@ export default function VibePage() {
 
   const isThinking = phase === "thinking" || phase === "streaming" || phase === "building";
 
+  useEffect(() => {
+    if (phase !== "thinking") {
+      setSlowThink(false);
+      return;
+    }
+    setSlowThink(false);
+    const t = window.setTimeout(() => setSlowThink(true), 12000);
+    return () => window.clearTimeout(t);
+  }, [phase]);
+
   /* ── shared input block ───────────────────────────────────────────────────── */
   const inputBlock = (isLanding: boolean) => {
     const urlPopover = urlInputOpen && (
@@ -1551,7 +1562,9 @@ export default function VibePage() {
                   {refineLoading
                     ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading…</>
                     : <><span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                      {phase === "thinking" ? "Thinking…" : phase === "streaming" ? "Responding…" : statusMsg || "Configuring…"}</>}
+                      {phase === "thinking"
+                        ? (slowThink ? "Still thinking — Gemini can take a bit…" : "Thinking…")
+                        : phase === "streaming" ? "Responding…" : statusMsg || "Configuring…"}</>}
                 </div>
               )}
               {previewWorthy && (
@@ -1643,16 +1656,16 @@ export default function VibePage() {
           {/* ── Preview panel — slides in when agent config appears ─────── */}
           {previewOpen && previewWorthy && (
           <div className={cn(
-            "flex flex-col border-border/30 bg-background/95 backdrop-blur-xl animate-in slide-in-from-right duration-300",
+            "flex flex-col vibe-glass border animate-in slide-in-from-right duration-300",
             "fixed inset-0 z-40 lg:relative lg:inset-auto lg:z-auto",
-            "lg:w-[min(520px,42vw)] lg:shrink-0 lg:border-l",
+            "lg:w-[min(520px,42vw)] lg:shrink-0 lg:border-l lg:rounded-none",
           )}>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 h-14 shrink-0 border-b border-border/20">
+            <div className="flex items-center justify-between px-6 h-14 shrink-0 border-b border-white/10 dark:border-white/10">
               <div className="flex items-center gap-2.5">
-                <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Zap className="h-3.5 w-3.5 text-primary" />
+                <div className="h-7 w-7 rounded-lg bg-white/10 dark:bg-white/10 border border-white/10 flex items-center justify-center backdrop-blur-sm">
+                  <Zap className="h-3.5 w-3.5 text-foreground/80" />
                 </div>
                 <div>
                   <p className="font-semibold text-sm leading-none">Agent Preview</p>
@@ -1682,7 +1695,7 @@ export default function VibePage() {
                   <Button
                     size="sm"
                     variant={showTestCall ? "default" : "outline"}
-                    className="h-7 gap-1.5 text-xs rounded-lg"
+                    className="h-7 gap-1.5 text-xs rounded-lg bg-white/5 border-white/15 backdrop-blur-sm"
                     disabled={isThinking && !showTestCall}
                     onClick={() => setShowTestCall(v => !v)}
                   >
@@ -1692,14 +1705,14 @@ export default function VibePage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 gap-1.5 text-xs rounded-lg"
+                    className="h-7 gap-1.5 text-xs rounded-lg bg-white/5 border-white/15 backdrop-blur-sm"
                     disabled={isThinking}
                     onClick={() => setCallDialogOpen(true)}
                   >
                     <PhoneOutgoing className="h-3 w-3" /> Make a Call
                   </Button>
                   {phase === "done" && (
-                    <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg"
+                    <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-lg bg-white/5 border-white/15"
                       onClick={() => navigate(`/app/agents/${lastSavedAgentId}`)}>
                       <Settings2 className="h-3 w-3" /> Edit
                     </Button>
@@ -1927,7 +1940,7 @@ export default function VibePage() {
               {/* System Prompt */}
               {promptPreview && (
                 <Section title="System Prompt">
-                  <div className="rounded-xl border border-border/60 bg-background p-4 max-h-[280px] overflow-y-auto">
+                  <div className="rounded-xl border vibe-glass-card p-4 max-h-[280px] overflow-y-auto">
                     <p className="text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">
                       {promptPreview}
                       {phase === "building" && (
@@ -2279,8 +2292,8 @@ function Section({ title, badge, badgeVariant = "neutral", children }: {
 function FieldCard({ field }: { field: AgentField }) {
   const IconComp = FIELD_ICONS[field.icon] ?? Sparkles;
   return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-background px-3 py-2.5 animate-in fade-in duration-300">
-      <div className="h-6 w-6 rounded-md bg-muted/80 flex items-center justify-center shrink-0">
+    <div className="flex items-center gap-2.5 rounded-xl border vibe-glass-card px-3 py-2.5 animate-in fade-in duration-300">
+      <div className="h-6 w-6 rounded-md bg-white/10 dark:bg-white/10 flex items-center justify-center shrink-0">
         <IconComp className="h-3 w-3 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
@@ -2294,7 +2307,7 @@ function FieldCard({ field }: { field: AgentField }) {
 
 function NoteCard({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-background p-4 flex gap-3">
+    <div className="rounded-xl border vibe-glass-card p-4 flex gap-3">
       <div className="text-muted-foreground mt-0.5 shrink-0">{icon}</div>
       <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">{text}</p>
     </div>
@@ -2305,10 +2318,10 @@ function FeatureChip({ feature }: { feature: FeatureCard }) {
   const Icon = FEATURE_ICONS[feature.icon] ?? Sparkles;
   return (
     <div className={cn(
-      "rounded-xl border px-3 py-2.5 flex items-start gap-2.5 transition-all",
-      feature.enabled ? "border-border/60 bg-background" : "border-border/40 bg-background/50 opacity-50",
+      "rounded-xl border px-3 py-2.5 flex items-start gap-2.5 transition-all vibe-glass-card",
+      !feature.enabled && "opacity-50",
     )}>
-      <div className="h-6 w-6 rounded-md bg-muted/80 flex items-center justify-center shrink-0 mt-0.5">
+      <div className="h-6 w-6 rounded-md bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
         <Icon className="h-3 w-3 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">

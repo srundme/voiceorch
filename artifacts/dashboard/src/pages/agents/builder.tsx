@@ -300,7 +300,7 @@ function WebhookParamsEditor({ control, toolIndex }: { control: any; toolIndex: 
 
 type CardSection = "transcriber" | "model" | "voice";
 
-function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<string, number>; agent: any }) {
+function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any; rateMap: Map<string, number>; agent: any; compact?: boolean }) {
   const userProviderNames = useUserProviderNames();
 
   const asrProvider       = form.watch("asrProvider");
@@ -334,24 +334,47 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
         ];
 
         const breakdown = segments.filter(s => s.cost > 0);
-        const primary = breakdown.reduce((max, s) => (s.cost > max.cost ? s : max), breakdown[0] ?? segments[0]);
-        const primaryPct = totalPerMin > 0 ? Math.min(100, Math.max(4, (primary?.cost ?? 0) / totalPerMin * 100)) : 0;
+
+        if (compact) {
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-muted/20 px-3 py-1.5 text-[12px] text-muted-foreground cursor-default">
+                  <span className="text-muted-foreground/70">Est. cost</span>
+                  <span className="font-semibold tabular-nums text-foreground">${totalPerMin.toFixed(3)}</span>
+                  <span className="text-muted-foreground/50">/min</span>
+                  <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/55 border-l border-border/50 pl-2">
+                    {isByop ? "BYOP" : "Managed"}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs space-y-1">
+                {breakdown.map(seg => (
+                  <div key={seg.key} className="flex items-center justify-between gap-3">
+                    <span className="font-medium">
+                      {seg.label}
+                      {seg.provider && seg.provider !== "SnapServe" && (
+                        <span className="text-muted-foreground ml-1 capitalize">({seg.provider})</span>
+                      )}
+                    </span>
+                    <span className="tabular-nums">${seg.cost.toFixed(4)}/min</span>
+                  </div>
+                ))}
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
 
         return (
-          <div className="group relative rounded-2xl border border-border/50 bg-card/60 px-6 py-[11px] shadow-sm transition-shadow duration-150 hover:shadow-md">
-            {/* Managed/BYOP pill */}
-            <span className="absolute top-3 right-4 text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground">
-              {isByop ? "BYOP" : "Managed"}
-            </span>
-
-            <div className="flex flex-col items-start text-left gap-2">
-              {/* Label + value */}
-              <div className="flex flex-col items-start gap-1.5">
-                <span className="text-[12px] text-muted-foreground">Estimated Cost / Minute</span>
+          <div className="rounded-xl border border-border/40 bg-muted/15 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="text-[11px] text-muted-foreground shrink-0">Estimated cost</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-[30px] font-semibold text-foreground leading-none tabular-nums cursor-default">
+                    <span className="text-lg font-semibold text-foreground leading-none tabular-nums cursor-default">
                       ${totalPerMin.toFixed(3)}
+                      <span className="text-[11px] font-normal text-muted-foreground ml-1">/min</span>
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs space-y-1">
@@ -368,23 +391,16 @@ function AgentCostSummary({ form, rateMap, agent }: { form: any; rateMap: Map<st
                     ))}
                   </TooltipContent>
                 </Tooltip>
+                <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border/50 text-muted-foreground/70">
+                  {isByop ? "BYOP" : "Managed"}
+                </span>
               </div>
-
-              {/* Thin left-aligned bar */}
-              <div className="h-1.5 w-[240px] rounded-full bg-muted/50 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-150"
-                  style={{ width: `${primaryPct}%` }}
-                />
-              </div>
-
-              {/* Provider breakdown row */}
-              <div className="flex flex-wrap justify-start gap-x-4 gap-y-1">
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {segments.map(seg => (
-                  <div key={seg.key} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                  <div key={seg.key} className="flex items-center gap-1 text-[11px] text-muted-foreground/75">
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
                     <span>{seg.label}</span>
-                    <span className="tabular-nums text-muted-foreground/80">${seg.cost.toFixed(3)}</span>
+                    <span className="tabular-nums">${seg.cost.toFixed(3)}</span>
                   </div>
                 ))}
               </div>
@@ -556,65 +572,65 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
 
       {/* ── Left: Vapi-style config ──────────────────────────────────────────── */}
       <div className="relative min-w-0">
-        <div className="p-5 space-y-5">
+        <div className="p-6 sm:p-8 space-y-8 max-w-4xl">
 
-          {/* ── Three provider cards ─────────────────────────────────────────── */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Pipeline identity */}
+          <section className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">Pipeline</p>
+              <p className="text-sm text-muted-foreground">Speech, model, and voice — click a card to edit.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <AgentConfigCard
+                icon={<Mic />}
+                label="Transcriber"
+                value={langLabel}
+                subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+                active={openSection === "transcriber"}
+                onClick={() => openPipelineDialog("transcriber")}
+              />
+              <AgentConfigCard
+                icon={<Brain />}
+                label="Model"
+                value={llmModelLabel || llmLabel}
+                subtext={llmLabel}
+                active={openSection === "model"}
+                onClick={() => openPipelineDialog("model")}
+              />
+              <AgentConfigCard
+                icon={<Volume2 />}
+                label="Voice"
+                value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
+                subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
+                active={openSection === "voice"}
+                onClick={() => openPipelineDialog("voice")}
+              />
+            </div>
+          </section>
 
-            <AgentConfigCard
-              icon={<Mic />}
-              label="Transcriber"
-              value={langLabel}
-              subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
-              active={openSection === "transcriber"}
-              onClick={() => openPipelineDialog("transcriber")}
-            />
-
-            <AgentConfigCard
-              icon={<Brain />}
-              label="Model"
-              value={llmModelLabel || llmLabel}
-              subtext={llmLabel}
-              active={openSection === "model"}
-              onClick={() => openPipelineDialog("model")}
-            />
-
-            <AgentConfigCard
-              icon={<Volume2 />}
-              label="Voice"
-              value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
-              subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
-              active={openSection === "voice"}
-              onClick={() => openPipelineDialog("voice")}
-            />
-          </div>
-
-
-          {/* ── Managed / BYOP callout ───────────────────────────────────────── */}
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3.5 py-2.5">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Star className="h-4 w-4 shrink-0 text-amber-400 fill-amber-400" />
-              <div className="min-w-0">
-                <p className="text-[11.5px] font-semibold text-amber-300/90 leading-snug">
-                  Using managed API keys
-                </p>
-                <p className="text-[10.5px] text-muted-foreground leading-relaxed mt-0.5">
-                  SnapServe provides keys for the selected providers. To use your own API keys, add them in the Providers section.
+          {/* Cost + keys — secondary, not hero */}
+          <section className="space-y-3">
+            <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-muted/10 px-3.5 py-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Star className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                <p className="text-[12px] text-muted-foreground leading-snug truncate">
+                  Using managed API keys — add your own in Providers.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => navigate("/app/providers")}
+                className="shrink-0 text-[11px] font-medium text-foreground/80 hover:text-foreground transition-colors whitespace-nowrap"
+              >
+                Add keys →
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate("/app/providers")}
-              className="shrink-0 text-[10.5px] font-semibold text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-400/50 rounded-md px-2.5 py-1.5 transition-colors whitespace-nowrap bg-amber-500/5 hover:bg-amber-500/10"
-            >
-              Add own keys →
-            </button>
-          </div>
+          </section>
 
           {/* ── Phone Number Assignment ──────────────────────────────────────── */}
           {phoneNumbers.length > 0 && (
-            <div className="rounded-xl border border-border/60 bg-card/50 p-4 space-y-3">
+            <div className="rounded-2xl border border-border/40 bg-card/30 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Phone className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone Numbers</span>
@@ -883,20 +899,56 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* ── Conversation ─────────────────────────────────────────────────── */}
-          <div className="space-y-5 pt-8">
-            <div className="space-y-1.5">
-              <h3 className="text-[18px] font-semibold text-foreground text-left">Conversation</h3>
-              <p className="text-[13px] text-muted-foreground text-left leading-relaxed">
-                Configure how your agent starts and responds during conversations.
+          {/* System Instructions — hero */}
+          <section className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h3 className="text-xl font-semibold tracking-tight text-foreground">System Instructions</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+                  Personality, behavior, and rules the agent follows on every call.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 text-xs gap-1.5 rounded-full"
+                onClick={() => setGenerateOpen(true)}
+              >
+                <Sparkles className="w-3 h-3" />
+                Generate
+              </Button>
+            </div>
+            <div className="rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm">
+              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <FormControl>
+                    <Textarea
+                      className="min-h-[320px] text-[14px] resize-none font-mono leading-[1.85] rounded-none border-0 bg-transparent px-5 pt-5 pb-4 shadow-none focus-visible:ring-0"
+                      placeholder="You are a helpful voice assistant…"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px] px-4 pb-2" />
+                </FormItem>
+              )} />
+            </div>
+          </section>
+
+          {/* Conversation */}
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">Conversation</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                How the agent opens the call.
               </p>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 rounded-2xl border border-border/40 bg-card/20 p-4">
               <div className="flex items-center justify-between gap-3">
                 <Label className="text-[13px] font-medium text-foreground/90">First Message</Label>
                 <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
                   <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-10 w-56 rounded-xl text-[13px] shrink-0">
+                    <SelectTrigger className="h-9 w-52 rounded-full text-[12px] shrink-0 border-border/50">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -910,7 +962,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 <FormItem className="space-y-0">
                   <FormControl>
                     <Textarea
-                      className="min-h-[72px] max-h-[76px] text-[15px] leading-relaxed resize-none rounded-2xl border-border/60 bg-muted/20 px-4 py-3.5 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/25"
+                      className="min-h-[72px] max-h-[96px] text-[14px] leading-relaxed resize-none rounded-xl border-border/40 bg-background/40 px-4 py-3 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/20"
                       placeholder="Hello, how can I help?"
                       {...field}
                     />
@@ -919,50 +971,14 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 </FormItem>
               )} />
             </div>
-          </div>
+          </section>
 
-          {/* ── System Instructions ──────────────────────────────────────────── */}
-          <div className="space-y-5 pt-6">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1.5">
-                <h3 className="text-[18px] font-semibold text-foreground text-left">System Instructions</h3>
-                <p className="text-[13px] text-muted-foreground text-left leading-relaxed">
-                  Define your agent's personality, behavior, and rules of engagement.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-[34px] shrink-0 text-[12px] px-3 gap-1.5 items-center text-muted-foreground/90 hover:text-foreground bg-foreground/[0.03] hover:bg-foreground/[0.06] border border-border/60 rounded-lg transition-colors font-medium"
-                onClick={() => setGenerateOpen(true)}
-              >
-                <Sparkles className="w-3 h-3" />
-                Generate
-              </Button>
-            </div>
-            <div className="rounded-2xl border border-border/60 bg-muted/20 overflow-hidden">
-              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[260px] text-[15px] resize-none font-mono leading-[1.9] rounded-none border-0 bg-transparent px-6 pt-5 pb-4 shadow-none focus-visible:ring-0"
-                      placeholder="You are a helpful voice assistant…"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px] px-4 pb-2" />
-                </FormItem>
-              )} />
-            </div>
-          </div>
-
-          {/* ── Knowledge ────────────────────────────────────────────────────── */}
-          <div className="space-y-5 pt-6">
-            <div className="space-y-1.5">
-              <h3 className="text-[18px] font-semibold text-foreground text-left">Knowledge</h3>
-              <p className="text-[13px] text-muted-foreground text-left leading-relaxed">
-                Attach documents or knowledge sources that your agent can search during conversations.
+          {/* Knowledge */}
+          <section className="space-y-4 pb-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">Knowledge</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Documents the agent can search during conversations.
               </p>
             </div>
             <div className="space-y-3">
@@ -982,7 +998,7 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
                 </FormItem>
               )} />
             </div>
-          </div>
+          </section>
 
         </div>
       </div>
@@ -4903,52 +4919,60 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
-        className="flex flex-col gap-0 px-6 py-1 border-b border-border/60 shrink-0"
+        className="flex flex-col gap-3 px-6 py-4 border-b border-border/40 shrink-0"
       >
-        <div className="flex flex-col min-w-0">
-          <button
-            type="button"
-            onClick={() => navigate("/app/agents")}
-            className="self-start text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← Agents
-          </button>
-          <div className="flex items-center gap-2 min-w-0 mt-0">
-            <h1
-              className="text-[27px] lg:text-[34px] font-bold leading-tight tracking-tight truncate max-w-[560px]"
-              title={agent.name}
-            >
-              {agent.name}
-            </h1>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col min-w-0 gap-1">
             <button
               type="button"
-              onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
-              className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title="Rename agent"
-              aria-label="Rename agent"
+              onClick={() => navigate("/app/agents")}
+              className="self-start text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
             >
-              <Pencil className="h-4 w-4" />
+              ← Agents
             </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1
+                className="text-2xl sm:text-[1.75rem] font-semibold leading-tight tracking-tight truncate max-w-[520px]"
+                title={agent.name}
+              >
+                {agent.name}
+              </h1>
+              <button
+                type="button"
+                onClick={() => { setRenameValue(agent.name ?? ""); setRenameDialogOpen(true); }}
+                className="shrink-0 rounded-full p-1.5 text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors"
+                title="Rename agent"
+                aria-label="Rename agent"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-[12px] text-muted-foreground/75">
+              <span className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]",
+                agent.status === "active"
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+                  : "border-border/50 bg-muted/30 text-muted-foreground",
+              )}>
+                <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/50")} />
+                {agent.status === "active" ? "Active" : "Inactive"}
+              </span>
+              <span className="text-muted-foreground/35">·</span>
+              <span>#{String(agent.id).padStart(4, "0")}</span>
+              <span className="text-muted-foreground/35">·</span>
+              <span>{(agent as any).totalCalls ?? 0} calls</span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center justify-between gap-4 mt-0">
-          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-            <span className={`h-2 w-2 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
-            <span>{agent.status === "active" ? "Active" : "Inactive"}</span>
-            <span className="text-muted-foreground/40">•</span>
-            <span>Agent #{String(agent.id).padStart(4, "0")}</span>
-            <span className="text-muted-foreground/40">•</span>
-            <span>{(agent as any).totalCalls ?? 0} Calls</span>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
-              <Sparkles className="h-3.5 w-3.5" /> Refine with AI
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 rounded-full text-muted-foreground hover:text-foreground" onClick={() => navigate(`/app/vibe?refine=${agentId}`)} title="Re-open in Vibe Builder to make AI-guided changes">
+              <Sparkles className="h-3.5 w-3.5" /> Refine
             </Button>
             <div className="relative">
               <Button
                 size="sm"
                 className={cn(
-                  "h-7 text-xs gap-1.5 transition-colors",
+                  "h-8 text-xs gap-1.5 rounded-full px-4 transition-colors",
                   savedFlash && "bg-green-600 hover:bg-green-700 text-white",
                 )}
                 onClick={onSave}
@@ -4962,23 +4986,31 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
                 {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save"}
               </Button>
               {isDirty && !updateAgent.isPending && !savedFlash && (
-                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
               )}
             </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setPublishModalOpen(true)}>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-full" onClick={() => setPublishModalOpen(true)}>
               <Upload className="h-3.5 w-3.5" /> Publish
             </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => setCallDialog(true)}>
-              <Phone className="h-3.5 w-3.5" /> Call
-            </Button>
-            <Button size="sm" variant={showWebcall ? "default" : "outline"} className="h-7 text-xs gap-1.5" onClick={() => setShowWebcall(v => !v)}>
-              <Mic className="h-3.5 w-3.5" /> Web Call
-            </Button>
+            <div className="hidden sm:flex items-center gap-1.5 pl-1 border-l border-border/40">
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 rounded-full" onClick={() => setCallDialog(true)}>
+                <Phone className="h-3.5 w-3.5" /> Call
+              </Button>
+              <Button size="sm" variant={showWebcall ? "default" : "outline"} className="h-8 text-xs gap-1.5 rounded-full" onClick={() => setShowWebcall(v => !v)}>
+                <Mic className="h-3.5 w-3.5" /> Web
+              </Button>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full"><MoreHorizontal className="h-4 w-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem className="sm:hidden" onClick={() => setCallDialog(true)}>
+                  <Phone className="h-3.5 w-3.5 mr-2" /> Call
+                </DropdownMenuItem>
+                <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall(v => !v)}>
+                  <Mic className="h-3.5 w-3.5 mr-2" /> Web Call
+                </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
                   <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Agent
                 </DropdownMenuItem>
@@ -5020,18 +5052,13 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       )}
 
       <Form {...form}>
-        {/* Cost card — fixed, never scrolls */}
-        <div className="px-6 pt-2 pb-0 shrink-0">
-          <AgentCostSummary form={form} rateMap={rateMap} agent={agent} />
-        </div>
-
-        {/* Tab strip — shrink-0 sibling, no sticky needed */}
-        <div className="flex items-center gap-1 px-6 border-b border-border/60 overflow-x-auto shrink-0 bg-background/90 backdrop-blur-sm">
+        {/* Tab strip */}
+        <div className="flex items-center gap-1 px-6 border-b border-border/40 overflow-x-auto shrink-0 bg-background/80 backdrop-blur-sm">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => handleTabClick(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-3 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
                 activeTab === tab.id
-                  ? "border-primary text-foreground"
+                  ? "border-foreground text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}>
               {tab.icon}{tab.label}

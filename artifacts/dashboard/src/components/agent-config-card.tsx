@@ -41,23 +41,24 @@ export function AgentConfigCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative text-left rounded-2xl border p-5 cursor-pointer transition-colors duration-150 bg-[#111111]",
+        "group relative text-left rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all duration-200",
+        "bg-card/40 hover:bg-card/70 backdrop-blur-sm",
         active
-          ? "border-white/25"
-          : "border-white/10 hover:border-white/20",
+          ? "border-foreground/25 shadow-sm ring-1 ring-foreground/10"
+          : "border-border/50 hover:border-border",
         className
       )}
     >
-      <Pencil className="absolute top-4 right-4 h-3.5 w-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2.5">
-        <span className="text-muted-foreground/70 [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>
+      <Pencil className="absolute top-3.5 right-3.5 h-3.5 w-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70 mb-2.5">
+        <span className="text-muted-foreground/60 [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span>
         {label}
       </div>
-      <div className="text-base font-semibold text-foreground truncate leading-snug">
+      <div className="text-[15px] font-semibold text-foreground truncate leading-snug tracking-tight">
         {value || "—"}
       </div>
       {subtext && (
-        <div className="text-[11px] text-muted-foreground mt-1 truncate">{subtext}</div>
+        <div className="text-[11px] text-muted-foreground/75 mt-1.5 truncate">{subtext}</div>
       )}
     </button>
   );

@@ -399,7 +399,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
           `https://generativelanguage.googleapis.com/v1beta/models/${VIBE_GEMINI_MODEL}:generateContent?key=${key}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body },
         ),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 45000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("gemini_timeout")), 90000)),
       ]);
 
       if (!resp.ok) {
@@ -413,7 +413,7 @@ async function callGemini(key: string, messages: VibeChatMessage[]): Promise<Gem
         if (resp.status === 429 || resp.status >= 500) {
           lastErr = err;
           if (attempt < MAX_ATTEMPTS) {
-            await sleep(attempt * 1500); // 1.5s, 3s
+            await sleep(attempt * 2000); // 2s, 4s — Gemini often recovers after a brief cooldown
             continue;
           }
         }
@@ -774,7 +774,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         type: "error",
         message: kind === "malformed"
           ? "the AI returned a malformed response. This is usually a one-off — please try again."
-          : "the AI provider timed out or is unavailable. Please try again in a moment.",
+          : "the AI is taking longer than usual or is temporarily unavailable. Please try again in a moment.",
       });
       res.end();
       return;
