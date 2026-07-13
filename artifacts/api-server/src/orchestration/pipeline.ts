@@ -1377,7 +1377,7 @@ export class OrchestrationPipeline {
       if (sp.backOffSeconds >= 0) this.bargeInEchoGraceMs = Math.round(sp.backOffSeconds * 1000);
     }
     this.interruptionMgr = new InterruptionManager({
-      incrementalDelayMs: config.agentConfig.incrementalDelay ?? 900,
+      incrementalDelayMs: config.agentConfig.incrementalDelay ?? 0,
       wordsForInterruption: config.agentConfig.wordsForInterruption ?? 2,
     });
     // Detection only makes sense when {caller_salutation} is actually in the prompt —
@@ -4782,12 +4782,11 @@ export class OrchestrationPipeline {
       if (wakePlayer) {
         const wake = wakePlayer;
         wakePlayer = null;
-        const delayMs = this.agent.incrementalDelay ?? 0;
-        if (delayMs > 0) {
-          setTimeout(wake, delayMs);
-        } else {
-          wake();
-        }
+        // Post-utterance grace (Bolna incremental_delay) is enforced once in
+        // drainSentenceJob via waitForAudioEmit — do not also delay the player
+        // wake here or agents with incrementalDelay>0 hear an extra silent gap
+        // between the first LLM clause and first audible TTS byte.
+        wake();
       }
     };
 
@@ -7865,20 +7864,62 @@ export function extractSentences(text: string, minCommaClauseChars = 8): { sente
 
   let remainder = text.slice(segStart);
 
-  // Comma-clause fallback: keep TTS latency low on long list-heavy responses
-  // with no sentence boundary yet.
-  // Threshold lowered 60→40 chars so Tamil responses (which often stream one long
-  // clause before a period) fire TTS sooner instead of waiting for 60+ chars.
-  if (sentences.length === 0 && remainder.length >= 40) {
-    const commaIdx = remainder.lastIndexOf(", ");
-    if (commaIdx >= 20) {
-      const clause = remainder.slice(0, commaIdx).trim();
-      if (clause.length >= minCommaClauseChars) {
-        sentences.push(clause);
-        remainder = remainder.slice(commaIdx + 2);
+  // Early phrase dispatch (Vapi/Bolna-style): start TTS on the first speakable
+  // clause while the LLM is still streaming — don't wait for .!? boundaries.
+  const early = tryEarlyPhraseDispatch(remainder, minCommaClauseChars);
+  if (early) {
+    sentences.push(early.clause);
+    remainder = early.rest;
+  }
+
+  return { sentences, remainder };
+}
+
+/**
+ * Emit the first speakable clause from streaming LLM text before a sentence
+ * boundary (.!?) arrives. Uses comma/semicolon breaks first, then a word
+ * boundary once the buffer is long enough for natural prosody.
+ */
+export function tryEarlyPhraseDispatch(
+  remainder: string,
+  minChars: number,
+): { clause: string; rest: string } | null {
+  const minBuffer = minChars + 6;
+  if (remainder.length < minBuffer) return null;
+
+  const firstComma = remainder.indexOf(", ");
+  if (firstComma !== -1 && remainder.length >= minBuffer) {
+    const clause = remainder.slice(0, firstComma).trim();
+    // Comma is a natural breath point — allow shorter leading clauses (e.g. "Hello Gopi").
+    if (clause.length >= 5) {
+      return { clause, rest: remainder.slice(firstComma + 2) };
+    }
+  }
+
+  for (const sep of ["; ", " — ", " - "] as const) {
+    const idx = remainder.lastIndexOf(sep);
+    if (idx >= minChars - 1) {
+      const clause = remainder.slice(0, idx).trim();
+      if (clause.length >= minChars) {
+        return { clause, rest: remainder.slice(idx + sep.length) };
       }
     }
   }
 
-  return { sentences, remainder };
+  // Word-boundary flush: once we have enough chars, ship the first phrase so
+  // Cartesia/ElevenLabs streaming TTS can start while tokens still arrive.
+  const softMax = Math.min(remainder.length, minChars + 18);
+  let sp = remainder.lastIndexOf(" ", softMax);
+  if (sp < minChars) {
+    if (remainder.length < minChars + 12) return null;
+    sp = remainder.lastIndexOf(" ");
+  }
+  if (sp >= minChars) {
+    const clause = remainder.slice(0, sp).trim();
+    if (clause.length >= minChars) {
+      return { clause, rest: remainder.slice(sp + 1) };
+    }
+  }
+
+  return null;
 }

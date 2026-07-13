@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractSentences } from "./pipeline.js";
+import { extractSentences, tryEarlyPhraseDispatch } from "./pipeline.js";
 
 // Regression test for the Tamil/Indic "duplicated opening clause" bug on the
 // telephony (pipeline.ts) path. The pipeline clause-split regex was missing the
@@ -59,4 +59,42 @@ describe("extractSentences (pipeline.ts) — enqueued text equals full reply", (
       });
     }
   }
+});
+
+describe("tryEarlyPhraseDispatch — streaming TTS starts before .!?", () => {
+  it("dispatches at comma once minChars is met", () => {
+    const r = tryEarlyPhraseDispatch("Hello Gopi, I'm Aisha from ILCC", 15);
+    expect(r?.clause).toBe("Hello Gopi");
+    expect(r?.rest).toMatch(/^I'm Aisha/);
+  });
+
+  it("dispatches at word boundary when no punctuation yet", () => {
+    const text = "Sure I can help you with that appointment";
+    const r = tryEarlyPhraseDispatch(text, 15);
+    expect(r).not.toBeNull();
+    expect(r!.clause.length).toBeGreaterThanOrEqual(15);
+    expect(text.startsWith(r!.clause)).toBe(true);
+    expect(text).toBe(`${r!.clause} ${r!.rest}`);
+  });
+
+  it("does not dispatch very short buffers", () => {
+    expect(tryEarlyPhraseDispatch("Sure I can", 15)).toBeNull();
+  });
+});
+
+describe("extractSentences — early dispatch during simulated stream", () => {
+  it("enqueues first clause before period arrives", () => {
+    const full = "I can help you schedule that appointment for tomorrow afternoon.";
+    let pending = "";
+    const enqueued: string[] = [];
+    const chunk = "I can help you schedule that appointment";
+    pending += chunk;
+    const { sentences, remainder } = extractSentences(pending, 15);
+    enqueued.push(...sentences);
+    pending = remainder;
+    expect(enqueued.length).toBeGreaterThan(0);
+    expect(enqueued[0]!.length).toBeGreaterThanOrEqual(15);
+    expect(full.startsWith(enqueued.join(" "))).toBe(true);
+    expect(pending.length).toBeGreaterThan(0);
+  });
 });

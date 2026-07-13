@@ -510,7 +510,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     genderDetectionNeutralSalutation: (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "",
     // P1-G: Engine — interruption & pacing
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
-    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 900,
+    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
