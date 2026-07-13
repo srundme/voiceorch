@@ -1183,87 +1183,136 @@ export default function VibePage() {
   const isThinking = phase === "thinking" || phase === "streaming" || phase === "building";
 
   /* ── shared input block ───────────────────────────────────────────────────── */
-  const inputBlock = (isLanding: boolean) => (
-    <div className={cn("relative", isLanding ? "w-full" : "")}>
-      <Textarea
-        ref={chatInputRef}
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={handleKey}
-        placeholder={phase === "done" ? "Your agent is ready!" : "Describe the AI voice agent you want to build…"}
-        disabled={phase === "done" || phase === "building"}
-        rows={isLanding ? 4 : 3}
-        className={cn(
-          "resize-none pr-20 bg-card border-border/70 placeholder:text-muted-foreground/50 transition-all duration-200",
-          isLanding
-            ? "text-[15px] rounded-xl px-4 pt-4 pb-14 min-h-[120px] shadow-sm focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:border-primary/40"
-            : "text-sm pr-20 rounded-xl bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50",
-        )}
-      />
-      <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html,.pdf,.docx" className="hidden" onChange={handleFileUpload} />
-      {/* Website URL input popover */}
-      {urlInputOpen && (
-        <div className={cn(
-          "absolute flex items-center gap-1.5 z-20",
-          isLanding ? "right-24 bottom-4" : "right-20 bottom-2.5",
-        )}>
-          <Input
-            autoFocus
-            value={urlInputValue}
-            onChange={e => setUrlInputValue(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void handleUrlSubmit(); } if (e.key === "Escape") { setUrlInputOpen(false); setUrlInputValue(""); } }}
-            placeholder="https://example.com"
-            className="h-8 w-48 text-xs border-border/60 bg-background"
-          />
-          <button
-            onClick={() => void handleUrlSubmit()}
-            className="h-8 px-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-          >Add</button>
-          <button
-            onClick={() => { setUrlInputOpen(false); setUrlInputValue(""); }}
-            className="h-8 px-2 rounded-lg text-muted-foreground hover:bg-muted/60 text-xs transition-colors"
-          ><X className="h-3.5 w-3.5" /></button>
+  const inputBlock = (isLanding: boolean) => {
+    const urlPopover = urlInputOpen && (
+      <div className={cn(
+        "absolute flex items-center gap-1.5 z-20",
+        isLanding ? "left-4 bottom-14" : "right-20 bottom-2.5",
+      )}>
+        <Input
+          autoFocus
+          value={urlInputValue}
+          onChange={e => setUrlInputValue(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void handleUrlSubmit(); } if (e.key === "Escape") { setUrlInputOpen(false); setUrlInputValue(""); } }}
+          placeholder="https://example.com"
+          className="h-8 w-48 text-xs border-border/60 bg-background"
+        />
+        <button
+          onClick={() => void handleUrlSubmit()}
+          className="h-8 px-2.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+        >Add</button>
+        <button
+          onClick={() => { setUrlInputOpen(false); setUrlInputValue(""); }}
+          className="h-8 px-2 rounded-lg text-muted-foreground hover:bg-muted/60 text-xs transition-colors"
+        ><X className="h-3.5 w-3.5" /></button>
+      </div>
+    );
+
+    if (isLanding) {
+      return (
+        <div className="relative w-full group">
+          <div className="pointer-events-none absolute -inset-px rounded-[26px] bg-gradient-to-br from-[#6366f1]/25 via-[#14b8a6]/10 to-[#ff9933]/20 opacity-60 blur-[1px] transition-opacity group-focus-within:opacity-100" />
+          <div className="relative rounded-[26px] border border-border/40 bg-card/70 backdrop-blur-2xl shadow-[0_8px_40px_rgba(0,0,0,0.35)] transition-all group-focus-within:border-border/70 group-focus-within:shadow-[0_12px_48px_rgba(0,0,0,0.45)]">
+            <Textarea
+              ref={chatInputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder={phase === "done" ? "Your agent is ready!" : "Describe the voice agent you want to build…"}
+              disabled={phase === "done" || phase === "building"}
+              rows={3}
+              className="resize-none border-0 bg-transparent text-[15px] leading-relaxed rounded-[26px] rounded-b-none px-5 pt-5 pb-2 min-h-[88px] placeholder:text-muted-foreground/45 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+            />
+            <div className="flex items-center justify-between gap-3 px-3 pb-3">
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
+                  disabled={phase === "done" || phase === "building" || isThinking}
+                  title="Add website URL for knowledge base"
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all disabled:opacity-30",
+                    urlInputOpen && "text-foreground bg-muted/50",
+                  )}
+                >
+                  <Globe className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={phase === "done" || phase === "building" || isThinking}
+                  title="Upload document for knowledge base"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all disabled:opacity-30"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
+              </div>
+              <Button
+                size="icon"
+                onClick={() => send()}
+                disabled={!canSend}
+                className={cn(
+                  "h-9 w-9 rounded-full transition-all duration-200 shrink-0",
+                  canSend
+                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:scale-105"
+                    : "bg-muted/60 text-muted-foreground",
+                )}
+              >
+                {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
+              </Button>
+            </div>
+            {urlPopover}
+          </div>
+          <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html,.pdf,.docx" className="hidden" onChange={handleFileUpload} />
         </div>
-      )}
-      <button
-        onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
-        disabled={phase === "done" || phase === "building" || isThinking}
-        title="Add website URL for knowledge base"
-        className={cn(
-          "absolute flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30",
-          isLanding ? "right-24 bottom-4 h-9 w-9" : "right-20 bottom-2.5 h-8 w-8",
-          urlInputOpen && "text-primary",
-        )}
-      >
-        <Globe className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />
-      </button>
-      <button
-        onClick={() => fileInputRef.current?.click()}
-        disabled={phase === "done" || phase === "building" || isThinking}
-        title="Upload document for knowledge base"
-        className={cn(
-          "absolute flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30",
-          isLanding ? "right-14 bottom-4 h-9 w-9" : "right-11 bottom-2.5 h-8 w-8",
-        )}
-      >
-        <Paperclip className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />
-      </button>
-      <Button
-        size="icon"
-        onClick={() => send()}
-        disabled={!canSend}
-        className={cn(
-          "absolute transition-all duration-200",
-          isLanding ? "right-4 bottom-4 h-9 w-9 rounded-xl" : "right-2.5 bottom-2.5 h-8 w-8 rounded-lg",
-          canSend
-            ? cn("bg-primary hover:bg-primary/90 shadow-sm", isLanding && "hover:scale-105 hover:rotate-6")
-            : "bg-muted text-muted-foreground",
-        )}
-      >
-        {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className={isLanding ? "h-4 w-4" : "h-3.5 w-3.5"} />}
-      </Button>
-    </div>
-  );
+      );
+    }
+
+    return (
+      <div className="relative">
+        <Textarea
+          ref={chatInputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder={phase === "done" ? "Your agent is ready!" : "Describe the AI voice agent you want to build…"}
+          disabled={phase === "done" || phase === "building"}
+          rows={3}
+          className="resize-none pr-20 text-sm rounded-xl bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50"
+        />
+        <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.html,.pdf,.docx" className="hidden" onChange={handleFileUpload} />
+        {urlPopover}
+        <button
+          onClick={() => { setUrlInputOpen(v => !v); setUrlInputValue(""); }}
+          disabled={phase === "done" || phase === "building" || isThinking}
+          title="Add website URL for knowledge base"
+          className={cn(
+            "absolute right-20 bottom-2.5 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30",
+            urlInputOpen && "text-primary",
+          )}
+        >
+          <Globe className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={phase === "done" || phase === "building" || isThinking}
+          title="Upload document for knowledge base"
+          className="absolute right-11 bottom-2.5 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded-lg transition-all disabled:opacity-30"
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+        </button>
+        <Button
+          size="icon"
+          onClick={() => send()}
+          disabled={!canSend}
+          className={cn(
+            "absolute right-2.5 bottom-2.5 h-8 w-8 rounded-lg transition-all duration-200",
+            canSend ? "bg-primary hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground",
+          )}
+        >
+          {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+    );
+  };
 
   /* ─ render ──────────────────────────────────────────────────────────────── */
   return (
@@ -1272,110 +1321,159 @@ export default function VibePage() {
       {/* ══ Landing view — before first message ════════════════════════════ */}
       {!chatStarted && (
         <div className="relative flex flex-col h-full overflow-hidden bg-background">
-          {/* Top bar */}
-          <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0 border-b border-border/60 bg-background/80 backdrop-blur-md">
+          {/* Ambient background — Gemini-style gradient mesh */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[55vh] w-[80vw] max-w-[900px] rounded-full bg-[#6366f1]/[0.05] dark:bg-[#6366f1]/[0.08] blur-[100px]" />
+            <div className="absolute bottom-[-10%] right-[-5%] h-[40vh] w-[50vw] max-w-[600px] rounded-full bg-[#14b8a6]/[0.04] dark:bg-[#14b8a6]/[0.07] blur-[90px]" />
+            <div className="absolute top-[30%] left-[-8%] h-[35vh] w-[40vw] max-w-[500px] rounded-full bg-[#ff9933]/[0.03] dark:bg-[#ff9933]/[0.05] blur-[80px]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(99,102,241,0.06),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(99,102,241,0.1),transparent)]" />
+          </div>
+
+          {/* Floating top bar */}
+          <header className="relative z-10 flex items-center justify-between px-5 sm:px-8 h-14 shrink-0">
             <BrandMark iconSize={22} wordmarkHeight={15} gapClass="gap-2" />
             <div className="flex items-center gap-1">
               <ThemeToggle />
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                className="h-8 gap-1.5 text-muted-foreground hover:text-foreground rounded-full"
                 onClick={() => navigate("/app/command-center")}
               >
                 <LayoutDashboard className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Explore dashboard</span>
+                <span className="hidden sm:inline">Dashboard</span>
               </Button>
             </div>
           </header>
 
-          <div className="relative z-10 flex-1 overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10 lg:py-14">
-              <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-10 lg:gap-14 items-start">
-                {/* Left — prompt */}
-                <div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground mb-5">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    Vibe Build · AI agent setup
-                  </div>
-
-                  <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.15]">
-                    {isThinking
-                      ? "Configuring your agent…"
-                      : welcomeName
-                        ? `Hey ${welcomeName.split(" ")[0]}, what should your agent do?`
-                        : "What should your voice agent do?"}
-                  </h1>
-                  <p className="mt-3 text-base text-muted-foreground leading-relaxed max-w-xl">
-                    Describe the use case in plain language. We configure STT, LLM, TTS, multilingual mode, tools, and your system prompt — then you can fine-tune everything in the full builder.
-                  </p>
-
-                  <div className="mt-8">
-                    {inputBlock(true)}
-                    <p className="mt-2.5 text-[11px] text-muted-foreground/60 flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span>Enter to send</span>
-                      <span className="text-border">·</span>
-                      <span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> URL for KB</span>
-                      <span className="text-border">·</span>
-                      <span className="inline-flex items-center gap-1"><Paperclip className="h-3 w-3" /> Upload docs</span>
-                    </p>
-                  </div>
-
-                  {!isThinking && (
-                    <div className="mt-6 flex flex-wrap gap-2">
-                      {QUICK_SUGGESTIONS.slice(0, 5).map(s => (
-                        <button
-                          key={s.label}
-                          type="button"
-                          onClick={() => send(s.message)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border/60 bg-card/50 text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-colors"
-                        >
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+          {/* Centered hero — Groq / Gemini chat landing */}
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-5 sm:px-8 pb-10 overflow-y-auto">
+            <div className="w-full max-w-2xl mx-auto flex flex-col items-center text-center">
+              {/* Icon glow */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4 }}
+                className="mb-6 relative"
+              >
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#6366f1]/30 via-[#14b8a6]/20 to-[#ff9933]/30 blur-xl scale-150 opacity-60" />
+                <div className="relative h-14 w-14 rounded-2xl border border-border/30 bg-card/60 backdrop-blur-xl flex items-center justify-center shadow-lg">
+                  <Sparkles className="h-6 w-6 text-foreground/80" />
                 </div>
+              </motion.div>
 
-                {/* Right — templates */}
-                {!isThinking && (
-                  <div className="lg:pt-10">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-3">
-                      Or start from a template
-                    </p>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-2.5">
-                      {VIBE_TEMPLATES.slice(0, 6).map(t => (
+              <motion.h1
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.05 }}
+                className="text-3xl sm:text-[2.75rem] font-semibold tracking-tight leading-[1.12] text-foreground"
+              >
+                {isThinking ? (
+                  "Configuring your agent…"
+                ) : welcomeName ? (
+                  <>
+                    <span className="text-muted-foreground font-normal">Hi </span>
+                    {welcomeName.split(" ")[0]}
+                    <span className="text-muted-foreground font-normal">, </span>
+                    <span className="bg-gradient-to-r from-[#a5b4fc] via-[#5eead4] to-[#fcd34d] bg-clip-text text-transparent">
+                      build your agent
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="bg-gradient-to-r from-[#a5b4fc] via-[#5eead4] to-[#fcd34d] bg-clip-text text-transparent">
+                      Build a voice agent
+                    </span>
+                    <span className="text-muted-foreground font-normal"> with AI</span>
+                  </>
+                )}
+              </motion.h1>
+
+              {!isThinking && (
+                <motion.p
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.12 }}
+                  className="mt-3 text-sm sm:text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                >
+                  Describe what it should do — we handle STT, LLM, TTS, tools, and multilingual setup.
+                </motion.p>
+              )}
+
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.18 }}
+                className="mt-8 w-full"
+              >
+                {inputBlock(true)}
+              </motion.div>
+
+              {!isThinking && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4, delay: 0.28 }}
+                  className="mt-5 w-full"
+                >
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {QUICK_SUGGESTIONS.slice(0, 6).map(s => (
+                      <button
+                        key={s.label}
+                        type="button"
+                        onClick={() => send(s.message)}
+                        className="px-4 py-2 rounded-full text-[13px] font-medium border border-border/50 bg-card/30 text-muted-foreground hover:text-foreground hover:border-border hover:bg-card/60 backdrop-blur-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {!isThinking && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4, delay: 0.36 }}
+                  className="mt-10 w-full"
+                >
+                  <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/50 mb-3">
+                    Templates
+                  </p>
+                  <div className="relative -mx-2">
+                    <div className="flex gap-2.5 overflow-x-auto pb-2 px-2 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {VIBE_TEMPLATES.map(t => (
                         <button
                           key={t.title}
                           type="button"
                           onClick={() => send(t.message)}
-                          className="group text-left rounded-xl border border-border/60 bg-card/40 p-4 hover:border-primary/35 hover:bg-primary/[0.04] transition-all"
+                          className="group snap-start shrink-0 w-[200px] sm:w-[220px] text-left rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md p-4 hover:border-border/70 hover:bg-card/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                              {t.title}
-                            </p>
-                            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-0.5" />
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          <p className="text-sm font-medium text-foreground group-hover:text-foreground/90 transition-colors truncate">
+                            {t.title}
+                          </p>
+                          <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
                             {t.desc}
                           </p>
-                          <p className="mt-2 text-[10px] font-medium text-muted-foreground/55 uppercase tracking-wide">
+                          <p className="mt-2.5 text-[10px] text-muted-foreground/45 font-medium">
                             {t.tag}
                           </p>
                         </button>
                       ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/app/agents?create=1")}
-                      className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
-                    >
-                      Prefer full manual control? Open the agent builder →
-                    </button>
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-background to-transparent" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent" />
                   </div>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/app/agents?create=1")}
+                    className="mt-4 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                  >
+                    Prefer manual setup? Open the full builder →
+                  </button>
+                </motion.div>
+              )}
             </div>
           </div>
         </div>
