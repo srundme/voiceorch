@@ -40,6 +40,7 @@ import {
   loadCallerContext,
   injectCallerMemory,
   injectEnhancedMemory,
+  isResumeDroppedCall,
   computePersonaHash,
   updateCallerProfile,
   latchCallerName,
@@ -399,6 +400,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     effectiveSystemPrompt = appendIrdaiAiDisclosure(effectiveSystemPrompt, irdaiInsurer);
   }
 
+  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 120);
+  const configuredLlmMaxTokens = agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"];
+
   const agentConfig: AgentConfig = {
     id: agent.id,
     name: agent.name,
@@ -410,7 +414,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // fields live in the agent_config JSON blob; only defined values are carried.
     llmGenerationParams: {
       ...(typeof agent.temperature === "number" ? { temperature: agent.temperature } : {}),
-      ...(typeof (agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"]) === "number" ? { maxTokens: (agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"]) as number } : {}),
+      maxTokens: typeof configuredLlmMaxTokens === "number"
+        ? configuredLlmMaxTokens
+        : VOICE_DEFAULT_MAX_TOKENS,
       ...(typeof agentCfg["topP"] === "number" ? { topP: agentCfg["topP"] as number } : {}),
       // Repetition guard: OpenAI-compatible LLMs (incl. Sarvam) default these to 0,
       // which at low temperature lets the model emit byte-identical replies turn
@@ -565,6 +571,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // system prompt, not effectiveSystemPrompt (which varies per call).
   const personaHash = computePersonaHash(agent.systemPrompt);
   let callerProfileSnapshot: CallerProfile | null = null;
+  let resumeDroppedCall = false;
   let latchedFactsMap = new Map<string, string>();
   // Tracks the name latched THIS call via latchCallerName (caller said "my name is X").
   // Kept separate from callerProfileSnapshot.name so we can detect contamination at call-end.
@@ -650,6 +657,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   // Apply caller memory to system prompt
   if (callerCtxResult) {
     callerProfileSnapshot = callerCtxResult.profile;
+    resumeDroppedCall = isResumeDroppedCall(callerCtxResult);
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
 
     // Override STT language from caller memory language_pref fact.
@@ -1251,6 +1259,8 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     onVoicemailAction: () => { voicemailActionExecuted = true; },
     // Returning caller (>=1 prior completed call) → memory-informed recognition opening
     isReturningCaller: (callerProfileSnapshot?.callCount ?? 0) >= 1,
+    callDirection,
+    isResumeDroppedCall: resumeDroppedCall,
     // Carrier answer time — anchors the recording clock (see SessionConfig).
     answeredAt: params.answeredAt,
     onTranscript: (speaker, text) => {

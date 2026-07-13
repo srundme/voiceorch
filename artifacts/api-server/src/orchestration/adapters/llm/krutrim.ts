@@ -21,6 +21,8 @@ import { toOpenAIMessages } from "./openai-messages.js";
  *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE (thinking disabled via chat_template_kwargs)
  */
 
+const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 120);
+
 const DEFAULT_MODEL = "gpt-oss-20b";
 
 /** Hard per-request timeout — fail fast so the pipeline's retry/fallback logic can take over */
@@ -49,6 +51,7 @@ export class KrutrimLLM implements LLMAdapter {
   private model: string;
   private maxTokens: number | undefined;
   private temperature: number | undefined;
+  private abortController: AbortController | null = null;
 
   constructor(apiKey: string, model: string | null, genParams?: LLMGenerationParams) {
     this.client = new OpenAI({
@@ -56,9 +59,13 @@ export class KrutrimLLM implements LLMAdapter {
       baseURL: "https://cloud.olakrutrim.com/v1",
     });
     this.model = model?.trim() || DEFAULT_MODEL;
-    this.maxTokens = genParams?.maxTokens ?? 250;
+    this.maxTokens = genParams?.maxTokens ?? VOICE_DEFAULT_MAX_TOKENS;
     const t = genParams?.temperature;
     this.temperature = typeof t === "number" && Number.isFinite(t) ? Math.min(2, Math.max(0, t)) : undefined;
+  }
+
+  cancelInFlight(): void {
+    this.abortController?.abort();
   }
 
   async chat(
@@ -98,9 +105,13 @@ export class KrutrimLLM implements LLMAdapter {
       body.tool_choice = "auto";
     }
 
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+
     const stream = await this.client.chat.completions.create(
       { ...body, stream: true },
-      { timeout: REQUEST_TIMEOUT_MS }
+      { timeout: REQUEST_TIMEOUT_MS, signal: abortController.signal },
     );
 
     let full = "";

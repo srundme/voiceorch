@@ -56,11 +56,10 @@ describe("makeFlowStepGuard (streaming)", () => {
     expect(g.push("And your timeline?")).toBe("");
   });
 
-  it("never suppresses when only one question is asked", () => {
+  it("never suppresses when only one question is asked within the sentence cap", () => {
     const g = makeFlowStepGuard();
     expect(g.push("Here is point one.")).toBe("Here is point one.");
     expect(g.push("Does that make sense?")).toBe("Does that make sense?");
-    expect(g.push("Great.")).toBe("Great.");
     expect(g.truncated()).toBe(false);
   });
 
@@ -70,6 +69,14 @@ describe("makeFlowStepGuard (streaming)", () => {
     g.push("Second question here?");
     expect(g.truncated()).toBe(true);
     expect(g.push("A trailing statement.")).toBe("");
+  });
+
+  it("caps monologue turns at maxSentences even without a second question", () => {
+    const g = makeFlowStepGuard({ maxSentences: 2 });
+    expect(g.push("Point one.")).toBe("Point one.");
+    expect(g.push("Point two.")).toBe("Point two.");
+    expect(g.push("Point three.")).toBe("");
+    expect(g.truncated()).toBe(true);
   });
 });
 

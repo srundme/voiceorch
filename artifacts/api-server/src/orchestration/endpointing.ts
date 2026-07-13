@@ -189,6 +189,10 @@ export const FORCE_FINALIZE_MS = envInt("FORCE_FINALIZE_MS", 1800);
  *  after ~10 s of silence, giving the caller two clear chances (at ~10 s and
  *  ~20 s) before the call ends. */
 export const STALL_BACKSTOP_MS = envInt("STALL_BACKSTOP_MS", 10000);
+/** Shorter stall window after greeting on outbound calls (caller may need a beat to respond). */
+export const OUTBOUND_POST_GREETING_STALL_MS = envInt("OUTBOUND_POST_GREETING_STALL_MS", 7000);
+/** Even shorter when resuming a dropped callback — expect a quick "hello?" back. */
+export const RESUME_DROP_POST_GREETING_STALL_MS = envInt("RESUME_DROP_POST_GREETING_STALL_MS", 6000);
 /** Max consecutive stall reprompts before ending the call. Override with env
  *  STALL_MAX_REPROMPTS. */
 export const STALL_MAX_REPROMPTS = envInt("STALL_MAX_REPROMPTS", 2);

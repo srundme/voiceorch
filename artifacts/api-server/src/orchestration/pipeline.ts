@@ -5,7 +5,7 @@ import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
-import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep } from "./conversationDiscipline.js";
+import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
@@ -36,6 +36,9 @@ import {
   inactivityFarewell,
   neutralGreeting,
   AFFIRMATIONS,
+  STALL_BACKSTOP_MS,
+  OUTBOUND_POST_GREETING_STALL_MS,
+  RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce } from "./transcriptQuality.js";
@@ -107,6 +110,8 @@ const FILLER_THRESHOLD_MS     = 800;    // play a filler phrase if LLM has not r
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
 const FRAGMENT_COALESCE_MS    = 2000;   // hold short English fragments for a follow-up STT final
+const LLM_TTFT_FALLBACK_MS    = Number(process.env.LLM_TTFT_FALLBACK_MS ?? 1200); // abort slow primary LLM
+const LLM_SLOW_TTFT_MS        = Number(process.env.LLM_SLOW_TTFT_MS ?? 1200);     // warn in execution logs
 const TTS_STREAM_TIMEOUT_MS   = 8000;   // abort TTS streaming fetch if no data within 8 s —
                                          // prevents a hung Cartesia/ElevenLabs connection from
                                          // silencing the call until Vobiz times out and drops it
@@ -335,7 +340,7 @@ const OPENING_ALREADY_DELIVERED_NOTE =
  * caller-memory block (so it can greet a returning caller by name/context) plus a
  * language + one-sentence-length instruction — nothing else.
  */
-function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string): string {
+function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string, resumeDropped = false): string {
   const memoryMatch = fullSystemPrompt.match(
     /=== CALLER MEMORY[\s\S]*?={20,}/,
   );
@@ -355,10 +360,13 @@ function buildCompactGreetingPrompt(fullSystemPrompt: string, language: string):
       `into ${langName} is normal spoken usage — keep such words in English as people naturally say them; this does NOT count as switching languages. ` +
       `EXCEPTION — proper nouns: keep all brand names, product names, company names, and people's names ` +
       `EXACTLY as written in your instructions; never translate or transliterate them.`;
+  const openingLengthRule = resumeDropped
+    ? "[OPENING LENGTH] ONE very short sentence only (under 12 words): briefly acknowledge the previous call dropped or was cut off, in natural colloquial language. No re-introduction, no company pitch, no questions — then stop and listen."
+    : "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.";
   const parts = [
     memoryBlock,
     languageInstruction,
-    "[OPENING LENGTH] Your opening line must be ONE short, natural sentence — a brief greeting only. Do not list services, ask multiple questions, or explain anything yet; wait for the caller to respond.",
+    openingLengthRule,
   ].filter(Boolean);
   return parts.join("\n\n");
 }
@@ -549,6 +557,8 @@ type TtsSentenceJob = {
 
 export class OrchestrationPipeline {
   private config: SessionConfig;
+  private readonly callDirection: "inbound" | "outbound";
+  private readonly isResumeDroppedCall: boolean;
   private agent: AgentConfig;
   private stt: ReturnType<typeof createSTTAdapter>;
   private llm: ReturnType<typeof createLLMAdapter>;
@@ -1064,6 +1074,15 @@ export class OrchestrationPipeline {
       if (!isEagerCommitReady(partial)) return;
       if (this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
       this._launchSpeculativeLlm(partial);
+      this.logExec("LLM", "system", {
+        status: "info",
+        turnNumber: this._activeTurnIndex,
+        metadata: {
+          event: "Eager LLM Launched",
+          partial: partial.slice(0, 80),
+          stableMs: EAGER_PARTIAL_STABLE_MS,
+        },
+      });
       logger.info(
         { callId: this.config.callId, partial: partial.slice(0, 80) },
         "Eager LLM prefill launched on stable partial",
@@ -1265,6 +1284,8 @@ export class OrchestrationPipeline {
 
   constructor(config: SessionConfig) {
     this.config = config;
+    this.callDirection = config.callDirection ?? "inbound";
+    this.isResumeDroppedCall = config.isResumeDroppedCall === true;
     this.agent = config.agentConfig;
     // Anchor the recording clock to the carrier answer time (when known) so the
     // gap between carrier answer and the first media frame is padded as leading
@@ -1538,7 +1559,13 @@ export class OrchestrationPipeline {
     }
 
     // Turn safety net — two timers guarding the "Listening…" hang.
+    const stallBackstopMs = this.isResumeDroppedCall
+      ? RESUME_DROP_POST_GREETING_STALL_MS
+      : this.callDirection === "outbound"
+        ? OUTBOUND_POST_GREETING_STALL_MS
+        : STALL_BACKSTOP_MS;
     this.safetyNet = new TurnSafetyNet({
+      stallBackstopMs,
       onForceFinalize: (transcript) => {
         if (this.closed) return;
         logger.warn(
@@ -2834,6 +2861,7 @@ export class OrchestrationPipeline {
             buildCompactGreetingPrompt(
               this.agent.systemPrompt,
               this.currentLang || this.agent.sttConfig.language || this.agent.language || "en-IN",
+              this.isResumeDroppedCall,
             ),
             this.salutationFor(null),
           );
@@ -4624,7 +4652,7 @@ export class OrchestrationPipeline {
     // One-step output guard: suppresses any second question (and everything
     // after it) so a turn that runs through multiple flow steps is truncated at
     // the first natural yield point. Mirrored into stored history below.
-    const stepGuard = makeFlowStepGuard();
+    const stepGuard = makeFlowStepGuard({ maxSentences: VOICE_MAX_SENTENCES_PER_TURN });
     let allEnqueued  = false;
     // Leading-ack suppression: when a dead-air or backchannel filler was already
     // spoken this turn, the first LLM sentence is checked and dropped if it is a
@@ -5456,6 +5484,31 @@ export class OrchestrationPipeline {
     // errors, so a momentary provider blip no longer drops the whole call.
     const MAX_LLM_ATTEMPTS = 3;
     let llmErr: unknown = null;
+    let ttftFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearTtftFallbackTimer = () => {
+      if (ttftFallbackTimer) { clearTimeout(ttftFallbackTimer); ttftFallbackTimer = null; }
+    };
+    const armTtftFallbackTimer = () => {
+      clearTtftFallbackTimer();
+      if (!this.fallbackLlm || effectiveLlm !== this.llm) return;
+      ttftFallbackTimer = setTimeout(() => {
+        if (llmFirstTokenAt || this.bargeInRequested || this.closed) return;
+        logger.warn(
+          { callId: this.config.callId, thresholdMs: LLM_TTFT_FALLBACK_MS, provider: this.agent.llmProvider },
+          "Primary LLM TTFT exceeded — cancelling in-flight request for fallback",
+        );
+        this.logExec("LLM", "system", {
+          status: "info",
+          turnNumber: _currentTurnIndex,
+          metadata: {
+            event: "TTFT Fallback Triggered",
+            thresholdMs: LLM_TTFT_FALLBACK_MS,
+            provider: this.agent.llmProvider,
+          },
+        });
+        this.llm.cancelInFlight?.();
+      }, LLM_TTFT_FALLBACK_MS);
+    };
     for (let llmAttempt = 1; llmAttempt <= MAX_LLM_ATTEMPTS; llmAttempt++) {
     if (llmAttempt > 1) {
       // Only reachable when the previous attempt threw a RETRYABLE error BEFORE
@@ -5479,6 +5532,7 @@ export class OrchestrationPipeline {
       });
     }
     try {
+      armTtftFallbackTimer();
       await effectiveLlm.chat(
         historyForLlm,
         systemPromptForTurn,
@@ -5487,15 +5541,19 @@ export class OrchestrationPipeline {
           if (!llmFirstTokenAt) {
             llmFirstTokenAt = Date.now();
             this._tTurnLlmFirstToken = performance.now();
+            clearTtftFallbackTimer();
             this.onLlmFirstTokenReceived();
             // LLM responded in time — cancel the dead-air filler before it fires
             if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
+            const ttftMs = llmFirstTokenAt - llmStart;
+            const slowTtft = ttftMs >= LLM_SLOW_TTFT_MS;
             this.logExec("LLM", "system", {
               provider: this.agent.llmProvider,
               status: "info",
               turnNumber: _currentTurnIndex,
-              durationMs: llmFirstTokenAt - llmStart,
-              metadata: { event: "First Token Received", ttftMs: llmFirstTokenAt - llmStart },
+              durationMs: ttftMs,
+              ...(slowTtft ? { warningFlags: ["slow_ttft"] as const } : {}),
+              metadata: { event: "First Token Received", ttftMs, slow: slowTtft },
             });
           }
           llmResponse += token;                  // keep raw response (incl. think blocks)
@@ -5600,9 +5658,11 @@ export class OrchestrationPipeline {
       );
       _agnostTurn?.end(llmResponse);
       llmErr = null;
+      clearTtftFallbackTimer();
       break;
     } catch (err) {
       llmErr = err;
+      clearTtftFallbackTimer();
       if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; }
       // Same-provider retry for transient errors, ONLY before any token has
       // streamed (llmFirstTokenAt === null) — otherwise a retry would double-speak
@@ -6354,7 +6414,7 @@ export class OrchestrationPipeline {
     let pendingText = "";
     // One-step output guard (same as the main turn path) — truncate at the first
     // natural yield point if the post-tool reply runs through multiple steps.
-    const stepGuard = makeFlowStepGuard();
+    const stepGuard = makeFlowStepGuard({ maxSentences: VOICE_MAX_SENTENCES_PER_TURN });
     let allEnqueued = false;
 
     // Keep tools attached on follow-up turns so the agent can chain calls in a

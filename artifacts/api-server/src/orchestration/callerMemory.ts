@@ -172,6 +172,13 @@ export function isAbruptEnd(profile: CallerProfile | null): boolean {
   );
 }
 
+/** True when this call should resume a recently dropped thread (not cold-start). */
+export function isResumeDroppedCall(ctx: CallerContext): boolean {
+  if (ctx.personaChanged) return false;
+  if (!isAbruptEnd(ctx.profile)) return false;
+  return isResumableTail(ctx.abruptEndTail ?? null);
+}
+
 /** Fetch the last `limit` utterances of an archived episode (L2), in chronological order. */
 async function loadEpisodeTail(
   episodeId: number,

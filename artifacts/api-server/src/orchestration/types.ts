@@ -609,6 +609,10 @@ export interface SessionConfig {
    *  When set, the opening greeting is generated from the memory-injected system prompt
    *  (recognition-style) instead of speaking the static scripted greeting verbatim. */
   isReturningCaller?: boolean;
+  /** Inbound vs outbound — used for post-greeting listen timing on telephony calls. */
+  callDirection?: "inbound" | "outbound";
+  /** Prior call dropped within the resume window — shorter opener + listen stall. */
+  isResumeDroppedCall?: boolean;
   /** Carrier answer/bridge time (epoch ms), captured at the telephony answer
    *  webhook. When set, the recording timeline is anchored here so the gap
    *  between carrier answer and the first media frame is padded as leading

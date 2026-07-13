@@ -74,6 +74,14 @@ export function truncateToSingleStep(text: string): { text: string; truncated: b
   return { text: text.trim(), truncated: false };
 }
 
+/** Default cap on spoken sentences per agent turn (voice latency). */
+export const VOICE_MAX_SENTENCES_PER_TURN = 2;
+
+export interface FlowStepGuardOptions {
+  /** Max sentences to speak before suppressing the rest of the turn. */
+  maxSentences?: number;
+}
+
 /**
  * Stateful streaming counterpart of {@link truncateToSingleStep}, applied to the
  * sentences a turn enqueues for TTS in real time. Feed each spoken sentence to
@@ -83,8 +91,10 @@ export function truncateToSingleStep(text: string): { text: string; truncated: b
  * per turn; only route real LLM-response sentences through it (never fillers or
  * tool-acknowledgement phrases).
  */
-export function makeFlowStepGuard(): { push: (sentence: string) => string; truncated: () => boolean } {
+export function makeFlowStepGuard(opts?: FlowStepGuardOptions): { push: (sentence: string) => string; truncated: () => boolean } {
+  const maxSentences = opts?.maxSentences ?? VOICE_MAX_SENTENCES_PER_TURN;
   let questionCount = 0;
+  let sentenceCount = 0;
   let suppressed = false;
   return {
     push(sentence: string): string {
@@ -95,6 +105,11 @@ export function makeFlowStepGuard(): { push: (sentence: string) => string; trunc
           suppressed = true;
           return "";
         }
+      }
+      sentenceCount++;
+      if (sentenceCount > maxSentences) {
+        suppressed = true;
+        return "";
       }
       return sentence;
     },
