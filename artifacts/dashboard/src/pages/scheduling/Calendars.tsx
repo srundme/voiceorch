@@ -939,7 +939,7 @@ export default function CalendarsPage({ embedded = false, onCalendarSaved }: { e
           <CalendarCard
             key={cal.id}
             calendar={cal}
-            agentName={undefined}
+            agentName={(cal as any).connectedAgentName ?? undefined}
             googleConnections={googleConnections}
             linkedConnectionId={calendarLinks[cal.id] ?? null}
             onLinkChange={handleLinkChange}

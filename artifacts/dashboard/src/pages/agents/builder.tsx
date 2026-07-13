@@ -4771,6 +4771,10 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         const payload = buildUpdateAgentPayload(data);
         const saved = await updateAgent.mutateAsync({ id: agentId, data: payload as any });
         form.setValue("languageAutoDetect", (saved as any)?.agentConfig?.languageAutoDetect ?? false, { shouldDirty: false });
+        // Sync scheduling fields immediately from the save response so the event-type
+        // Select is not shown as "Any event type" while the background refetch is in-flight.
+        form.setValue("schedulingCalendarId", (saved as any)?.agentConfig?.calendarCapability?.defaultCalendarId ?? null, { shouldDirty: false });
+        form.setValue("schedulingEventTypeId", (saved as any)?.agentConfig?.calendarCapability?.defaultEventTypeId ?? null, { shouldDirty: false });
         queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
         queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
         toast({ title: "Saved", description: `${data.name} updated.` });

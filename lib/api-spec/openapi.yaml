@@ -9711,6 +9711,9 @@ components:
         connectedGoogleAccountsCount:
           type: ["integer", "null"]
           description: Total number of Google Calendar connections for this user
+        connectedAgentName:
+          type: ["string", "null"]
+          description: Name of the agent whose calendarCapability points to this calendar, if any
 
     SchedulingCalendarInput:
       type: object

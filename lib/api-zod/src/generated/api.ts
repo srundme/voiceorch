@@ -4620,7 +4620,8 @@ export const ListCalendarsResponseItem = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
-  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user'),
+  "connectedAgentName": zod.string().nullish().describe('Name of the agent whose calendarCapability points to this calendar, if any')
 })
 export const ListCalendarsResponse = zod.array(ListCalendarsResponseItem)
 
@@ -4661,7 +4662,8 @@ export const GetCalendarResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
-  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user'),
+  "connectedAgentName": zod.string().nullish().describe('Name of the agent whose calendarCapability points to this calendar, if any')
 })
 
 
@@ -4695,7 +4697,8 @@ export const UpdateCalendarResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
   "connectedGoogleEmail": zod.string().nullish().describe('Email of the linked Google Calendar account, if any'),
-  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user')
+  "connectedGoogleAccountsCount": zod.number().nullish().describe('Total number of Google Calendar connections for this user'),
+  "connectedAgentName": zod.string().nullish().describe('Name of the agent whose calendarCapability points to this calendar, if any')
 })
 
 

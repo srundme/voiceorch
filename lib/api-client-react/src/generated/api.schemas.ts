@@ -3006,6 +3006,11 @@ export interface SchedulingCalendar {
      * @nullable
      */
   connectedGoogleAccountsCount?: number | null;
+  /**
+     * Name of the agent whose calendarCapability points to this calendar, if any
+     * @nullable
+     */
+  connectedAgentName?: string | null;
 }
 
 export interface SchedulingCalendarInput {

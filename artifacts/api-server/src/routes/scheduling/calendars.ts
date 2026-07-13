@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count } from "drizzle-orm";
-import { db, schedulingCalendarsTable, googleCalendarConnectionsTable, bookingsTable } from "@workspace/db";
+import { eq, and, count, sql } from "drizzle-orm";
+import { db, schedulingCalendarsTable, googleCalendarConnectionsTable, bookingsTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../../middlewares/requireAuth.js";
 import {
   CreateCalendarBody,
@@ -59,10 +59,30 @@ router.get("/scheduling/calendars", requireAuth, async (req, res): Promise<void>
     for (const c of conns) emailMap[c.id] = c.email;
   }
 
+  // Build calendarId → agentName map via JSONB lookup (no schema column needed).
+  const calendarIds = rows.map(r => r.id);
+  const agentNameMap: Record<number, string> = {};
+  if (calendarIds.length > 0) {
+    const agentRows = await db
+      .select({
+        name: agentsTable.name,
+        calendarId: sql<number>`(${agentsTable.agentConfig}->'calendarCapability'->>'defaultCalendarId')::integer`,
+      })
+      .from(agentsTable)
+      .where(
+        sql`${agentsTable.userId} = ${clerkId}
+          AND (${agentsTable.agentConfig}->'calendarCapability'->>'defaultCalendarId') IS NOT NULL`
+      );
+    for (const a of agentRows) {
+      if (a.calendarId != null) agentNameMap[a.calendarId] = a.name;
+    }
+  }
+
   const enriched = rows.map(r => ({
     ...r,
     connectedGoogleEmail: r.googleCalendarConnectionId ? (emailMap[r.googleCalendarConnectionId] ?? null) : null,
     connectedGoogleAccountsCount: googleAccountsCount,
+    connectedAgentName: agentNameMap[r.id] ?? null,
   }));
 
   res.json(ListCalendarsResponse.parse(enriched));
