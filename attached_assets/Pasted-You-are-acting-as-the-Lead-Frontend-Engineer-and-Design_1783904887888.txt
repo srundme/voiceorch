@@ -1,0 +1,99 @@
+You are acting as the Lead Frontend Engineer and Design System Owner for SnapServe.
+
+Perform a UI audit and enforce the following design standards across the entire application.
+
+==================================================
+ENTERPRISE UI STANDARD
+==================================================
+
+SnapServe is an enterprise SaaS platform.
+
+The UI must look professional, minimal, and suitable for enterprise customers.
+
+Do NOT make it look playful or consumer-oriented.
+
+==================================================
+NO EMOJIS ANYWHERE
+==================================================
+
+Remove every emoji from the application.
+
+This includes, but is not limited to:
+
+• Emoji icons in buttons
+• Emoji in labels
+• Emoji in headings
+• Emoji in helper text
+• Emoji in status indicators
+• Emoji in empty states
+• Emoji in onboarding
+• Emoji in notifications
+• Emoji inside prompts
+• Emoji inside templates
+• Emoji in tooltips
+• Emoji in cards
+• Emoji in badges
+
+Examples to remove:
+
+❌ 🔥 🚀 ⭐ 💡 🎯 ✨ 📄 📞 🟢 🔴 🟡 ⚡ 🌐 🇮🇳 🇺🇸 🇬🇧
+
+Also remove all country flag emojis.
+
+==================================================
+USE ICONS INSTEAD
+==================================================
+
+Whenever a visual indicator is needed, use the existing icon library already used in the project (Lucide/Radix/shadcn icons).
+
+Examples:
+
+Instead of 🌐 use Globe
+
+Instead of 📄 use FileText
+
+Instead of 📞 use Phone
+
+Instead of ⚙️ use Settings
+
+Instead of ⭐ use Star icon
+
+Instead of 🚀 use Rocket icon
+
+Instead of 🟢 use a small colored status dot
+
+==================================================
+DESIGN CONSISTENCY
+==================================================
+
+Maintain one consistent visual language.
+
+No emojis.
+
+No mixed icon styles.
+
+Only professional SVG icons.
+
+==================================================
+DO NOT CHANGE
+==================================================
+
+• Business logic
+• Functionality
+• APIs
+• Backend
+• Routing
+
+Only update the UI presentation.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+✓ Zero emojis anywhere in the application.
+
+✓ Zero country flags anywhere in the application.
+
+✓ Only consistent SVG icons are used.
+
+✓ The application feels like a premium enterprise SaaS product similar to Stripe, Linear, Vercel, GitHub Enterprise, and Notion.
