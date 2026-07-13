@@ -4580,6 +4580,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
   const sectionRefs = useRef<Partial<Record<TabId, HTMLElement>>>({});
   const tabStripRef = useRef<HTMLDivElement>(null);
   const [tabH, setTabH] = useState(44);
+  const tabHRef = useRef(44);
   const agentResetSigRef = useRef<string | null>(null);
 
   const scrollToSection = (tabId: TabId) => {
@@ -4613,10 +4614,14 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     const strip = tabStripRef.current;
     if (!strip) return;
     const ro = new ResizeObserver(() => {
-      setTabH(strip.offsetHeight || 44);
+      const h = strip.offsetHeight || 44;
+      tabHRef.current = h;
+      setTabH(h);
     });
     ro.observe(strip);
-    setTabH(strip.offsetHeight || 44);
+    const h = strip.offsetHeight || 44;
+    tabHRef.current = h;
+    setTabH(h);
     return () => ro.disconnect();
   }, [isLoading]);
 
@@ -4624,6 +4629,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
     if (isLoading) return;
     const container = scrollContainerRef.current;
     if (!container) return;
+    const margin = tabHRef.current;
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries.filter(e => e.isIntersecting);
@@ -4632,7 +4638,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
         const topId = visible[0].target.id.replace("section-", "") as TabId;
         setActiveTab(topId);
       },
-      { root: container, rootMargin: `-${tabH}px 0px -60% 0px`, threshold: 0 },
+      { root: container, rootMargin: `-${margin}px 0px -60% 0px`, threshold: 0 },
     );
     TABS.forEach(tab => {
       const el = sectionRefs.current[tab.id];
