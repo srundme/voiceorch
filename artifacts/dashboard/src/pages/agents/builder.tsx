@@ -1756,10 +1756,12 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
           };
           return (
             <div key={type} className={cn("rounded-xl border transition-all duration-150", isOn ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleNativeTool(type)}
-                className="w-full text-left p-4 flex items-start gap-3"
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNativeTool(type); } }}
+                className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
               >
                 <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
                   <span className={cn(isOn ? "text-foreground/70" : "text-muted-foreground/35")}>{icon}</span>
@@ -1771,9 +1773,9 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
                   <p className="text-[11px] text-muted-foreground/60 leading-relaxed">{description}</p>
                 </div>
                 <div className="shrink-0 mt-1">
-                  <Switch checked={isOn} onCheckedChange={() => toggleNativeTool(type)} onClick={e => e.stopPropagation()} />
+                  <Switch checked={isOn} onCheckedChange={e => { e.stopPropagation?.(); toggleNativeTool(type); }} onClick={e => e.stopPropagation()} />
                 </div>
-              </button>
+              </div>
               {isOn && (
                 <div className="px-4 pb-4 -mt-1">
                   <div className="border-t border-border/30 pt-3 flex items-center justify-between gap-2 flex-wrap">
