@@ -1742,7 +1742,15 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               disabled={!calendarIdForEt}
             >
               <SelectTrigger className="h-7 text-xs bg-background/50">
-                <SelectValue placeholder="Any event type" />
+                <SelectValue placeholder="Any event type">
+                  {schedulingEventTypeId != null
+                    ? agentEventTypes == null
+                      ? "Loading…"
+                      : ((agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.title
+                         || (agentEventTypes as any[]).find((e: any) => e.id === schedulingEventTypeId)?.name
+                         || undefined)
+                    : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__" className="text-xs text-muted-foreground">Any event type</SelectItem>
