@@ -1,11 +1,11 @@
 import { useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import {
-  Terminal, RefreshCw, Activity, Zap, CheckCircle2, XCircle,
+  Terminal, RefreshCw, Activity, Zap, CheckCircle2,
   AlertTriangle, Server, Key, Bot,
-  Cpu, Radio, AudioWaveform, Phone, BarChart3, Inbox,
-  ChevronRight, Plus, BookOpen, ArrowUpRight, ArrowDownLeft,
-  Rocket,
+  Cpu, Radio, AudioWaveform, Phone,
+  ArrowUpRight, ArrowDownLeft,
+  Rocket, Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -213,8 +213,8 @@ function ProviderRow({ providers }: { providers: ProviderConfig[] }) {
   const Icon = PROVIDER_TYPE_ICON[providers[0].providerType] ?? Server;
   const label = PROVIDER_TYPE_LABEL[providers[0].providerType] ?? providers[0].providerType;
   return (
-    <div className="flex items-center gap-3 py-1.5 border-b border-border/40 last:border-0">
-      <div className="flex items-center gap-1.5 w-20 shrink-0">
+    <div className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+      <div className="flex items-center gap-2 w-20 shrink-0">
         <Icon className="w-3 h-3 text-muted-foreground/40" />
         <span className="text-[11px] font-semibold text-muted-foreground/60">{label}</span>
       </div>
@@ -244,7 +244,7 @@ function AgentRow({ agent }: { agent: Agent }) {
   const [, navigate] = useLocation();
   return (
     <div
-      className="flex items-center gap-2.5 py-1.5 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-1 -mx-1 rounded-md"
+      className="flex items-center gap-2 py-2 border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/20 transition-colors px-1 -mx-1 rounded-md"
       onClick={() => navigate(`/app/agents/${agent.id}`)}
     >
       <span className={cn(
@@ -269,17 +269,14 @@ function AgentRow({ agent }: { agent: Agent }) {
 /* ── Section heading ───────────────────────────────────────────────────────── */
 
 function SectionHeading({
-  icon: Icon, title, sub, isFetching,
+  icon: Icon, title, isFetching,
 }: {
-  icon: React.ElementType; title: string; sub?: string; isFetching?: boolean;
+  icon: React.ElementType; title: string; isFetching?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
       <Icon className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-      <div className="flex flex-col min-w-0">
-        <span className="text-[13px] font-semibold text-foreground/80 leading-tight">{title}</span>
-        {sub && <span className="text-[10px] text-muted-foreground/35 leading-tight mt-0.5">{sub}</span>}
-      </div>
+      <span className="text-[13px] font-semibold text-foreground/80 leading-tight">{title}</span>
       {isFetching && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground/30 ml-1 shrink-0" />}
     </div>
   );
@@ -289,7 +286,7 @@ function SectionHeading({
 
 function SidebarCardHeading({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
-    <div className="flex items-center gap-2 px-3.5 pt-3 pb-2.5 border-b border-border/40">
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40">
       <Icon className="w-3 h-3 text-muted-foreground/40 shrink-0" />
       <span className="text-[12px] font-semibold text-foreground/70">{title}</span>
     </div>
@@ -338,22 +335,22 @@ export default function CommandCenterPage() {
   const avgTts = avg(c => c.ttsFirstChunkMs);
 
   return (
-    <div className="flex flex-col gap-3.5 px-6 py-5 min-h-full">
+    <div className="flex flex-col gap-6 px-6 py-4 min-h-full">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-muted-foreground/50" />
           <div>
             <h1 className="text-[15px] font-semibold text-foreground leading-tight">Command Center</h1>
-            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-0.5">Live overview of your voice platform.</p>
+            <p className="text-[11px] text-muted-foreground/40 leading-tight mt-1">Live overview of your voice platform.</p>
           </div>
         </div>
         <LiveIndicator isFetching={isFetching} />
       </div>
 
       {/* ── KPI Row ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard label="Active Agents"   value={s?.activeAgents ?? 0} sub={`/ ${s?.totalAgents ?? 0}`}   icon={Bot}      color="text-emerald-400" href="/app/agents"    loading={isLoading} countUp />
         <KpiCard label="Calls Today"     value={s?.callsToday ?? 0}                                        icon={Activity} color="text-blue-400"    href="/app/calls"    loading={isLoading} countUp />
         <KpiCard label="Success Rate"    value={s ? `${s.successRate.toFixed(1)}%` : "—"}                  icon={CheckCircle2} color="text-green-400"                    loading={isLoading} />
@@ -363,7 +360,7 @@ export default function CommandCenterPage() {
 
       {/* ── Latency strip ───────────────────────────────────────────────────── */}
       {(avgStt != null || avgLlm != null || avgTts != null) && (
-        <div className="flex items-center gap-5 px-4 py-2 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
+        <div className="flex items-center gap-4 px-4 py-2 rounded-xl border border-border/60 bg-muted/20 text-[11px]">
           <span className="text-muted-foreground/40 font-semibold uppercase tracking-wide text-[10px]">
             Voice Pipeline Health <span className="text-muted-foreground/25 normal-case font-normal tracking-normal">· last {callsWithLatency.length} calls</span>
           </span>
@@ -389,32 +386,31 @@ export default function CommandCenterPage() {
       )}
 
       {/* ── Two-column body ──────────────────────────────────────────────────── */}
-      <div className="flex gap-5 min-h-0">
+      <div className="flex gap-6 min-h-0">
 
         {/* ── Left column: Calls + Activity ─────────────────────────────────── */}
-        <div className="flex flex-col gap-3 flex-1 min-w-0">
+        <div className="flex flex-col gap-6 flex-1 min-w-0">
 
           {/* Recent Calls */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <SectionHeading
                 icon={Activity}
                 title="Recent Calls"
-                sub="Last 25 calls"
                 isFetching={callsQ.isFetching}
               />
               <button
                 onClick={() => navigate("/app/calls")}
-                className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+                className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors duration-[180ms]"
               >
-                <BarChart3 className="w-3 h-3" />
-                <span>{recentCalls.length} calls</span>
+                <span>View All</span>
+                <ArrowUpRight className="w-3 h-3" />
               </button>
             </div>
 
             <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
               {/* table header */}
-              <div className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] border-b border-border/60 bg-muted/30 px-4 py-2.5">
+              <div className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] border-b border-border/60 bg-muted/30 px-4 py-3">
                 {["Agent", "Phone", "Direction", "Duration", "Status", "Time"].map(h => (
                   <span key={h} className="text-[10px] font-semibold tracking-[0.07em] uppercase text-muted-foreground/35 truncate">
                     {h}
@@ -436,14 +432,13 @@ export default function CommandCenterPage() {
                   <div className="flex flex-col items-center justify-center py-14 gap-3 text-center">
                     <Phone className="w-7 h-7 text-muted-foreground/20" />
                     <div className="flex flex-col gap-1">
-                      <p className="text-[12px] font-medium text-foreground/40">Your calls will appear here as your agents go live</p>
-                      <p className="text-[11px] text-muted-foreground/30">No calls yet</p>
+                      <p className="text-[12px] font-medium text-foreground/40">No calls yet. Create an agent and make your first call.</p>
                     </div>
                     <button
-                      onClick={() => navigate("/app/agents")}
-                      className="mt-1 text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
+                      onClick={() => navigate("/app/agents?create=1")}
+                      className="mt-1 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all duration-[180ms] border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
                     >
-                      Create Agent →
+                      Create Agent
                     </button>
                   </div>
                 ) : (
@@ -453,7 +448,7 @@ export default function CommandCenterPage() {
                     return (
                       <div
                         key={call.id}
-                        className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] px-4 py-3 hover:bg-accent/25 transition-colors duration-150 cursor-pointer"
+                        className="grid grid-cols-[1fr_120px_76px_64px_84px_72px] px-4 py-3 hover:bg-accent/25 hover:-translate-y-px transition-all duration-[180ms] ease-out cursor-pointer"
                         onClick={() => navigate(`/app/calls/${call.id}`)}
                       >
                         {/* Agent */}
@@ -474,22 +469,18 @@ export default function CommandCenterPage() {
                                 : <ArrowUpRight className="w-2.5 h-2.5" />}
                               {dir === "inbound" ? "In" : "Out"}
                             </span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground/30">—</span>
-                          )}
+                          ) : <span className="text-[10px] text-muted-foreground/30">—</span>}
                         </div>
                         {/* Duration */}
-                        <p className="text-[11px] text-muted-foreground/50 self-center font-mono">
-                          {fmtDuration(call.durationSeconds)}
-                        </p>
+                        <p className="text-[10px] font-mono text-muted-foreground/50 self-center">{fmtDuration(call.durationSeconds)}</p>
                         {/* Status */}
-                        <div className="self-center pr-1">
-                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", statusColors(call.status))}>
+                        <div className="self-center">
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", statusColors(call.status))}>
                             {statusLabel(call.status)}
                           </span>
                         </div>
                         {/* Time */}
-                        <p className="text-[10px] text-muted-foreground/40 self-center font-mono truncate">
+                        <p className="text-[10px] font-mono text-muted-foreground/35 self-center truncate">
                           {relativeTime(call.createdAt)}
                         </p>
                       </div>
@@ -500,14 +491,22 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          {/* Recent Activity (formerly System Event Log) */}
-          <div className="flex flex-col gap-3 mt-1">
-            <SectionHeading
-              icon={Activity}
-              title="Recent Activity"
-              sub="Last 25 events"
-              isFetching={activity.isFetching}
-            />
+          {/* Recent Activity */}
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <SectionHeading
+                icon={Activity}
+                title="Recent Activity"
+                isFetching={activity.isFetching}
+              />
+              <button
+                onClick={() => navigate("/app/calls")}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors duration-[180ms]"
+              >
+                <span>View All</span>
+                <ArrowUpRight className="w-3 h-3" />
+              </button>
+            </div>
             <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
               <div className="divide-y divide-border/40 max-h-[240px] overflow-y-auto">
                 {activity.isLoading ? (
@@ -518,22 +517,19 @@ export default function CommandCenterPage() {
                     </div>
                   ))
                 ) : events.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 gap-2.5 text-center">
+                  <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
                     <Activity className="w-6 h-6 text-muted-foreground/20" />
-                    <div className="flex flex-col gap-1">
-                      <p className="text-[12px] font-medium text-foreground/40">Activity will appear here once your agents start running</p>
-                      <p className="text-[11px] text-muted-foreground/30">No events yet</p>
-                    </div>
-                    <a
-                      href="/docs"
-                      className="text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+                    <p className="text-[12px] font-medium text-foreground/40">No activity yet. Activity appears once your agents start running.</p>
+                    <button
+                      onClick={() => window.open("/docs", "_blank")}
+                      className="text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all duration-[180ms] border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
                     >
-                      Learn how it works →
-                    </a>
+                      Read the docs
+                    </button>
                   </div>
                 ) : (
                   events.map(ev => (
-                    <div key={ev.id} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors duration-150">
+                    <div key={ev.id} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/25 hover:-translate-y-px transition-all duration-[180ms] ease-out">
                       <span className="text-[10px] font-mono tabular-nums text-muted-foreground/35 shrink-0 w-16">
                         {shortTime(ev.createdAt)}
                       </span>
@@ -551,26 +547,30 @@ export default function CommandCenterPage() {
         </div>
 
         {/* ── Right sidebar ─────────────────────────────────────────────────── */}
-        <div className="w-[260px] shrink-0 flex flex-col gap-3">
+        <div className="w-[280px] shrink-0 flex flex-col gap-6">
 
-          {/* Quick Actions */}
+          {/* Next Steps */}
           <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-            <SidebarCardHeading icon={Zap} title="Quick Actions" />
-            <div className="p-2 flex flex-col gap-0.5">
+            <SidebarCardHeading icon={Rocket} title="Next Steps" />
+            <div className="p-3 flex flex-col gap-2">
               {[
-                { label: "Create Agent",    icon: Plus,        href: "/app/agents" },
-                { label: "Add Provider",    icon: Key,         href: "/app/providers" },
-                { label: "View Call Log",   icon: Phone,       href: "/app/calls" },
-                { label: "Browse Knowledge", icon: BookOpen,   href: "/app/knowledge-bases" },
-              ].map(({ label, icon: Icon, href }) => (
+                { label: "Create Agent",      desc: "Build and configure a new voice agent",    icon: Bot,      href: "/app/agents?create=1" },
+                { label: "Connect Provider",  desc: "Add your ASR, LLM, or TTS keys",           icon: Key,      href: "/app/providers" },
+                { label: "Buy Phone Number",  desc: "Get a number to receive or place calls",    icon: Phone,    href: "/app/phone-numbers" },
+                { label: "Create Campaign",   desc: "Launch an outbound call campaign",          icon: Activity, href: "/app/campaigns" },
+              ].map(({ label, desc, icon: Icon, href }) => (
                 <button
                   key={href}
                   onClick={() => navigate(href)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] text-muted-foreground/70 hover:text-foreground hover:bg-accent/40 transition-colors text-left w-full group"
+                  className="flex items-start gap-3 px-3 py-2.5 rounded-lg text-left w-full border border-border/40 bg-card hover:bg-accent/30 hover:-translate-y-0.5 hover:shadow-sm hover:border-border/70 transition-all duration-[180ms] ease-out group"
                 >
-                  <Icon className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0 group-hover:text-muted-foreground/70 transition-colors" />
-                  <span className="flex-1">{label}</span>
-                  <ChevronRight className="w-3 h-3 text-muted-foreground/25 group-hover:text-muted-foreground/50 transition-colors shrink-0" />
+                  <div className="mt-0.5 rounded-md p-1.5 bg-muted/60 shrink-0 group-hover:bg-accent/60 transition-colors duration-[180ms]">
+                    <Icon className="w-3 h-3 text-muted-foreground/60 group-hover:text-foreground/60 transition-colors duration-[180ms]" />
+                  </div>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-[12px] font-medium text-foreground/75 leading-tight group-hover:text-foreground/90 transition-colors duration-[180ms]">{label}</span>
+                    <span className="text-[10px] text-muted-foreground/40 leading-snug">{desc}</span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -579,20 +579,23 @@ export default function CommandCenterPage() {
           {/* Provider Health */}
           <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
             <SidebarCardHeading icon={Server} title="Provider Health" />
-            <div className="px-3.5 py-2">
+            <div className="px-4 py-2">
               {providers.isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="h-4 rounded animate-pulse bg-muted my-2" />
                 ))
               ) : allProviders.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-5 text-center">
+                <div className="flex flex-col items-center gap-3 py-6 text-center">
                   <AlertTriangle className="w-5 h-5 text-muted-foreground/20" />
-                  <p className="text-[11px] text-muted-foreground/40">No providers configured</p>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-[12px] font-medium text-foreground/40">No providers configured.</p>
+                    <p className="text-[11px] text-muted-foreground/30">Add your first provider to get started.</p>
+                  </div>
                   <button
                     onClick={() => navigate("/app/providers")}
-                    className="text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+                    className="text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all duration-[180ms] border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
                   >
-                    Add Provider →
+                    Add Provider
                   </button>
                 </div>
               ) : (
@@ -613,20 +616,23 @@ export default function CommandCenterPage() {
           {/* Active Agents */}
           <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
             <SidebarCardHeading icon={Bot} title="Active Agents" />
-            <div className="px-3.5 py-2">
+            <div className="px-4 py-2">
               {agents.isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-4 rounded animate-pulse bg-muted my-1.5" />
+                  <div key={i} className="h-4 rounded animate-pulse bg-muted my-2" />
                 ))
               ) : allAgents.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-5 text-center">
+                <div className="flex flex-col items-center gap-3 py-6 text-center">
                   <Inbox className="w-5 h-5 text-muted-foreground/20" />
-                  <p className="text-[11px] text-muted-foreground/40">No agents yet</p>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-[12px] font-medium text-foreground/40">No agents yet.</p>
+                    <p className="text-[11px] text-muted-foreground/30">Build your first voice agent in minutes.</p>
+                  </div>
                   <button
-                    onClick={() => navigate("/app/agents")}
-                    className="text-[11px] font-medium text-muted-foreground/50 hover:text-foreground transition-colors"
+                    onClick={() => navigate("/app/agents?create=1")}
+                    className="text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-all duration-[180ms] border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
                   >
-                    Create Agent →
+                    Create Agent
                   </button>
                 </div>
               ) : (
@@ -650,18 +656,18 @@ export default function CommandCenterPage() {
 
       {/* ── Getting Started strip ────────────────────────────────────────────── */}
       {showGettingStarted && (
-        <div className="rounded-xl border border-border/60 bg-card px-5 py-4 flex items-center gap-4">
-          <div className="flex items-center gap-2.5 shrink-0">
+        <div className="rounded-xl border border-border/60 bg-card px-4 py-4 flex items-center gap-4">
+          <div className="flex items-center gap-2 shrink-0">
             <Rocket className="w-4 h-4 text-muted-foreground/40" />
             <div>
               <p className="text-[12px] font-semibold text-foreground/70 leading-tight">Get started in 3 steps</p>
-              <p className="text-[10px] text-muted-foreground/35 leading-tight mt-0.5">Set up your first voice agent</p>
+              <p className="text-[10px] text-muted-foreground/35 leading-tight mt-1">Set up your first voice agent</p>
             </div>
           </div>
           <div className="h-px flex-1 bg-border/40" />
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => navigate("/app/agents")}
+              onClick={() => navigate("/app/agents?create=1")}
               className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-1.5 hover:bg-accent/40"
             >
               <span className="text-muted-foreground/35">1.</span> Create an agent
