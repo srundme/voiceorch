@@ -992,7 +992,7 @@ export async function updateCallerProfile(opts: {
   // Defense-in-depth: write under the SAME canonical key the read path uses.
   const phoneNumber = canonicalizeCallerKey(opts.phoneNumber) ?? opts.phoneNumber;
 
-  if (history.length < 1) return;
+  if (history.length < 2) return;
 
   const now      = new Date();
   const newCount = (existing?.callCount ?? 0) + 1;

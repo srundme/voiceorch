@@ -8,13 +8,12 @@
 > table named below was verified against the source at the time of writing. When the
 > code and this document disagree, **trust the code** and update this document.
 
-The single most important thing to understand before touching anything: **there are
-two largely-parallel implementations of the same call loop** —
-`orchestration/pipeline.ts` (telephony) and `orchestration/telephony/webcall.ts`
-(web). They share *support* modules but **not** the core turn loop. A feature added
-to one is **not** automatically present in the other. Section 2 (Feature Ownership)
-and the duplication callouts throughout exist specifically to keep you from shipping
-a fix to only half the product.
+The single most important thing to understand before touching anything: **there is
+one core turn loop** — `OrchestrationPipeline` in `orchestration/pipeline.ts`.
+Both PSTN telephony (Twilio/Plivo/Vobiz) and browser web calls (`webcall.ts`
+Webcall 2.0) call `createSession()` → `new OrchestrationPipeline(...)`. The web
+transport is a thin adapter; it does **not** duplicate orchestration logic.
+Section 2 (Feature Ownership) notes any remaining transport-only differences.
 
 All paths below are relative to the repository root unless noted. The orchestration
 code lives under `artifacts/api-server/src/`.
@@ -33,12 +32,11 @@ billing.
 | Path | Transport | Entry point | Core turn loop lives in |
 | :--- | :--- | :--- | :--- |
 | **Telephony (PSTN)** | Provider media WebSocket (Twilio/Plivo/Vobiz) | WS handlers in `orchestration/telephony/{twilio,plivo,vobiz}.ts` → `createSession()` in `orchestration/session.ts` | **class `OrchestrationPipeline`** in `orchestration/pipeline.ts` |
-| **Web call** | Browser ↔ server WebSocket | `handleWebCallWebSocket()` in `orchestration/telephony/webcall.ts` | **one large closure** inside `handleWebCallWebSocket` (nested functions, *not* a class) |
+| **Web call** | Browser ↔ server WebSocket | `handleWebcallWebSocket()` in `orchestration/telephony/webcall.ts` → `createSession()` | **same `OrchestrationPipeline`** (Webcall 2.0 — thin transport only) |
 
-This structural asymmetry is the root cause of all the duplication: telephony is an
-object with private methods and instance fields; web call is a function with closure
-locals. The same concept (e.g. "echo grace") is therefore an instance field
-(`bargeInHoldUntil`) in one and a closure `let` (`echoGraceUntil`) in the other.
+Webcall 1.0's duplicated closure-based turn loop was removed. Fixes to barge-in,
+eager/speculative LLM, endpointing, and heard-only history apply to **both** paths
+automatically because they share one pipeline instance per session.
 
 ### 1.2 Telephony lifecycle (live PSTN call)
 

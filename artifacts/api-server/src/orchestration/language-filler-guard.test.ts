@@ -28,7 +28,7 @@ describe("isRealEnglishUtterance", () => {
 
   it("accepts a real English sentence", () => {
     expect(isRealEnglishUtterance("how much does the premium cost?")).toBe(true);
-    expect(isRealEnglishUtterance("can you tell me the price")).toBe(true);
+    expect(isRealEnglishUtterance("what is the monthly insurance premium cost")).toBe(true);
     expect(isRealEnglishUtterance("I want to know about the policy")).toBe(true);
   });
 

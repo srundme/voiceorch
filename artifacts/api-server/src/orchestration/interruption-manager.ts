@@ -25,11 +25,17 @@ export class InterruptionManager {
   private calleeSpeaking = false;
   private utteranceEndAt = -1;
   private readonly incrementalDelayMs: number;
+  private readonly wordsForInterruption: number;
   private turnId = 0;
   private bargeInCount = 0;
 
   constructor(opts: InterruptionManagerOptions = {}) {
     this.incrementalDelayMs = opts.incrementalDelayMs ?? 900;
+    this.wordsForInterruption = opts.wordsForInterruption ?? 2;
+  }
+
+  getWordsForInterruption(): number {
+    return this.wordsForInterruption;
   }
 
   /** Start a new agent reply turn; returns the sequence id for TTS frames. */
@@ -44,10 +50,23 @@ export class InterruptionManager {
     return this.currSequenceId;
   }
 
+  /**
+   * Drop sequence ids from prior agent turns so stale prefetch cannot emit after
+   * a new processTurn begins. Fillers (sequence -1) are always kept.
+   */
+  pruneStaleSequences(): void {
+    for (const id of [...this.validSequenceIds]) {
+      if (id !== FILLER_SEQUENCE_ID && id !== this.currSequenceId) {
+        this.validSequenceIds.delete(id);
+      }
+    }
+  }
+
   /** Invalidate the active agent turn (barge-in / eager miss). */
   invalidateCurrentTurn(): number {
     const invalidated = this.currSequenceId;
-    this.validSequenceIds.delete(invalidated);
+    this.validSequenceIds.clear();
+    this.validSequenceIds.add(FILLER_SEQUENCE_ID);
     this.bargeInCount++;
     return invalidated;
   }

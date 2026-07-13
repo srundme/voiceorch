@@ -6,10 +6,13 @@ import { GenderDetectorChained } from "./genderDetectorChained.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
+import { shouldSwitchSttLang } from "./stt-language-switch.js";
+import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isSpeculativeHit } from "./eager-stt.js";
+import type { SttFinalMetadata } from "./adapters/stt/base.js";
 import { makeThinkFilter, stripReasoningBlocks, stripJsonMessageWrapper } from "./reasoningFilter.js";
 import { createSTTAdapter } from "./adapters/stt/index.js";
 import { resolveSarvamSttMode } from "./adapters/stt/sarvam-mode.js";
-import { toReadableError } from "./utils.js";
+import { toReadableError, envInt, parseJsonObject } from "./utils.js";
 import { createLLMAdapter } from "./adapters/llm/index.js";
 import { createTTSAdapter } from "./adapters/tts/index.js";
 import { CartesiaTTS } from "./adapters/tts/cartesia.js";
@@ -494,40 +497,6 @@ function isRetryableLlmError(err: unknown): boolean {
   );
 }
 
-// ── Speculative / eager LLM prefill ──────────────────────────────────────────
-// On a SEMANTIC barge-in the partial transcript is often the caller's
-// complete utterance.  Starting the LLM immediately means tokens are already
-// buffered when the STT final arrives — saving the full LLM TTFB (~200-400 ms)
-// for the most common single-word interruptions ("ruko", "stop", "nahi", …).
-// If the final transcript differs enough from the partial, the speculative
-// call is aborted and the real turn proceeds normally (minor wasted cost).
-function isSpeculativeHit(partial: string, final: string): boolean {
-  const p = partial.trim().toLowerCase();
-  const f = final.trim().toLowerCase();
-  if (p === f) return true;
-  // Final is the partial plus a little trailing text (punctuation / filler)
-  if (f.startsWith(p) && f.length - p.length <= 15) return true;
-  // ≥ 75 % of the partial's words appear in the final
-  const pWords = p.split(/\s+/).filter(Boolean);
-  if (pWords.length === 0) return false;
-  const fWordSet = new Set(f.split(/\s+/).filter(Boolean));
-  const overlap = pWords.filter(w => fWordSet.has(w)).length;
-  return overlap / pWords.length >= 0.75;
-}
-
-/** Bolna Flux EagerEndOfTurn analogue — stable partial before STT final. */
-const EAGER_PARTIAL_STABLE_MS = Number(process.env.EAGER_PARTIAL_STABLE_MS ?? 400);
-
-function isEagerCommitReady(partial: string): boolean {
-  const t = partial.trim();
-  if (t.length < 3) return false;
-  if (/[.?!।]$/.test(t)) return true;
-  const words = t.split(/\s+/).filter(Boolean);
-  if (words.length >= 4) return true;
-  if (words.length === 1 && /^(yes|no|ok|okay|sure|சரி|ஆம்|हाँ|हां)$/iu.test(words[0]!)) return true;
-  return false;
-}
-
 /**
  * A single sentence's TTS synthesis, decoupled from its playback. Created by
  * startSentenceSynthesis (network fetch + byte-alignment only, safe to run
@@ -740,6 +709,8 @@ export class OrchestrationPipeline {
   private safetyNet!: TurnSafetyNet;
   // Reason the current turn closed — read by the turn_latency log line.
   private _turnCloseReason: TurnCloseReason = "stt_final";
+  /** True when this turn reused speculative/eager LLM prefill (Bolna Flux analogue). */
+  private _eagerLlmHitThisTurn = false;
 
   // KB prefetch — fired on the first speech frame of a new utterance so the
   // result is ready by the time STT finishes and processTurn() starts.
@@ -1018,7 +989,6 @@ export class OrchestrationPipeline {
   ): void {
     if (this.bargeInRequested) return;
     const invalidatedSeq = this.interruptionMgr.invalidateCurrentTurn();
-    this.interruptionMgr.onUserSpeechStart();
     for (const ac of this.activeTtsAborts) {
       try { ac.abort(); } catch { /* noop */ }
     }
@@ -1034,6 +1004,22 @@ export class OrchestrationPipeline {
     this._lastTurnWasBargedIn = true;
     this.captureInterruptionHint();
     const heard = this._currentTurnPlayedSentences.join(" ").trim();
+    // Trim history when barge-in interrupts playback of an assistant turn already
+    // appended this user turn (clarification / guardrail paths).
+    if (this.isPlaying || this.isSendingTtsAudio) {
+      const msgs = this.conversationHistory.messages;
+      let lastUserIdx = -1;
+      let lastAsstIdx = -1;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (lastUserIdx === -1 && msgs[i]!.role === "user") lastUserIdx = i;
+        if (lastAsstIdx === -1 && msgs[i]!.role === "assistant") lastAsstIdx = i;
+        if (lastUserIdx !== -1 && lastAsstIdx !== -1) break;
+      }
+      if (lastAsstIdx > lastUserIdx) {
+        if (heard) this.conversationHistory.replaceLastAssistant(heard);
+        else this.conversationHistory.popUnheardResponses(1);
+      }
+    }
     if (opts?.speculative !== false && partial?.trim()) {
       this._launchSpeculativeLlm(partial);
     }
@@ -1073,21 +1059,87 @@ export class OrchestrationPipeline {
       if (this.eagerPartialText !== partial) return;
       if (!isEagerCommitReady(partial)) return;
       if (this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
-      this._launchSpeculativeLlm(partial);
+      this.launchEagerLlmFromPartial(partial, "stable_partial");
+    }, EAGER_PARTIAL_STABLE_MS);
+  }
+
+  /** Sarvam VAD speech_end — launch speculative LLM before coalesced final arrives. */
+  private handleSttSpeechEnd(): void {
+    if (this.closed || this.isPlaying || this.isSendingTtsAudio || this.isProcessing) return;
+    if (this._specLlmState) return;
+    if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
+    const text = this.streamSTT?.getPendingTranscript?.()?.trim() ?? this.eagerPartialText.trim();
+    if (!text) return;
+    this.clearEagerPartialTimer();
+    if (!isEagerCommitReady(text, { speechEnd: true })) return;
+    this.launchEagerLlmFromPartial(text, "speech_end");
+  }
+
+  /** Bolna TurnResumed analogue — caller resumed before final; discard speculative work. */
+  private handleSttSpeechResumed(): void {
+    if (this.isPlaying || this.bargeInRequested) return;
+    this.clearEagerPartialTimer();
+    if (this._specLlmState && !this.isProcessing) {
+      this._specLlmState.aborted = true;
+      this._specLlmState = null;
       this.logExec("LLM", "system", {
         status: "info",
         turnNumber: this._activeTurnIndex,
-        metadata: {
-          event: "Eager LLM Launched",
-          partial: partial.slice(0, 80),
-          stableMs: EAGER_PARTIAL_STABLE_MS,
-        },
+        metadata: { event: "Eager LLM Cancelled", reason: "speech_resumed" },
       });
-      logger.info(
-        { callId: this.config.callId, partial: partial.slice(0, 80) },
-        "Eager LLM prefill launched on stable partial",
-      );
-    }, EAGER_PARTIAL_STABLE_MS);
+      logger.info({ callId: this.config.callId }, "Eager LLM cancelled — caller resumed speaking");
+    }
+  }
+
+  private maybeLaunchEagerOnPartial(text: string, metadata?: SttFinalMetadata): void {
+    if (!text.trim() || this.isPlaying || this.isProcessing || this.closed || this._specLlmState) return;
+    if (!this.conversationHistory.some((t) => t.role === "assistant")) return;
+    const speechEnd = metadata?.speechEndReceived === true;
+    if (speechEnd && isEagerCommitReady(text, { speechEnd: true })) {
+      this.clearEagerPartialTimer();
+      this.launchEagerLlmFromPartial(text, "speech_end_partial");
+      return;
+    }
+    this.scheduleEagerLlm(text);
+  }
+
+  private launchEagerLlmFromPartial(partial: string, source: string): void {
+    if (this._specLlmState || this.closed || this.isProcessing) return;
+    this._launchSpeculativeLlm(partial);
+    this.logExec("LLM", "system", {
+      status: "info",
+      turnNumber: this._activeTurnIndex,
+      metadata: {
+        event: "Eager LLM Launched",
+        source,
+        partial: partial.slice(0, 80),
+        stableMs: source === "stable_partial" ? EAGER_PARTIAL_STABLE_MS : 0,
+      },
+    });
+    logger.info(
+      { callId: this.config.callId, source, partial: partial.slice(0, 80) },
+      "Eager LLM prefill launched",
+    );
+  }
+
+  private wireStreamSttCallbacks(): void {
+    if (!this.streamSTT) return;
+    this.streamSTT.onSpeechEnd = () => this.handleSttSpeechEnd();
+    this.streamSTT.onSpeechStart = () => {
+      this.interruptionMgr.onUserSpeechStart();
+      this.handleSttSpeechResumed();
+    };
+  }
+
+  /** Poll until post-utterance WAIT clears or timeout (Bolna incremental_delay grace). */
+  private async waitForAudioEmit(sequenceId: number, maxMs = 1200): Promise<boolean> {
+    const deadline = Date.now() + maxMs;
+    while (!this.closed && !this.bargeInRequested) {
+      if (this.canEmitAudio(sequenceId)) return true;
+      if (Date.now() >= deadline) return false;
+      await new Promise<void>((r) => setTimeout(r, 25));
+    }
+    return false;
   }
 
   private canEmitAudio(sequenceId: number): boolean {
@@ -1377,7 +1429,7 @@ export class OrchestrationPipeline {
     const providerExtraConfig = keys.get(`${this.agent.asrProvider}:extraConfig`) ?? null;
     const sttExtraConfig = this.agent.asrProvider === "sarvam"
       ? JSON.stringify({
-          ...(providerExtraConfig ? JSON.parse(providerExtraConfig) : {}),
+          ...parseJsonObject(providerExtraConfig),
           mode: resolveSarvamSttMode(sttCfg.language, this.agent.sarvamSttMode),
         })
       : providerExtraConfig;
@@ -1615,7 +1667,7 @@ export class OrchestrationPipeline {
             if (!this.isPlaying && text.trim()) {
               this.safetyNet.onPartial(text);
               this.resetHangupTimer();
-              this.scheduleEagerLlm(text);
+              this.maybeLaunchEagerOnPartial(text, metadata ?? undefined);
             }
             // P0-C: Semantic barge-in on interims — detect caller interruption
             // immediately during playback, before the STT provider finalizes.
@@ -1685,6 +1737,7 @@ export class OrchestrationPipeline {
           }, backoffMs);
         }
       );
+      this.wireStreamSttCallbacks();
       logger.info({ callId: this.config.callId, provider: this.agent.asrProvider }, "Streaming STT initialized");
       // Re-apply a latched explicit language request after a full stream
       // re-init (reconnect path) — the fresh adapter stream starts on the
@@ -1694,7 +1747,7 @@ export class OrchestrationPipeline {
         // strict mode can now latch and switch the STT socket (fix #4), so a
         // mid-call Sarvam reconnect must restore the requested language on both paths.
         this.streamSTTLang = null;
-        this.switchStreamSTTLanguage(this.requestedLangLatch);
+        this.maybeSwitchStreamingSttLang(this.requestedLangLatch, true);
       }
     } catch (err) {
       logger.error(
@@ -1809,7 +1862,7 @@ export class OrchestrationPipeline {
         const planNumWords = this.agent.stopSpeakingPlan?.numWords;
         const threshold = (planNumWords && planNumWords > 0)
           ? planNumWords
-          : (this.agent.wordsForInterruption ?? 2);
+          : this.interruptionMgr.getWordsForInterruption();
         if (this.streamingBargeInWordCount >= threshold) {
           this.triggerBargeIn("word_count", transcript, { speculative: false });
           logger.info(
@@ -1870,14 +1923,11 @@ export class OrchestrationPipeline {
               { callId: this.config.callId, requested, text: transcript.slice(0, 60) },
               "Auto-detect: explicit language request latched",
             );
-            // Make the latch drive speech recognition too — otherwise the
-            // streaming STT stays on its call-start language for the rest of
-            // the call and mistranscribes the caller's requested language
-            // into the old script (call 1881: Tamil speech → Devanagari →
-            // script detection reads Hindi → agent locked in Hindi).
-            this.switchStreamSTTLanguage(requested);
           }
           this.requestedLangLatch = requested;
+          // Explicit requests (including English) hot-swap STT immediately so
+          // the stream transcribes in the requested script (call 1881 fix).
+          this.maybeSwitchStreamingSttLang(requested, true);
         }
         // A latched explicit request overrides per-turn script detection.
         // Otherwise, a short Latin-only filler/backchannel ("okay", "thank
@@ -1918,27 +1968,19 @@ export class OrchestrationPipeline {
           this.currentLang = detected;
           if (!detected.startsWith("en-")) {
             this.lastNonEnglishLang = detected;
-            // Switch the streaming STT to the detected language so it
-            // transcribes in the correct script instead of translating
-            // (e.g. Sarvam en-IN translates "புரியுது" → "I understood").
-            // Only switch passively to non-English — switching BACK to
-            // English requires an explicit caller request to avoid repeated
-            // WebSocket reconnects when the caller mixes English fillers.
-            //
-            // Consecutive-detection guard: require the SAME non-English
-            // language in 2 back-to-back transcripts before switching the
-            // STT socket. Sarvam en-IN occasionally emits a stray Telugu
-            // glyph while transcribing Tamil audio; a single stray character
-            // used to flip the STT connection to te-IN (this bug). A genuine
-            // Tamil caller will trigger the switch within their first 2 turns.
-            if (detected === this._pendingSttSwitchLang) {
-              this._pendingSttSwitchCount++;
-            } else {
-              this._pendingSttSwitchLang = detected;
-              this._pendingSttSwitchCount = 1;
+            // Passive non-English STT switch (2-turn consecutive guard).
+            if (!this.requestedLangLatch?.startsWith("en-")) {
+              this.maybeSwitchStreamingSttLang(detected);
             }
-            if (this._pendingSttSwitchCount >= 2) {
-              this.switchStreamSTTLanguage(detected);
+          } else {
+            // English STT hot-swap: keep ASR aligned when caller converses in English.
+            const enTarget = this.requestedLangLatch?.startsWith("en-")
+              ? this.requestedLangLatch
+              : detected;
+            if (this.requestedLangLatch?.startsWith("en-")) {
+              this.maybeSwitchStreamingSttLang(enTarget, true);
+            } else if (this.agent.autoSwitchToEnglish) {
+              this.maybeSwitchStreamingSttLang(enTarget);
             }
           }
         }
@@ -1952,19 +1994,17 @@ export class OrchestrationPipeline {
         // are respected. A caller who explicitly says "speak English" must always
         // be heard, regardless of agent config.
         const requested = detectExplicitLanguageRequest(transcript);
-        if (requested && requested !== this.requestedLangLatch) {
-          const requestedName = LANG_DISPLAY_NAMES[requested] ?? requested;
-          logger.info(
-            { callId: this.config.callId, requested, text: transcript.slice(0, 60) },
-            `Strict mode: caller requested ${requestedName} — latching (overrides ABSOLUTE RULE this call)`,
-          );
+        if (requested) {
+          if (requested !== this.requestedLangLatch) {
+            const requestedName = LANG_DISPLAY_NAMES[requested] ?? requested;
+            logger.info(
+              { callId: this.config.callId, requested, text: transcript.slice(0, 60) },
+              `Strict mode: caller requested ${requestedName} — latching (overrides ABSOLUTE RULE this call)`,
+            );
+          }
           this.requestedLangLatch = requested;
           this.currentLang = requested;
-          // Switch the STT socket to transcribe in the requested language.
-          // Without this, a Tamil-locked agent whose caller asks for English
-          // keeps transcribing through ta-IN — English speech gets mis-scripted
-          // and the conversation degrades (same mechanism as call 1881).
-          this.switchStreamSTTLanguage(requested);
+          this.maybeSwitchStreamingSttLang(requested, true);
         }
       }
     }
@@ -2000,6 +2040,7 @@ export class OrchestrationPipeline {
         this.safetyNet.onFinal();
         this.clearEagerPartialTimer();
         this.interruptionMgr.onUserSpeechEnd();
+        if (!this.closed) this.safetyNet.beginListening();
         return;
       }
     } else {
@@ -2026,13 +2067,9 @@ export class OrchestrationPipeline {
       // If the call ended (transfer or end_call) while this turn was processing,
       // do NOT drain the pending queue — those transcripts must be discarded.
       if (this.closed) return;
-      const queue = this.pendingTranscriptQueue;
-      if (queue.length > 0) {
-        this.pendingTranscriptQueue = [];
-        const mergedText = queue.map((q) => q.text).join(" ");
-        const lastEmittedAt = queue[queue.length - 1].emittedAt;
-        const lastCloseReason = queue[queue.length - 1].closeReason;
-        void this.handleStreamingTranscript(mergedText, lastEmittedAt, lastCloseReason);
+      const next = this.pendingTranscriptQueue.shift();
+      if (next) {
+        void this.handleStreamingTranscript(next.text, next.emittedAt, next.closeReason);
       } else if (!this.closed) {
         // Turn fully done — re-enter Listening and re-arm the stall backstop.
         this.safetyNet.beginListening();
@@ -2918,10 +2955,6 @@ export class OrchestrationPipeline {
 
       if (!greeting.trim() || this.closed) return;
       logger.info({ callId: this.config.callId, greeting: greeting.slice(0, 80) }, "Sending greeting");
-      this.conversationHistory.appendAssistant(greeting);
-      this.lastAssistantSpokenRaw = greeting;  // seed repeat guard with the opener
-      this.config.onTranscript("agent", greeting);
-      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       this.firstAudioSentAt = null;
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       // Live Call (carrier) path: protect the FULL greeting from streaming-STT and
@@ -2938,6 +2971,7 @@ export class OrchestrationPipeline {
           GREETING_ECHO_HOLD_CAP_MS,
         );
       }
+      this._currentTurnPlayedSentences = [];
       this.isPlaying = true;
       try {
         await this.playSentence(greeting, greetingEmotions);
@@ -2945,6 +2979,11 @@ export class OrchestrationPipeline {
         this.isPlaying = false;
         this.armTailEchoGrace();
       }
+      const heardGreeting = this._currentTurnPlayedSentences.join(" ").trim() || greeting;
+      this.conversationHistory.appendAssistant(heardGreeting);
+      this.lastAssistantSpokenRaw = heardGreeting;
+      this.config.onTranscript("agent", heardGreeting);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
       // Drain the carrier's jitter buffer so the greeting's final word plays out
       // fully before we arm the stall backstop and enter Listening.
       await this.drainPlaybackTail();
@@ -3467,22 +3506,31 @@ export class OrchestrationPipeline {
       _audioDurationMs = await this.drainSentenceJob(job);
     } finally {
       this.isSendingTtsAudio = false;
+      const noAudioSent = _audioDurationMs === undefined;
       const _pbEvent: PlaybackEvent = this.closed
         ? "Playback Cancelled"
         : this.bargeInRequested
           ? "Playback Interrupted"
-          : "Playback Completed";
+          : noAudioSent
+            ? "Playback Cancelled"
+            : "Playback Completed";
       logPlaybackEvent(this.logFn, _pbEvent, {
         provider: this.agent.ttsProvider,
         turnNumber: _pbTurn,
         playbackDurationMs: Date.now() - _pbStart,
         audioDurationMs: _audioDurationMs,
-        stopReason: this.closed ? "call_closed" : this.bargeInRequested ? "barge_in" : "completed",
+        stopReason: this.closed
+          ? "call_closed"
+          : this.bargeInRequested
+            ? "barge_in"
+            : noAudioSent
+              ? "audio_gated"
+              : "completed",
       });
       // Accumulate fully-played sentences for the interruption hint. Only count
       // sentences that completed — a mid-sentence barge-in means the caller may
       // not have heard the whole thing, so we conservatively exclude that one.
-      if (_pbEvent === "Playback Completed") {
+      if (_pbEvent === "Playback Completed" && !noAudioSent) {
         this._currentTurnPlayedSentences.push(job.text);
       }
     }
@@ -3652,8 +3700,14 @@ export class OrchestrationPipeline {
       })();
     } else {
       void (async () => {
+        const ttsAbort = new AbortController();
+        this.activeTtsAborts.add(ttsAbort);
+        const closedWatcher = setInterval(() => {
+          if (this.closed || this.bargeInRequested) ttsAbort.abort();
+        }, 50);
         try {
           const { audio } = await this.tts.synthesize(text);
+          if (ttsAbort.signal.aborted || this.bargeInRequested || this.closed) return;
           job.nonStreamAudio = audio;
           this.logExec("TTS", "response", {
             provider: this.agent.ttsProvider,
@@ -3664,8 +3718,11 @@ export class OrchestrationPipeline {
             responsePayload: { audioBytes: audio.length, textLength: text.length },
           });
         } catch (err) {
-          job.synthError = err;
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          if (!isAbort) job.synthError = err;
         } finally {
+          clearInterval(closedWatcher);
+          this.activeTtsAborts.delete(ttsAbort);
           job.synthDone = true;
           resolveReady();
         }
@@ -3684,7 +3741,11 @@ export class OrchestrationPipeline {
    */
   private async drainSentenceJob(job: TtsSentenceJob): Promise<number | undefined> {
     if (job.sequenceId === FILLER_SEQUENCE_ID && this._skipPendingFillerPlayback) return;
-    if (this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) return;
+    if (this.bargeInRequested) return;
+    if (!this.canEmitAudio(job.sequenceId)) {
+      const ok = await this.waitForAudioEmit(job.sequenceId);
+      if (!ok || this.bargeInRequested) return;
+    }
 
     // Extend echo-grace to cover estimated sentence playback duration.
     // ~70 ms/char covers Tamil/Indic and Latin at typical TTS speech rate
@@ -3789,7 +3850,11 @@ export class OrchestrationPipeline {
     } else {
       await job.ready;
       if (job.synthError) throw job.synthError;
-      if (this.bargeInRequested || !this.canEmitAudio(job.sequenceId)) return;
+      if (this.bargeInRequested) return;
+      if (!this.canEmitAudio(job.sequenceId)) {
+        const ok = await this.waitForAudioEmit(job.sequenceId);
+        if (!ok || this.bargeInRequested) return;
+      }
       const ttsPcm16k = job.nonStreamAudio!;
       const ttsPcm8k = downsample16to8(ttsPcm16k);
       this.recording.addAgentChunk(ttsPcm8k);
@@ -4487,6 +4552,7 @@ export class OrchestrationPipeline {
     this._tTurnFirstAudioOut  = null;
     this._fillerPlayedThisTurn = false;
     this._skipPendingFillerPlayback = false;
+    this._eagerLlmHitThisTurn = false;
     this._deadAirFillerEnqueuedAt = null;
     this.clearFragmentCoalesce();
     // Capture adaptive endpoint decision for this turn (set by scheduleSilenceFlush);
@@ -4583,7 +4649,7 @@ export class OrchestrationPipeline {
     const sttLang = this.currentLang || this.agent.sttConfig.language;
     const { isGarbled, reason: garbledReason } = checkTranscriptQuality(transcript, { expectedLang: sttLang });
     if (isGarbled) {
-      const clarification = pickClarificationPhrase(sttLang);
+      const clarification = pickClarificationPhrase(sttLang, String(this.config.callId));
       logger.warn({ callId: this.config.callId, transcript, garbledReason }, "Garbled transcript — responding with clarification");
       this.conversationHistory.appendAssistant(clarification);
       this.config.onTranscript("agent", clarification);
@@ -5418,6 +5484,7 @@ export class OrchestrationPipeline {
     });
 
     // ── Speculative LLM prefill — consume or abort ───────────────────────────
+    this.interruptionMgr.pruneStaleSequences();
     this.activeAgentSequenceId = this.interruptionMgr.beginAgentTurn();
     // If _launchSpeculativeLlm() fired at barge-in time and the final transcript
     // is close enough to the partial, replay the already-buffered tokens through
@@ -5432,6 +5499,7 @@ export class OrchestrationPipeline {
     let effectiveLlm: typeof this.llm = this.llm;
     if (_spec) {
       if (!_spec.aborted && !_spec.storedToolCall && isSpeculativeHit(_spec.partial, transcript)) {
+        this._eagerLlmHitThisTurn = true;
         this.logExec("LLM", "system", {
           status: "info", turnNumber: _currentTurnIndex,
           metadata: {
@@ -5991,6 +6059,8 @@ export class OrchestrationPipeline {
       turnNumber: _currentTurnIndex,
       metadata: {
         event: "Turn Metrics",
+        turnCloseReason: this._turnCloseReason,
+        eagerLlmHit: this._eagerLlmHitThisTurn,
         bargeInFiredTotal: this._bargeInFiredCount,
         bargeInRecoveryTotal: this._bargeInRecoveryCount,
         bargeInRecoveryRate: this._bargeInFiredCount > 0
@@ -6119,7 +6189,6 @@ export class OrchestrationPipeline {
     if (pcm8k.length < MIN_SPEECH_BYTES) return;
 
     this.isProcessing = true;
-    let processed = false;
 
     try {
       // Send native 8kHz telephony audio directly when the adapter is configured
@@ -6149,6 +6218,7 @@ export class OrchestrationPipeline {
         const reason = toReadableError(sttErr, "STT error");
         logger.error({ callId: this.config.callId, err: sttErr }, reason);
         this.config.onFatalError?.(reason);
+        if (!this.closed) this.safetyNet.beginListening();
         return;
       }
       this._tTurnSttFinal = performance.now();
@@ -6166,14 +6236,14 @@ export class OrchestrationPipeline {
       this.clearEagerPartialTimer();
       this.interruptionMgr.onUserSpeechEnd();
       await this.processTurn(transcript, sttLatencyMs);
-      processed = true;
 
     } catch (err) {
       logger.error({ callId: this.config.callId, err }, "Pipeline error");
+      if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
       if (this.audioBuffer.length > 0) void this.flushAndProcess();
-      else if (processed && !this.closed) this.safetyNet.beginListening();
+      else if (!this.closed) this.safetyNet.beginListening();
     }
   }
 
@@ -6229,6 +6299,22 @@ export class OrchestrationPipeline {
         "Streaming STT language switch failed — keeping current stream",
       );
     }
+  }
+
+  /**
+   * Passive or explicit streaming-STT language switch with consecutive-detection
+   * guard (2 finals) unless `immediate` (explicit caller language request).
+   */
+  private maybeSwitchStreamingSttLang(targetLang: string, immediate = false): void {
+    const { shouldSwitch, gate } = shouldSwitchSttLang(
+      { pendingLang: this._pendingSttSwitchLang, pendingCount: this._pendingSttSwitchCount },
+      targetLang,
+      this.streamSTTLang,
+      immediate,
+    );
+    this._pendingSttSwitchLang = gate.pendingLang;
+    this._pendingSttSwitchCount = gate.pendingCount;
+    if (shouldSwitch) this.switchStreamSTTLanguage(targetLang);
   }
 
   /**
@@ -6498,6 +6584,7 @@ export class OrchestrationPipeline {
 
     const playPromise = playTask();
 
+    this.interruptionMgr.pruneStaleSequences();
     this.activeAgentSequenceId = this.interruptionMgr.beginAgentTurn();
 
     // Build a system prompt with {caller_salutation} substituted, same as processTurn.
@@ -7049,6 +7136,16 @@ export class OrchestrationPipeline {
     }
     this.safetyNet?.clear();
     this.clearFragmentCoalesce();
+    this.clearEagerPartialTimer();
+    if (this._specLlmState) {
+      this._specLlmState.aborted = true;
+      this._specLlmState = null;
+    }
+    this.llm.cancelInFlight?.();
+    for (const ac of this.activeTtsAborts) {
+      try { ac.abort(); } catch { /* noop */ }
+    }
+    this.activeTtsAborts.clear();
     this.streamSTT?.close();
     this.streamSTT = null;
     logger.info({ callId: this.config.callId }, "Pipeline closed");

@@ -510,7 +510,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     genderDetectionNeutralSalutation: (agentCfg["genderDetectionNeutralSalutation"] as string | undefined) ?? "",
     // P1-G: Engine — interruption & pacing
     wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
-    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
+    incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 900,
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     // P1-H: Call lifecycle
     hangupAfterLlmCall: (agentCfg["hangupAfterLlmCall"] as boolean | undefined) ?? false,
@@ -660,10 +660,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     resumeDroppedCall = isResumeDroppedCall(callerCtxResult);
     for (const f of callerCtxResult.facts) latchedFactsMap.set(f.key, f.value);
 
-    // Override STT language from caller memory language_pref fact.
-    // Sarvam hi-IN codemix produces Hindi/Marathi garbage when the caller speaks
-    // English — initializing with the remembered language prevents this.
-    {
+    // Override STT language from caller memory language_pref fact — only when the
+    // agent is in auto-detect mode. Strict fixed-language agents must not inherit
+    // a remembered preference from a prior multilingual call.
+    if (agentConfig.languageAutoDetect) {
       const LANG_PREF_TO_BCP47: Record<string, string> = {
         "english": "en-IN", "hindi": "hi-IN", "tamil": "ta-IN",
         "telugu": "te-IN", "kannada": "kn-IN", "malayalam": "ml-IN",

@@ -27,6 +27,8 @@ interface PlivoEvent {
     payload: string; // base64 mulaw
     chunk: number;
     timestamp: string;
+    /** When present, only `inbound` is caller audio (mirror Twilio/Vobiz). */
+    track?: string;
   };
   start?: {
     call_id: string;
@@ -159,6 +161,7 @@ export async function handlePlivoWebSocket(
 
       case "media": {
         if (!sessionId || !event.media) break;
+        if (event.media.track && event.media.track !== "inbound") break;
         const session = getSession(sessionId);
         if (!session) break;
         const chunk = Buffer.from(event.media.payload, "base64");

@@ -12,3 +12,25 @@ export function toReadableError(err: unknown, prefix: string): string {
   const clean = raw.replace(/^Error:\s*/i, "").trim();
   return clean ? `${prefix}: ${clean}` : prefix;
 }
+
+/** Parse a positive integer env var with a safe fallback (ignores NaN / sub-min). */
+export function envInt(name: string, def: number, min = 1): number {
+  const v = process.env[name];
+  if (!v) return def;
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= min ? n : def;
+}
+
+/** Best-effort JSON object parse for provider extraConfig blobs. */
+export function parseJsonObject(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* fall through */
+  }
+  return {};
+}

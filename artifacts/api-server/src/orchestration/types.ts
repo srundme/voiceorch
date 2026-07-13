@@ -470,6 +470,12 @@ export interface StreamSTT {
    * fill, backchannel TTS warm-up) earlier than waiting for the full coalesced text.
    */
   onSpeechEnd?: (() => void) | null;
+  /**
+   * Provider-specific (optional): best-effort text for the utterance still being
+   * coalesced — used to launch speculative LLM on VAD speech_end before the
+   * committed final is emitted (Sarvam).
+   */
+  getPendingTranscript?: () => string;
 }
 
 export interface LLMUsage {

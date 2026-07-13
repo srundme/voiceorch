@@ -110,7 +110,7 @@ export class DeepgramSTT implements STTAdapter {
     const params = new URLSearchParams({
       model,
       encoding: "linear16",
-      sample_rate: "16000",
+      sample_rate: String(this.cfg.nativeSampleRate ?? 16000),
       channels: "1",
       punctuate: "true",
       smart_format: "true",
@@ -144,6 +144,7 @@ export class DeepgramSTT implements STTAdapter {
 
     let wsReady = false;
     const audioQueue: Buffer[] = [];
+    const MAX_AUDIO_QUEUE = 200;
     let pendingInterim = "";
 
     const ws = new WebSocket(wsUrl, {
@@ -236,8 +237,8 @@ export class DeepgramSTT implements STTAdapter {
       sendAudio(chunk: Buffer): void {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(chunk);
-        } else if (!wsReady) {
-          audioQueue.push(chunk);
+        } else if (!wsReady || ws.readyState === WebSocket.CONNECTING) {
+          if (audioQueue.length < MAX_AUDIO_QUEUE) audioQueue.push(chunk);
         }
       },
       close(): void {

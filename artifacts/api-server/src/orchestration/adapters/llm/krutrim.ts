@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import type { ConversationTurn, LLMAdapter, LLMGenerationParams, LLMUsage, ToolDefinition } from "../../types.js";
 import { toOpenAIMessages } from "./openai-messages.js";
+import { envInt } from "../../utils.js";
+import { logger } from "../../../lib/logger.js";
 
 /**
  * Krutrim Cloud — OpenAI-compatible LLM gateway, Bangalore-hosted.
@@ -21,12 +23,12 @@ import { toOpenAIMessages } from "./openai-messages.js";
  *   - Qwen3.6-35B-A3B    — Qwen 3.6 35B MoE (thinking disabled via chat_template_kwargs)
  */
 
-const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 120);
+const VOICE_DEFAULT_MAX_TOKENS = envInt("VOICE_DEFAULT_MAX_TOKENS", 120);
 
 const DEFAULT_MODEL = "gpt-oss-20b";
 
 /** Hard per-request timeout — fail fast so the pipeline's retry/fallback logic can take over */
-const REQUEST_TIMEOUT_MS = Number(process.env.KRUTRIM_REQUEST_TIMEOUT_MS) || 15000;
+const REQUEST_TIMEOUT_MS = envInt("KRUTRIM_REQUEST_TIMEOUT_MS", 15000, 1000);
 
 /** Models that reliably support native tool/function calling on Krutrim. */
 const TOOL_CAPABLE_MODELS = new Set([
@@ -82,6 +84,12 @@ export class KrutrimLLM implements LLMAdapter {
     }
   ): Promise<void> {
     const hasTools = TOOL_CAPABLE_MODELS.has(this.model) && (options?.tools?.length ?? 0) > 0;
+    if ((options?.tools?.length ?? 0) > 0 && !TOOL_CAPABLE_MODELS.has(this.model)) {
+      logger.warn(
+        { model: this.model, toolCount: options!.tools!.length },
+        "Krutrim: tools omitted — model is not tool-capable",
+      );
+    }
 
     const body: Parameters<typeof this.client.chat.completions.create>[0] & Record<string, unknown> = {
       model: this.model,

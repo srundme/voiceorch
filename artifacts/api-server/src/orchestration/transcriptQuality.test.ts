@@ -47,4 +47,11 @@ describe("pickClarificationPhrase", () => {
     const phrase = pickClarificationPhrase("hi-IN");
     expect(phrase).toMatch(/माफ|क्षमा/);
   });
+
+  it("is stable per rotation key (per-call)", () => {
+    const a = pickClarificationPhrase("en-IN", "call-2527");
+    const b = pickClarificationPhrase("en-IN", "call-2527");
+    expect(a).toBe(b);
+    expect(a.length).toBeGreaterThan(10);
+  });
 });

@@ -193,14 +193,13 @@ and the cancel/rewind path protect against acting on false ends.
   (`stream_synthesizer.py`): first audio plays before the LLM finishes.
 - **Tight Deepgram endpointing** (`endpointing="400"`, interim results on).
 
-### VoiceOrch gap (research only — NOT in approved scope)
-VoiceOrch's STT adapters don't use Deepgram Flux, so there is no eager-EOT signal to
-speculate on today. The biggest available latency win would be to **adopt speculative
-LLM on a high-confidence interim** (start the LLM on a near-final partial, reuse or
-cancel on the real final) — but that requires the sequence-id stale-audio gate
-(Bolna #5) to be safe, which is explicitly **out of the approved scope** for this
-work. VoiceOrch already has the two cheaper wins: streaming clause-by-clause TTS and
-filler-on-TTFT. A keep-alive HTTP pool for provider calls would be a low-risk,
-isolated follow-up.
+### VoiceOrch status (2026-07)
+VoiceOrch does not use Deepgram Flux, but ships a **Flux-free eager path** on Sarvam:
+`END_SPEECH` VAD + stable partials launch speculative LLM (`eager-stt.ts`), reused on
+`isSpeculativeHit` in `processTurn()`. The **sequence-id stale-audio gate**
+(`InterruptionManager` + `activeAgentSequenceId`) is wired — cancelled turns cannot
+leak audio. Turn Metrics now include `turnCloseReason` and `eagerLlmHit` for latency
+debugging. Remaining gap vs Bolna: queue-decoupled stage tasks (Python asyncio model);
+VoiceOrch uses a single-threaded async pipeline with shared state instead.
 
 **Reference (`/tmp/bolna-ref`) consumed and deleted after this writeup.**

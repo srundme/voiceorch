@@ -9,6 +9,10 @@ export interface SttFinalMetadata {
   mergedSegments?: number;
   /** Number of within-utterance pauses that were bridged (mergedSegments - 1). */
   pauseCount?: number;
+  /** Interim from an in-flight coalesce buffer (Sarvam) — not a committed final. */
+  pendingPartial?: boolean;
+  /** Sarvam VAD END_SPEECH already received for this utterance (eager-commit signal). */
+  speechEndReceived?: boolean;
 }
 
 export interface STTAdapter {

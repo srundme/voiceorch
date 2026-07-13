@@ -220,6 +220,7 @@ export class SarvamSTT implements STTAdapter {
     let intentionallyClosed = false;
     let switchingLanguage = false; // set by setLanguage(); close handler reopens immediately, no backoff
     let reconnectAttempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     const MAX_RECONNECT = 10;
 
     const audioQueue: Buffer[] = [];
@@ -390,6 +391,16 @@ export class SarvamSTT implements STTAdapter {
     let coalesceLang: string | undefined;
     let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const emitPartial = () => {
+      const text = coalesceBuf.trim();
+      if (!text) return;
+      onTranscript(text, false, coalesceLang, {
+        ...coalesceMeta,
+        pendingPartial: true,
+        speechEndReceived,
+      });
+    };
+
     const emitCoalesced = () => {
       coalesceTimer = null;
       if (!coalesceBuf) return;
@@ -450,6 +461,7 @@ export class SarvamSTT implements STTAdapter {
     };
 
     const openSocket = () => {
+      if (intentionallyClosed) return;
       wsReady = false;
 
       ws = new WebSocket(buildWsUrl(), {
@@ -543,6 +555,7 @@ export class SarvamSTT implements STTAdapter {
               ? 30
               : Math.max(adaptiveHoldMs(), THINKING_PAUSE_FLOOR_MS);
             coalesceTimer = setTimeout(emitCoalesced, newHold);
+            emitPartial();
             logger.debug(
               { langCode, buf: coalesceBuf.slice(0, 60), newHold },
               "Sarvam STT: speech_end fast-flush (pre-buffered) — coalesce shortened",
@@ -609,6 +622,7 @@ export class SarvamSTT implements STTAdapter {
             );
           }
           coalesceTimer = setTimeout(emitCoalesced, holdMs);
+          emitPartial();
           return;
         }
 
@@ -658,7 +672,11 @@ export class SarvamSTT implements STTAdapter {
           { code, delay, reconnectAttempts },
           "Sarvam STT: WebSocket closed — reconnecting",
         );
-        setTimeout(openSocket, delay);
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          openSocket();
+        }, delay);
       });
 
       ws.on("error", (err) => {
@@ -742,6 +760,10 @@ export class SarvamSTT implements STTAdapter {
         // Drain the coalesce buffer before closing so no transcript is lost.
         if (coalesceTimer) { clearTimeout(coalesceTimer); emitCoalesced(); }
         intentionallyClosed = true;
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         clearInterval(heartbeatInterval);
         if (
           ws.readyState === WebSocket.OPEN ||
@@ -749,6 +771,9 @@ export class SarvamSTT implements STTAdapter {
         ) {
           ws.close(1000);
         }
+      },
+      getPendingTranscript(): string {
+        return coalesceBuf.trim();
       },
     };
 

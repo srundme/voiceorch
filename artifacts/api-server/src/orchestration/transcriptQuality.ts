@@ -241,9 +241,16 @@ function clarificationLangKey(lang?: string | null): string {
 let _clarificationIdx = 0;
 
 /** Returns a rotating clarification phrase in the caller's language when known. */
-export function pickClarificationPhrase(lang?: string | null): string {
+export function pickClarificationPhrase(lang?: string | null, rotationKey?: string): string {
   const key = clarificationLangKey(lang);
   const pool = CLARIFICATION_BY_LANG[key] ?? CLARIFICATION_PHRASES;
+  if (rotationKey) {
+    let h = 0;
+    for (let i = 0; i < rotationKey.length; i++) {
+      h = (h * 31 + rotationKey.charCodeAt(i)) >>> 0;
+    }
+    return pool[h % pool.length]!;
+  }
   const phrase = pool[_clarificationIdx % pool.length]!;
   _clarificationIdx++;
   return phrase;
