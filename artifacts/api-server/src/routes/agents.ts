@@ -249,7 +249,14 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
     );
     // Link calendar to agent via calendarCapability
     const existingConfig = (agent.agentConfig as Record<string, unknown> | null) ?? {};
-    const updatedConfig = { ...existingConfig, calendarCapability: { enabled: true, defaultCalendarId: newCal.id } };
+    const calCap: AgentConfig["calendarCapability"] = {
+      enabled: true,
+      defaultCalendarId: newCal.id,
+      accessibleCalendarIds: [newCal.id],
+      defaultEventTypeId: null,
+      permissions: { checkAvailability: true, book: true, reschedule: true, cancel: true },
+    };
+    const updatedConfig = { ...existingConfig, calendarCapability: calCap };
     const [updatedAgent] = await db
       .update(agentsTable)
       .set({ agentConfig: updatedConfig })
