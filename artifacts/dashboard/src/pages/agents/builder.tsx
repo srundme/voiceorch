@@ -721,9 +721,40 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
         }}
       />
 
-      {/* ── Studio canvas (Bolna-style: welcome → prompt → pipeline) ─────────── */}
+      {/* ── Studio overview: pipeline → welcome → canvas ─────────────────────── */}
       <div className="relative min-w-0">
         <div className="p-5 sm:p-6 space-y-6 max-w-3xl">
+
+          {/* Pipeline chips — top of Overview */}
+          <section className="space-y-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <AgentConfigCard
+                icon={<Mic />}
+                label="Transcriber"
+                value={langLabel}
+                subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
+                active={openSection === "transcriber"}
+                onClick={() => openPipelineDialog("transcriber")}
+              />
+              <AgentConfigCard
+                icon={<Brain />}
+                label="Model"
+                value={llmModelLabel || llmLabel}
+                subtext={llmLabel}
+                active={openSection === "model"}
+                onClick={() => openPipelineDialog("model")}
+              />
+              <AgentConfigCard
+                icon={<Volume2 />}
+                label="Voice"
+                value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
+                subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
+                active={openSection === "voice"}
+                onClick={() => openPipelineDialog("voice")}
+              />
+            </div>
+          </section>
 
           {/* Welcome / first message */}
           <section className="space-y-3">
@@ -799,37 +830,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
                   <FormMessage className="text-[10px] px-4 pb-2" />
                 </FormItem>
               )} />
-            </div>
-          </section>
-
-          {/* Pipeline chips */}
-          <section className="space-y-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">Pipeline</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <AgentConfigCard
-                icon={<Mic />}
-                label="Transcriber"
-                value={langLabel}
-                subtext={<>{asrLabel}{asrModel ? ` · ${asrModel}` : ""}</>}
-                active={openSection === "transcriber"}
-                onClick={() => openPipelineDialog("transcriber")}
-              />
-              <AgentConfigCard
-                icon={<Brain />}
-                label="Model"
-                value={llmModelLabel || llmLabel}
-                subtext={llmLabel}
-                active={openSection === "model"}
-                onClick={() => openPipelineDialog("model")}
-              />
-              <AgentConfigCard
-                icon={<Volume2 />}
-                label="Voice"
-                value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
-                subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
-                active={openSection === "voice"}
-                onClick={() => openPipelineDialog("voice")}
-              />
             </div>
           </section>
 
@@ -2870,14 +2870,10 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <div className="p-4 border-b border-border/40 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => navigate("/app/agents")}
-            className="text-left min-w-0"
-          >
+          <div className="text-left min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Agents</p>
             <p className="text-sm font-semibold text-foreground truncate">{agents?.length ?? 0} live</p>
-          </button>
+          </div>
           <Button size="sm" className="h-8 rounded-full gap-1 px-3 text-xs shrink-0" onClick={handleCreate}>
             <Plus className="h-3.5 w-3.5" /> New
           </Button>
@@ -5021,13 +5017,6 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col min-w-0 gap-1.5 flex-1">
-            <button
-              type="button"
-              onClick={() => navigate("/app/agents")}
-              className="self-start text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
-            >
-              ← All agents
-            </button>
             <div className="flex items-center gap-2 min-w-0">
               <h1
                 className="text-xl sm:text-2xl font-semibold leading-tight tracking-tight truncate max-w-[420px]"
@@ -5440,236 +5429,31 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
-function AgentsHub({
-  agents,
-  isLoading,
-  rateMap,
-  onSelect,
-  onCreate,
-}: {
-  agents: Array<{
-    id: number;
-    name: string;
-    status: string;
-    asrProvider?: string | null;
-    llmProvider?: string | null;
-    ttsProvider?: string | null;
-    language?: string | null;
-    totalCalls?: number | null;
-  }> | undefined;
-  isLoading: boolean;
-  rateMap: Map<string, number>;
-  onSelect: (id: number) => void;
-  onCreate: () => void;
-}) {
+function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
   const [, navigate] = useLocation();
-  const userProviderNames = useUserProviderNames();
-  const [search, setSearch] = useState("");
-  const list = agents ?? [];
-  const filtered = list.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()));
-
   return (
-    <div className="relative flex-1 overflow-y-auto bg-background">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[50vh] w-[80vw] max-w-[900px] rounded-full bg-[#6366f1]/[0.06] dark:bg-[#6366f1]/[0.1] blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-5%] h-[40vh] w-[45vw] rounded-full bg-[#14b8a6]/[0.05] dark:bg-[#14b8a6]/[0.07] blur-[90px]" />
-      </div>
-
-      <div className="relative z-10 mx-auto max-w-6xl px-6 sm:px-8 py-10 sm:py-14">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-10"
-        >
-          <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/55 mb-3">
-              Agent Studio
-            </p>
-            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-[1.1]">
-              Build voice agents{" "}
-              <span className="bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#fbbf24] bg-clip-text text-transparent">
-                people love talking to
-              </span>
-            </h1>
-            <p className="mt-3 text-[15px] text-muted-foreground leading-relaxed">
-              Start in Vibe Build — describe the use case and we wire STT, LLM, TTS, tools, and your prompt. Or open the full builder.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Button
-              size="lg"
-              className="h-11 rounded-full gap-2 px-5 shadow-sm"
-              onClick={() => navigate("/app/vibe")}
-            >
-              <Sparkles className="h-4 w-4" /> Build with AI
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-11 rounded-full gap-2 px-5"
-              onClick={onCreate}
-            >
-              <Plus className="h-4 w-4" /> Manual setup
-            </Button>
-          </div>
-        </motion.div>
-
-        {/* Quick starts */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.06 }}
-          className="mb-10"
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/50 mb-3">
-            Popular starts
-          </p>
-          <div className="grid sm:grid-cols-3 gap-3">
-            {[
-              { title: "Sales follow-up", desc: "Qualify leads, handle objections, book callbacks", path: "/app/vibe" },
-              { title: "Support desk", desc: "Inbound help for billing, orders, and accounts", path: "/app/vibe" },
-              { title: "Appointments", desc: "Book, reschedule, and confirm clinic slots", path: "/app/vibe" },
-            ].map(card => (
-              <button
-                key={card.title}
-                type="button"
-                onClick={() => navigate(card.path)}
-                className="group text-left rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md p-4 hover:border-border/70 hover:bg-card/50 transition-all hover:scale-[1.01]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold">{card.title}</p>
-                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-0.5" />
-                </div>
-                <p className="mt-1.5 text-[12px] text-muted-foreground leading-relaxed">{card.desc}</p>
-              </button>
-            ))}
-          </div>
-        </motion.div>
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Your agents</h2>
-            <p className="text-sm text-muted-foreground">
-              {isLoading ? "Loading…" : `${list.length} agent${list.length === 1 ? "" : "s"}`}
-            </p>
-          </div>
-          {list.length > 0 && (
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
-              <Input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search agents…"
-                className="h-9 pl-9 rounded-full bg-muted/20 border-border/40"
-              />
-            </div>
-          )}
+    <div className="flex-1 flex items-center justify-center p-8 bg-background">
+      <div className="text-center max-w-sm space-y-4">
+        <div className="mx-auto h-12 w-12 rounded-2xl border border-border/50 bg-muted/30 flex items-center justify-center">
+          <Bot className="h-5 w-5 text-muted-foreground" />
         </div>
-
-        {isLoading && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="rounded-2xl border border-border/40 p-5 space-y-3">
-                <Skeleton className="h-5 w-2/3" />
-                <Skeleton className="h-3 w-1/2" />
-                <Skeleton className="h-3 w-1/3" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!isLoading && list.length === 0 && (
-          <div className="rounded-3xl border border-dashed border-border/50 bg-card/20 p-12 text-center">
-            <div className="mx-auto mb-5 h-16 w-16 rounded-2xl border border-border/40 bg-card/40 flex items-center justify-center">
-              <Sparkles className="h-7 w-7 text-muted-foreground/70" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No agents yet</h3>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-              Your first agent takes a few minutes in Vibe Build — then fine-tune everything here.
-            </p>
-            <Button onClick={() => navigate("/app/vibe")} className="rounded-full gap-2 h-10 px-5">
-              <Sparkles className="h-4 w-4" /> Create your first agent
-            </Button>
-          </div>
-        )}
-
-        {!isLoading && filtered.length > 0 && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Create card */}
-            <button
-              type="button"
-              onClick={() => navigate("/app/vibe")}
-              className="group rounded-2xl border border-dashed border-border/50 bg-primary/[0.03] hover:bg-primary/[0.06] hover:border-primary/30 p-5 text-left transition-all min-h-[160px] flex flex-col justify-between"
-            >
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Plus className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">Create new agent</p>
-                <p className="text-[12px] text-muted-foreground mt-1">Start with AI — recommended</p>
-              </div>
-            </button>
-
-            {filtered.map((agent, i) => {
-              const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
-              return (
-                <motion.button
-                  key={agent.id}
-                  type="button"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                  onClick={() => onSelect(agent.id)}
-                  className="group rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm hover:border-border/70 hover:bg-card/70 p-5 text-left transition-all hover:scale-[1.015] min-h-[160px] flex flex-col justify-between shadow-sm"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="h-10 w-10 rounded-xl border border-border/40 bg-muted/30 flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <span className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border",
-                        agent.status === "active"
-                          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-                          : "border-border/50 text-muted-foreground",
-                      )}>
-                        <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/40")} />
-                        {agent.status === "active" ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                    <p className="text-[15px] font-semibold truncate group-hover:text-foreground">{agent.name}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1 truncate">
-                      {[agent.asrProvider, agent.llmProvider, agent.ttsProvider].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/30 mt-3">
-                    <span className="text-[11px] text-muted-foreground">
-                      {agent.totalCalls ?? 0} calls
-                      {agent.language ? ` · ${agent.language}` : ""}
-                    </span>
-                    {costCents ? (
-                      <span className="text-[11px] tabular-nums text-muted-foreground/80">
-                        ${(costCents / 100).toFixed(3)}/min
-                      </span>
-                    ) : null}
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
-        )}
-
-        {!isLoading && list.length > 0 && filtered.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-12">No agents match “{search}”.</p>
-        )}
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-semibold tracking-tight">Select an agent</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Pick one from the list, or create a new agent with AI or manual setup.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+          <Button className="h-9 rounded-xl gap-1.5 text-xs" onClick={() => navigate("/app/vibe")}>
+            <Sparkles className="h-3.5 w-3.5" /> Build with AI
+          </Button>
+          <Button variant="outline" className="h-9 rounded-xl gap-1.5 text-xs" onClick={onCreate}>
+            <Plus className="h-3.5 w-3.5" /> Manual setup
+          </Button>
+        </div>
       </div>
     </div>
   );
-}
-
-function EmptyState({ onCreate }: { onCreate: () => void }) {
-  return <AgentsHub agents={[]} isLoading={false} rateMap={new Map()} onSelect={() => {}} onCreate={onCreate} />;
 }
 
 /* ── Main page ──────────────────────────────────────────────────────────────── */
@@ -5694,7 +5478,23 @@ export default function AgentBuilder() {
     try { localStorage.setItem(LAST_AGENT_ID_KEY, String(selectedId)); } catch { /* ignore */ }
   }, [selectedId]);
 
-  // Auto-open the create dialog when the URL contains ?create=1
+  // Bolna-style: /app/agents opens Studio and lands on last (or first) agent — no gallery hub
+  useEffect(() => {
+    if (selectedId != null || agentsLoading) return;
+    const list = Array.isArray(agents) ? agents : [];
+    if (list.length === 0) return;
+    let target: number | null = null;
+    try {
+      const last = localStorage.getItem(LAST_AGENT_ID_KEY);
+      if (last) {
+        const id = parseInt(last, 10);
+        if (list.some(a => a.id === id)) target = id;
+      }
+    } catch { /* ignore */ }
+    if (target == null) target = list[0]!.id;
+    navigate(`/app/agents/${target}`, { replace: true });
+  }, [selectedId, agents, agentsLoading, navigate]);
+
   const [showCreate, setShowCreate] = useState(() => {
     try {
       return new URLSearchParams(window.location.search).get("create") === "1";
@@ -5715,27 +5515,16 @@ export default function AgentBuilder() {
     } catch { /* ignore */ }
   }, []);
 
-  // Hub view — tempting gallery, no forced auto-open into last agent
-  if (selectedId == null) {
-    return (
-      <div className="flex h-full overflow-hidden">
-        <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
-        <AgentsHub
-          agents={agents as any}
-          isLoading={agentsLoading}
-          rateMap={rateMap}
-          onSelect={handleSelect}
-          onCreate={handleCreate}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full overflow-hidden">
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <AgentListPanel selectedId={selectedId} onSelect={handleSelect} rateMap={rateMap} />
-      <AgentEditorPanel agentId={selectedId} />
+      {selectedId != null ? (
+        <AgentEditorPanel agentId={selectedId} />
+      ) : (
+        <StudioEmptyCanvas onCreate={handleCreate} />
+      )}
     </div>
   );
 }
+
