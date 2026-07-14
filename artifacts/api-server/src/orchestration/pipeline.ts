@@ -36,6 +36,7 @@ import {
   TurnSafetyNet,
   SilenceWatchdog,
   recoveryReprompt,
+  speakerHandoffChallenge,
   inactivityReprompt,
   inactivityFarewell,
   neutralGreeting,
@@ -343,6 +344,12 @@ const SPEAKER_HANDOFF_SUPPRESS_NOTE =
   "(phone may have been handed to someone else). Do NOT use the previous caller's name, " +
   "Sir/Ma'am salutation, or CALLER MEMORY facts for them until the new speaker confirms who they are. " +
   "Treat the current speaker as a new person on this line. Do not hang up.";
+
+/** Injected after we already forced a spoken "who am I speaking with?" line. */
+const SPEAKER_HANDOFF_AFTER_CHALLENGE_NOTE =
+  SPEAKER_HANDOFF_SUPPRESS_NOTE +
+  " You already asked who you are speaking with. Wait for their answer; do not re-ask and " +
+  "do not continue treating them as the previous caller.";
 
 const SPEAKER_HANDOFF_CHALLENGE_NOTE =
   SPEAKER_HANDOFF_SUPPRESS_NOTE +
@@ -861,6 +868,11 @@ export class OrchestrationPipeline {
   /** Voice Memory (opt-in) — mid-call handoff + cross-number voice linking. */
   private speakerVerifier: SpeakerVerifier | null = null;
   private pendingSpeakerChallenge = false;
+  /** True after we forced a spoken handoff challenge for the current handoff. */
+  private speakerChallengeSpoken = false;
+  private speakingSpeakerHandoffChallenge = false;
+  /** While true, suppress in-flight LLM TTS so the forced handoff ask can take the floor. */
+  private skipAgentPlaybackForHandoff = false;
   private voiceHandoffActive = false;
   private voiceLinkedFromPhone: string | null = null;
   private pendingVoiceLinkNote = false;
@@ -2101,6 +2113,9 @@ export class OrchestrationPipeline {
       logger.error({ callId: this.config.callId, err }, "Turn error (streaming STT)");
     } finally {
       this.isProcessing = false;
+      if (!this.speakingSpeakerHandoffChallenge) {
+        this.skipAgentPlaybackForHandoff = false;
+      }
       // If the call ended (transfer or end_call) while this turn was processing,
       // do NOT drain the pending queue — those transcripts must be discarded.
       if (this.closed) return;
@@ -2745,6 +2760,7 @@ export class OrchestrationPipeline {
     if (ev.type === "handoff") {
       this.voiceHandoffActive = true;
       this.pendingSpeakerChallenge = true;
+      this.speakerChallengeSpoken = false;
       this.salutationCorrection = null;
       this.pendingVoiceLinkNote = false;
       // Unlock gender so the new speaker can be re-detected.
@@ -2757,6 +2773,64 @@ export class OrchestrationPipeline {
         { callId: this.config.callId, similarity: ev.similarity },
         "Voice Memory: mid-call speaker handoff — gender unlocked, challenge pending",
       );
+      // Do not rely on the LLM to ask — force a spoken identity check now.
+      void this.speakSpeakerHandoffChallenge();
+    }
+  }
+
+  /**
+   * Interrupt any in-flight agent speech and ask who is on the line.
+   * Soft prompt notes alone are often ignored when CALLER MEMORY / history
+   * still name the previous person.
+   */
+  private async speakSpeakerHandoffChallenge(): Promise<void> {
+    if (this.closed || this.speakingSpeakerHandoffChallenge || this.speakerChallengeSpoken) return;
+    this.speakingSpeakerHandoffChallenge = true;
+    this.skipAgentPlaybackForHandoff = true;
+    try {
+      // Cut off whatever the agent was saying so the challenge is heard.
+      if (this.isPlaying || this.isSendingTtsAudio) {
+        this.bargeInRequested = true;
+        const deadline = Date.now() + 2_000;
+        while ((this.isSendingTtsAudio || this.isPlaying) && Date.now() < deadline && !this.closed) {
+          await new Promise((r) => setTimeout(r, 30));
+        }
+        this.bargeInRequested = false;
+      }
+
+      if (this.closed) return;
+
+      const text = speakerHandoffChallenge(this.currentLang || this.agent.language);
+      this.pendingSpeakerChallenge = false;
+      this.speakerChallengeSpoken = true;
+      this.conversationHistory.appendAssistant(text);
+      this.config.onTranscript("agent", text);
+      this.config.onConversationUpdate?.(this.conversationHistory.messages);
+      logger.info(
+        { callId: this.config.callId, text },
+        "Voice Memory: speaking forced handoff challenge",
+      );
+
+      this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+      this.isPlaying = true;
+      try {
+        await this.playSentence(text);
+      } finally {
+        this.isPlaying = false;
+        this.armTailEchoGrace();
+      }
+      await this.drainPlaybackTail();
+    } catch (err) {
+      logger.warn({ callId: this.config.callId, err }, "Voice Memory: forced handoff challenge failed");
+      // Fall back to LLM soft challenge on the next turn.
+      if (!this.speakerChallengeSpoken) this.pendingSpeakerChallenge = true;
+    } finally {
+      this.speakingSpeakerHandoffChallenge = false;
+      // Keep suppressing leftover LLM TTS from an interrupted turn until that
+      // turn exits (cleared where isProcessing flips false).
+      if (!this.isProcessing) {
+        this.skipAgentPlaybackForHandoff = false;
+      }
     }
   }
 
@@ -3577,6 +3651,9 @@ export class OrchestrationPipeline {
    */
   private async playJob(job: TtsSentenceJob): Promise<void> {
     if (this.bargeInRequested) return;
+    // Voice Memory handoff takeover — drop in-flight LLM sentences so the
+    // forced "who am I speaking with?" line can own the channel.
+    if (this.skipAgentPlaybackForHandoff && !this.speakingSpeakerHandoffChallenge) return;
     // Track what the agent is about to speak so the streaming-STT path can reject
     // this same audio when the carrier echoes it back (content-based self-echo).
     this.recordAgentSpeech(job.text);
@@ -5450,9 +5527,11 @@ export class OrchestrationPipeline {
     // Voice Memory — handoff / cross-number notes live in the volatile per-turn
     // tail so Gemini / OpenAI cached prefixes stay byte-stable.
     if (this.voiceHandoffActive) {
-      if (this.pendingSpeakerChallenge) {
+      if (this.pendingSpeakerChallenge && !this.speakerChallengeSpoken) {
         systemPromptForTurn += `\n\n${SPEAKER_HANDOFF_CHALLENGE_NOTE}`;
         this.pendingSpeakerChallenge = false;
+      } else if (this.speakerChallengeSpoken) {
+        systemPromptForTurn += `\n\n${SPEAKER_HANDOFF_AFTER_CHALLENGE_NOTE}`;
       } else {
         systemPromptForTurn += `\n\n${SPEAKER_HANDOFF_SUPPRESS_NOTE}`;
       }
@@ -6350,6 +6429,9 @@ export class OrchestrationPipeline {
       if (!this.closed) this.safetyNet.beginListening();
     } finally {
       this.isProcessing = false;
+      if (!this.speakingSpeakerHandoffChallenge) {
+        this.skipAgentPlaybackForHandoff = false;
+      }
       if (this.audioBuffer.length > 0) void this.flushAndProcess();
       else if (!this.closed) this.safetyNet.beginListening();
     }

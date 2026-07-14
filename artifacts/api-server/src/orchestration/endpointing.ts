@@ -222,6 +222,24 @@ export function recoveryReprompt(lang?: string | null): string {
   return RECOVERY_REPROMPTS[prefix] ?? RECOVERY_REPROMPTS["en"]!;
 }
 
+// Voice Memory — forced spoken challenge when mid-call speaker handoff is detected.
+const SPEAKER_HANDOFF_CHALLENGES: Record<string, string> = {
+  en: "Sorry — who am I speaking with now?",
+  hi: "माफ़ कीजिए — अभी मैं किससे बात कर रहा हूँ?",
+  ta: "சாரி — இப்போ நான் யாருடன் பேசுகிறேன்?",
+  te: "క్షమించండి — ఇప్పుడు నేను ఎవరితో మాట్లాడుతున్నాను?",
+  kn: "ಕ್ಷಮಿಸಿ — ಈಗ ನಾನು ಯಾರೊಂದಿಗೆ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ?",
+  mr: "माफ करा — आता मी कोणाशी बोलत आहे?",
+  gu: "માફ કરશો — હું હવે કોની સાથે વાત કરું છું?",
+  bn: "দুঃখিত — এখন আমি কার সাথে কথা বলছি?",
+  ml: "ക്ഷമിക്കണം — ഇപ്പോൾ ഞാൻ ആരോടാണ് സംസാരിക്കുന്നത്?",
+};
+/** Soft identity check after Voice Memory detects a new speaker on the line. */
+export function speakerHandoffChallenge(lang?: string | null): string {
+  const prefix = (lang ?? "en").split("-")[0] ?? "en";
+  return SPEAKER_HANDOFF_CHALLENGES[prefix] ?? SPEAKER_HANDOFF_CHALLENGES["en"]!;
+}
+
 // Language-aware "are you there?" check-in — spoken when the per-agent
 // silence-hangup timer expires the FIRST time, so the caller gets an audible
 // chance to respond before the call is ended (call 1915: silent mid-speech drop).

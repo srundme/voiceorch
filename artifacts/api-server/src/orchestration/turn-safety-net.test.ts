@@ -5,6 +5,7 @@ import {
   STALL_BACKSTOP_MS,
   STALL_MAX_REPROMPTS,
   recoveryReprompt,
+  speakerHandoffChallenge,
 } from "./endpointing.js";
 import {
   createStubStreamingSTTPartialsOnly,
@@ -195,5 +196,15 @@ describe("recoveryReprompt", () => {
     expect(recoveryReprompt("zz")).toBe(recoveryReprompt("en")); // unknown → English
     expect(recoveryReprompt(null)).toBe(recoveryReprompt("en"));
     expect(recoveryReprompt("")).toBe(recoveryReprompt("en"));
+  });
+});
+
+describe("speakerHandoffChallenge", () => {
+  it("returns a language-specific Voice Memory handoff ask and falls back to English", () => {
+    expect(speakerHandoffChallenge("ta")).toContain("யாருடன்");
+    expect(speakerHandoffChallenge("ta-IN")).toContain("யாருடன்");
+    expect(speakerHandoffChallenge("hi")).toContain("किससे");
+    expect(speakerHandoffChallenge("zz")).toBe(speakerHandoffChallenge("en"));
+    expect(speakerHandoffChallenge(null)).toBe(speakerHandoffChallenge("en"));
   });
 });
