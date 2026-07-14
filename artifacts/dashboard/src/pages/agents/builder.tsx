@@ -110,8 +110,9 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   options: { value: string; label: string }[];
   placeholder?: string;
 }) {
+  // Radix Select treats "" as a controlled empty-invalid value; use undefined so the placeholder shows.
   return (
-    <Select value={value ?? ""} onValueChange={onChange}>
+    <Select value={value ? value : undefined} onValueChange={onChange}>
       <SelectTrigger className="h-8 text-xs bg-background/50">
         <SelectValue placeholder={placeholder ?? "Select…"} />
       </SelectTrigger>
@@ -120,6 +121,26 @@ function SmallSelect({ value, onChange, options, placeholder }: {
       </SelectContent>
     </Select>
   );
+}
+
+/** Resolve a friendly voice label from whitelist, static catalog, or truncated ID. */
+function resolveVoiceLabel(
+  voiceId: string | undefined | null,
+  provider: string | undefined | null,
+  whitelist: Array<{ id: string; name: string }> = [],
+  storedName?: string | null,
+): string {
+  if (!voiceId || voiceId === "__custom__") return "";
+  const fromWhitelist = whitelist.find(v => v.id === voiceId)?.name;
+  if (fromWhitelist) return fromWhitelist;
+  if (storedName) return storedName;
+  const staticList = provider && provider in TTS_VOICES ? TTS_VOICES[provider] : undefined;
+  if (Array.isArray(staticList)) {
+    const fromStatic = staticList.find(v => v.value === voiceId)?.label;
+    if (fromStatic) return fromStatic;
+  }
+  if (voiceId.length > 12) return `…${voiceId.slice(-8)}`;
+  return voiceId;
 }
 
 function OverviewCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
@@ -613,15 +634,36 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Shared language filter (single source of truth in agent-providers.ts):
-  // English agents see ALL whitelisted voices; non-English agents see only
-  // their language's voices. Identical to the Voice tab's list.
+  // Curated Cartesia voice list: prefer admin whitelist (language-filtered),
+  // fall back to the static catalog when whitelist is empty so "Choose voice"
+  // always has options. Always append the current voice if it's missing so the
+  // select can display it. Always end with Paste-custom.
   const cartesiaOverviewOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const opts = filterVoicesForLanguage(all, language).map(v => ({ value: v.id, label: v.name }));
+    const filtered = filterVoicesForLanguage(all, language);
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const v of filtered) {
+      if (seen.has(v.id)) continue;
+      seen.add(v.id);
+      opts.push({ value: v.id, label: v.name });
+    }
+    if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
+      for (const v of TTS_VOICES.cartesia) {
+        if (v.value === "__custom__" || seen.has(v.value)) continue;
+        seen.add(v.value);
+        opts.push(v);
+      }
+    }
+    if (ttsVoice && ttsVoice !== "__custom__" && !seen.has(ttsVoice)) {
+      opts.unshift({
+        value: ttsVoice,
+        label: resolveVoiceLabel(ttsVoice, "cartesia", all, (agent as any)?.ttsVoiceName),
+      });
+    }
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
-  }, [whitelistedData, language]);
+  }, [whitelistedData, language, ttsVoice, agent]);
 
   // When the language changes (or the whitelist finishes loading), clear a
   // selected curated voice that no longer supports the language — using the
@@ -659,9 +701,25 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const llmModelLabel  = llmOptions.find((m: any) => m.value === llmModel)?.label ?? llmModel;
   const curatedVoiceOpts = ttsVoiceOpts.filter(v => v.value !== "__custom__");
   const inCuratedList    = curatedVoiceOpts.some(v => v.value === ttsVoice);
-  const showCustomVoiceInput = ttsVoiceFree || voiceCustomMode || (ttsVoiceOpts.length > 0 && !inCuratedList);
-  const ttsVoiceDropdownVal  = inCuratedList && !voiceCustomMode ? (ttsVoice ?? "") : "__custom__";
-  const ttsVoiceLabel  = (!ttsVoice || ttsVoice === "__custom__") ? "" : (curatedVoiceOpts.find(v => v.value === ttsVoice)?.label ?? ttsVoice);
+  // Only show custom paste when user explicitly chose it, provider is free-form,
+  // OR current voice ID is set but not in the curated list (edit existing custom).
+  // Empty voice must NOT force custom mode — that hid the "Choose voice" dropdown.
+  const showCustomVoiceInput =
+    ttsVoiceFree
+    || voiceCustomMode
+    || (!!ttsVoice && ttsVoice !== "__custom__" && !inCuratedList);
+  const ttsVoiceDropdownVal = (() => {
+    if (voiceCustomMode || ttsVoiceFree) return "__custom__";
+    if (inCuratedList) return ttsVoice ?? "";
+    if (!ttsVoice || ttsVoice === "__custom__") return ""; // unselected → placeholder
+    return "__custom__"; // unknown custom id
+  })();
+  const ttsVoiceLabel = resolveVoiceLabel(
+    ttsVoice,
+    ttsProvider,
+    whitelistedData?.voices ?? [],
+    (agent as any)?.ttsVoiceName,
+  );
   const ttsModelLabel  = ttsModelOpts.find((m: any) => m.value === ttsModel)?.label ?? ttsModel;
 
   const openPipelineDialog = (section: CardSection) => {
@@ -748,7 +806,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
               <AgentConfigCard
                 icon={<Volume2 />}
                 label="Voice"
-                value={ttsVoiceLabel || ttsVoice || ttsModelLabel || ttsLabel}
+                value={ttsVoiceLabel || "Select a voice"}
                 subtext={<>{ttsLabel}{ttsModelLabel ? ` · ${ttsModelLabel}` : ""}</>}
                 active={openSection === "voice"}
                 onClick={() => openPipelineDialog("voice")}
@@ -967,63 +1025,76 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             title="Voice"
             description="Choose the text-to-speech provider and voice used to speak to callers."
           >
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="ttsProvider" render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
-                  <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); setVoiceCustomMode(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
-                    options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
-                </FormItem>
-              )} />
-              {ttsVoiceOpts.length > 0 && (
-                <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="ttsProvider" render={({ field }) => (
                   <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Voice</FormLabel>
-                    <SmallSelect
-                      value={ttsVoiceDropdownVal}
-                      onChange={(v) => {
-                        if (v === "__custom__") {
-                          // Show the custom input without erasing the saved voice ID.
-                          setVoiceCustomMode(true);
-                          return;
-                        }
-                        setVoiceCustomMode(false);
-                        field.onChange(v);
-                      }}
-                      options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
-                      placeholder="Default"
-                    />
+                    <FormLabel className="text-[10px] text-muted-foreground">Provider</FormLabel>
+                    <SmallSelect value={field.value} onChange={(v) => { field.onChange(v); setVoiceCustomMode(false); form.setValue("ttsVoice", ""); form.setValue("ttsModel", ""); }}
+                      options={TTS_PROVIDERS.map(p => ({ value: p.value, label: p.label }))} />
                   </FormItem>
                 )} />
-              )}
-              {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && (
-                <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
-                  No voices available for the selected language.
-                </p>
-              )}
-              {showCustomVoiceInput && (
-                <FormField control={form.control} name="ttsVoice" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">
-                      {ttsVoiceOpts.length > 0 ? "Custom Voice ID" : "Voice ID"}
-                    </FormLabel>
-                    <Input
-                      value={field.value === "__custom__" ? "" : (field.value ?? "")}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      placeholder="Paste UUID / voice ID…"
-                      className="h-8 text-xs bg-background/50"
-                    />
-                  </FormItem>
-                )} />
-              )}
-              {ttsModelOpts.length > 0 && (
-                <FormField control={form.control} name="ttsModel" render={({ field }) => (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
-                    <SmallSelect value={field.value ?? ""} onChange={field.onChange}
-                      options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
-                  </FormItem>
-                )} />
+                {ttsModelOpts.length > 0 && (
+                  <FormField control={form.control} name="ttsModel" render={({ field }) => (
+                    <FormItem className="space-y-1">
+                      <FormLabel className="text-[10px] text-muted-foreground">Model</FormLabel>
+                      <SmallSelect value={field.value ?? ""} onChange={field.onChange}
+                        options={ttsModelOpts.map((m: any) => ({ value: m.value, label: m.label }))} placeholder="Default" />
+                    </FormItem>
+                  )} />
+                )}
+              </div>
+
+              {(ttsVoiceOpts.length > 0 || ttsVoiceFree) && (
+                <div className="space-y-2">
+                  <FormLabel className="text-[10px] text-muted-foreground">Choose voice</FormLabel>
+                  {ttsVoiceOpts.length > 0 && (
+                    <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                      <FormItem className="space-y-0">
+                        <FormControl>
+                          <SmallSelect
+                            value={ttsVoiceDropdownVal}
+                            onChange={(v) => {
+                              if (v === "__custom__") {
+                                // Show the custom input without erasing the saved voice ID.
+                                setVoiceCustomMode(true);
+                                return;
+                              }
+                              setVoiceCustomMode(false);
+                              field.onChange(v);
+                            }}
+                            options={ttsVoiceOpts.map(v => ({ value: v.value, label: v.label }))}
+                            placeholder="Select a voice…"
+                          />
+                        </FormControl>
+                        <FormMessage className="text-[10px]" />
+                      </FormItem>
+                    )} />
+                  )}
+                  {ttsProvider === "cartesia" && (whitelistedData?.voices ?? []).length > 0 && curatedVoiceOpts.length === 0 && (
+                    <p className="text-[10px] text-amber-400/80 leading-relaxed rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
+                      No voices available for the selected language.
+                    </p>
+                  )}
+                  {showCustomVoiceInput && (
+                    <FormField control={form.control} name="ttsVoice" render={({ field }) => (
+                      <FormItem className="space-y-1">
+                        <FormLabel className="text-[10px] text-muted-foreground">
+                          {ttsVoiceOpts.length > 0 ? "Custom Voice ID" : "Voice ID"}
+                        </FormLabel>
+                        <Input
+                          value={field.value === "__custom__" ? "" : (field.value ?? "")}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          placeholder="Paste UUID / voice ID…"
+                          className="h-8 text-xs bg-background/50 font-mono"
+                        />
+                        <FormDescription className="text-[10px]">
+                          Find voice IDs in your {ttsProvider === "cartesia" ? "Cartesia" : ttsProvider === "elevenlabs" ? "ElevenLabs" : "provider"} dashboard.
+                        </FormDescription>
+                      </FormItem>
+                    )} />
+                  )}
+                </div>
               )}
             </div>
           </EditConfigDialog>
@@ -1194,10 +1265,30 @@ function VoiceTab({ form }: { form: any }) {
   // their language's voices. Identical to the Overview section's list.
   const cartesiaVoiceOpts = useMemo(() => {
     const all = whitelistedData?.voices ?? [];
-    const opts = filterVoicesForLanguage(all, agentLanguage).map(v => ({ value: v.id, label: v.name }));
+    const filtered = filterVoicesForLanguage(all, agentLanguage);
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const v of filtered) {
+      if (seen.has(v.id)) continue;
+      seen.add(v.id);
+      opts.push({ value: v.id, label: v.name });
+    }
+    if (opts.length === 0 && Array.isArray(TTS_VOICES.cartesia)) {
+      for (const v of TTS_VOICES.cartesia) {
+        if (v.value === "__custom__" || seen.has(v.value)) continue;
+        seen.add(v.value);
+        opts.push(v);
+      }
+    }
+    if (ttsVoice && ttsVoice !== "__custom__" && !seen.has(ttsVoice)) {
+      opts.unshift({
+        value: ttsVoice,
+        label: resolveVoiceLabel(ttsVoice, "cartesia", all),
+      });
+    }
     opts.push({ value: "__custom__", label: "Paste custom Voice ID" });
     return opts;
-  }, [whitelistedData, agentLanguage]);
+  }, [whitelistedData, agentLanguage, ttsVoice]);
 
   // When the language changes (or the whitelist finishes loading), clear a
   // selected curated voice that no longer supports the language — using the
@@ -1231,8 +1322,17 @@ function VoiceTab({ form }: { form: any }) {
   const ttsModelOptsV = TTS_MODELS[ttsProvider] ?? [];
   const curatedVoiceOptsV = ttsVoiceOptsV.filter(v => v.value !== "__custom__");
   const inCuratedV        = curatedVoiceOptsV.some(v => v.value === ttsVoice);
-  const showCustomV       = ttsVoiceRawV === null || voiceCustomModeV || (ttsVoiceOptsV.length > 0 && !inCuratedV);
-  const dropdownValV      = inCuratedV && !voiceCustomModeV ? (ttsVoice ?? "") : "__custom__";
+  // Don't force custom mode when voice is empty — that hid the Choose Voice dropdown.
+  const showCustomV =
+    ttsVoiceRawV === null
+    || voiceCustomModeV
+    || (!!ttsVoice && ttsVoice !== "__custom__" && !inCuratedV);
+  const dropdownValV = (() => {
+    if (voiceCustomModeV || ttsVoiceRawV === null) return "__custom__";
+    if (inCuratedV) return ttsVoice ?? "";
+    if (!ttsVoice || ttsVoice === "__custom__") return "";
+    return "__custom__";
+  })();
 
   // ── Voice preview ─────────────────────────────────────────────────────────
   const { toast } = useToast();
@@ -1417,9 +1517,9 @@ function VoiceTab({ form }: { form: any }) {
           {ttsVoiceOptsV.length > 0 && (
             <FormField control={form.control} name="ttsVoice" render={({ field }) => (
               <FormItem className="space-y-1">
-                <FormLabel className="text-xs text-muted-foreground">Voice</FormLabel>
+                <FormLabel className="text-xs text-muted-foreground">Choose voice</FormLabel>
                 <Select
-                  value={dropdownValV}
+                  value={dropdownValV || undefined}
                   onValueChange={(v) => {
                     if (v === "__custom__") {
                       // Show the custom input without erasing the saved voice ID.
@@ -1431,7 +1531,7 @@ function VoiceTab({ form }: { form: any }) {
                   }}
                 >
                   <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Select voice" />
+                    <SelectValue placeholder="Select a voice…" />
                   </SelectTrigger>
                   <SelectContent position="popper" className="max-h-[300px]">
                     {ttsVoiceOptsV.map(v => (
