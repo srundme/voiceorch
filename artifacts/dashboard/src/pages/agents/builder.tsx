@@ -28,6 +28,7 @@ import {
   useListAgentVersions, usePublishAgentVersion, useGetAgentVersion, useRestoreAgentVersion,
   useArchiveAgentVersion, useDeleteAgentVersion,
   getListAgentVersionsQueryKey, getGetAgentVersionQueryKey,
+  useListPhoneNumbers, useAssignPhoneNumber, getListPhoneNumbersQueryKey,
 } from "@workspace/api-client-react";
 import type { AgentVersion } from "@workspace/api-client-react";
 import {
@@ -407,12 +408,189 @@ const SECTION_FIELDS: Record<CardSection, string[]> = {
   voice: ["ttsProvider", "ttsModel", "ttsVoice"],
 };
 
+/* ── Inbound number card (same assign API as Phone Numbers) ─────────────────── */
+
+function AgentInboundPanel({
+  agentId,
+  preferredManagedNumber,
+  className,
+}: {
+  agentId: number;
+  preferredManagedNumber?: string | null;
+  className?: string;
+}) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: phoneNumbersRaw, isLoading } = useListPhoneNumbers({
+    query: { queryKey: getListPhoneNumbersQueryKey(), staleTime: 60_000 },
+  });
+  const { data: agents } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
+  const assign = useAssignPhoneNumber();
+  const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
+  const assigned = phoneNumbers.find(p => p.agentId === agentId);
+  const preferredManaged = preferredManagedNumber ?? null;
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>("none");
+
+  const openDialog = () => {
+    setSelectedId(assigned ? String(assigned.id) : "none");
+    setDialogOpen(true);
+  };
+
+  const configureWebhook = async (numberId: number) => {
+    try {
+      const token = localStorage.getItem("voiceorch:session");
+      await fetch(`/api/phone-numbers/${numberId}/configure-webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    } catch {
+      // Non-fatal — number is assigned; webhook can be repaired from Phone Numbers.
+    }
+  };
+
+  const handleSave = async () => {
+    const nextId = selectedId === "none" ? null : parseInt(selectedId, 10);
+    try {
+      // Agent-centric: clear previous number on this agent if switching/unassigning
+      if (assigned && assigned.id !== nextId) {
+        await assign.mutateAsync({ id: assigned.id, data: { agentId: null } });
+      }
+      if (nextId != null) {
+        await assign.mutateAsync({ id: nextId, data: { agentId } });
+        await configureWebhook(nextId);
+      }
+      queryClient.invalidateQueries({ queryKey: getListPhoneNumbersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetAgentQueryKey(agentId) });
+      toast({
+        title: nextId ? "Inbound number set" : "Inbound number cleared",
+        description: nextId
+          ? "Calls to this number route to this agent. Outbound caller ID follows it."
+          : "No number routes inbound calls to this agent.",
+      });
+      setDialogOpen(false);
+    } catch (err) {
+      toast({ title: "Error", description: formatApiError(err), variant: "destructive" });
+    }
+  };
+
+  const outboundLabel = assigned?.number
+    ?? (preferredManaged ? `${preferredManaged} · Platform` : null);
+
+  return (
+    <div className={cn("rounded-xl border border-border/50 bg-card/40 p-3 space-y-2.5", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <PhoneForwarded className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Inbound</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("/app/phone-numbers")}
+          className="text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Numbers →
+        </button>
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-9 w-full rounded-lg" />
+      ) : (
+        <button
+          type="button"
+          onClick={openDialog}
+          className="w-full flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-2.5 py-2 text-left hover:border-border hover:bg-background/70 transition-colors"
+        >
+          <div className="min-w-0">
+            <p className={cn("text-[12px] font-medium truncate tabular-nums", assigned ? "text-foreground" : "text-muted-foreground")}>
+              {assigned?.number ?? "No number assigned"}
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+              {assigned
+                ? "Inbound + outbound caller ID"
+                : phoneNumbers.length === 0
+                  ? "Buy or bring a number first"
+                  : "Click to assign a number"}
+            </p>
+          </div>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        </button>
+      )}
+
+      {!assigned && outboundLabel && (
+        <p className="text-[10px] text-muted-foreground/70 px-0.5">
+          Outbound fallback: <span className="tabular-nums text-muted-foreground">{outboundLabel}</span>
+        </p>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set inbound number</DialogTitle>
+            <DialogDescription>
+              Route inbound calls to this agent. Outbound caller ID follows the same number — same assign path as Phone Numbers.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {phoneNumbers.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center space-y-2">
+                <p className="text-sm text-muted-foreground">You don’t have any phone numbers yet.</p>
+                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setDialogOpen(false); navigate("/app/phone-numbers"); }}>
+                  <Plus className="h-3.5 w-3.5" /> Buy a number
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Label className="text-sm">Phone number</Label>
+                <Select value={selectedId} onValueChange={setSelectedId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a number…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Unassigned —</SelectItem>
+                    {phoneNumbers.map(n => {
+                      const owner = n.agentId && n.agentId !== agentId
+                        ? agents?.find(a => a.id === n.agentId)?.name
+                        : null;
+                      return (
+                        <SelectItem key={n.id} value={String(n.id)}>
+                          {n.number}{owner ? ` · ${owner}` : n.agentId === agentId ? " · current" : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Reassigning a number in use by another agent moves inbound routing to this agent.
+                </p>
+              </>
+            )}
+          </div>
+          {phoneNumbers.length > 0 && (
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button type="button" onClick={handleSave} disabled={assign.isPending}>
+                {assign.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                Save
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function OverviewTab({ form, agent }: { form: any; agent: any }) {
   const [openSection, setOpenSection] = useState<CardSection | null>(null);
   const [confirmDiscardSection, setConfirmDiscardSection] = useState<CardSection | null>(null);
   const sectionSnapshotRef = useRef<{ values: Record<string, any>; voiceCustomMode: boolean }>({ values: {}, voiceCustomMode: false });
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [, navigate] = useLocation();
 
   const asrProvider           = form.watch("asrProvider");
   const llmProvider           = form.watch("llmProvider");
@@ -434,14 +612,6 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
     queryFn: () => customFetch<{ voices: Array<{ id: string; name: string; language: string }> }>(`${DASH_API}/voices/whitelisted`),
     staleTime: 5 * 60 * 1000,
   });
-
-  // Fetch user's phone numbers for inbound/outbound assignment
-  const { data: phoneNumbersRaw } = useQuery({
-    queryKey: ["phone-numbers", "list"],
-    queryFn: () => customFetch<Array<{ id: number; number: string; countryCode: string | null; agentId: number | null }>>(`${DASH_API}/phone-numbers`),
-    staleTime: 60 * 1000,
-  });
-  const phoneNumbers = Array.isArray(phoneNumbersRaw) ? phoneNumbersRaw : [];
 
   // Shared language filter (single source of truth in agent-providers.ts):
   // English agents see ALL whitelisted voices; non-English agents see only
@@ -663,73 +833,13 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
             </div>
           </section>
 
-          {/* ── Phone Number Assignment ──────────────────────────────────────── */}
-          {phoneNumbers.length > 0 && (
-            <div className="rounded-2xl border border-border/40 bg-card/30 p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone Numbers</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="inboundPhoneNumberId" render={({ field }) => {
-                  // Assignment is derived from the phone number's own agentId (the
-                  // real routing source of truth set by Phone Numbers page), NOT
-                  // from this agent's own inboundPhoneNumberId column — that column
-                  // isn't kept in sync by every assignment path and can go stale,
-                  // making a number look assigned to agents that don't own it.
-                  const assigned = agent?.id != null ? phoneNumbers.find(p => p.agentId === agent.id) : undefined;
-                  return (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Inbound Number</FormLabel>
-                    {/* Read-only: number → agent routing is assigned/reassigned from the
-                        Phone Numbers page (the source of truth for inbound call routing).
-                        Editing it here too let two screens fight over the same setting. */}
-                    <button
-                      type="button"
-                      onClick={() => navigate("/app/phone-numbers")}
-                      className="w-full flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-left text-[12px] hover:border-border hover:bg-background/60 transition-colors"
-                    >
-                      <span className={cn(assigned ? "text-foreground" : "text-muted-foreground")}>
-                        {assigned ? assigned.number : "Not assigned"}
-                      </span>
-                      <span className="text-[10px] font-medium text-primary whitespace-nowrap">Manage →</span>
-                    </button>
-                    <p className="text-[10px] text-muted-foreground">Calls to this number route here — assign/reassign from Phone Numbers</p>
-                  </FormItem>
-                  );
-                }} />
-                <FormField control={form.control} name="outboundPhoneNumberId" render={({ field }) => {
-                  const preferredManaged = form.watch("preferredManagedNumber");
-                  // Same fix as Inbound Number above: derive from phoneNumbers.agentId,
-                  // not this agent's own (potentially stale) outboundPhoneNumberId column.
-                  const assigned = agent?.id != null ? phoneNumbers.find(p => p.agentId === agent.id) : undefined;
-                  const displayLabel = assigned
-                    ? assigned.number
-                    : preferredManaged
-                    ? `${preferredManaged} · Platform`
-                    : null;
-                  return (
-                  <FormItem className="space-y-1">
-                    <FormLabel className="text-[10px] text-muted-foreground">Outbound Caller ID</FormLabel>
-                    {/* Read-only: outbound caller ID always mirrors the Inbound Number
-                        (auto-synced server-side on assignment). It can't drift from it,
-                        so there is nothing to pick here — change it via Phone Numbers. */}
-                    <button
-                      type="button"
-                      onClick={() => navigate("/app/phone-numbers")}
-                      className="w-full flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-left text-[12px] hover:border-border hover:bg-background/60 transition-colors"
-                    >
-                      <span className={cn(displayLabel ? "text-foreground" : "text-muted-foreground")}>
-                        {displayLabel ?? "Not assigned"}
-                      </span>
-                      <span className="text-[10px] font-medium text-primary whitespace-nowrap">Manage →</span>
-                    </button>
-                    <p className="text-[10px] text-muted-foreground">Caller ID for outbound calls — follows Inbound Number</p>
-                  </FormItem>
-                  );
-                }} />
-              </div>
-            </div>
+          {/* Phone assign — mobile/tablet only; desktop uses the action rail */}
+          {agent?.id != null && (
+            <AgentInboundPanel
+              agentId={agent.id}
+              preferredManagedNumber={form.watch("preferredManagedNumber")}
+              className="xl:hidden"
+            />
           )}
 
           {/* ── Transcriber dialog ── */}
@@ -5053,103 +5163,112 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
           </div>
         </Form>
 
-        {/* Bolna-style right action rail */}
-        <aside className="hidden xl:flex w-[260px] shrink-0 flex-col gap-3 border-l border-border/40 bg-muted/10 px-4 py-4 overflow-y-auto">
-          <div className="space-y-2">
-            <Button
-              className="w-full h-10 text-[13px] font-semibold gap-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white shadow-sm"
-              onClick={() => setCallDialog(true)}
-            >
-              <Phone className="h-4 w-4" />
-              Get call from agent
-            </Button>
-            <Button
-              variant={showWebcall ? "default" : "outline"}
-              className="w-full h-9 text-[12px] gap-2 rounded-xl"
-              onClick={() => setShowWebcall(v => !v)}
-            >
-              <Mic className="h-3.5 w-3.5" />
-              {showWebcall ? "Close browser test" : "Test via browser"}
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full h-9 text-[12px] gap-2 rounded-xl"
-              onClick={() => navigate("/app/phone-numbers")}
-            >
-              <PhoneForwarded className="h-3.5 w-3.5" />
-              Set inbound agent
-            </Button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate("/app/calls")}
-            className="text-left text-[12px] text-sky-500 hover:text-sky-400 transition-colors px-0.5"
-          >
-            See all call logs →
-          </button>
-
-          <div className="h-px bg-border/50" />
-
-          <div className="space-y-2">
-            <div className="relative">
+        {/* Studio action rail — test, inbound number, save */}
+        <aside className="hidden xl:flex w-[272px] shrink-0 flex-col border-l border-border/40 bg-muted/[0.15] overflow-y-auto">
+          <div className="flex flex-col gap-4 px-3.5 py-4 flex-1">
+            {/* Test actions */}
+            <div className="space-y-1">
               <Button
-                className={cn(
-                  "w-full h-9 text-[12px] gap-2 rounded-xl",
-                  savedFlash && "bg-green-600 hover:bg-green-700 text-white",
-                )}
-                onClick={onSave}
-                disabled={updateAgent.isPending}
+                className="w-full h-9 text-[12.5px] font-semibold gap-2 rounded-lg"
+                onClick={() => setCallDialog(true)}
               >
-                {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-                {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save agent"}
+                <Phone className="h-3.5 w-3.5" />
+                Get call from agent
               </Button>
-              {isDirty && !updateAgent.isPending && !savedFlash && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
-              )}
-            </div>
-            <Button
-              variant="outline"
-              className="w-full h-9 text-[12px] gap-2 rounded-xl"
-              onClick={() => setPublishModalOpen(true)}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Publish
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full h-9 text-[12px] gap-2 rounded-xl text-muted-foreground hover:text-foreground"
-              onClick={() => navigate(`/app/vibe?refine=${agentId}`)}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Refine with AI
-            </Button>
-          </div>
-
-          <div className="mt-auto space-y-3 pt-4">
-            <button
-              type="button"
-              onClick={() => navigate("/app/providers")}
-              className="flex items-center gap-2 w-full text-left text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Star className="h-3 w-3 shrink-0" />
-              <span>Add your own API keys</span>
-            </button>
-            <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/70">
-              <span>
-                {(agent as any).updatedAt
-                  ? `Updated ${formatDistanceToNow(new Date((agent as any).updatedAt), { addSuffix: true })}`
-                  : `${(agent as any).totalCalls ?? 0} calls`}
-              </span>
               <button
                 type="button"
-                onClick={handleDelete}
-                className="p-1.5 rounded-lg text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                title="Delete agent"
-                aria-label="Delete agent"
+                onClick={() => setShowWebcall(v => !v)}
+                className={cn(
+                  "w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-[12px] transition-colors",
+                  showWebcall
+                    ? "bg-foreground text-background font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                )}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Mic className="h-3.5 w-3.5 shrink-0" />
+                {showWebcall ? "Close browser test" : "Test via browser"}
               </button>
+            </div>
+
+            {/* Our inbound assign — not a dead link to Phone Numbers */}
+            <AgentInboundPanel
+              agentId={agentId}
+              preferredManagedNumber={form.watch("preferredManagedNumber")}
+            />
+
+            <button
+              type="button"
+              onClick={() => navigate("/app/calls")}
+              className="text-left text-[12px] text-sky-500/90 hover:text-sky-400 transition-colors px-0.5 -mt-1"
+            >
+              See all call logs →
+            </button>
+
+            <div className="h-px bg-border/40" />
+
+            {/* Persist */}
+            <div className="space-y-1">
+              <div className="relative">
+                <Button
+                  className={cn(
+                    "w-full h-9 text-[12.5px] gap-2 rounded-lg",
+                    savedFlash && "bg-green-600 hover:bg-green-700 text-white",
+                  )}
+                  onClick={onSave}
+                  disabled={updateAgent.isPending}
+                >
+                  {savedFlash ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                  {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save agent"}
+                </Button>
+                {isDirty && !updateAgent.isPending && !savedFlash && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-amber-400 pointer-events-none" />
+                )}
+              </div>
+              <div className="flex items-center gap-1 px-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPublishModalOpen(true)}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <Upload className="h-3 w-3" />
+                  Publish
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/app/vibe?refine=${agentId}`)}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Refine
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-auto space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => navigate("/app/providers")}
+                className="flex items-center gap-2 w-full text-left text-[11px] text-muted-foreground/80 hover:text-foreground transition-colors"
+              >
+                <Star className="h-3 w-3 shrink-0 opacity-70" />
+                <span>Add your own API keys</span>
+              </button>
+              <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/65">
+                <span className="truncate">
+                  {(agent as any).updatedAt
+                    ? `Updated ${formatDistanceToNow(new Date((agent as any).updatedAt), { addSuffix: true })}`
+                    : `${(agent as any).totalCalls ?? 0} calls`}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="p-1.5 rounded-md text-muted-foreground/45 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Delete agent"
+                  aria-label="Delete agent"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </aside>
