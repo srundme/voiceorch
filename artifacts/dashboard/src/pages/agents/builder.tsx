@@ -1053,7 +1053,7 @@ function OverviewTab({ form, agent }: { form: any; agent: any }) {
 
               {(ttsVoiceOpts.length > 0 || ttsVoiceFree) && (
                 <div className="space-y-2">
-                  <FormLabel className="text-[10px] text-muted-foreground">Choose voice</FormLabel>
+                  <p className="text-[10px] font-medium text-muted-foreground">Choose voice</p>
                   {ttsVoiceOpts.length > 0 && (
                     <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                       <FormItem className="space-y-0">
