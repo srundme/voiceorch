@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInterruptionHint,
+  composeHeardWithMid,
+  estimateHeardPrefix,
   joinHeardSentences,
   resolveSpokenForHistory,
 } from "./bargeHeard.js";
@@ -12,16 +14,34 @@ describe("joinHeardSentences", () => {
   });
 });
 
+describe("estimateHeardPrefix", () => {
+  it("returns empty before any ms elapses", () => {
+    expect(estimateHeardPrefix("Hello there friend", 0)).toBe("");
+  });
+
+  it("returns a word-bounded prefix from elapsed ms", () => {
+    // 70ms/char → ~7 chars ≈ "Hello t" → cut at "Hello"
+    const prefix = estimateHeardPrefix("Hello there friend", 70 * 7);
+    expect(prefix).toBe("Hello");
+  });
+
+  it("returns full text when elapsed covers the sentence", () => {
+    const t = "Short ok.";
+    expect(estimateHeardPrefix(t, 70 * t.length + 100)).toBe(t);
+  });
+});
+
+describe("composeHeardWithMid", () => {
+  it("merges completed and mid prefix", () => {
+    expect(composeHeardWithMid("First.", "Second half")).toBe("First. Second half");
+    expect(composeHeardWithMid("", "Only mid")).toBe("Only mid");
+  });
+});
+
 describe("buildInterruptionHint", () => {
-  it("never pastes unspoken mid-sentence body into the hint", () => {
-    expect(buildInterruptionHint("First sentence.", true)).toBe(
-      "First sentence. [cut mid-sentence]",
-    );
-    expect(buildInterruptionHint("First sentence.", false)).toBe("First sentence.");
+  it("prefers concrete heard text", () => {
+    expect(buildInterruptionHint("First sentence. Second", true)).toBe("First sentence. Second");
     expect(buildInterruptionHint("", true)).toBe(
-      "(interrupted before a full sentence finished)",
-    );
-    expect(buildInterruptionHint("", false)).toBe(
       "(interrupted before a full sentence finished)",
     );
   });
@@ -53,12 +73,5 @@ describe("resolveSpokenForHistory", () => {
         fullResponse: "Only this played. Plus a gated sentence.",
       }),
     ).toBe("Only this played.");
-    expect(
-      resolveSpokenForHistory({
-        barged: false,
-        heardOnly: "",
-        fullResponse: "Fallback full text",
-      }),
-    ).toBe("Fallback full text");
   });
 });

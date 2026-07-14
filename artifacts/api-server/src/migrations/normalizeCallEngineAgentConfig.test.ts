@@ -28,7 +28,7 @@ describe("normalizeCallEngineAgentConfig", () => {
     });
     expect(result.changed).toBe(true);
     expect(result.config.bargeInEnergyThreshold).toBe(1200);
-    expect(result.config.asrEndpointingSilenceMs).toBe(300);
+    expect(result.config.asrEndpointingSilenceMs).toBe(250);
     expect(result.config.wordsForInterruption).toBe(3);
     expect(result.config.stopSpeakingPlan).toEqual({
       numWords: 3,
@@ -63,7 +63,7 @@ describe("normalizeCallEngineAgentConfig", () => {
 
   it("callEngineInsertDefaults matches Bolna safe floors", () => {
     expect(callEngineInsertDefaults()).toEqual({
-      asrEndpointingSilenceMs: 300,
+      asrEndpointingSilenceMs: 250,
       incrementalDelay: 400,
       bargeInEnergyThreshold: 1200,
       wordsForInterruption: 3,

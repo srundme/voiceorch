@@ -175,7 +175,7 @@ export function hydrateToolsForForm(tools: readonly AgentTool[]): AgentFormTool[
 /** Bolna-style Call Engine presets (endpointing + linear delay + interrupt words). */
 export const CALL_ENGINE_PRESETS = {
   fast:     { asrEndpointingSilenceMs: 150, linearDelayMs: 200, stopSpeakingNumWords: 2 },
-  balanced: { asrEndpointingSilenceMs: 300, linearDelayMs: 400, stopSpeakingNumWords: 3 },
+  balanced: { asrEndpointingSilenceMs: 250, linearDelayMs: 350, stopSpeakingNumWords: 3 },
   patient:  { asrEndpointingSilenceMs: 500, linearDelayMs: 700, stopSpeakingNumWords: 4 },
 } as const;
 

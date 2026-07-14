@@ -7,7 +7,7 @@
 
 import { envInt } from "./utils.js";
 
-export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 400, 50);
+export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 250, 50);
 
 /** If the speculative partial is close enough to the final transcript, reuse it. */
 export function isSpeculativeHit(partial: string, final: string): boolean {
@@ -31,11 +31,11 @@ export function isEagerCommitReady(partial: string, opts?: { speechEnd?: boolean
   if (t.length < 3) return false;
   if (/[.?!।]$/.test(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
-  if (words.length >= 4) return true;
+  if (words.length >= 3) return true;
   if (words.length === 1 && /^(yes|no|ok|okay|sure|சரி|ஆம்|हाँ|हां)$/iu.test(words[0]!)) return true;
   if (opts?.speechEnd) {
-    if (words.length >= 2) return true;
-    if (t.length >= 10) return true;
+    if (words.length >= 1 && t.length >= 4) return true;
+    if (t.length >= 8) return true;
   }
   return false;
 }

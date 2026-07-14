@@ -48,7 +48,8 @@ import {
   type TurnCloseReason,
 } from "./endpointing.js";
 import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, isAccidentalInterruptPhrase, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk } from "./transcriptQuality.js";
-import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory } from "./bargeHeard.js";
+import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
+import { getCachedFillerPcm, setCachedFillerPcm } from "./fillerPcmCache.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -112,7 +113,7 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
-const FILLER_THRESHOLD_MS     = 800;    // play a filler phrase if LLM has not returned a first
+const FILLER_THRESHOLD_MS     = 600;    // play a filler phrase if LLM has not returned a first
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
@@ -942,6 +943,8 @@ export class OrchestrationPipeline {
   private _interruptionHint: string | null = null;
   /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
   private _activePlaybackText: string | null = null;
+  /** Wall-clock when current sentence drain started — for mid-sentence heard estimate. */
+  private _activePlaybackStartedAt: number | null = null;
   // ── Speculative / eager LLM prefill state ────────────────────────────────
   // Populated by _launchSpeculativeLlm() at semantic barge-in; consumed (or
   // aborted) in processTurn() before the LLM retry loop runs.
@@ -989,25 +992,35 @@ export class OrchestrationPipeline {
     this.lastAssistantSpokenRaw = spoken;
   }
 
-  /** Completed sentences only — durable history never invents mid-sentence audio. */
-  private getHeardAgentText(): string {
-    return joinHeardSentences(this._currentTurnPlayedSentences);
+  /**
+   * Heard agent text for history / barge.
+   * With includeActiveEstimate, append ms-based prefix of the in-flight sentence
+   * (Bolna mark-accurate analogue without telco marks).
+   */
+  private getHeardAgentText(opts?: { includeActiveEstimate?: boolean }): string {
+    const completed = joinHeardSentences(this._currentTurnPlayedSentences);
+    if (!opts?.includeActiveEstimate) return completed;
+    const mid = this._activePlaybackText?.trim();
+    if (!mid || this._activePlaybackStartedAt == null) return completed;
+    const elapsed = Date.now() - this._activePlaybackStartedAt;
+    const prefix = estimateHeardPrefix(mid, elapsed);
+    return composeHeardWithMid(completed, prefix);
   }
 
-  /** Called at every barge-in fire point. Hint matches durable heard text (no unspoken tail). */
+  /** Called at every barge-in fire point. Hint = completed + estimated mid prefix. */
   private captureInterruptionHint(): void {
     if (this._interruptionHint) return; // already captured (multiple simultaneous events)
-    const played = this.getHeardAgentText();
+    const played = this.getHeardAgentText({ includeActiveEstimate: true });
     const wasMidSentence = Boolean(this._activePlaybackText?.trim());
     this._interruptionHint = buildInterruptionHint(played, wasMidSentence);
   }
 
   /**
-   * After barge: keep history aligned with heard-only agent text.
+   * After barge: keep history aligned with heard-only agent text (incl. mid estimate).
    * Tool-call assistant rows keep toolCalls and only replace spoken content.
    */
   private trimHistoryToHeardOnBarge(): void {
-    const heard = this.getHeardAgentText();
+    const heard = this.getHeardAgentText({ includeActiveEstimate: true });
     const msgs = this.conversationHistory.messages;
     let lastUserIdx = -1;
     let lastAsstIdx = -1;
@@ -1137,7 +1150,7 @@ export class OrchestrationPipeline {
     }
     this.clearEagerPartialTimer();
     this.captureInterruptionHint();
-    const heard = this.getHeardAgentText();
+    const heard = this.getHeardAgentText({ includeActiveEstimate: true });
     this.trimHistoryToHeardOnBarge();
     if (opts?.speculative !== false && partial?.trim()) {
       this._launchSpeculativeLlm(partial);
@@ -1435,16 +1448,33 @@ export class OrchestrationPipeline {
    * caller word is diagnosable from the dashboard Logs tab alone. Purely
    * additive telemetry; fire-and-forget, never affects call flow.
    */
-  private logDiscardedTranscript(transcript: string, guard: "tail_echo_guard" | "self_echo_content_guard"): void {
+  private logDiscardedTranscript(
+    transcript: string,
+    guard:
+      | "tail_echo_guard"
+      | "self_echo_content_guard"
+      | "ultra_short_fragment"
+      | "false_interruption_scrap"
+      | "transfer_in_progress"
+      | "fragment_coalesce_hold",
+  ): void {
     const now = Date.now();
+    const reasonByGuard: Record<typeof guard, string> = {
+      tail_echo_guard: "post-playback tail-echo window (content matched agent speech)",
+      self_echo_content_guard: "content matched agent's own recent speech (self-echo)",
+      ultra_short_fragment: "ultra-short STT noise stub — waiting for more speech",
+      false_interruption_scrap: "post-barge scrap under interrupt-word threshold",
+      transfer_in_progress: "transfer already in progress",
+      fragment_coalesce_hold: "short fragment held briefly for coalesce (not a drop)",
+    };
     this.logExec(EXEC_COMPONENTS.STT, "system", {
       status: "info",
       provider: this.agent.asrProvider,
       turnNumber: this._activeTurnIndex,
-      warningFlags: ["transcript_discarded"],
+      warningFlags: guard === "fragment_coalesce_hold" ? ["transcript_held"] : ["transcript_discarded"],
       metadata: {
-        event: "Transcript Discarded",
-        reason: guard === "tail_echo_guard" ? "post-playback tail-echo window (content matched agent speech)" : "content matched agent's own recent speech (self-echo)",
+        event: guard === "fragment_coalesce_hold" ? "Transcript Held" : "Transcript Discarded",
+        reason: reasonByGuard[guard],
         guard,
         discardedText: transcript.slice(0, 300),
         isPlaying: this.isPlaying,
@@ -2100,6 +2130,7 @@ export class OrchestrationPipeline {
         { callId: this.config.callId, transcript },
         "Streaming STT: discarding transcript — transfer already in progress",
       );
+      this.logDiscardedTranscript(transcript, "transfer_in_progress");
       return;
     }
 
@@ -2246,6 +2277,7 @@ export class OrchestrationPipeline {
           { callId: this.config.callId, fragment: transcript.slice(0, 80), holdMs: FRAGMENT_COALESCE_MS },
           "STT fragment coalesce hold — awaiting follow-up final",
         );
+        this.logDiscardedTranscript(transcript, "fragment_coalesce_hold");
         this.safetyNet.onFinal();
         this.clearEagerPartialTimer();
         this.interruptionMgr.onUserSpeechEnd();
@@ -2271,6 +2303,7 @@ export class OrchestrationPipeline {
           { callId: this.config.callId, transcript: transcript.slice(0, 80), wordsThreshold },
           "False interruption — ignoring scrap transcript",
         );
+        this.logDiscardedTranscript(transcript, "false_interruption_scrap");
         this.prepareSystemPlayback();
         // Drop only this barge-linked scrap. Leaving the flag sticky used to
         // swallow every later short reply until the caller spoke 4+ words
@@ -3946,6 +3979,7 @@ export class OrchestrationPipeline {
     // this same audio when the carrier echoes it back (content-based self-echo).
     this.recordAgentSpeech(job.text);
     this._activePlaybackText = job.text;
+    this._activePlaybackStartedAt = Date.now();
     const _pbStart = Date.now();
     const _pbTurn = job.turnNumber;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
@@ -3955,7 +3989,10 @@ export class OrchestrationPipeline {
       _audioDurationMs = await this.drainSentenceJob(job);
     } finally {
       this.isSendingTtsAudio = false;
-      if (this._activePlaybackText === job.text) this._activePlaybackText = null;
+      if (this._activePlaybackText === job.text) {
+        this._activePlaybackText = null;
+        this._activePlaybackStartedAt = null;
+      }
       const noAudioSent = _audioDurationMs === undefined;
       const _pbEvent: PlaybackEvent = this.closed
         ? "Playback Cancelled"
@@ -4047,6 +4084,56 @@ export class OrchestrationPipeline {
       nonStreamAudio: null,
       ready,
     };
+
+    // Dead-air / tool fillers: serve cached PCM (Bolna preset-WAV feel) or synthesize once and cache.
+    if (sequenceId === FILLER_SEQUENCE_ID) {
+      const cacheKey = {
+        provider: this.agent.ttsProvider,
+        voice: this.agent.ttsVoice ?? "",
+        model: this.agent.ttsModel ?? "",
+        text,
+      };
+      const cached = getCachedFillerPcm(cacheKey);
+      void (async () => {
+        try {
+          if (cached) {
+            job.streaming = false;
+            job.nonStreamAudio = cached;
+            job.audioDurationMs = Math.round((cached.length / 2 / 16000) * 1000);
+            this.logExec("TTS", "response", {
+              provider: this.agent.ttsProvider,
+              status: "success",
+              latencyMs: Date.now() - _ttsReqStart,
+              turnNumber,
+              durationMs: Date.now() - _ttsReqStart,
+              responsePayload: { audioBytes: cached.length, textLength: text.length, fillerCacheHit: true },
+            });
+            return;
+          }
+          // Prefer one-shot synthesize for cacheable fillers even when stream exists.
+          const { audio } = await this.tts.synthesize(text);
+          if (this.closed || this.bargeInRequested) return;
+          job.streaming = false;
+          job.nonStreamAudio = audio;
+          job.audioDurationMs = Math.round((audio.length / 2 / 16000) * 1000);
+          setCachedFillerPcm(cacheKey, audio);
+          this.logExec("TTS", "response", {
+            provider: this.agent.ttsProvider,
+            status: "success",
+            latencyMs: Date.now() - _ttsReqStart,
+            turnNumber,
+            durationMs: Date.now() - _ttsReqStart,
+            responsePayload: { audioBytes: audio.length, textLength: text.length, fillerCacheHit: false },
+          });
+        } catch (err) {
+          job.synthError = err;
+        } finally {
+          job.synthDone = true;
+          resolveReady();
+        }
+      })();
+      return job;
+    }
 
     if (this.tts.synthesizeStream) {
       const ttsAdapter = this.tts;
@@ -5024,6 +5111,7 @@ export class OrchestrationPipeline {
         { callId: this.config.callId, transcript: transcript.slice(0, 80) },
         "Dropping ultra-short STT fragment — waiting for more speech",
       );
+      this.logDiscardedTranscript(transcript, "ultra_short_fragment");
       this.prepareSystemPlayback();
       this.safetyNet.beginListening();
       return;

@@ -5,7 +5,7 @@
 
 export const CALL_ENGINE_SAFE = {
   bargeInEnergyThreshold: 1200,
-  asrEndpointingSilenceMs: 300,
+  asrEndpointingSilenceMs: 250,
   incrementalDelay: 400,
   wordsForInterruption: 3,
   stopSpeakingVoiceFloor: 0.2,

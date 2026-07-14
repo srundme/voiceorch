@@ -400,7 +400,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     effectiveSystemPrompt = appendIrdaiAiDisclosure(effectiveSystemPrompt, irdaiInsurer);
   }
 
-  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 120);
+  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 80);
   const configuredLlmMaxTokens = agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"];
 
   const agentConfig: AgentConfig = {
@@ -540,7 +540,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     stagedPromptStages: (agent.stagedPromptStages as Array<{ name: string; content: string }> | null) ?? [],
     stagedPromptCoreIdentity: agent.stagedPromptCoreIdentity ?? null,
     // Latency tuning
-    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 300,
+    asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
     ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 15,
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"

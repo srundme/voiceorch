@@ -2648,7 +2648,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 form={form}
                 name="asrEndpointingSilenceMs"
                 label="Endpointing"
-                hint="Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 300 · Patient 500."
+                hint="Milliseconds of silence after the caller stops before we finalize the turn. Fast 150 · Balanced 250 · Patient 500."
                 min={100}
                 max={800}
                 step={25}
@@ -4891,7 +4891,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
       asrEndpointingSilenceMs: 300,
-      llmMaxTokens: 150,
+      llmMaxTokens: 80,
       ttsMinSentenceChars: 25,
       ttsSpeed: 1,
       linearDelayMs: 400,
