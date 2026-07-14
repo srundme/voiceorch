@@ -4891,7 +4891,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       outboundPhoneNumberId: undefined,
       preferredManagedNumber: null,
       asrEndpointingSilenceMs: 300,
-      llmMaxTokens: 80,
+      llmMaxTokens: 160,
       ttsMinSentenceChars: 25,
       ttsSpeed: 1,
       linearDelayMs: 400,

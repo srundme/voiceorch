@@ -334,15 +334,13 @@ const GREETING_ECHO_HOLD_CAP_MS = 3000;  // Hard cap on greetingEchoHoldUntil so
  * Deliberately preserves the persistent rules (NAME PRIORITY, DO NOT RE-ASK).
  */
 const OPENING_ALREADY_DELIVERED_NOTE =
-  "[OPENING ALREADY DELIVERED] The opening line of this call has ALREADY been spoken " +
-  "(it is the first assistant message in the conversation). Any instruction above that tells you " +
-  "how to OPEN the call — greeting the caller by name, referencing prior context or memory in your " +
-  "opening, or acknowledging that a previous call dropped / got cut off — has already been fulfilled " +
-  "and MUST NOT be acted on again. Do NOT greet the caller again, do NOT re-introduce yourself, do NOT " +
-  "re-state that you remember them or summarize the previous call unprompted, and do NOT re-apologize " +
-  "for the dropped call. Do NOT say the call was cut / dropped / lost / कॉल कट / கால் கட் unless the " +
-  "caller themselves just said that RIGHT NOW. Simply respond to the caller's latest message and move " +
-  "the conversation forward. " +
+  "[OPENING ALREADY DELIVERED — OVERRIDES RESUME/DROP ACK] The opening line of this call has ALREADY been spoken " +
+  "(it is the first assistant message in the conversation). This OVERRIDES any RESUME / LAST CALL DROPPED / " +
+  "\"acknowledge the interruption\" instruction above. Do NOT greet again, do NOT re-introduce yourself, do NOT " +
+  "re-state that you remember them or summarize the previous call unprompted, and do NOT apologize for or " +
+  "mention a dropped/cut/lost call. Forbidden unless the caller just said it RIGHT NOW: கால் கட், कॉल कट, " +
+  "\"call cut\", \"call dropped\", \"got cut off\", \"ஆயிடுச்சு\" about the call. Simply respond to the " +
+  "caller's latest message and move the conversation forward. " +
   "The NAME PRIORITY rule and the DO NOT RE-ASK KNOWN INFORMATION rule above remain in force for the " +
   "entire call — keep using known details instead of re-asking, and switch names if the caller states their own.";
 

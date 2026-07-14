@@ -170,7 +170,7 @@ describe("buildUpdateAgentPayload", () => {
       asrEndpointingSilenceMs: 150,
       ttsMinSentenceChars: 25,
       linearDelayMs: 50,
-      llmMaxTokens: 80,
+      llmMaxTokens: 160,
       startSpeakingWaitSecs: 0,
       startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 0.1,
@@ -196,7 +196,7 @@ describe("buildUpdateAgentPayload", () => {
     expect(cfg?.asrEndpointingSilenceMs).toBe(150);
     expect(cfg?.ttsMinSentenceChars).toBe(25);
     expect(cfg?.incrementalDelay).toBe(50);
-    expect(cfg?.llmMaxTokens).toBe(80);
+    expect(cfg?.llmMaxTokens).toBe(160);
     expect(cfg?.bargeInEnergyThreshold).toBe(800);
     expect(cfg?.wordsForInterruption).toBe(1);
     expect(cfg?.startSpeakingPlan).toEqual({

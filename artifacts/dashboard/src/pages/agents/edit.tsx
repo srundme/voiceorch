@@ -1368,7 +1368,7 @@ export default function AgentEdit() {
                         }} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Cap how many tokens the LLM generates per turn. <strong>Lower = faster + shorter replies.</strong> Leave blank for model default. Try 80–120 for concise voice responses.
+                      Cap how many tokens the LLM generates per turn. <strong>Lower = faster + shorter replies.</strong> Leave blank for the voice default (160). Use 120–200 for Tamil/Hinglish so sentences are not cut mid-word.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

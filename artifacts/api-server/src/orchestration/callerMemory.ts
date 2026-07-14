@@ -584,16 +584,14 @@ export function injectEnhancedMemory(
     lines.push(
       "⚠️ IMPORTANT — RESUME, DO NOT RESTART: Your previous call with this caller ended abruptly (it dropped). " +
       "Do NOT re-introduce yourself or your company and do NOT start the conversation over. " +
-      "Briefly acknowledge the interruption in the caller's language — use a natural, colloquial phrase for it. " +
-      "Examples by language (use whichever matches the caller's language, adapting to match your conversation style): " +
-      "English: \"Sorry, it looks like we got cut off\" | " +
-      "Tamil: \"Sori, call cut ஆயிடுச்சு\" or \"Sori, திடீர்னு call போயிடுச்சு\" | " +
-      "Hindi: \"Sorry, call cut ho gayi thi\" | " +
-      "Hinglish: \"Sorry yaar, call drop ho gayi\" — " +
-      "then " +
+      "If YOU are speaking the very first opening line of THIS call (no assistant message has been spoken yet), " +
+      "you MAY use ONE short colloquial phrase that you got cut off — then immediately continue the topic. " +
+      "If an opening greeting was ALREADY spoken (including an instant/system greeting), do NOT acknowledge any " +
+      "drop/cut/lost call at all — answer the caller's latest message only. Never invent கால் கட் / कॉल कट / " +
+      "\"call cut\" / \"call dropped\" unless the caller just said that. " +
       (hasResumeTail
-        ? "pick the conversation back up exactly where the exchanges above left off. Your FIRST spoken line may briefly acknowledge the drop (one short phrase). From the caller's first reply onward: NEVER repeat the cut-off apology — if they ask about a product/topic, answer that question directly."
-        : "continue naturally from the prior context above. After the opening ack, never again say you got cut off — answer their questions normally."),
+        ? "Pick the conversation back up exactly where the exchanges above left off. If they ask about a product/topic, answer that question directly."
+        : "Continue naturally from the prior context above."),
     );
   } else if (!suppressDomain && callCount >= 1) {
     const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";

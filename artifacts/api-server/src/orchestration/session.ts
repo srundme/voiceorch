@@ -401,7 +401,9 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     effectiveSystemPrompt = appendIrdaiAiDisclosure(effectiveSystemPrompt, irdaiInsurer);
   }
 
-  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 80);
+  // 80 was too tight for Tamil/Hinglish — call 2643 hit the cap mid-sentence
+  // twice (outputTokens≈91 on "…அதுக்கு ஒரு fifteen" / "…இப்போ demo-க்கு").
+  const VOICE_DEFAULT_MAX_TOKENS = Number(process.env.VOICE_DEFAULT_MAX_TOKENS ?? 160);
   const configuredLlmMaxTokens = agentCfg["llmMaxTokens"] ?? agentCfg["maxTokens"];
 
   const agentConfig: AgentConfig = {
@@ -776,11 +778,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     }
     sections.push(
       `=== RESUME DIRECTIVE ===\n` +
-      `The caller was disconnected mid-call. Open warmly and acknowledge the drop naturally ` +
-      `(e.g. "Hi again — sorry, it seems our call got cut off. Can you hear me now?" or "Apologies, looks like we lost the connection — are you there?"). ` +
-      `Wait for the caller to confirm they are back before continuing. ` +
-      `Once they confirm, naturally resume the conversation from where it left off — ` +
-      `do NOT use the phrase "pick up from where we left off", just smoothly continue. ` +
+      `The caller was disconnected mid-call. If YOU speak the first opening line of THIS call, ` +
+      `open warmly and briefly acknowledge the drop once, then wait for them to confirm. ` +
+      `If an opening greeting was already spoken, do NOT mention any cut/drop/lost call — just continue. ` +
+      `Once they are back, resume from where it left off without saying "pick up from where we left off". ` +
       `NEVER re-ask for information already listed in Customer facts. ` +
       `NEVER repeat steps already marked as completed. ` +
       `NEVER re-execute tools listed in TOOL STATE.`
