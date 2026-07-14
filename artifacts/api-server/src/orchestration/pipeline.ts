@@ -340,7 +340,9 @@ const OPENING_ALREADY_DELIVERED_NOTE =
   "opening, or acknowledging that a previous call dropped / got cut off — has already been fulfilled " +
   "and MUST NOT be acted on again. Do NOT greet the caller again, do NOT re-introduce yourself, do NOT " +
   "re-state that you remember them or summarize the previous call unprompted, and do NOT re-apologize " +
-  "for the dropped call. Simply respond to the caller's latest message and move the conversation forward. " +
+  "for the dropped call. Do NOT say the call was cut / dropped / lost / कॉल कट / கால் கட் unless the " +
+  "caller themselves just said that RIGHT NOW. Simply respond to the caller's latest message and move " +
+  "the conversation forward. " +
   "The NAME PRIORITY rule and the DO NOT RE-ASK KNOWN INFORMATION rule above remain in force for the " +
   "entire call — keep using known details instead of re-asking, and switch names if the caller states their own.";
 
@@ -3315,7 +3317,7 @@ export class OrchestrationPipeline {
     if (this.closed) return;
     // Prefer ambient ready before first speech so BG noise isn't silent for seconds
     // after connect (call 2636 — uploaded PCM arrived ~6s late).
-    await this.ensureAmbientReady(400);
+    await this.ensureAmbientReady(0);
     // ── Gemini context-cache warm (best-effort, non-blocking) ────────────────
     // Fire-and-forget: register the static system-prompt prefix as a Gemini
     // CachedContent while the greeting plays, so the caller's first real turn

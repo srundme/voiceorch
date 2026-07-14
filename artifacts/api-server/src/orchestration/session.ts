@@ -1225,16 +1225,14 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
   const sessionId = `${params.telephonyProvider}-${callRecord.id}-${Date.now()}`;
   const redisTtl = (agentConfig.maxDuration ?? 600) + 600; // maxDuration + 10 min buffer
 
-  // Warm uploaded ambient PCM into process cache before pipeline connect so the
-  // first keepalive frames can carry BG noise (call 2636: ambient silent ~6s).
+  // Warm uploaded ambient PCM in the background — never block first audio.
+  // Call 2638: await loadPcmLoop here cost ~1.8s of opening silence.
   {
     const ambTrack = agentConfig.ambientNoiseEnabled ? agentConfig.ambientNoiseTrack : null;
     if (ambTrack && !Object.prototype.hasOwnProperty.call(TRACK_PARAMS, ambTrack)) {
-      try {
-        await loadPcmLoop(ambTrack);
-      } catch (ambErr) {
+      void loadPcmLoop(ambTrack).catch((ambErr) => {
         logger.warn({ callId: callRecord.id, soundId: ambTrack, err: ambErr }, "Ambient preload failed — pipeline will retry");
-      }
+      });
     }
   }
 

@@ -78,15 +78,22 @@ export function isFalseInterruptionScrap(
   if (isCallerAudioDifficulty(t)) return false;
   if (isTopicClarificationAsk(t)) return false;
   if (isAccidentalInterruptPhrase(t) || isSemanticInterrupt(t)) return false;
+  // Questions / requests are never barge scraps (call 2638 dropped "பண்ண முடியுமா?").
+  if (/[?？]/.test(t)) return false;
+  if (/(முடியுமா|கேளுங்க|சொல்லுங்க|விளக்க|explain|tell me|என்ன|எப்படி)\b/iu.test(t)) return false;
   if (isUltraShortNoiseFragment(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
   if (words.length > Math.max(1, wordsForInterruption)) return false;
-  // Keep genuine flow-control acks ("okay", "சரி") — those still go to the LLM
-  // with a strong continue-hint. Everything else at ≤threshold words is scrap.
+  // Keep genuine flow-control acks ("okay", "சரி", "ஆமா சார் ஆமா") — those still
+  // go to the LLM. Everything else at ≤threshold words is scrap.
   if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
   if (REDUPLICATED_ACK_RE.test(t)) return false;
   if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी)[\s,.!]*$/iu.test(t)) return false;
+  // Tamil/Hinglish ack + vocative ("ஆமா சார் ஆமா.", "हाँ जी हाँ")
+  if (/^(ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)([\s,.!]+(சார்|sir|जी|ji|madam|மா.?ம்|ஆமா|ஆம்|சரி|हां|हाँ|haan|ok(?:ay)?)){0,4}[\s,.!]*$/iu.test(t)) {
+    return false;
+  }
   return true;
 }
 

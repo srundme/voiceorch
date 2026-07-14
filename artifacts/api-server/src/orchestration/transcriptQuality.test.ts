@@ -106,15 +106,17 @@ describe("isCallerAudioDifficulty", () => {
 });
 
 describe("isFalseInterruptionScrap", () => {
-  it("drops Bolna-style short scraps at or under the word threshold", () => {
-    expect(isFalseInterruptionScrap("சொல்லுங்க", 3)).toBe(true);
+  it("drops thin mid-cut scraps at or under the word threshold", () => {
     expect(isFalseInterruptionScrap("call பண்ண", 3)).toBe(true);
+    expect(isFalseInterruptionScrap("Madam இப்போ", 3)).toBe(true);
     expect(isFalseInterruptionScrap("wait wait wait wait", 3)).toBe(false);
   });
 
-  it("keeps real acks and audio-difficulty reports", () => {
+  it("keeps real acks, questions, and audio-difficulty reports (call 2638)", () => {
     expect(isFalseInterruptionScrap("okay", 3)).toBe(false);
     expect(isFalseInterruptionScrap("சரி", 3)).toBe(false);
+    expect(isFalseInterruptionScrap("ஆமா சார் ஆமா.", 3)).toBe(false);
+    expect(isFalseInterruptionScrap("பண்ண முடியுமா?", 3)).toBe(false);
     expect(isFalseInterruptionScrap("கேக்கல", 3)).toBe(false);
   });
 
