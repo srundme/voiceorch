@@ -349,6 +349,17 @@ export class TurnSafetyNet {
     this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
   }
 
+  /**
+   * VAD / speech-energy pulse while listening — push the stall backstop without
+   * arming force-finalize. Sarvam often lags interims; without this, call-2626
+   * fired “can't hear” while the caller was already speaking.
+   */
+  onActivityPulse(): void {
+    this.repromptCount = 0;
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+  }
+
   /** Non-empty interim arrived — track best partial and (re)arm the tight timer. */
   onPartial(text: string): void {
     const t = text.trim();
@@ -362,9 +373,7 @@ export class TurnSafetyNet {
     // never while a (slow-to-finalize) caller is still talking. Without this, a
     // caller whose STT streams partials but is slow/never emits a final would be
     // treated as silent: reprompts accumulate and the net ends a live call.
-    this.repromptCount = 0;
-    if (this.stallTimer) clearTimeout(this.stallTimer);
-    this.stallTimer = setTimeout(() => this.onStallExpire(), this.stallMs);
+    this.onActivityPulse();
   }
 
   /** Real STT final (or otherwise-usable speech) — clear timers, reset reprompts. */

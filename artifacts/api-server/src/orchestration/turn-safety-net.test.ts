@@ -186,6 +186,22 @@ describe("TurnSafetyNet", () => {
     expect(onStallReprompt).not.toHaveBeenCalled();
     expect(onStallGiveUp).not.toHaveBeenCalled();
   });
+
+  it("onActivityPulse pushes stall without arming force-finalize", () => {
+    const onForceFinalize = vi.fn();
+    const onStallReprompt = vi.fn();
+    const onStallGiveUp = vi.fn();
+    const net = new TurnSafetyNet({ onForceFinalize, onStallReprompt, onStallGiveUp });
+
+    net.beginListening();
+    vi.advanceTimersByTime(STALL_BACKSTOP_MS - 500);
+    net.onActivityPulse();
+    vi.advanceTimersByTime(STALL_BACKSTOP_MS - 500);
+    expect(onStallReprompt).not.toHaveBeenCalled();
+    expect(onForceFinalize).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(600);
+    expect(onStallReprompt).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("recoveryReprompt", () => {

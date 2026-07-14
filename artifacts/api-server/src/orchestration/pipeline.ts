@@ -881,6 +881,14 @@ export class OrchestrationPipeline {
   private speakingSpeakerHandoffChallenge = false;
   /** While true, suppress in-flight LLM TTS so the forced handoff ask can take the floor. */
   private skipAgentPlaybackForHandoff = false;
+  /**
+   * True while playing system lines (stall “can't hear”, silence check-in, inactivity
+   * farewell, forced Voice Memory challenge). Word-count interim barge must NOT cut
+   * these — only semantic stop-words / clear caller speech cancel (call 2626 cascade).
+   */
+  private systemPlaybackActive = false;
+  /** Last time we observed caller speech energy or a non-empty STT partial/final. */
+  private lastCallerActivityAt = 0;
   private voiceHandoffActive = false;
   private voiceLinkedFromPhone: string | null = null;
   private pendingVoiceLinkNote = false;
@@ -1007,6 +1015,29 @@ export class OrchestrationPipeline {
     this.bargeInSpeechFrames = 0;
     this.streamingBargeInWordCount = 0;
     this.interruptionMgr.onUserSpeechEnd();
+    this.systemPlaybackActive = true;
+  }
+
+  /**
+   * Soft-cancel system TTS when the caller starts speaking over “can't hear” /
+   * check-in / VM challenge — without sticky bargeInRequested (which audio_gates
+   * the next LLM turn).
+   */
+  private cancelSystemPlaybackForCallerSpeech(partial?: string): void {
+    if (!this.systemPlaybackActive) return;
+    this.systemPlaybackActive = false;
+    for (const ac of this.activeTtsAborts) {
+      try { ac.abort(); } catch { /* noop */ }
+    }
+    this.activeTtsAborts.clear();
+    this.bargeInCallback?.();
+    this.isPlaying = false;
+    this.streamingBargeInWordCount = 0;
+    this.lastCallerActivityAt = Date.now();
+    logger.info(
+      { callId: this.config.callId, partial: partial?.slice(0, 80) ?? null },
+      "Cancelled system TTS — caller speech detected (Bolna-style)",
+    );
   }
 
   private clearFragmentCoalesce(): void {
@@ -1772,9 +1803,14 @@ export class OrchestrationPipeline {
           // barge-in candidates handled separately). Don't process yet.
             if (!isFinal) {
             if (!this.isPlaying && text.trim()) {
+              this.lastCallerActivityAt = Date.now();
               this.safetyNet.onPartial(text);
               this.resetHangupTimer();
               this.maybeLaunchEagerOnPartial(text, metadata ?? undefined);
+            }
+            // Soft-cancel system “can't hear” / check-in when caller speech arrives.
+            if (this.systemPlaybackActive && this.isPlaying && text.trim().length >= 4) {
+              this.cancelSystemPlaybackForCallerSpeech(text);
             }
             // P0-C: Semantic barge-in on interims — detect caller interruption
             // immediately during playback, before the STT provider finalizes.
@@ -1786,6 +1822,15 @@ export class OrchestrationPipeline {
               !this.bargeInRequested &&
               text.trim()
             ) {
+              // During system recovery TTS, only stop-words force a full barge —
+              // word-count interim was cutting “can't hear” mid-apology (call 2626).
+              if (this.systemPlaybackActive) {
+                if (isSemanticInterrupt(text) || isAccidentalInterruptPhrase(text)) {
+                  this.systemPlaybackActive = false;
+                  this.triggerBargeIn("semantic_interim_system", text);
+                }
+                return;
+              }
               // Bolna: interrupt on interim when word count exceeds threshold OR
               // the phrase is an accidental-interrupt / semantic stop cue.
               // Energy alone is secondary — Sarvam may not finalize during talk-over,
@@ -1803,17 +1848,28 @@ export class OrchestrationPipeline {
                   this.streamingBargeInWordCount,
                   wordCount,
                 );
+                // Indic langs pack meaning into fewer whitespace tokens — also
+                // require a grapheme / char floor so short fragments don't barge.
+                const charCount = [...text.trim()].length;
                 const planNumWords = this.agent.stopSpeakingPlan?.numWords;
                 const threshold = (planNumWords && planNumWords > 0)
                   ? planNumWords
                   : this.interruptionMgr.getWordsForInterruption();
-                if (threshold > 0 && this.streamingBargeInWordCount > threshold) {
+                const langPrefix = (this.currentLang || this.agent.language || "en").split(/[-_]/)[0]?.toLowerCase();
+                const isIndic = ["ta", "hi", "te", "kn", "ml", "mr", "bn", "gu"].includes(langPrefix ?? "");
+                const minChars = isIndic ? 14 : 8;
+                if (
+                  threshold > 0
+                  && this.streamingBargeInWordCount > threshold
+                  && charCount >= minChars
+                ) {
                   this.triggerBargeIn("word_count_interim", text, { speculative: false });
                   logger.info(
                     {
                       callId: this.config.callId,
                       words: this.streamingBargeInWordCount,
                       threshold,
+                      charCount,
                       text: text.slice(0, 80),
                     },
                     "Barge-in detected (streaming STT interim word-count — Bolna parity)",
@@ -1824,6 +1880,7 @@ export class OrchestrationPipeline {
             return;
           }
           if (!text.trim()) return;
+          this.lastCallerActivityAt = Date.now();
           this.streamSTTReconnectAttempts = 0; // reset backoff on successful transcript
           this.resetHangupTimer();
           // NB: safetyNet.onFinal() and language auto-detection are DEFERRED to
@@ -2259,6 +2316,15 @@ export class OrchestrationPipeline {
       if (!this.closed) this.safetyNet.beginListening();
       return;
     }
+    // Caller energy pulsed recently (VAD before STT) — don't say "can't hear".
+    if (this.lastCallerActivityAt > 0 && Date.now() - this.lastCallerActivityAt < 2500) {
+      logger.info(
+        { callId: this.config.callId, msSinceActivity: Date.now() - this.lastCallerActivityAt },
+        "Stall reprompt skipped — recent caller activity",
+      );
+      if (!this.closed) this.safetyNet.beginListening();
+      return;
+    }
     this.prepareSystemPlayback();
     logger.info(
       { evt: "turn_latency", path: "pipeline", callId: this.config.callId, turn_close_reason: "stall_reprompt" },
@@ -2278,6 +2344,7 @@ export class OrchestrationPipeline {
       logger.error({ callId: this.config.callId, err }, "Stall reprompt playback error");
     } finally {
       this.isPlaying = false;
+      this.systemPlaybackActive = false;
       this.armTailEchoGrace();
     }
     // Drain the carrier's jitter buffer so the reprompt's final word plays out
@@ -2446,6 +2513,9 @@ export class OrchestrationPipeline {
       return;
     }
     if (!this.bargeInEnabled || !this.isPlaying || this.bargeInRequested) return;
+    // Never energy-barge system recovery / identity lines — word_count was doing
+    // that via interim; energy would recreate the call-2626 cascade.
+    if (this.systemPlaybackActive) return;
 
     // Streaming-STT carrier path (webcall has AEC; the batch path keeps its own
     // extended-hold protection). Only here do we measure RMS / self-calibrate.
@@ -2730,7 +2800,16 @@ export class OrchestrationPipeline {
           || Date.now() < this.expectingShortReplyUntil
         )
       ) {
+        this.lastCallerActivityAt = Date.now();
         this.silenceWatchdog?.onSpeechEnergy();
+        // Push stall back when caller is vocalizing but Sarvam hasn't emitted a partial yet.
+        if (!this.isPlaying && !this.isProcessing) {
+          this.safetyNet.onActivityPulse();
+        }
+      }
+      // Soft-cancel system TTS on caller energy (before STT catches up).
+      if (hasSpeech && this.systemPlaybackActive && this.isPlaying) {
+        this.cancelSystemPlaybackForCallerSpeech();
       }
       // Send native 8kHz telephony audio directly when the adapter is configured
       // for it (Sarvam) instead of the linear-interpolation upsample to 16k —
@@ -2920,7 +2999,15 @@ export class OrchestrationPipeline {
         { callId: this.config.callId, similarity: ev.similarity },
         "Voice Memory: mid-call speaker handoff — gender unlocked, challenge pending",
       );
-      // Do not rely on the LLM to ask — force a spoken identity check now.
+      // Defer identity challenge if we are mid system recovery or just heard the caller —
+      // forced "who is speaking?" over “can't hear” / schedule offer killed call 2626.
+      if (this.systemPlaybackActive || (this.lastCallerActivityAt > 0 && Date.now() - this.lastCallerActivityAt < 2000)) {
+        logger.info(
+          { callId: this.config.callId },
+          "Voice Memory: deferring handoff challenge (system playback / recent caller speech)",
+        );
+        return;
+      }
       void this.speakSpeakerHandoffChallenge();
     }
   }
@@ -2973,6 +3060,7 @@ export class OrchestrationPipeline {
         await this.playSentence(text);
       } finally {
         this.isPlaying = false;
+        this.systemPlaybackActive = false;
         this.armTailEchoGrace();
       }
       await this.drainPlaybackTail();
@@ -2982,6 +3070,7 @@ export class OrchestrationPipeline {
       if (!this.speakerChallengeSpoken) this.pendingSpeakerChallenge = true;
     } finally {
       this.speakingSpeakerHandoffChallenge = false;
+      this.systemPlaybackActive = false;
       if (!this.isProcessing) {
         this.skipAgentPlaybackForHandoff = false;
       }
@@ -3703,6 +3792,7 @@ export class OrchestrationPipeline {
       logger.error({ callId: this.config.callId, err }, "Silence check-in playback error");
     } finally {
       this.isPlaying = false;
+      this.systemPlaybackActive = false;
       this.armTailEchoGrace();
     }
     await this.drainPlaybackTail();
@@ -3791,6 +3881,10 @@ export class OrchestrationPipeline {
   noteMediaDropIfWaitingForReply(): void {
     if (this.endReasonHint) return;
     if (Date.now() >= this.expectingShortReplyUntil) return;
+    // Recent caller energy/STT → normal hangup after a question, not a media failure.
+    if (this.lastCallerActivityAt > 0 && Date.now() - this.lastCallerActivityAt < 12_000) {
+      return;
+    }
     this.endReasonHint = "media_disconnect";
     logger.warn(
       { callId: this.config.callId, expectingMsLeft: this.expectingShortReplyUntil - Date.now() },
@@ -5321,27 +5415,22 @@ export class OrchestrationPipeline {
     // first agent word.
     let backchanneledThisTurn = false;
     if (this.agent.backchannelingEnabled && !this.closed && !this.bargeInRequested) {
-      // Language resolution for the filler pool:
-      // 1. Use the conversation's established language (currentLang) when available.
-      // 2. If currentLang is null (turn 1, language not yet established) AND the agent
-      //    has languageAutoDetect on, SKIP entirely — sttConfig.language may be "en-IN"
-      //    for a Tamil conversation (Sarvam), which resolves to the English pool and
-      //    plays "Got it." / "I see." before the Tamil LLM reply.
-      // 3. Only fall back to sttConfig.language once the language is known, or for
-      //    single-language agents (no auto-detect) where sttConfig.language is trusted.
+      // Prefer conversation language; bootstrap from agent target / STT config so
+      // auto-detect agents still backchannel on turn 1 instead of staying silent.
       const fillerLang = this.currentLang
-        || (this.agent.languageAutoDetect ? null : this.agent.sttConfig.language);
+        || this.agent.language
+        || this.agent.sttConfig.language
+        || null;
       if (!fillerLang) {
-        // Language not yet established on an auto-detect agent — skip backchannel to
-        // avoid playing an English filler in a non-English (e.g. Tamil) conversation.
         logger.info(
           { callId: this.config.callId, fillerType: "backchannel" },
-          "Backchannel filler skipped — language not yet established (auto-detect agent, turn 1)",
+          "Backchannel filler skipped — no language available",
         );
       } else {
-        const isTamil = fillerLang.toLowerCase().split(/[-_]/)[0] === "ta";
         const baseFreq = this.agent.backchannelingFrequency ?? 0.5;
-        const freq = isTamil ? Math.min(baseFreq, 0.25) : baseFreq;
+        // Honor the configured frequency for all languages (including Tamil).
+        // The old 0.25 Tamil hard-cap made enabled backchanneling feel "broken".
+        const freq = Math.max(0, Math.min(1, baseFreq));
         if (Math.random() < freq) {
           // Strict, language-based fillers only — no cross-language fallback.
           const pool = getBackchannelFillers(fillerLang, this.backchannelFillerOpts());
@@ -5354,6 +5443,7 @@ export class OrchestrationPipeline {
                 fillerType: "backchannel",
                 language: fillerLang,
                 backchannelingEnabled: this.agent.backchannelingEnabled,
+                frequency: freq,
                 fillerListLength: pool.length,
                 selectedFiller: phrase,
                 ttsText: phrase,
@@ -5374,6 +5464,17 @@ export class OrchestrationPipeline {
               "Backchannel filler skipped — no filler set for language",
             );
           }
+        } else {
+          logger.info(
+            {
+              callId: this.config.callId,
+              fillerType: "backchannel",
+              language: fillerLang,
+              frequency: freq,
+              backchannelingEnabled: true,
+            },
+            "Backchannel filler skipped — frequency roll",
+          );
         }
       }
     }

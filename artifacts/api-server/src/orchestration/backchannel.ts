@@ -17,6 +17,8 @@ const BACKCHANNEL_FILLERS: Record<string, string[]> = {
   // overused and made the agent sound scripted/repetitive.
   "ta": [
     "சரி",        // okay / right (seri)
+    "hmm",
+    "ஆமா",       // mild yes (sparing)
     "okay",       // universal
   ],
 

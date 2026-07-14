@@ -2533,11 +2533,18 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
 
         // ── Post-call caller memory update + callback detection (fire-and-forget) ──
         if (session.callerPhone && transcript && transcript.length > 50) {
+          const endHint = session.pipeline.endReasonHint;
+          // Only treat true mid-conversation dropouts as resume-cut (call 2626
+          // greeter “கால் கட் ஆயிடுச்சு” after a long hangup-after-question).
           const wasDropped =
             !session.naturalEndTriggered &&
             !session.wasTransferred &&
-            durationSeconds > 15 &&
-            durationSeconds < 1200;
+            durationSeconds > 20 &&
+            durationSeconds < 180 &&
+            endHint !== "media_disconnect" &&
+            endHint !== "silence_timeout" &&
+            endHint !== "inactivity" &&
+            endHint !== "max_duration";
 
           void (async () => {
             try {

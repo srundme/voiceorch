@@ -227,9 +227,10 @@ export class SpeakerVerifier {
       this.lowScoreStreak++;
       // Require persistence — false handoffs mute the line with a forced
       // "who is speaking?" challenge when the same caller briefly mismatches
-      // (noise, distance, codec). Very low single shot still fires.
-      const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.15;
-      if (!this.handoffFired && (definite || this.lowScoreStreak >= 3)) {
+      // (noise, distance, codec). Call 2626 fired on short “Hello…” / Tamil talk
+      // overlaps — need a longer streak and a deeper single-shot cliff.
+      const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.22;
+      if (!this.handoffFired && (definite || this.lowScoreStreak >= 5)) {
         this.handoffFired = true;
         this.onEvent({ type: "handoff", similarity: result.similarity });
       }
