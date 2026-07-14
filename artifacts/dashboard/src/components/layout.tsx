@@ -36,11 +36,26 @@ class ErrorBoundary extends Component<
     }
   }
 
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[ErrorBoundary]", error, info.componentStack);
+  }
+
   render() {
     if (this.state.hasError) {
+      const message =
+        this.state.error instanceof Error
+          ? this.state.error.message
+          : this.state.error != null
+            ? String(this.state.error)
+            : null;
       return (
         <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
           <p className="text-sm text-muted-foreground">Something went wrong on this page.</p>
+          {message && (
+            <pre className="max-w-xl max-h-32 overflow-auto text-left text-[11px] font-mono text-destructive/90 bg-destructive/5 border border-destructive/20 rounded-lg px-3 py-2 whitespace-pre-wrap">
+              {message}
+            </pre>
+          )}
           <button
             onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
             className="px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"

@@ -110,14 +110,20 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   options: { value: string; label: string }[];
   placeholder?: string;
 }) {
-  // Radix Select treats "" as a controlled empty-invalid value; use undefined so the placeholder shows.
+  // Radix Select crashes if `value` is "" or not present in SelectItem list.
+  // Normalize to undefined so the placeholder shows instead of throwing.
+  const safeOptions = options.filter((o) => o.value !== "");
+  const safeValue =
+    value && safeOptions.some((o) => o.value === value) ? value : undefined;
   return (
-    <Select value={value ? value : undefined} onValueChange={onChange}>
+    <Select value={safeValue} onValueChange={onChange}>
       <SelectTrigger className="h-8 text-xs bg-background/50">
         <SelectValue placeholder={placeholder ?? "Select…"} />
       </SelectTrigger>
       <SelectContent position="popper" className="max-h-[280px] overflow-y-auto">
-        {options.filter(o => o.value !== "").map(o => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+        {safeOptions.map((o) => (
+          <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
@@ -1519,7 +1525,11 @@ function VoiceTab({ form }: { form: any }) {
               <FormItem className="space-y-1">
                 <FormLabel className="text-xs text-muted-foreground">Choose voice</FormLabel>
                 <Select
-                  value={dropdownValV || undefined}
+                  value={
+                    dropdownValV && ttsVoiceOptsV.some((v) => v.value === dropdownValV)
+                      ? dropdownValV
+                      : undefined
+                  }
                   onValueChange={(v) => {
                     if (v === "__custom__") {
                       // Show the custom input without erasing the saved voice ID.
@@ -1534,7 +1544,7 @@ function VoiceTab({ form }: { form: any }) {
                     <SelectValue placeholder="Select a voice…" />
                   </SelectTrigger>
                   <SelectContent position="popper" className="max-h-[300px]">
-                    {ttsVoiceOptsV.map(v => (
+                    {ttsVoiceOptsV.filter((v) => v.value !== "").map(v => (
                       <SelectItem key={v.value} value={v.value} className="text-sm">
                         {v.label}
                       </SelectItem>
@@ -1553,10 +1563,13 @@ function VoiceTab({ form }: { form: any }) {
           )}
 
           {ttsModelOptsV.length > 0 && (
-            <FormField control={form.control} name="ttsModel" render={({ field }) => (
+            <FormField control={form.control} name="ttsModel" render={({ field }) => {
+              const modelVal = field.value ?? "";
+              const modelSafe = modelVal && ttsModelOptsV.some((m: any) => m.value === modelVal) ? modelVal : undefined;
+              return (
               <FormItem className="space-y-1">
                 <FormLabel className="text-xs text-muted-foreground">Model</FormLabel>
-                <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                <Select value={modelSafe} onValueChange={field.onChange}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
@@ -1567,7 +1580,8 @@ function VoiceTab({ form }: { form: any }) {
                   </SelectContent>
                 </Select>
               </FormItem>
-            )} />
+              );
+            }} />
           )}
         </div>
 
