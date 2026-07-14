@@ -20,6 +20,9 @@ import {
   ChevronDown, ChevronUp, Zap, WifiOff, Info,
 } from "lucide-react";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import { AppPageHeader } from "@/components/app-page-header";
+import { EmptyState } from "@/components/empty-state";
+import { MetricCard, MetricStrip } from "@/components/metric-strip";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API  = `${BASE}/api`;
@@ -188,19 +191,28 @@ function CallbacksGuide() {
 
 function StatsBanner({ stats }: { stats?: CallbackStats }) {
   return (
-    <div className="grid grid-cols-4 gap-4 mb-6">
-      {[
-        { label: "Pending Callbacks",     value: stats?.pendingCallbacks     ?? "—", icon: <PhoneCall className="w-4 h-4 text-blue-400" /> },
-        { label: "Pending Auto-Redials",  value: stats?.pendingRedials       ?? "—", icon: <PhoneMissed className="w-4 h-4 text-orange-400" /> },
-        { label: "Pending Net Drop Retry", value: stats?.pendingNetworkDrops ?? "—", icon: <PhoneMissed className="w-4 h-4 text-amber-400" /> },
-        { label: "Due Now",               value: stats?.dueNow               ?? "—", icon: <Clock className="w-4 h-4 text-yellow-400" /> },
-      ].map(({ label, value, icon }) => (
-        <div key={label} className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-1">{icon}<span className="text-xs text-muted-foreground">{label}</span></div>
-          <p className="text-2xl font-semibold text-foreground">{value}</p>
-        </div>
-      ))}
-    </div>
+    <MetricStrip cols={4}>
+      <MetricCard
+        label="Pending Callbacks"
+        value={stats?.pendingCallbacks ?? "—"}
+        icon={<PhoneCall className="text-blue-400" />}
+      />
+      <MetricCard
+        label="Pending Auto-Redials"
+        value={stats?.pendingRedials ?? "—"}
+        icon={<PhoneMissed className="text-orange-400" />}
+      />
+      <MetricCard
+        label="Pending Net Drop Retry"
+        value={stats?.pendingNetworkDrops ?? "—"}
+        icon={<PhoneMissed className="text-amber-400" />}
+      />
+      <MetricCard
+        label="Due Now"
+        value={stats?.dueNow ?? "—"}
+        icon={<Clock className="text-yellow-400" />}
+      />
+    </MetricStrip>
   );
 }
 
@@ -416,13 +428,16 @@ function CallbackList({
 
   if (!data?.items.length) {
     return (
-      <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-        {status === "pending"
-          ? <PhoneCall className="w-8 h-8 opacity-40" />
-          : <PhoneMissed className="w-8 h-8 opacity-40" />
+      <EmptyState
+        variant="panel"
+        icon={status === "pending" ? <PhoneCall /> : <PhoneMissed />}
+        title={`No ${status} callbacks`}
+        description={
+          status === "pending"
+            ? "When callers request a callback or a redial is scheduled, it’ll show up here."
+            : "Triggered and finished items appear in these tabs."
         }
-        <p className="text-sm">No {status} callbacks</p>
-      </div>
+      />
     );
   }
 
@@ -485,30 +500,28 @@ export default function CallbacksPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Callbacks & Auto-Redials</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage scheduled callbacks requested by callers, and automatic redial retries for missed calls.
-        </p>
-      </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      <AppPageHeader
+        eyebrow="Voice Operations"
+        title="Callbacks & Auto-Redials"
+        description="Scheduled callbacks requested by callers, plus automatic redial retries for missed calls."
+      >
+        <StatsBanner stats={stats} />
+      </AppPageHeader>
 
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
       {/* Guide */}
       <CallbacksGuide />
 
-      {/* Stats */}
-      <StatsBanner stats={stats} />
-
       {/* Filter row */}
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground">Filter by type:</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-muted-foreground/70 mr-1">Type</span>
         {(["all", "callback_requested", "no_answer", "network_drop"] as const).map((r) => (
           <Button
             key={r}
             size="sm"
             variant={reasonFilter === r ? "secondary" : "ghost"}
-            className="h-7 text-xs"
+            className="h-7 text-xs rounded-lg"
             onClick={() => setReasonFilter(r)}
           >
             {r === "all" ? "All" : r === "callback_requested" ? "Callbacks" : r === "network_drop" ? "Network Drop" : "Auto-Redials"}
@@ -554,6 +567,7 @@ export default function CallbacksPage() {
           />
         </TabsContent>
       </Tabs>
+      </div>
 
       {/* Call detail drawer */}
       <CallDetailDrawer

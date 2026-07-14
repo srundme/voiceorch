@@ -26,6 +26,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
+import { AppPageHeader } from "@/components/app-page-header";
+import { EmptyState } from "@/components/empty-state";
 import {
   useListAgentMemorySummaries, getListAgentMemorySummariesQueryKey,
   getListAgentMemoryFactsQueryKey,
@@ -1073,19 +1075,19 @@ function CallerDetailView({
 
 /* ─── Empty states ───────────────────────────────────────────────────────── */
 function NoAgentsState() {
+  const [, navigate] = useLocation();
   return (
-    <div className="flex flex-col items-center justify-center flex-1 py-24 text-center px-4">
-      <div className="w-14 h-14 rounded-2xl bg-muted/40 border border-border/50 flex items-center justify-center mb-5">
-        <Brain className="w-6 h-6 text-muted-foreground/40" />
-      </div>
-      <h3 className="font-semibold text-foreground text-[15px] mb-2">No agents yet</h3>
-      <p className="text-sm text-muted-foreground max-w-[340px] leading-relaxed mb-5">
-        Create a voice agent and start taking calls. SnapServe will automatically build a per-agent
-        memory profile from facts, episodes, and call history.
-      </p>
-      <Button asChild>
-        <Link href="/app/agents">Create an agent</Link>
-      </Button>
+    <div className="flex-1 flex items-center justify-center px-6">
+      <EmptyState
+        variant="hero"
+        icon={<Brain />}
+        title="No agents yet"
+        description="Create a voice agent and start taking calls. SnapServe builds a per-agent memory profile from facts, episodes, and call history."
+        action={{
+          label: "Create an agent",
+          onClick: () => navigate("/app/agents"),
+        }}
+      />
     </div>
   );
 }
@@ -1187,22 +1189,12 @@ export default function MemoryPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
-      {/* Header */}
-      <div className="px-6 pt-4 pb-3 border-b border-border/40 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0">
-            <Brain className="h-4 w-4 text-purple-500" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight text-foreground leading-none">
-              Customer Intelligence
-            </h1>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              Memory / CRM
-            </p>
-          </div>
-        </div>
-      </div>
+      <AppPageHeader
+        eyebrow="Memory / CRM"
+        title="Customer Intelligence"
+        description="Facts, episodes, and call history your agents remember about each caller."
+        compact
+      />
 
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {isLoading ? (

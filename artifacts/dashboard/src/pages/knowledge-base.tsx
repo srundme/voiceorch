@@ -36,6 +36,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatApiError } from "@/lib/format-api-error";
 import { formatDistanceToNow } from "date-fns";
+import { AppPageHeader } from "@/components/app-page-header";
+import { EmptyState } from "@/components/empty-state";
 
 /* ── Type constants ─────────────────────────────────────────────────────── */
 
@@ -805,45 +807,39 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 space-y-8">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2.5">
-            <BookOpen className="w-6 h-6 text-primary" />
-            Agent Knowledge
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Build reusable knowledge sources from FAQs, text, documents, and websites — then attach them to any agent.
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Knowledge
-        </Button>
-      </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      <AppPageHeader
+        eyebrow="Knowledge"
+        title="Agent Knowledge"
+        description="Build reusable knowledge sources from FAQs, text, documents, and websites — then attach them to any agent."
+        actions={
+          <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
+            <Plus className="w-3.5 h-3.5" />
+            Add Knowledge
+          </Button>
+        }
+      />
 
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
       {/* Source grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
         </div>
       ) : !sources?.length ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="p-4 rounded-2xl bg-muted mb-4">
-            <BookOpen className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <h3 className="font-semibold mb-1">No knowledge sources yet</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mb-6">
-            Add FAQs, paste text, upload a document, or import from a website to train your voice agents.
-          </p>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Your First Source
-          </Button>
-        </div>
+        <EmptyState
+          variant="hero"
+          icon={<BookOpen />}
+          title="No knowledge sources yet"
+          description="Add FAQs, paste text, upload a document, or import from a website to ground your voice agents."
+          action={{
+            label: "Add your first source",
+            onClick: () => setCreateOpen(true),
+            icon: <Plus className="w-3.5 h-3.5" />,
+          }}
+        />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {sources.map((source) => (
             <SourceCard
               key={source.id}
@@ -857,20 +853,18 @@ export default function KnowledgeBasePage() {
 
       {/* Info row */}
       {sources && sources.length > 0 && (
-        <div className="flex flex-wrap gap-6 pt-2 border-t border-border text-sm text-muted-foreground">
+        <div className="flex flex-wrap gap-5 pt-3 border-t border-border/50 text-xs text-muted-foreground/70">
           <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             {sources.length} knowledge {sources.length === 1 ? "source" : "sources"}
           </span>
           <span className="flex items-center gap-1.5">
-            <FileText className="w-4 h-4 text-blue-400" />
+            <FileText className="w-3.5 h-3.5 text-sky-400" />
             {sources.reduce((s, x) => s + x.entryCount, 0)} total entries
-          </span>
-          <span className="flex items-center gap-1.5 ml-auto text-xs">
-            Powered by PostgreSQL Full Text Search
           </span>
         </div>
       )}
+      </div>
 
       {/* Create modal */}
       <CreateSourceModal open={createOpen} onClose={() => setCreateOpen(false)} />

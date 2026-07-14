@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListConnections,
@@ -38,6 +39,8 @@ import {
   Activity, KeyRound, ChevronLeft, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AppPageHeader } from "@/components/app-page-header";
+import { EmptyState } from "@/components/empty-state";
 import { format } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -2227,6 +2230,7 @@ function CrmConnectorSection() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ConnectionsPage() {
+  const [, navigate] = useLocation();
   const { data: connections = [], isLoading, refetch } = useListConnections({
     query: { queryKey: getListConnectionsQueryKey(), refetchInterval: 30_000 },
   });
@@ -2276,27 +2280,35 @@ export default function ConnectionsPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-        <div>
-          <h1 className="text-base font-semibold text-foreground">Connections</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Connect your CRM, automate lead intake, and manage campaign webhooks.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleRefresh}
-          className="h-7 text-xs text-muted-foreground"
-        >
-          <RefreshCw className="w-3 h-3 mr-1" />
-          Refresh
-        </Button>
-      </div>
+      <AppPageHeader
+        eyebrow="Integrations"
+        title="Connections"
+        description="Connect your CRM, automate lead intake, and manage campaign webhooks."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRefresh}
+              className="h-8 text-xs gap-1.5 rounded-lg"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 rounded-lg"
+              onClick={() => navigate("/app/campaigns")}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              New campaign
+            </Button>
+          </div>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-6 py-8 space-y-8">
+        <div className="mx-auto w-full max-w-4xl px-6 py-6 space-y-8">
 
           {/* 1. CRM Connectors — primary integrations */}
           <CrmConnectorSection />
@@ -2304,10 +2316,10 @@ export default function ConnectionsPage() {
           {/* 2. Campaign Webhooks — compact searchable table */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
                 Campaign Webhooks
               </h2>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-muted-foreground/60">
                 {webhookConnections.length} webhook{webhookConnections.length !== 1 ? "s" : ""}
               </span>
             </div>
@@ -2317,13 +2329,17 @@ export default function ConnectionsPage() {
                 {[1, 2, 3].map(i => <div key={i} className="h-10 rounded-lg bg-card border border-border animate-pulse" />)}
               </div>
             ) : webhookConnections.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center bg-card border border-border rounded-xl">
-                <Webhook className="w-5 h-5 text-muted-foreground mb-2" />
-                <p className="text-sm font-medium text-muted-foreground">No webhook connections</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Create a campaign to get a webhook URL for receiving leads automatically.
-                </p>
-              </div>
+              <EmptyState
+                variant="panel"
+                icon={<Webhook />}
+                title="No webhook connections"
+                description="Create a campaign to get a webhook URL for receiving leads automatically."
+                action={{
+                  label: "Go to campaigns",
+                  onClick: () => navigate("/app/campaigns"),
+                  icon: <Zap className="w-3.5 h-3.5" />,
+                }}
+              />
             ) : (
               <WebhookTable
                 connections={webhookConnections}
@@ -2347,12 +2363,20 @@ export default function ConnectionsPage() {
             </section>
           )}
 
-          {/* 4. Setup Recipes */}
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Setup Recipes
-            </h2>
-            <div className="space-y-3">
+          {/* 4. Setup Recipes — collapsed so Coming Soon doesn't dominate */}
+          <details className="group rounded-xl border border-border/50 bg-card/20 open:bg-card/30 [&_summary::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer list-none flex items-center justify-between gap-3 px-4 py-3.5 select-none">
+              <div className="min-w-0">
+                <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/55">
+                  More ways to connect
+                </h2>
+                <p className="text-xs text-muted-foreground/55 mt-0.5">
+                  Google Sheets, Zapier, Make, and generic webhooks — coming soon
+                </p>
+              </div>
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="px-4 pb-4 space-y-2.5 border-t border-border/40 pt-3">
               <RecipeCard
                 comingSoon
                 icon={<Sheet className="w-4 h-4 text-emerald-400" />}
@@ -2396,7 +2420,7 @@ export default function ConnectionsPage() {
                 </div>
               </RecipeCard>
             </div>
-          </section>
+          </details>
         </div>
       </div>
     </div>

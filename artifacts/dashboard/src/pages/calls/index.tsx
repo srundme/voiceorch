@@ -35,6 +35,9 @@ import {
 } from "@/components/ui/popover";
 import { Card, CardContent } from "@/components/ui/card";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import { AppPageHeader } from "@/components/app-page-header";
+import { EmptyState } from "@/components/empty-state";
+import { MetricCard, MetricStrip } from "@/components/metric-strip";
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -214,27 +217,8 @@ function PhoneCell({ number }: { number?: string | null }) {
 }
 
 /* ── Mini Stat Card ──────────────────────────────────────────────────────── */
-function MiniStat({ label, value, icon, trend }: { label: string; value: string; icon: React.ReactNode; trend?: string }) {
-  return (
-    <Card className="h-full border border-border bg-elevated/40 shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-primary/40 transition-all duration-300">
-      <CardContent className="h-full p-5 flex items-center gap-4">
-        <div className="h-12 w-12 rounded-xl bg-elevated border border-border flex items-center justify-center shrink-0">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{label}</p>
-          <div className="flex items-center gap-1.5 mt-1">
-            <p className="text-2xl font-bold text-foreground leading-tight tracking-tight">{value}</p>
-            {trend && (
-              <span className="text-[10px] text-emerald-500 flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" />{trend}
-              </span>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function MiniStat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode; trend?: string }) {
+  return <MetricCard label={label} value={value} icon={icon} />;
 }
 
 
@@ -452,56 +436,40 @@ export default function CallsList() {
   return (
     <TooltipProvider>
       <div className="flex-1 flex flex-col h-full overflow-hidden animate-fade-in">
-        {/* Header */}
-        <div className="px-8 pt-8 pb-6 border-b border-border shrink-0">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
-                  <Headphones className="h-3.5 w-3.5 text-primary/70" />
-                </div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50">
-                  Voice Operations
-                </p>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground leading-tight">
-                Call Logs
-              </h1>
-              <p className="text-sm mt-2 text-muted-foreground/50">
-                Complete history of voice interactions with AI agents
-              </p>
-            </div>
-          </div>
-
-          {/* Stats Row */}
+        <AppPageHeader
+          eyebrow="Voice Operations"
+          title="Call Logs"
+          description="Complete history of voice interactions with AI agents."
+        >
+          <div className="space-y-4">
           {stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
+            <MetricStrip cols={5}>
               <MiniStat
                 label="Total Calls"
                 value={String(stats.total)}
-                icon={<Phone className="h-4 w-4 text-muted-foreground/50" />}
+                icon={<Phone className="text-muted-foreground/60" />}
               />
               <MiniStat
                 label="Completed"
                 value={String(stats.completed)}
-                icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                icon={<CheckCircle2 className="text-emerald-500" />}
               />
               <MiniStat
                 label="Voicemail"
                 value={String(stats.voicemail)}
-                icon={<Voicemail className="h-4 w-4 text-violet-500" />}
+                icon={<Voicemail className="text-violet-500" />}
               />
               <MiniStat
                 label="Failed"
                 value={String(stats.failed)}
-                icon={<AlertTriangle className="h-4 w-4 text-red-500" />}
+                icon={<AlertTriangle className="text-red-500" />}
               />
               <MiniStat
                 label="Avg Duration"
                 value={formatDuration(stats.avgDuration)}
-                icon={<Clock className="h-4 w-4 text-muted-foreground/50" />}
+                icon={<Clock className="text-muted-foreground/60" />}
               />
-            </div>
+            </MetricStrip>
           )}
 
           {/* Filters Bar */}
@@ -634,10 +602,11 @@ export default function CallsList() {
               </div>
             )}
           </div>
-        </div>
+          </div>
+        </AppPageHeader>
 
         {/* Table */}
-        <div ref={callsScrollRef} className="flex-1 overflow-auto px-8 py-6">
+        <div ref={callsScrollRef} className="flex-1 overflow-auto px-6 py-5">
           <div className="rounded-2xl border border-border bg-elevated/40 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
             <Table>
@@ -762,32 +731,22 @@ export default function CallsList() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-64 text-center border-0">
-                      <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
-                        <div className="h-12 w-12 rounded-2xl bg-elevated border border-border flex items-center justify-center">
-                          <Phone className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-foreground/40">
-                            No calls found
-                          </p>
-                          <p className="text-xs text-muted-foreground/30 mt-0.5">
-                            {hasActiveFilters
-                              ? "Try adjusting your filters"
-                              : "Calls will appear once your agents start making them"}
-                          </p>
-                        </div>
-                        {hasActiveFilters && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs mt-1"
-                            onClick={clearFilters}
-                          >
-                            <RefreshCw className="h-3 w-3 mr-1" /> Clear Filters
-                          </Button>
-                        )}
-                      </div>
+                    <TableCell colSpan={10} className="p-0 border-0">
+                      <EmptyState
+                        variant="inline"
+                        icon={<Phone />}
+                        title="No calls found"
+                        description={
+                          hasActiveFilters
+                            ? "Try adjusting your filters"
+                            : "Calls will appear once your agents start making them"
+                        }
+                        action={
+                          hasActiveFilters
+                            ? { label: "Clear filters", onClick: clearFilters, icon: <RefreshCw className="h-3 w-3" /> }
+                            : undefined
+                        }
+                      />
                     </TableCell>
                   </TableRow>
                 )}

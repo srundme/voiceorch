@@ -43,6 +43,8 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AppPageHeader } from "@/components/app-page-header";
+import { MetricCard, MetricStrip } from "@/components/metric-strip";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1053,31 +1055,6 @@ function CampaignFormDialog({
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────────────────────
-
-function StatCard({
-  label, value, sub, icon, accent, loading,
-}: {
-  label: string; value: number; sub?: string; icon: React.ReactNode;
-  accent?: string; loading?: boolean;
-}) {
-  return (
-    <div className="bg-card border border-border rounded-xl px-4 py-3.5 flex items-center gap-3">
-      <div className="h-8 w-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground/40 leading-none mb-1.5 truncate">{label}</p>
-        {loading
-          ? <Skeleton className="h-5 w-8 rounded" />
-          : <p className={cn("text-xl font-semibold tabular-nums leading-none", accent ?? "text-foreground")}>{value}</p>
-        }
-        {sub && !loading && <p className="text-[9px] text-muted-foreground/30 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
 // ── Table Header ───────────────────────────────────────────────────────────
 
 function TableHeader() {
@@ -1162,28 +1139,16 @@ export default function CampaignsPage() {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-
-      {/* ── Header ── */}
-      <div className="px-6 pt-6 pb-5 border-b border-border shrink-0">
-        <div className="flex items-start justify-between gap-4 mb-5">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <Target className="h-3.5 w-3.5 text-muted-foreground/40" />
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40">
-                Campaign Operations
-              </span>
-              {isFetching && !isLoading && (
-                <span className="h-1 w-1 rounded-full bg-muted-foreground/20 animate-pulse" />
-              )}
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground leading-none">
-              Campaigns
-            </h1>
-            <p className="text-xs text-muted-foreground/50 mt-1.5">
-              Live overview · auto-refreshes every 10 seconds
-            </p>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
+      <AppPageHeader
+        eyebrow="Campaign Operations"
+        title="Campaigns"
+        description={
+          isFetching && !isLoading
+            ? "Live overview · refreshing…"
+            : "Live overview · auto-refreshes every 10 seconds"
+        }
+        actions={
+          <>
             <button
               onClick={() => setHelpOpen(true)}
               className="h-8 w-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted/70 flex items-center justify-center text-muted-foreground/50 hover:text-foreground transition-all"
@@ -1194,7 +1159,7 @@ export default function CampaignsPage() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs gap-1.5"
+              className="h-8 text-xs gap-1.5 rounded-lg"
               onClick={() => {
                 const token = localStorage.getItem("voiceorch:session");
                 const url = `${BASE}/api/campaigns/export.csv${token ? `?token=${encodeURIComponent(token)}` : ""}`;
@@ -1203,22 +1168,21 @@ export default function CampaignsPage() {
             >
               <FileText className="h-3.5 w-3.5" /> Export
             </Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" className="h-8 text-xs gap-1.5 rounded-lg" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> New Campaign
             </Button>
-          </div>
-        </div>
-
-        {/* ── Stats Row ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          <StatCard
+          </>
+        }
+      >
+        <MetricStrip cols={6}>
+          <MetricCard
             label="Active Campaigns"
             value={stats?.activeCampaigns ?? 0}
             icon={<Megaphone className="h-4 w-4 text-emerald-500" />}
             accent={(stats?.activeCampaigns ?? 0) > 0 ? "text-emerald-500" : undefined}
             loading={isLoading}
           />
-          <StatCard
+          <MetricCard
             label="Listening Sources"
             value={stats?.listeningCampaigns ?? 0}
             sub="Real-time intake"
@@ -1226,7 +1190,7 @@ export default function CampaignsPage() {
             accent={(stats?.listeningCampaigns ?? 0) > 0 ? "text-sky-500" : undefined}
             loading={isLoading}
           />
-          <StatCard
+          <MetricCard
             label="Live Calls"
             value={stats?.liveCalls ?? 0}
             sub="In progress"
@@ -1234,7 +1198,7 @@ export default function CampaignsPage() {
             accent={(stats?.liveCalls ?? 0) > 0 ? "text-blue-500" : undefined}
             loading={isLoading}
           />
-          <StatCard
+          <MetricCard
             label="Queued Leads"
             value={stats?.queuedLeads ?? 0}
             sub="Pending call"
@@ -1242,7 +1206,7 @@ export default function CampaignsPage() {
             accent={(stats?.queuedLeads ?? 0) > 0 ? "text-amber-500" : undefined}
             loading={isLoading}
           />
-          <StatCard
+          <MetricCard
             label="Leads Today"
             value={stats?.todayLeads ?? 0}
             sub="Since midnight UTC"
@@ -1250,7 +1214,7 @@ export default function CampaignsPage() {
             accent={(stats?.todayLeads ?? 0) > 0 ? "text-violet-500" : undefined}
             loading={isLoading}
           />
-          <StatCard
+          <MetricCard
             label="Bookings Today"
             value={stats?.todayBookings ?? 0}
             sub="Meetings booked"
@@ -1258,8 +1222,8 @@ export default function CampaignsPage() {
             accent={(stats?.todayBookings ?? 0) > 0 ? "text-rose-500" : undefined}
             loading={isLoading}
           />
-        </div>
-      </div>
+        </MetricStrip>
+      </AppPageHeader>
 
       {/* ── Content ── */}
       <div ref={listScrollRef} className="flex-1 overflow-auto px-6 py-5">
