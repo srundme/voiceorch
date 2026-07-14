@@ -574,11 +574,86 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
       <div className="relative min-w-0">
         <div className="p-6 sm:p-8 space-y-8 max-w-4xl">
 
-          {/* Pipeline identity */}
+          {/* System Instructions — hero (first viewport) */}
+          <section className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">Identity</p>
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">System Instructions</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+                  This is your agent. Write how it should sound, what it sells, and the rules it never breaks.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 text-xs gap-1.5 rounded-full"
+                onClick={() => setGenerateOpen(true)}
+              >
+                <Sparkles className="w-3 h-3" />
+                Generate
+              </Button>
+            </div>
+            <div className="rounded-2xl border border-border/40 bg-card/40 overflow-hidden shadow-sm ring-1 ring-foreground/[0.03]">
+              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <FormControl>
+                    <Textarea
+                      className="min-h-[380px] text-[14px] resize-none font-mono leading-[1.85] rounded-none border-0 bg-transparent px-5 pt-5 pb-4 shadow-none focus-visible:ring-0"
+                      placeholder="You are a helpful voice assistant…"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px] px-4 pb-2" />
+                </FormItem>
+              )} />
+            </div>
+          </section>
+
+          {/* Conversation opener */}
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">First message</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                What callers hear at the start of the call.
+              </p>
+            </div>
+            <div className="space-y-3 rounded-2xl border border-border/40 bg-card/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-[13px] font-medium text-foreground/90">Who speaks first</Label>
+                <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
+                  <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
+                    <SelectTrigger className="h-9 w-52 rounded-full text-[12px] shrink-0 border-border/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
+                      <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )} />
+              </div>
+              <FormField control={form.control} name="greetingMessage" render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <FormControl>
+                    <Textarea
+                      className="min-h-[72px] max-h-[96px] text-[14px] leading-relaxed resize-none rounded-xl border-border/40 bg-background/40 px-4 py-3 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/20"
+                      placeholder="Hello, how can I help?"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px]" />
+                </FormItem>
+              )} />
+            </div>
+          </section>
+
+          {/* Pipeline — secondary */}
           <section className="space-y-3">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55">Pipeline</p>
-              <p className="text-sm text-muted-foreground">Speech, model, and voice — click a card to edit.</p>
+              <p className="text-sm text-muted-foreground">Speech, model, and voice — click to edit.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <AgentConfigCard
@@ -898,80 +973,6 @@ function OverviewTab({ form, rateMap, agent }: { form: any; rateMap: Map<string,
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-
-          {/* System Instructions — hero */}
-          <section className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <h3 className="text-xl font-semibold tracking-tight text-foreground">System Instructions</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-                  Personality, behavior, and rules the agent follows on every call.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 text-xs gap-1.5 rounded-full"
-                onClick={() => setGenerateOpen(true)}
-              >
-                <Sparkles className="w-3 h-3" />
-                Generate
-              </Button>
-            </div>
-            <div className="rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm">
-              <FormField control={form.control} name="systemPrompt" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[320px] text-[14px] resize-none font-mono leading-[1.85] rounded-none border-0 bg-transparent px-5 pt-5 pb-4 shadow-none focus-visible:ring-0"
-                      placeholder="You are a helpful voice assistant…"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px] px-4 pb-2" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
-
-          {/* Conversation */}
-          <section className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="text-lg font-semibold tracking-tight text-foreground">Conversation</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                How the agent opens the call.
-              </p>
-            </div>
-            <div className="space-y-3 rounded-2xl border border-border/40 bg-card/20 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <Label className="text-[13px] font-medium text-foreground/90">First Message</Label>
-                <FormField control={form.control} name="firstSpeaker" render={({ field }) => (
-                  <Select value={field.value === "user" ? "user" : "assistant"} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-9 w-52 rounded-full text-[12px] shrink-0 border-border/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      <SelectItem value="assistant" className="text-[13px]">Assistant speaks first</SelectItem>
-                      <SelectItem value="user" className="text-[13px]">User speaks first</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )} />
-              </div>
-              <FormField control={form.control} name="greetingMessage" render={({ field }) => (
-                <FormItem className="space-y-0">
-                  <FormControl>
-                    <Textarea
-                      className="min-h-[72px] max-h-[96px] text-[14px] leading-relaxed resize-none rounded-xl border-border/40 bg-background/40 px-4 py-3 shadow-none transition-colors focus-visible:ring-0 focus-visible:border-foreground/20"
-                      placeholder="Hello, how can I help?"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage className="text-[10px]" />
-                </FormItem>
-              )} />
-            </div>
-          </section>
 
           {/* Knowledge */}
           <section className="space-y-4 pb-4">
@@ -2785,7 +2786,6 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   const [search, setSearch] = useState("");
   const [, navigate] = useLocation();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
-  const { toast } = useToast();
   const userProviderNames = useUserProviderNames();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -2796,30 +2796,37 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
   );
 
   return (
-    <div className="w-[240px] shrink-0 border-r border-border/60 flex flex-col h-full bg-background/40">
+    <div className="w-[260px] shrink-0 border-r border-border/40 flex flex-col h-full bg-background/30 backdrop-blur-sm">
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
-      <div className="p-3 border-b border-border/60 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agents</span>
-          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCreate}>
-            <Plus className="h-3.5 w-3.5" />
+      <div className="p-4 border-b border-border/40 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/app/agents")}
+            className="text-left min-w-0"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">Agents</p>
+            <p className="text-sm font-semibold text-foreground truncate">{agents?.length ?? 0} live</p>
+          </button>
+          <Button size="sm" className="h-8 rounded-full gap-1 px-3 text-xs shrink-0" onClick={handleCreate}>
+            <Plus className="h-3.5 w-3.5" /> New
           </Button>
         </div>
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
           <Input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search…" className="h-7 pl-6 text-xs" />
+            placeholder="Search agents…" className="h-8 pl-8 text-xs rounded-full bg-muted/20 border-border/40" />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="px-3 py-2.5"><Skeleton className="h-4 w-3/4 mb-1.5" /><Skeleton className="h-3 w-1/2" /></div>
+          <div key={i} className="px-3 py-3 rounded-xl"><Skeleton className="h-4 w-3/4 mb-1.5" /><Skeleton className="h-3 w-1/2" /></div>
         ))}
         {!isLoading && filtered.length === 0 && (
-          <div className="px-3 py-6 text-center">
-            <p className="text-xs text-muted-foreground">No agents yet</p>
-            <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={handleCreate}>
-              <Plus className="h-3 w-3 mr-1" /> Create
+          <div className="px-3 py-8 text-center">
+            <p className="text-xs text-muted-foreground mb-3">No agents yet</p>
+            <Button size="sm" className="h-8 rounded-full text-xs gap-1" onClick={() => navigate("/app/vibe")}>
+              <Sparkles className="h-3 w-3" /> Build with AI
             </Button>
           </div>
         )}
@@ -2828,18 +2835,39 @@ function AgentListPanel({ selectedId, onSelect, rateMap }: {
           const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
           return (
             <button key={agent.id} onClick={() => onSelect(agent.id)}
-              className={`w-full text-left px-3 py-2.5 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0 ${isSelected ? "bg-accent" : ""}`}>
+              className={cn(
+                "w-full text-left rounded-xl px-3 py-2.5 transition-all border",
+                isSelected
+                  ? "bg-card/80 border-border/60 shadow-sm"
+                  : "border-transparent hover:bg-muted/30 hover:border-border/30",
+              )}>
               <div className="flex items-center justify-between gap-1.5">
-                <span className="text-xs font-medium truncate">{agent.name}</span>
-                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${agent.status === "active" ? "bg-green-400" : "bg-muted-foreground/40"}`} />
+                <span className="text-[13px] font-medium truncate">{agent.name}</span>
+                <span className={cn(
+                  "h-1.5 w-1.5 rounded-full shrink-0",
+                  agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/35",
+                )} />
               </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[10px] text-muted-foreground truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
-                {costCents ? <span className="text-[10px] text-muted-foreground ml-auto shrink-0">~${(costCents / 100).toFixed(3)}/m</span> : null}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] text-muted-foreground/75 truncate">{agent.asrProvider} · {agent.ttsProvider}</span>
+                {costCents ? <span className="text-[10px] text-muted-foreground/55 ml-auto shrink-0">${(costCents / 100).toFixed(3)}</span> : null}
               </div>
             </button>
           );
         })}
+      </div>
+      <div className="p-3 border-t border-border/40">
+        <button
+          type="button"
+          onClick={() => navigate("/app/vibe")}
+          className="w-full flex items-center gap-2 rounded-xl border border-border/40 bg-primary/5 hover:bg-primary/10 px-3 py-2.5 text-left transition-colors"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-foreground">Vibe Build</p>
+            <p className="text-[10px] text-muted-foreground truncate">Create with AI in minutes</p>
+          </div>
+        </button>
       </div>
     </div>
   );
@@ -4928,7 +4956,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
               onClick={() => navigate("/app/agents")}
               className="self-start text-[11px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
             >
-              ← Agents
+              ← All agents
             </button>
             <div className="flex items-center gap-2 min-w-0">
               <h1
@@ -5234,29 +5262,236 @@ function CreateAgentDialog({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function AgentsHub({
+  agents,
+  isLoading,
+  rateMap,
+  onSelect,
+  onCreate,
+}: {
+  agents: Array<{
+    id: number;
+    name: string;
+    status: string;
+    asrProvider?: string | null;
+    llmProvider?: string | null;
+    ttsProvider?: string | null;
+    language?: string | null;
+    totalCalls?: number | null;
+  }> | undefined;
+  isLoading: boolean;
+  rateMap: Map<string, number>;
+  onSelect: (id: number) => void;
+  onCreate: () => void;
+}) {
   const [, navigate] = useLocation();
+  const userProviderNames = useUserProviderNames();
+  const [search, setSearch] = useState("");
+  const list = agents ?? [];
+  const filtered = list.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <div className="flex-1 flex items-center justify-center p-8 bg-background">
-      <div className="text-center max-w-md">
-        <div className="h-20 w-20 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-5">
-          <Sparkles className="h-9 w-9 text-primary" />
+    <div className="relative flex-1 overflow-y-auto bg-background">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 h-[50vh] w-[80vw] max-w-[900px] rounded-full bg-[#6366f1]/[0.06] dark:bg-[#6366f1]/[0.1] blur-[100px]" />
+        <div className="absolute bottom-[-10%] right-[-5%] h-[40vh] w-[45vw] rounded-full bg-[#14b8a6]/[0.05] dark:bg-[#14b8a6]/[0.07] blur-[90px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-6xl px-6 sm:px-8 py-10 sm:py-14">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-10"
+        >
+          <div className="max-w-xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/55 mb-3">
+              Agent Studio
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-[1.1]">
+              Build voice agents{" "}
+              <span className="bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#fbbf24] bg-clip-text text-transparent">
+                people love talking to
+              </span>
+            </h1>
+            <p className="mt-3 text-[15px] text-muted-foreground leading-relaxed">
+              Start in Vibe Build — describe the use case and we wire STT, LLM, TTS, tools, and your prompt. Or open the full builder.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              size="lg"
+              className="h-11 rounded-full gap-2 px-5 shadow-sm"
+              onClick={() => navigate("/app/vibe")}
+            >
+              <Sparkles className="h-4 w-4" /> Build with AI
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-11 rounded-full gap-2 px-5"
+              onClick={onCreate}
+            >
+              <Plus className="h-4 w-4" /> Manual setup
+            </Button>
+          </div>
+        </motion.div>
+
+        {/* Quick starts */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.06 }}
+          className="mb-10"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/50 mb-3">
+            Popular starts
+          </p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              { title: "Sales follow-up", desc: "Qualify leads, handle objections, book callbacks", path: "/app/vibe" },
+              { title: "Support desk", desc: "Inbound help for billing, orders, and accounts", path: "/app/vibe" },
+              { title: "Appointments", desc: "Book, reschedule, and confirm clinic slots", path: "/app/vibe" },
+            ].map(card => (
+              <button
+                key={card.title}
+                type="button"
+                onClick={() => navigate(card.path)}
+                className="group text-left rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md p-4 hover:border-border/70 hover:bg-card/50 transition-all hover:scale-[1.01]"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold">{card.title}</p>
+                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-primary shrink-0 mt-0.5" />
+                </div>
+                <p className="mt-1.5 text-[12px] text-muted-foreground leading-relaxed">{card.desc}</p>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Your agents</h2>
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? "Loading…" : `${list.length} agent${list.length === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          {list.length > 0 && (
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search agents…"
+                className="h-9 pl-9 rounded-full bg-muted/20 border-border/40"
+              />
+            </div>
+          )}
         </div>
-        <h3 className="text-xl font-semibold mb-2 text-foreground">Create your first voice agent</h3>
-        <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-          Start with Vibe Build — answer a few questions and we configure Sarvam, Groq, Cartesia, multilingual mode, tools, and your prompt. Or open the full builder for manual control.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-2 justify-center">
-          <Button onClick={() => navigate("/app/vibe")} className="gap-2">
-            <Sparkles className="h-4 w-4" /> Build with AI
-          </Button>
-          <Button variant="outline" onClick={onCreate} className="gap-2">
-            <Plus className="h-4 w-4" /> Manual builder
-          </Button>
-        </div>
+
+        {isLoading && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-border/40 p-5 space-y-3">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isLoading && list.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-border/50 bg-card/20 p-12 text-center">
+            <div className="mx-auto mb-5 h-16 w-16 rounded-2xl border border-border/40 bg-card/40 flex items-center justify-center">
+              <Sparkles className="h-7 w-7 text-muted-foreground/70" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No agents yet</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
+              Your first agent takes a few minutes in Vibe Build — then fine-tune everything here.
+            </p>
+            <Button onClick={() => navigate("/app/vibe")} className="rounded-full gap-2 h-10 px-5">
+              <Sparkles className="h-4 w-4" /> Create your first agent
+            </Button>
+          </div>
+        )}
+
+        {!isLoading && filtered.length > 0 && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Create card */}
+            <button
+              type="button"
+              onClick={() => navigate("/app/vibe")}
+              className="group rounded-2xl border border-dashed border-border/50 bg-primary/[0.03] hover:bg-primary/[0.06] hover:border-primary/30 p-5 text-left transition-all min-h-[160px] flex flex-col justify-between"
+            >
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Plus className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">Create new agent</p>
+                <p className="text-[12px] text-muted-foreground mt-1">Start with AI — recommended</p>
+              </div>
+            </button>
+
+            {filtered.map((agent, i) => {
+              const costCents = computeAgentRateCents(rateMap, agent as any, userProviderNames);
+              return (
+                <motion.button
+                  key={agent.id}
+                  type="button"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                  onClick={() => onSelect(agent.id)}
+                  className="group rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm hover:border-border/70 hover:bg-card/70 p-5 text-left transition-all hover:scale-[1.015] min-h-[160px] flex flex-col justify-between shadow-sm"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="h-10 w-10 rounded-xl border border-border/40 bg-muted/30 flex items-center justify-center">
+                        <Bot className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <span className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border",
+                        agent.status === "active"
+                          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+                          : "border-border/50 text-muted-foreground",
+                      )}>
+                        <span className={cn("h-1.5 w-1.5 rounded-full", agent.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/40")} />
+                        {agent.status === "active" ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                    <p className="text-[15px] font-semibold truncate group-hover:text-foreground">{agent.name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                      {[agent.asrProvider, agent.llmProvider, agent.ttsProvider].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/30 mt-3">
+                    <span className="text-[11px] text-muted-foreground">
+                      {agent.totalCalls ?? 0} calls
+                      {agent.language ? ` · ${agent.language}` : ""}
+                    </span>
+                    {costCents ? (
+                      <span className="text-[11px] tabular-nums text-muted-foreground/80">
+                        ${(costCents / 100).toFixed(3)}/min
+                      </span>
+                    ) : null}
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
+
+        {!isLoading && list.length > 0 && filtered.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-12">No agents match “{search}”.</p>
+        )}
       </div>
     </div>
   );
+}
+
+function EmptyState({ onCreate }: { onCreate: () => void }) {
+  return <AgentsHub agents={[]} isLoading={false} rateMap={new Map()} onSelect={() => {}} onCreate={onCreate} />;
 }
 
 /* ── Main page ──────────────────────────────────────────────────────────────── */
@@ -5266,7 +5501,6 @@ const LAST_AGENT_ID_KEY = "voiceorch:lastAgentId";
 export default function AgentBuilder() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
-  const { toast } = useToast();
   const rateMap = useMinuteRatesMap();
   const { data: agents, isLoading: agentsLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
 
@@ -5277,28 +5511,12 @@ export default function AgentBuilder() {
     navigate(`/app/agents/${id}`);
   };
 
-  // Persist the currently-viewed agent so it can be restored next session.
   useEffect(() => {
     if (selectedId == null) return;
     try { localStorage.setItem(LAST_AGENT_ID_KEY, String(selectedId)); } catch { /* ignore */ }
   }, [selectedId]);
 
-  // Auto-select an agent when landing on the page with none selected.
-  useEffect(() => {
-    if (selectedId != null) return;
-    if (agentsLoading) return;
-    if (!agents || agents.length === 0) return;
-    let stored: number | null = null;
-    try {
-      const raw = localStorage.getItem(LAST_AGENT_ID_KEY);
-      stored = raw ? parseInt(raw, 10) : null;
-    } catch { /* ignore */ }
-    const target = (stored != null && agents.some(a => a.id === stored)) ? stored : agents[0].id;
-    navigate(`/app/agents/${target}`, { replace: true });
-  }, [selectedId, agentsLoading, agents, navigate]);
-
   // Auto-open the create dialog when the URL contains ?create=1
-  // (used by the post-login redirect for new users with no agents).
   const [showCreate, setShowCreate] = useState(() => {
     try {
       return new URLSearchParams(window.location.search).get("create") === "1";
@@ -5308,8 +5526,6 @@ export default function AgentBuilder() {
   });
   const handleCreate = () => setShowCreate(true);
 
-  // Strip the ?create=1 param from the URL once we've consumed it so that
-  // the browser history is clean (Back button works normally).
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
@@ -5321,16 +5537,27 @@ export default function AgentBuilder() {
     } catch { /* ignore */ }
   }, []);
 
+  // Hub view — tempting gallery, no forced auto-open into last agent
+  if (selectedId == null) {
+    return (
+      <div className="flex h-full overflow-hidden">
+        <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
+        <AgentsHub
+          agents={agents as any}
+          isLoading={agentsLoading}
+          rateMap={rateMap}
+          onSelect={handleSelect}
+          onCreate={handleCreate}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       <CreateAgentDialog open={showCreate} onClose={() => setShowCreate(false)} />
       <AgentListPanel selectedId={selectedId} onSelect={handleSelect} rateMap={rateMap} />
-      {selectedId
-        ? <AgentEditorPanel agentId={selectedId} />
-        : (agentsLoading || (agents && agents.length > 0))
-          ? <div className="flex-1" />
-          : <EmptyState onCreate={handleCreate} />
-      }
+      <AgentEditorPanel agentId={selectedId} />
     </div>
   );
 }
