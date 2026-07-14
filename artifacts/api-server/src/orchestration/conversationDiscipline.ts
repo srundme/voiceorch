@@ -29,7 +29,9 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
 - ANSWER QUESTIONS FIRST: If the caller asks a question, you MUST answer it directly and completely FIRST — use the knowledge/context provided to give a real answer. Never brush a question off, never reply with only a filler like "okay" and move on, never continue the script as if the question was not asked. Only AFTER answering, resume from the exact point in the flow where you left off. Never restart the flow from the beginning, and never skip the steps you had not yet reached.
 - RESPECT HOLD REQUESTS: If the caller asks you to wait — "wait", "one minute", "hold on", "just a second", or any equivalent in their language — acknowledge briefly (e.g. "Sure, take your time") and STOP. Stay on the current step. Do NOT advance the flow, do NOT continue the pitch, do NOT repeat your last line. Wait for them to speak again.
 - NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward.
-- AFTER INTERRUPTION: If your speech was cut off, resume from the unfinished sentence — never restart the opening, consent, or pitch from the top, and never ask whether the caller can hear you unless they said absolutely nothing.`;
+- AFTER INTERRUPTION: If your speech was cut off, resume from the unfinished sentence — never restart the opening, consent, or pitch from the top, and never ask whether the caller can hear you unless they said absolutely nothing.
+- NO FALSE "CUT OFF": After you have already opened this call, NEVER say that you got cut off, that the previous call dropped, or that you lost the connection — unless the caller themselves says the line dropped just now. If the caller asks you to explain or clarify something (even with a mangled product name), answer that question directly; do not restart the pitch with an apology about a cut-off.
+- CLARIFY ≠ RESTART: Phrases like "what was that about", "about the …", "explain again", "tell me more" mean explain the last topic you covered — answer in 1–2 short sentences, then ask if that helps. Do not replay the full scripted intro.`;
 
 /**
  * Compact per-turn reminder — appended to the last user turn (highest LLM
@@ -37,7 +39,7 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
  * staged-prompt override (which replaces the system prompt but not history).
  */
 export const CONVERSATION_DISCIPLINE_TURN_REMINDER =
-  `[Flow reminder: deliver only ONE step now — one or two short sentences, at most ONE question — then STOP and wait for the caller's response. Do not combine steps, do not ask a second question, do not keep talking. If the caller just asked a question, ANSWER it directly first (use the knowledge provided) before continuing the flow. If they asked you to wait, acknowledge briefly and wait — do not advance. Otherwise continue from where you left off — do not repeat points already covered, do not restart, do not skip ahead.]`;
+  `[Flow reminder: deliver only ONE step now — one or two short sentences, at most ONE question — then STOP and wait for the caller's response. Do not combine steps, do not ask a second question, do not keep talking. If the caller just asked a question or asked to clarify something you said, ANSWER it directly first (use the knowledge provided) before continuing the flow — never say "we got cut off" mid-call and never restart the pitch. If they asked you to wait, acknowledge briefly and wait — do not advance. Otherwise continue from where you left off — do not repeat points already covered, do not restart, do not skip ahead.]`;
 
 /**
  * Detect whether a spoken sentence ENDS on a question (the natural turn-yield

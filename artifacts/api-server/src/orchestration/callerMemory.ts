@@ -592,8 +592,8 @@ export function injectEnhancedMemory(
       "Hinglish: \"Sorry yaar, call drop ho gayi\" — " +
       "then " +
       (hasResumeTail
-        ? "pick the conversation back up exactly where the exchanges above left off."
-        : "continue naturally from the prior context above."),
+        ? "pick the conversation back up exactly where the exchanges above left off. Your FIRST spoken line may briefly acknowledge the drop (one short phrase). From the caller's first reply onward: NEVER repeat the cut-off apology — if they ask about a product/topic, answer that question directly."
+        : "continue naturally from the prior context above. After the opening ack, never again say you got cut off — answer their questions normally."),
     );
   } else if (!suppressDomain && callCount >= 1) {
     const namePhrase = namePart !== "unknown" ? ` by name (${namePart})` : " by name if known";

@@ -44,9 +44,10 @@ import {
   STALL_BACKSTOP_MS,
   OUTBOUND_POST_GREETING_STALL_MS,
   RESUME_DROP_POST_GREETING_STALL_MS,
+  isAffirmationOnlyUtterance,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap, isTopicClarificationAsk } from "./transcriptQuality.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -826,6 +827,11 @@ export class OrchestrationPipeline {
   private _bargeInRecoveryCount = 0;
   /** Whether the immediately-preceding agent turn was interrupted by a barge-in. */
   private _lastTurnWasBargedIn = false;
+  /**
+   * After the agent asks a question, short caller replies ("yes ma'am", "okay okay",
+   * "go on") must never be swallowed by self-echo — they are the expected next turn.
+   */
+  private expectingShortReplyUntil = 0;
 
   /**
    * Set when the configured max-call-duration timer fires while the agent is
@@ -880,6 +886,8 @@ export class OrchestrationPipeline {
   private pendingVoiceLinkNote = false;
   /** Caller said they cannot hear the agent — next LLM turn must resume, not ask கேக்குதா. */
   private pendingAudioDifficultyNote = false;
+  /** Caller asked to clarify the last topic (often mid-cut STT like "about the Kala Fit"). */
+  private pendingTopicClarificationNote = false;
 
   // Tracks the current call language for per-turn LLM language injection.
   // Seeded from the agent's primary language at construction so turn 1 already
@@ -1313,6 +1321,13 @@ export class OrchestrationPipeline {
     if (this.recentAgentSpeech.length > 12) {
       this.recentAgentSpeech = this.recentAgentSpeech.slice(-12);
     }
+    // Agent just asked something — next 8s of short replies are presumed real.
+    if (/[?？]\s*$/.test(text.trim())) {
+      this.expectingShortReplyUntil = Math.max(
+        this.expectingShortReplyUntil,
+        estEndAt + 8_000,
+      );
+    }
   }
 
   /** True when a streaming-STT transcript closely matches text the agent recently
@@ -1327,16 +1342,18 @@ export class OrchestrationPipeline {
     if (!norm) return false;
     const tokens = norm.split(" ").filter(Boolean);
     if (tokens.length === 0) return false;
-    // Genuine one-word replies ("yes", "okay", "sure", "no", …) are extremely
-    // common caller turns, and the SAME words routinely appear somewhere in the
-    // agent's own recent line ("Okay, let me check that for you"). With only one
-    // token, a single incidental match is a 100% overlap ratio, so the ratio
-    // check below would misclassify almost every short affirmation as an echo of
-    // the agent's own voice — the exact bug that made single-word replies vanish.
-    // These words are never suppressed here; the real filters for them are the
-    // time-window tail-echo guard (caller says "yes" a beat after our own line
-    // ends) and the 600 ms per-sentence echo grace, both upstream of this call.
-    if (tokens.length === 1 && AFFIRMATIONS.has(tokens[0])) return false;
+    // Genuine short replies ("yes", "okay okay", "yes madam", …) must never be
+    // discarded as echo of the agent saying "okay?" / "right?" at turn end —
+    // that bug ate "yes I have two minutes" style answers and looked like the
+    // caller hung up when the call actually stalled listening.
+    if (tokens.length === 1 && AFFIRMATIONS.has(tokens[0]!)) return false;
+    if (isAffirmationOnlyUtterance(tokens)) return false;
+    if (Date.now() < this.expectingShortReplyUntil && tokens.length <= 8) {
+      // Agent just asked a question — prefer accepting short replies over
+      // echo-suppression (carrier echo of our own "?" rarely becomes a multi-word
+      // affirmation). Exact long overlaps still get suppressed below.
+      if (tokens.length <= 4) return false;
+    }
     const now = Date.now();
     for (const entry of this.recentAgentSpeech) {
       if (now > entry.estEndAt + SELF_ECHO_TAIL_MS) continue;
@@ -2150,6 +2167,9 @@ export class OrchestrationPipeline {
     if (isCallerAudioDifficulty(transcript)) {
       this.pendingAudioDifficultyNote = true;
     }
+    if (isTopicClarificationAsk(transcript)) {
+      this.pendingTopicClarificationNote = true;
+    }
 
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
@@ -2651,9 +2671,16 @@ export class OrchestrationPipeline {
       // Raw caller speech energy keeps the silence-hangup watchdog alive even
       // when streaming STT goes quiet mid-speech (no partials/finals — call
       // 1915 dropped the caller mid-sentence). Gated on the agent not speaking
-      // so carrier echo of our own TTS can't keep an abandoned call alive
-      // (mirrors the !isPlaying gate on the partial-transcript reset above).
-      if (hasSpeech && !this.isPlaying && !this.isSendingTtsAudio) {
+      // so continuous carrier echo of our TTS cannot keep an abandoned call alive
+      // forever. Exception: when we just asked a question, count overlapping
+      // caller energy too (callers often answer before our last word ends).
+      if (
+        hasSpeech
+        && (
+          (!this.isPlaying && !this.isSendingTtsAudio)
+          || Date.now() < this.expectingShortReplyUntil
+        )
+      ) {
         this.silenceWatchdog?.onSpeechEnergy();
       }
       // Send native 8kHz telephony audio directly when the adapter is configured
@@ -3699,6 +3726,20 @@ export class OrchestrationPipeline {
       if (lastUser !== null && lastAgent !== null) break;
     }
     return { lastUser, lastAgent };
+  }
+
+  /**
+   * Media WS closed while we were waiting for a short reply after a question.
+   * Prefer this label over generic "Caller hung up" (QA often kept the phone up).
+   */
+  noteMediaDropIfWaitingForReply(): void {
+    if (this.endReasonHint) return;
+    if (Date.now() >= this.expectingShortReplyUntil) return;
+    this.endReasonHint = "media_disconnect";
+    logger.warn(
+      { callId: this.config.callId, expectingMsLeft: this.expectingShortReplyUntil - Date.now() },
+      "Media stream closed while expecting short caller reply — labeling media_disconnect",
+    );
   }
 
   /**
@@ -5586,6 +5627,23 @@ export class OrchestrationPipeline {
       this.pendingAudioDifficultyNote = false;
     }
 
+    // Caller is asking what you were talking about (STT may have mangled the name).
+    if (this.pendingTopicClarificationNote && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        const clarify =
+          `[CLARIFY LAST TOPIC] The caller wants you to explain again what you just said ` +
+          `(product/program names in STT may be wrong — e.g. "Kala Fit" ≈ Gala Fit). ` +
+          `Do NOT say "we got cut off". Do NOT restart greeting/consent/full pitch. ` +
+          `Give a short clear re-explanation of the last benefit you mentioned, then ask one check question.`;
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${clarify}` },
+        ];
+      }
+      this.pendingTopicClarificationNote = false;
+    }
+
     // Layer 4: Staged Prompt — override system prompt with active stage block
     if (tokenOptEnabled && this.agent.stagedPromptEnabled && this.agent.stagedPromptStages.length > 0) {
       const stage = this.agent.stagedPromptStages[this.currentStageIndex];
@@ -7359,6 +7417,10 @@ export class OrchestrationPipeline {
    */
   private armTailEchoGrace(): void {
     this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
+    // Keep the VoBiz/ambient audio bridge warm the instant we enter Listening —
+    // a multi-hundred-ms dead zone after TTS can look like End Of XML (4010)
+    // and surface in the UI as "Caller hung up" even though the phone stayed up.
+    this.lastTtsFrameAt = Date.now();
   }
 
   /**

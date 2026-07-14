@@ -170,14 +170,17 @@ export async function handlePlivoWebSocket(
       }
 
       case "stop":
-        if (sessionId) await endSession(sessionId);
-        else sessionEndedBeforeReady = true;
+        if (sessionId) {
+          getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
+          await endSession(sessionId);
+        } else sessionEndedBeforeReady = true;
         break;
     }
   });
 
   ws.on("close", () => {
     if (sessionId) {
+      getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
       endSession(sessionId).catch((err: unknown) =>
         logger.error({ sessionId, err }, "Plivo WS close: endSession failed"),
       );

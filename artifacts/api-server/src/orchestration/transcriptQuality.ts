@@ -39,6 +39,17 @@ const VALID_COMPLETE_SHORT_UTTERANCE_RE =
 const REDUPLICATED_ACK_RE =
   /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)){0,2}[\s,.!]*$/i;
 
+/** Caller asks to clarify / re-explain the last topic (often mid-sentence STT). */
+export function isTopicClarificationAsk(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    /\b(what (was|is) that|about the|tell me (more )?about|explain( it| again)?|what (did|were) you (saying|telling))\b/i.test(t)
+    || /\b(என்ன|அது என்ன|மீண்டும் சொல்ல|விளக்க)\b/u.test(t)
+    || /\b(क्या था|फिर से समझा|बताओ तो)\b/u.test(t)
+  );
+}
+
 /** Caller reports they cannot hear the agent (audio quality / cut TTS). */
 export function isCallerAudioDifficulty(text: string): boolean {
   const t = text.trim();
@@ -65,6 +76,7 @@ export function isFalseInterruptionScrap(
   const t = text.trim();
   if (!t) return true;
   if (isCallerAudioDifficulty(t)) return false;
+  if (isTopicClarificationAsk(t)) return false;
   if (isUltraShortNoiseFragment(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;

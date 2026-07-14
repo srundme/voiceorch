@@ -173,8 +173,10 @@ export async function handleTwilioWebSocket(
 
       case "stop":
         logger.info({ sessionId }, "Twilio stream stopped");
-        if (sessionId) await endSession(sessionId);
-        else sessionEndedBeforeReady = true;
+        if (sessionId) {
+          getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
+          await endSession(sessionId);
+        } else sessionEndedBeforeReady = true;
         break;
     }
   });
@@ -182,6 +184,7 @@ export async function handleTwilioWebSocket(
   ws.on("close", () => {
     logger.info({ sessionId }, "Twilio WS closed");
     if (sessionId) {
+      getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
       endSession(sessionId).catch((err: unknown) =>
         logger.error({ sessionId, err }, "Twilio WS close: endSession failed"),
       );

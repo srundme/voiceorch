@@ -314,6 +314,7 @@ export async function handleVobizWebSocket(
       case "stop":
         logger.info({ sessionId }, "Vobiz stream stopped");
         if (sessionId) {
+          getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
           await endSession(sessionId);
         } else {
           sessionEndedBeforeReady = true;
@@ -325,6 +326,7 @@ export async function handleVobizWebSocket(
   ws.on("close", () => {
     logger.info({ sessionId }, "Vobiz WS closed");
     if (sessionId) {
+      getSession(sessionId)?.pipeline.noteMediaDropIfWaitingForReply();
       endSession(sessionId).catch((err: unknown) =>
         logger.error({ sessionId, err }, "Vobiz WS close: endSession failed"),
       );

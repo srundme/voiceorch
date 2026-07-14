@@ -490,6 +490,21 @@ export const AFFIRMATIONS = new Set([
   "sare", "houdu", "howdu", "ho", "nako", "ha", "shari",
 ]);
 
+/** Honorifics often glued to short yes/no replies ("yes ma'am", "okay sir"). */
+const SHORT_REPLY_HONORIFICS = new Set([
+  "madam", "maam", "ma'am", "sir", "miss", "mam", "ji",
+]);
+
+/**
+ * True when every token is an affirmation/backchannel (or honorific). Used to
+ * keep "okay okay", "yes madam", "haan ji" from being discarded as self-echo
+ * of the agent saying "okay?" at the end of a question.
+ */
+export function isAffirmationOnlyUtterance(tokens: string[]): boolean {
+  if (tokens.length === 0 || tokens.length > 4) return false;
+  return tokens.every((t) => AFFIRMATIONS.has(t) || SHORT_REPLY_HONORIFICS.has(t));
+}
+
 /**
  * Compute the adaptive silence window (ms) to wait before flushing audio to STT.
  */

@@ -285,6 +285,9 @@ function normalizeDisconnectReason(raw: string): ReasonMapping {
     case "silence":
     case "inactivity":
       return { reason: "silence_timeout", label: "Silence timeout — no caller speech detected", outcome: "Timeout", expected: true, component: "STT" };
+    case "media_disconnect":
+    case "carrier_disconnect":
+      return { reason: "provider_error", label: "Media/carrier disconnect while waiting for caller", outcome: "Error", expected: false, component: "Telephony" };
     case "timeout":
     case "max_duration":
     case "max_duration_reached":

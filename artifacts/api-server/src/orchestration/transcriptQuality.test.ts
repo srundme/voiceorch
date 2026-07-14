@@ -7,7 +7,9 @@ import {
   isUltraShortNoiseFragment,
   isCallerAudioDifficulty,
   isFalseInterruptionScrap,
+  isTopicClarificationAsk,
 } from "./transcriptQuality.js";
+import { isAffirmationOnlyUtterance } from "./endpointing.js";
 
 describe("checkTranscriptQuality", () => {
   it("flags Sarvam phantom silence hallucinations", () => {
@@ -108,5 +110,18 @@ describe("isFalseInterruptionScrap", () => {
     expect(isFalseInterruptionScrap("okay", 3)).toBe(false);
     expect(isFalseInterruptionScrap("சரி", 3)).toBe(false);
     expect(isFalseInterruptionScrap("கேக்கல", 3)).toBe(false);
+  });
+
+  it("keeps topic-clarification asks even when short", () => {
+    expect(isTopicClarificationAsk("about the Kala Fit")).toBe(true);
+    expect(isFalseInterruptionScrap("about the Kala Fit", 3)).toBe(false);
+  });
+});
+
+describe("isAffirmationOnlyUtterance", () => {
+  it("treats okay okay / yes madam as affirmation-only", () => {
+    expect(isAffirmationOnlyUtterance(["okay", "okay"])).toBe(true);
+    expect(isAffirmationOnlyUtterance(["yes", "madam"])).toBe(true);
+    expect(isAffirmationOnlyUtterance(["yes", "i", "have", "two", "minutes"])).toBe(false);
   });
 });
