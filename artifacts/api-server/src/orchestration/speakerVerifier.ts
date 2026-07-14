@@ -225,11 +225,11 @@ export class SpeakerVerifier {
     );
     if (result.similarity < VOICE_HANDOFF_THRESHOLD) {
       this.lowScoreStreak++;
-      // Two consecutive low windows ⇒ speaker changed. A single mixed/noise
-      // window can score low without a real handoff — require persistence.
-      // Very low single shot (< threshold − 0.12) still fires immediately.
-      const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.12;
-      if (!this.handoffFired && (definite || this.lowScoreStreak >= 2)) {
+      // Require persistence — false handoffs mute the line with a forced
+      // "who is speaking?" challenge when the same caller briefly mismatches
+      // (noise, distance, codec). Very low single shot still fires.
+      const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.15;
+      if (!this.handoffFired && (definite || this.lowScoreStreak >= 3)) {
         this.handoffFired = true;
         this.onEvent({ type: "handoff", similarity: result.similarity });
       }

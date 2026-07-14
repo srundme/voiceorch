@@ -1433,6 +1433,22 @@ export class OrchestrationPipeline {
     this.bargeInEnergyThreshold = config.agentConfig.bargeInEnergyThreshold;
     this.bargeInMinFrames       = config.agentConfig.bargeInMinFrames;
     this.bargeInEchoGraceMs     = config.agentConfig.bargeInEchoGraceMs;
+    // Agents often store bargeInEnergyThreshold=200–300 (VAD floor). That is far
+    // too low for interruption and caused call-2620 style 60 ms false cuts.
+    // Raise the stored bar on telephony so the configured value cannot undercut
+    // the floor (effectiveThreshold still has adaptive cold-start on top).
+    if (config.telephonyProvider !== "webcall"
+      && this.bargeInEnergyThreshold < BARGE_IN_TELEPHONY_MIN_ENERGY) {
+      logger.warn(
+        {
+          callId: config.callId,
+          configured: this.bargeInEnergyThreshold,
+          flooredTo: BARGE_IN_TELEPHONY_MIN_ENERGY,
+        },
+        "bargeInEnergyThreshold below telephony floor — raising (VAD values must not drive barge-in)",
+      );
+      this.bargeInEnergyThreshold = BARGE_IN_TELEPHONY_MIN_ENERGY;
+    }
     // Mic Sensitivity — one lever that scales the noise gate ratio, the
     // hasSpeechEnergy() VAD floor, and (when not already overridden by an
     // explicit bargeInEnergyThreshold) the barge-in bars. See mic-sensitivity.ts.
@@ -2549,17 +2565,22 @@ export class OrchestrationPipeline {
         ? Math.max(BARGE_IN_MIN_FRAMES, this.bargeInMinFrames)
         : Math.max(this.bargeInMinFrames, (this.agent.wordsForInterruption ?? 3) * 20);
       // Bolna prefers transcript-gated interruption. Pure-energy barge-in without
-      // any interim STT evidence must sustain longer so brief echo / coughs do
-      // not cut the agent (then leave sticky barge + silence that looks hung).
+      // any interim STT evidence must SUSTAIN longer (~400 ms). Previously we used
+      // Math.min(effective, cap) which left stop-speaking-plan agents at 3 frames
+      // (~60 ms) forever — call 2620 false-cut mid "okay"/overview with mute gap.
       if (!respectHoldUntil) {
         const hasSttEvidence = this.streamingBargeInWordCount > 0;
-        const streamingCap = hasSttEvidence
-          ? BARGE_IN_STREAMING_MIN_FRAMES
-          : Math.max(BARGE_IN_STREAMING_MIN_FRAMES * 2, 20); // ~400 ms without words
-        effectiveMinFrames = Math.max(
-          BARGE_IN_MIN_FRAMES,
-          Math.min(effectiveMinFrames, streamingCap),
-        );
+        const noEvidenceFloor = Math.max(BARGE_IN_STREAMING_MIN_FRAMES * 2, 20); // ~400 ms @ 20 ms/frame
+        if (hasSttEvidence) {
+          // Words confirmed — allow a responsive energy cut (capped near streaming min).
+          effectiveMinFrames = Math.max(
+            BARGE_IN_MIN_FRAMES,
+            Math.min(effectiveMinFrames, BARGE_IN_STREAMING_MIN_FRAMES),
+          );
+        } else {
+          // No STT words yet — raise the floor; never leave agents at 3 frames.
+          effectiveMinFrames = Math.max(effectiveMinFrames, noEvidenceFloor);
+        }
       }
       if (this.bargeInSpeechFrames >= effectiveMinFrames) {
         this.triggerBargeIn(source, undefined, {
@@ -2914,14 +2935,21 @@ export class OrchestrationPipeline {
     this.speakingSpeakerHandoffChallenge = true;
     this.skipAgentPlaybackForHandoff = true;
     try {
-      // Cut off whatever the agent was saying so the challenge is heard.
+      // Cut in-flight TTS without a long mute. The old 2s busy-wait with
+      // bargeInRequested=true left callers in blank silence (call 2620 report).
       if (this.isPlaying || this.isSendingTtsAudio) {
-        this.bargeInRequested = true;
-        const deadline = Date.now() + 2_000;
-        while ((this.isSendingTtsAudio || this.isPlaying) && Date.now() < deadline && !this.closed) {
-          await new Promise((r) => setTimeout(r, 30));
+        this.interruptionMgr.invalidateCurrentTurn();
+        for (const ac of this.activeTtsAborts) {
+          try { ac.abort(); } catch { /* noop */ }
         }
-        this.bargeInRequested = false;
+        this.activeTtsAborts.clear();
+        this.bargeInCallback?.(); // clearAudio on carrier
+        this.bargeInRequested = true;
+        const deadline = Date.now() + 350;
+        while ((this.isSendingTtsAudio || this.isPlaying) && Date.now() < deadline && !this.closed) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        this.prepareSystemPlayback();
       }
 
       if (this.closed) return;
@@ -2937,6 +2965,8 @@ export class OrchestrationPipeline {
         "Voice Memory: speaking forced handoff challenge",
       );
 
+      // Allow this challenge through the handoff skip gate.
+      this.skipAgentPlaybackForHandoff = false;
       this.bargeInHoldUntil = Date.now() + this.bargeInEchoGraceMs;
       this.isPlaying = true;
       try {
@@ -2952,8 +2982,6 @@ export class OrchestrationPipeline {
       if (!this.speakerChallengeSpoken) this.pendingSpeakerChallenge = true;
     } finally {
       this.speakingSpeakerHandoffChallenge = false;
-      // Keep suppressing leftover LLM TTS from an interrupted turn until that
-      // turn exits (cleared where isProcessing flips false).
       if (!this.isProcessing) {
         this.skipAgentPlaybackForHandoff = false;
       }
