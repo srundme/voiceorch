@@ -76,13 +76,18 @@ describe("pickClarificationPhrase", () => {
 });
 
 describe("isUltraShortNoiseFragment", () => {
-  it("drops single Indic syllables and 1–2 token stubs", () => {
+  it("drops only bare single-syllable stubs", () => {
     expect(isUltraShortNoiseFragment("ஆ")).toBe(true);
-    expect(isUltraShortNoiseFragment("call பண்ண")).toBe(true);
-    expect(isUltraShortNoiseFragment("Madam இப்போ")).toBe(true);
+    expect(isUltraShortNoiseFragment("mm")).toBe(true);
   });
 
-  it("keeps real acks, greetings, and fuller utterances", () => {
+  it("keeps real one-/two-word replies that callers actually say", () => {
+    expect(isUltraShortNoiseFragment("இருக்கு")).toBe(false);
+    expect(isUltraShortNoiseFragment("நல்லா")).toBe(false);
+    expect(isUltraShortNoiseFragment("சொல்லுங்க")).toBe(false);
+    expect(isUltraShortNoiseFragment("நல்லா கேட்குது")).toBe(false);
+    expect(isUltraShortNoiseFragment("call பண்ண")).toBe(false);
+    expect(isUltraShortNoiseFragment("Madam இப்போ")).toBe(false);
     expect(isUltraShortNoiseFragment("Okay Madam")).toBe(false);
     expect(isUltraShortNoiseFragment("Okay Okay.")).toBe(false);
     expect(isUltraShortNoiseFragment("Hello")).toBe(false);

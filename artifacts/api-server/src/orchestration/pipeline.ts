@@ -2251,10 +2251,13 @@ export class OrchestrationPipeline {
       ) {
         logger.info(
           { callId: this.config.callId, transcript: transcript.slice(0, 80), wordsThreshold },
-          "Bolna-style false interruption — ignoring scrap transcript",
+          "False interruption — ignoring scrap transcript",
         );
         this.prepareSystemPlayback();
-        // Keep _lastTurnWasBargedIn so a follow-up scrap still skips the LLM.
+        // Drop only this barge-linked scrap. Leaving the flag sticky used to
+        // swallow every later short reply until the caller spoke 4+ words
+        // (call 2632 felt like “STT only hears 3+ words”).
+        this._lastTurnWasBargedIn = false;
         this.streamingBargeInWordCount = 0;
         this.safetyNet.onFinal();
         this.clearEagerPartialTimer();

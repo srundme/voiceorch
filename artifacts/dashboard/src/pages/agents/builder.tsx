@@ -379,7 +379,7 @@ function AgentCostSummary({ form, rateMap, agent, compact = false }: { form: any
     );
   }
 
-  // Bolna-style strip: price + segmented color bar + legend
+  // Cost strip: price + segmented color bar + legend
   return (
     <div className="w-full max-w-xl space-y-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
@@ -2582,7 +2582,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
       {/* ── Content ── */}
       <div className="px-5 py-5 space-y-4">
 
-        {/* ── ENGINE (Bolna-style) ── */}
+        {/* ── ENGINE ── */}
         {section === "engine" && (
           <>
             <div>
@@ -2633,7 +2633,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                   form={form}
                   name="stopSpeakingNumWords"
                   label="Words before interrupt"
-                  hint="Agent ignores interruptions until this many words are spoken (Stop / Wait / Hold on still cut immediately). Default 3 — Bolna-style."
+                  hint="Agent ignores interruptions until this many words are spoken (Stop / Wait / Hold on still cut immediately). Default 3."
                   min={1}
                   max={6}
                   step={1}
@@ -2659,7 +2659,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                 form={form}
                 name="linearDelayMs"
                 label="Linear delay"
-                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses (Bolna incremental delay)."
+                hint="Extra wait after end-of-turn before the agent speaks — covers mid-sentence pauses."
                 min={0}
                 max={1500}
                 step={50}
@@ -2675,7 +2675,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
                       <div>
                         <FormLabel className="text-[12px] font-medium text-foreground/90">Silence check-in</FormLabel>
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          If the caller is silent this long, play a check-in / end the call (Bolna “user online”).
+                          If the caller is silent this long, play a check-in / end the call.
                         </p>
                       </div>
                       <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">{val}s</span>
@@ -5126,7 +5126,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
 
   return (
     <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
-      {/* Header — identity + Bolna-style cost strip */}
+      {/* Header — identity + cost strip */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -5596,7 +5596,7 @@ export default function AgentBuilder() {
     try { localStorage.setItem(LAST_AGENT_ID_KEY, String(selectedId)); } catch { /* ignore */ }
   }, [selectedId]);
 
-  // Bolna-style: /app/agents opens Studio and lands on last (or first) agent — no gallery hub
+  // /app/agents opens Studio and lands on last (or first) agent — no gallery hub
   useEffect(() => {
     if (selectedId != null || agentsLoading) return;
     const list = Array.isArray(agents) ? agents : [];

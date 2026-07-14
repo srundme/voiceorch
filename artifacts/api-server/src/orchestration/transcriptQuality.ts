@@ -91,8 +91,13 @@ export function isFalseInterruptionScrap(
 }
 
 /**
- * Ultra-short / half-cut STT stubs that should NOT run a full LLM turn
- * (e.g. "ஆ", "call பண்ண", "Madam இப்போ"). Silent-wait for more speech instead.
+ * Ultra-short STT noise that should NOT run an LLM turn.
+ *
+ * Keep this extremely narrow: call 2632 showed a prior ≤14-grapheme / ≤2-token
+ * rule silently ate real one-word Tamil replies ("இருக்கு", "நல்லா", "சொல்லுங்க")
+ * before STT was even logged — so Studio looked like "STT only hears 3+ words".
+ * Incomplete mid-phrase scraps after barge-in are handled by
+ * `isFalseInterruptionScrap` instead.
  */
 export function isUltraShortNoiseFragment(text: string): boolean {
   const t = text.trim();
@@ -111,11 +116,8 @@ export function isUltraShortNoiseFragment(text: string): boolean {
   const compact = t.replace(/[\s,.!?;:'"“”‘’…]+/g, "");
   const graphemes = [...compact].length;
 
-  // Single short syllable / one-character Indic token ("ஆ")
+  // Only pure single-syllable stubs ("ஆ", "அ", "mm") — never whole short answers.
   if (tokens.length <= 1 && graphemes <= 2) return true;
-
-  // 1–2 token stubs under ~14 graphemes — typical mid-phrase STT cuts
-  if (tokens.length <= 2 && graphemes <= 14) return true;
 
   return false;
 }
