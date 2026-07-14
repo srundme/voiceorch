@@ -73,7 +73,7 @@ export type { AgentFormValues } from "./edit.schema";
 export function buildUpdateAgentPayload(data: AgentFormValues) {
   const {
     webhookSecret, promptVariables, vadSilenceMs, bargeInEnabled, bargeInEnergyThreshold, bargeInMinFrames, micSensitivity,
-    timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, recordingEnabled,
+    timezone, autoSwitchToEnglish, languageAutoDetect, machineDetectionMode, voicemailAction, voicemailMessage, voicemailLeadInSeconds, genderDetectionEnabled, voiceMemoryEnabled, recordingEnabled,
     startSpeakingWaitSecs, startSpeakingOnPunctuationSecs, startSpeakingOnNoPunctuationSecs, startSpeakingOnNumberSecs,
     stopSpeakingNumWords, stopSpeakingVoiceSecs, stopSpeakingBackOffSecs,
     complianceIrdai, complianceDpdp, complianceTrai,
@@ -111,6 +111,7 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (voicemailMessage) agentConfig["voicemailMessage"] = voicemailMessage;
   if (voicemailLeadInSeconds != null && voicemailLeadInSeconds !== 2) agentConfig["voicemailLeadInSeconds"] = voicemailLeadInSeconds;
   agentConfig["genderDetectionEnabled"] = !!genderDetectionEnabled;
+  agentConfig["voiceMemoryEnabled"] = !!voiceMemoryEnabled;
   agentConfig["recordingEnabled"] = !!recordingEnabled;
   agentConfig["summarizationEnabled"] = !!summarizationEnabled;
   agentConfig["ambientNoiseEnabled"] = !!ambientNoiseEnabled;
@@ -356,6 +357,7 @@ export default function AgentEdit() {
       voicemailLeadInSeconds: 2,
       tools: [{ type: "end_call" as const, name: "end_call", description: "End the call when the conversation is complete." }],
       genderDetectionEnabled: false,
+      voiceMemoryEnabled: false,
       recordingEnabled: true,
       snapserveAgentId: "",
       contextWindowTurns: undefined,
@@ -577,6 +579,7 @@ export default function AgentEdit() {
       voicemailLeadInSeconds:   ((agent as any).agentConfig?.voicemailLeadInSeconds as number | undefined) ?? 2,
       tools: hydrateToolsForForm(agent.tools ?? []),
       genderDetectionEnabled: (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      voiceMemoryEnabled: (agent as any).agentConfig?.voiceMemoryEnabled ?? false,
       recordingEnabled: (agent as any).agentConfig?.recordingEnabled ?? false,
       snapserveAgentId: (agent as any).snapserveAgentId ?? "",
       contextWindowTurns: (agent as any).contextWindowTurns ?? undefined,

@@ -3,6 +3,7 @@ import { GenderDetector } from "./genderDetector.js";
 import { GenderDetectorML } from "./genderDetectorML.js";
 import { GenderDetectorMLv2 } from "./genderDetectorMLv2.js";
 import { GenderDetectorChained } from "./genderDetectorChained.js";
+import { SpeakerVerifier, type VoiceMemoryEvent } from "./speakerVerifier.js";
 import { buildDatetimeInjection } from "./datetimeInject.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { CONVERSATION_DISCIPLINE_BLOCK, CONVERSATION_DISCIPLINE_TURN_REMINDER, buildAntiRepeatNudge, makeFlowStepGuard, truncateToSingleStep, VOICE_MAX_SENTENCES_PER_TURN } from "./conversationDiscipline.js";
@@ -335,6 +336,23 @@ const OPENING_ALREADY_DELIVERED_NOTE =
   "for the dropped call. Simply respond to the caller's latest message and move the conversation forward. " +
   "The NAME PRIORITY rule and the DO NOT RE-ASK KNOWN INFORMATION rule above remain in force for the " +
   "entire call — keep using known details instead of re-asking, and switch names if the caller states their own.";
+
+/** Soft mid-call handoff — new voice on the same phone; do not hang up. */
+const SPEAKER_HANDOFF_SUPPRESS_NOTE =
+  "[SPEAKER CHANGE DETECTED] The person speaking now may not be the original caller " +
+  "(phone may have been handed to someone else). Do NOT use the previous caller's name, " +
+  "Sir/Ma'am salutation, or CALLER MEMORY facts for them until the new speaker confirms who they are. " +
+  "Treat the current speaker as a new person on this line. Do not hang up.";
+
+const SPEAKER_HANDOFF_CHALLENGE_NOTE =
+  SPEAKER_HANDOFF_SUPPRESS_NOTE +
+  " Ask one short polite question about who you are speaking with now, then continue normally.";
+
+/** Voice matched a known person who previously called from a different number. */
+const VOICE_LINKED_PHONE_NOTE =
+  "[VOICE MEMORY] This caller's voice closely matches someone this agent spoke with before on a " +
+  "different phone number. Treat them as possibly the same person — you may gently recognize them if " +
+  "it feels natural, but confirm name/details if unsure. This is a soft signal, not identity verification.";
 
 /**
  * Build a COMPACT system prompt for the greeting-only LLM call. Returning callers were
@@ -840,6 +858,12 @@ export class OrchestrationPipeline {
    *  stray pre-greeting audio. Until armed, caller audio is not fed to the detector. */
   private genderDetectionArmed = false;
 
+  /** Voice Memory (opt-in) — mid-call handoff + cross-number voice linking. */
+  private speakerVerifier: SpeakerVerifier | null = null;
+  private pendingSpeakerChallenge = false;
+  private voiceHandoffActive = false;
+  private voiceLinkedFromPhone: string | null = null;
+  private pendingVoiceLinkNote = false;
 
   // Tracks the current call language for per-turn LLM language injection.
   // Seeded from the agent's primary language at construction so turn 1 already
@@ -1404,6 +1428,19 @@ export class OrchestrationPipeline {
       }
     }
 
+    // Voice Memory — opt-in; requires gender-service speaker endpoints.
+    if (config.agentConfig.voiceMemoryEnabled) {
+      this.speakerVerifier = new SpeakerVerifier({
+        callId: config.callId,
+        agentId: config.agentConfig.id,
+        phoneNumber: config.callerPhone ?? null,
+        onEvent: (ev) => this.onVoiceMemoryEvent(ev),
+      });
+      logger.info(
+        { callId: config.callId, agentId: config.agentConfig.id },
+        "Voice Memory enabled — will enroll/verify caller voice this call",
+      );
+    }
 
     const keys = config.providerKeys;
 
@@ -2492,6 +2529,7 @@ export class OrchestrationPipeline {
       // Only after the greeting is delivered (armed) so we sample the caller's intro,
       // not the greeting echo or stray pre-greeting audio.
       if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
+      this.speakerVerifier?.addSpeechChunk(pcm8k);
 
       // ── Input-level self-echo gate (Live Call / carrier path only) ─────────────
       // Root fix for the greeting-startup delay: on the carrier path there is no
@@ -2545,6 +2583,7 @@ export class OrchestrationPipeline {
     // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops).
     // Gated on armed so detection samples the caller's intro turn, not the greeting.
     if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
+    this.speakerVerifier?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
     if (hasSpeech) this.silenceWatchdog?.onSpeechEnergy();
@@ -2669,12 +2708,56 @@ export class OrchestrationPipeline {
    * detector is active (toggle off or {caller_salutation} absent).
    */
   private armGenderDetection(): void {
-    if (this.genderDetectionArmed || !this.genderDetector) return;
-    this.genderDetectionArmed = true;
-    logger.info(
-      { callId: this.config.callId, provider: this.agent.genderDetectionProvider ?? "librosa" },
-      "Gender detection ARMED — now sampling the caller's intro turn",
-    );
+    if (!this.genderDetectionArmed && this.genderDetector) {
+      this.genderDetectionArmed = true;
+      logger.info(
+        { callId: this.config.callId, provider: this.agent.genderDetectionProvider ?? "librosa" },
+        "Gender detection ARMED — now sampling the caller's intro turn",
+      );
+    }
+    // Voice Memory arms on the same post-greeting moment as gender, even if
+    // gender detection is off / missing {caller_salutation}.
+    this.speakerVerifier?.arm();
+  }
+
+  /**
+   * Voice Memory callbacks — mid-call handoff + cross-number link notes.
+   * Soft signals only; never hang up or treat as KYC.
+   */
+  private onVoiceMemoryEvent(ev: VoiceMemoryEvent): void {
+    if (ev.type === "enrolled") {
+      if (ev.linkedFromPhone) {
+        this.voiceLinkedFromPhone = ev.linkedFromPhone;
+        this.pendingVoiceLinkNote = true;
+        logger.info(
+          {
+            callId: this.config.callId,
+            personKey: ev.personKey,
+            linkedFromPhone: ev.linkedFromPhone,
+            score: ev.score,
+          },
+          "Voice Memory: same voice matched across phone numbers",
+        );
+      }
+      return;
+    }
+
+    if (ev.type === "handoff") {
+      this.voiceHandoffActive = true;
+      this.pendingSpeakerChallenge = true;
+      this.salutationCorrection = null;
+      this.pendingVoiceLinkNote = false;
+      // Unlock gender so the new speaker can be re-detected.
+      const gd = this.genderDetector as GenderDetectorChained | null;
+      if (gd && typeof gd.resetForNewSpeaker === "function") {
+        gd.resetForNewSpeaker();
+      }
+      this.speakerVerifier?.resetForNewSpeaker();
+      logger.info(
+        { callId: this.config.callId, similarity: ev.similarity },
+        "Voice Memory: mid-call speaker handoff — gender unlocked, challenge pending",
+      );
+    }
   }
 
   /**
@@ -4625,6 +4708,9 @@ export class OrchestrationPipeline {
     // GenderDetector (v0) auto-fires via addSpeechChunk and treats this as a no-op.
     if (this.genderDetector && !this.genderDetector.locked) this.genderDetector.runDetection();
 
+    // Voice Memory — enroll / verify windows after confirmed user speech (non-blocking).
+    this.speakerVerifier?.tick();
+
     // ── Explicit caller salutation correction ──────────────────────────────
     // Only an explicit caller correction ("call me sir, not ma'am") can override
     // the locked/detected gender. Once set it is sticky for the rest of the call
@@ -5359,6 +5445,20 @@ export class OrchestrationPipeline {
     const openerAlreadySpoken = this.conversationHistory.messages.some((t) => t.role === "assistant");
     if (hasOpeningOnlyDirective && openerAlreadySpoken) {
       systemPromptForTurn += `\n\n${OPENING_ALREADY_DELIVERED_NOTE}`;
+    }
+
+    // Voice Memory — handoff / cross-number notes live in the volatile per-turn
+    // tail so Gemini / OpenAI cached prefixes stay byte-stable.
+    if (this.voiceHandoffActive) {
+      if (this.pendingSpeakerChallenge) {
+        systemPromptForTurn += `\n\n${SPEAKER_HANDOFF_CHALLENGE_NOTE}`;
+        this.pendingSpeakerChallenge = false;
+      } else {
+        systemPromptForTurn += `\n\n${SPEAKER_HANDOFF_SUPPRESS_NOTE}`;
+      }
+    } else if (this.pendingVoiceLinkNote && this.voiceLinkedFromPhone) {
+      systemPromptForTurn += `\n\n${VOICE_LINKED_PHONE_NOTE}`;
+      this.pendingVoiceLinkNote = false;
     }
 
     // ── [CURRENT DATE & TIME] — appended LAST for prompt-cache stability ──────

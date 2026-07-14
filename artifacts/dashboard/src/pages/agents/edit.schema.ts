@@ -84,6 +84,7 @@ export const agentFormSchema = z.object({
     })).optional(),
   })).optional(),
   genderDetectionEnabled: z.boolean().optional(),
+  voiceMemoryEnabled: z.boolean().optional(),
   recordingEnabled: z.boolean().optional(),
   startSpeakingWaitSecs:          z.number().min(0).max(5).optional(),
   startSpeakingOnPunctuationSecs: z.number().min(0).max(3).optional(),

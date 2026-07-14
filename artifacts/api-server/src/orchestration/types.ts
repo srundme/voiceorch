@@ -334,6 +334,13 @@ export interface AgentConfig {
   genderDetectionFemaleSalutation: string;
   genderDetectionNeutralSalutation: string;
 
+  /**
+   * Voice Memory — remember the caller's voiceprint (ECAPA), detect mid-call
+   * handoffs (phone given to someone else), and link the same voice across
+   * different phone numbers. Opt-in; default OFF so existing agents are unchanged.
+   */
+  voiceMemoryEnabled: boolean;
+
   // P1-G: Engine — interruption & pacing
   wordsForInterruption: number;
   incrementalDelay: number;

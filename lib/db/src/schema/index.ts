@@ -9,6 +9,7 @@ export * from "./phone-numbers";
 export * from "./phone-number-orders";
 export * from "./webhook-endpoints";
 export * from "./callerProfiles";
+export * from "./callerVoiceprints";
 export * from "./scheduledCallbacks";
 export * from "./platform-settings";
 export * from "./campaigns";

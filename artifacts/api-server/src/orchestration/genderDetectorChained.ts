@@ -162,6 +162,19 @@ export class GenderDetectorChained {
       .finally(() => { this.detecting = false; });
   }
 
+  /**
+   * Unlock gender so a new speaker on the line can be re-detected.
+   * Clears locked state and buffers — used by Voice Memory on handoff.
+   */
+  resetForNewSpeaker(): void {
+    this.locked = false;
+    this.gender = null;
+    this.chunks = [];
+    this.accumulated = 0;
+    this.detecting = false;
+    this.log.info({ callId: this.callId, provider: "chained" }, "Gender detection reset for new speaker");
+  }
+
   /** Try each model in order; lock on the first result ≥ CONFIDENCE_THRESHOLD. */
   private async _detectChain(pcm: Buffer): Promise<void> {
     const wavBuf = buildWav(pcm);

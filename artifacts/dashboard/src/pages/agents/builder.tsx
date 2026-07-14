@@ -6,7 +6,7 @@ import {
   Save, MoreHorizontal, Trash2, Settings, FileText, Wrench,
   VoicemailIcon, SlidersHorizontal, TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
-  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square,
+  User2, Sparkles, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
   Play, Pause,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
@@ -1712,6 +1712,7 @@ function VoiceTab({ form }: { form: any }) {
 function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined }) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "tools" });
   const genderEnabled = form.watch("genderDetectionEnabled") ?? false;
+  const voiceMemoryEnabled = form.watch("voiceMemoryEnabled") ?? false;
   const recordingEnabled = form.watch("recordingEnabled") ?? true;
   const watchedTools  = (form.watch("tools") ?? []) as any[];
   const { toast } = useToast();
@@ -2183,6 +2184,42 @@ function ToolsTab({ form, agentId }: { form: any; agentId: number | undefined })
               <Switch
                 checked={genderEnabled}
                 onCheckedChange={(v) => form.setValue("genderDetectionEnabled", v, { shouldDirty: true })}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Voice Memory card */}
+        <div className={cn("rounded-xl border transition-all duration-150", voiceMemoryEnabled ? "border-border/70 bg-card/40" : "border-border/40 bg-card/20")}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { if (!e.nativeEvent.isTrusted) return; form.setValue("voiceMemoryEnabled", !voiceMemoryEnabled, { shouldDirty: true }); }}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); form.setValue("voiceMemoryEnabled", !voiceMemoryEnabled, { shouldDirty: true }); } }}
+            className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+          >
+            <div className="mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted/30">
+              <AudioLines className={cn("h-4 w-4", voiceMemoryEnabled ? "text-foreground/70" : "text-muted-foreground/35")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-foreground/80">Voice Memory</span>
+                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Beta</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+                Remembers the caller&apos;s voiceprint. Detects mid-call handoffs (phone given to someone else) and can link the same voice across different phone numbers. Phone-number memory stays primary.
+              </p>
+              {voiceMemoryEnabled && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-relaxed mt-1.5">
+                  Soft signal only — not identity verification. Requires the voice-analysis service. On handoff the agent asks who it&apos;s speaking with and stops using the previous person&apos;s name/salutation until confirmed.
+                </p>
+              )}
+            </div>
+            <div className="shrink-0 mt-1">
+              <Switch
+                checked={voiceMemoryEnabled}
+                onCheckedChange={(v) => form.setValue("voiceMemoryEnabled", v, { shouldDirty: true })}
                 onClick={e => e.stopPropagation()}
               />
             </div>
@@ -4869,7 +4906,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailAction: "hangup",
       voicemailMessage: "Hello, we tried to reach you. Please call us back at your earliest convenience. Thank you.",
       voicemailLeadInSeconds: 2,
-      tools: [], genderDetectionEnabled: false, recordingEnabled: true, languageAutoDetect: false,
+      tools: [], genderDetectionEnabled: false, voiceMemoryEnabled: false, recordingEnabled: true, languageAutoDetect: false,
       autoSwitchToEnglish: false,
       startSpeakingWaitSecs: 0, startSpeakingOnPunctuationSecs: 0.1,
       startSpeakingOnNoPunctuationSecs: 0.1, startSpeakingOnNumberSecs: 0,
@@ -4947,6 +4984,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       voicemailLeadInSeconds:   (agent as any).agentConfig?.voicemailLeadInSeconds ?? 2,
       tools:                    hydrateToolsForForm(agent.tools ?? []),
       genderDetectionEnabled:   (agent as any).agentConfig?.genderDetectionEnabled ?? false,
+      voiceMemoryEnabled:       (agent as any).agentConfig?.voiceMemoryEnabled ?? false,
       recordingEnabled:         (agent as any).agentConfig?.recordingEnabled ?? false,
       languageAutoDetect:       (agent as any).agentConfig?.languageAutoDetect ?? false,
       autoSwitchToEnglish:      (agent as any).agentConfig?.autoSwitchToEnglish ?? false,
