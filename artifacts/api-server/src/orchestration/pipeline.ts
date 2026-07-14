@@ -114,7 +114,7 @@ const CHUNK_SIZE_MULAW        = 160;    // 20ms @ 8kHz mulaw for paced batch pla
 const VAD_THRESHOLD           = 100;    // RMS threshold for speech detection
 const STREAM_ACCUM_BYTES      = 640;    // 20ms of 16kHz PCM before forwarding a TTS stream chunk
 const HANDOFF_SILENCE_MS      = 3000;   // sustained silence that may indicate a phone handoff
-const FILLER_THRESHOLD_MS     = 600;    // play a filler phrase if LLM has not returned a first
+const FILLER_THRESHOLD_MS     = 350;    // play a filler phrase if LLM has not returned a first
                                         // token within this window (and backchannel didn't fire)
 const DEAD_AIR_FILLER_CANCEL_MS = 500; // skip dead-air filler playback if LLM first token
                                         // arrives within this window after filler was enqueued
@@ -1918,7 +1918,9 @@ export class OrchestrationPipeline {
                   && this.streamingBargeInWordCount > threshold
                   && charCount >= minChars
                 ) {
-                  this.triggerBargeIn("word_count_interim", text, { speculative: false });
+                  // Path A: launch speculative LLM from substantive barge partial
+                  // (energy-only barge stays non-speculative — see energy path).
+                  this.triggerBargeIn("word_count_interim", text, { speculative: true });
                   logger.info(
                     {
                       callId: this.config.callId,
@@ -2110,7 +2112,7 @@ export class OrchestrationPipeline {
           ? planNumWords
           : this.interruptionMgr.getWordsForInterruption();
         if (this.streamingBargeInWordCount > threshold) {
-          this.triggerBargeIn("word_count", transcript, { speculative: false });
+          this.triggerBargeIn("word_count", transcript, { speculative: true });
           logger.info(
             { callId: this.config.callId, words: this.streamingBargeInWordCount, threshold },
             "Barge-in detected (streaming STT)",
@@ -6096,7 +6098,7 @@ export class OrchestrationPipeline {
                 backchannelingEnabled: this.agent.backchannelingEnabled,
                 fillerListLength: pool.length,
               },
-              "Dead-air filler skipped — no filler set for language (LLM > 800 ms)",
+              "Dead-air filler skipped — no filler set for language (LLM > filler threshold)",
             );
             return;
           }
@@ -6110,7 +6112,7 @@ export class OrchestrationPipeline {
               selectedFiller: phrase,
               ttsText: phrase,
             },
-            "Dead-air filler enqueued (language-aware, LLM > 800 ms)",
+            "Dead-air filler enqueued (language-aware, LLM > filler threshold)",
           );
           enqueue(phrase, FILLER_SEQUENCE_ID);
           this.lastFillerPhrase = phrase;

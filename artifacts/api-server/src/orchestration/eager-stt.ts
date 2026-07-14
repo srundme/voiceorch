@@ -7,14 +7,21 @@
 
 import { envInt } from "./utils.js";
 
-export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 250, 50);
+/** Stable-partial timer before launching eager LLM (Path A Bolna-feel: 180ms). */
+export const EAGER_PARTIAL_STABLE_MS = envInt("EAGER_PARTIAL_STABLE_MS", 180, 50);
+
+/** Trailing-char tolerance when final extends a speculative partial. */
+const SPECULATIVE_TRAIL_CHARS = 24;
+
+const SHORT_ACK_RE =
+  /^(yes|no|ok|okay|sure|சரி|சரிங்க|ஆம்|ஆமா|हाँ|हां|haan|okay\s+sir|ok\s+sir)$/iu;
 
 /** If the speculative partial is close enough to the final transcript, reuse it. */
 export function isSpeculativeHit(partial: string, final: string): boolean {
   const p = partial.trim().toLowerCase();
   const f = final.trim().toLowerCase();
   if (p === f) return true;
-  if (f.startsWith(p) && f.length - p.length <= 15) return true;
+  if (f.startsWith(p) && f.length - p.length <= SPECULATIVE_TRAIL_CHARS) return true;
   const pWords = p.split(/\s+/).filter(Boolean);
   if (pWords.length === 0) return false;
   const fWordSet = new Set(f.split(/\s+/).filter(Boolean));
@@ -32,8 +39,12 @@ export function isEagerCommitReady(partial: string, opts?: { speechEnd?: boolean
   if (/[.?!।]$/.test(t)) return true;
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length >= 3) return true;
-  if (words.length === 1 && /^(yes|no|ok|okay|sure|சரி|ஆம்|हाँ|हां)$/iu.test(words[0]!)) return true;
+  // Indic / Hinglish short acks (incl. "okay sir", "ஆமா", "சரிங்க")
+  if (SHORT_ACK_RE.test(t)) return true;
+  // Two-word Indic replies ("எங்க எங்க", "Okay sir") — Path A Bolna-feel
+  if (words.length >= 2 && t.length >= 8) return true;
   if (opts?.speechEnd) {
+    if (SHORT_ACK_RE.test(t)) return true;
     if (words.length >= 1 && t.length >= 4) return true;
     if (t.length >= 8) return true;
   }

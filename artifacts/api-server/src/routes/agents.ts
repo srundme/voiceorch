@@ -196,7 +196,7 @@ router.post("/agents", requireAuth, async (req, res): Promise<void> => {
   if (insertAgentConfig["asrEndpointingSilenceMs"] == null) {
     insertAgentConfig["asrEndpointingSilenceMs"] = engineDefaults["asrEndpointingSilenceMs"];
   }
-  if (insertAgentConfig["ttsMinSentenceChars"] == null) insertAgentConfig["ttsMinSentenceChars"] = 25;
+  if (insertAgentConfig["ttsMinSentenceChars"] == null) insertAgentConfig["ttsMinSentenceChars"] = 18;
   if (insertAgentConfig["incrementalDelay"] == null) {
     insertAgentConfig["incrementalDelay"] = engineDefaults["incrementalDelay"];
   }

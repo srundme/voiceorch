@@ -9,10 +9,18 @@ describe("isEagerCommitReady", () => {
   it("accepts short affirmations", () => {
     expect(isEagerCommitReady("okay")).toBe(true);
     expect(isEagerCommitReady("சரி")).toBe(true);
+    expect(isEagerCommitReady("ஆமா")).toBe(true);
+    expect(isEagerCommitReady("சரிங்க")).toBe(true);
+    expect(isEagerCommitReady("okay sir")).toBe(true);
   });
 
   it("rejects very short dangling partial without speechEnd", () => {
     expect(isEagerCommitReady("I want")).toBe(false);
+  });
+
+  it("accepts two-word Indic/Hinglish of length >= 8 without speechEnd", () => {
+    expect(isEagerCommitReady("Okay sir")).toBe(true);
+    expect(isEagerCommitReady("எங்க சார்")).toBe(true);
   });
 
   it("accepts longer partials even without speechEnd", () => {
@@ -22,6 +30,7 @@ describe("isEagerCommitReady", () => {
   it("relaxes for speechEnd (Sarvam VAD committed)", () => {
     expect(isEagerCommitReady("I want to know how", { speechEnd: true })).toBe(true);
     expect(isEagerCommitReady("premium budget", { speechEnd: true })).toBe(true);
+    expect(isEagerCommitReady("ஆமா", { speechEnd: true })).toBe(true);
   });
 });
 
@@ -30,9 +39,15 @@ describe("isSpeculativeHit", () => {
     expect(isSpeculativeHit("I want to know how", "I want to know how")).toBe(true);
   });
 
-  it("matches when final extends partial slightly", () => {
+  it("matches when final extends partial within 24 trailing chars", () => {
     expect(
       isSpeculativeHit("I want to know how", "I want to know how I can benefit."),
+    ).toBe(true);
+    expect(
+      isSpeculativeHit(
+        "நான் demo வரதுக்கு",
+        "நான் demo வரதுக்கு முன்னாடி என்ன விஷயம்",
+      ),
     ).toBe(true);
   });
 

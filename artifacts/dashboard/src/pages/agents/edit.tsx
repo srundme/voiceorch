@@ -138,9 +138,9 @@ export function buildUpdateAgentPayload(data: AgentFormValues) {
   if (kbBakedOnly) agentConfig["kbBakedOnly"] = true;
   if (ttsSpeed != null && ttsSpeed !== 1) agentConfig["ttsSpeed"] = ttsSpeed;
   if (llmMaxTokens != null) agentConfig["llmMaxTokens"] = llmMaxTokens;
-  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 15) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
+  if (ttsMinSentenceChars != null && ttsMinSentenceChars !== 18) agentConfig["ttsMinSentenceChars"] = ttsMinSentenceChars;
   {
-    const linear = clampLinearDelayMs(linearDelayMs ?? 400);
+    const linear = clampLinearDelayMs(linearDelayMs ?? 350);
     if (linear > 0) agentConfig["incrementalDelay"] = linear;
   }
   agentConfig["autoRedial"] = {
@@ -391,9 +391,9 @@ export default function AgentEdit() {
       stagedPromptCoreIdentity: "",
       asrEndpointingSilenceMs: 300,
       llmMaxTokens: null,
-      ttsMinSentenceChars: 15,
+      ttsMinSentenceChars: 18,
       ttsSpeed: 1,
-      linearDelayMs: 400,
+      linearDelayMs: 350,
       kbBakedOnly: false,
       startSpeakingWaitSecs: 0,
       startSpeakingOnPunctuationSecs: 0.1,
@@ -621,7 +621,7 @@ export default function AgentEdit() {
       stagedPromptCoreIdentity: (agent as any).stagedPromptCoreIdentity ?? "",
       asrEndpointingSilenceMs: clampEndpointingMs((agent as any).agentConfig?.asrEndpointingSilenceMs as number | undefined),
       llmMaxTokens: ((agent as any).agentConfig?.llmMaxTokens as number | null | undefined) ?? null,
-      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 15,
+      ttsMinSentenceChars: ((agent as any).agentConfig?.ttsMinSentenceChars as number | undefined) ?? 18,
       linearDelayMs: clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay as number | undefined),
       kbBakedOnly: ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       startSpeakingWaitSecs:            ((agent as any).agentConfig?.startSpeakingPlan?.waitSeconds as number | undefined)            ?? 0,
@@ -1378,11 +1378,11 @@ export default function AgentEdit() {
                     <FormLabel>TTS Early Dispatch Threshold (chars)</FormLabel>
                     <FormControl>
                       <Input type="number" min={5} max={200} step={5}
-                        value={field.value ?? 15}
+                        value={field.value ?? 18}
                         onChange={e => field.onChange(parseInt(e.target.value, 10))} />
                     </FormControl>
                     <FormDescription className="text-[11px]">
-                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 15. Range: 5–200.
+                      Min chars before a comma-clause triggers an early TTS request mid-LLM-stream. <strong>Lower = TTS fires earlier.</strong> Default: 18 (voice). Range: 5–200.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

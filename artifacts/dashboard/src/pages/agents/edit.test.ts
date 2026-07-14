@@ -168,7 +168,7 @@ describe("buildUpdateAgentPayload", () => {
       ...BASE,
       maxDuration: 480,
       asrEndpointingSilenceMs: 150,
-      ttsMinSentenceChars: 25,
+      ttsMinSentenceChars: 30,
       linearDelayMs: 50,
       llmMaxTokens: 160,
       startSpeakingWaitSecs: 0,
@@ -194,7 +194,7 @@ describe("buildUpdateAgentPayload", () => {
     expect((payload as any).maxDuration).toBe(480);
     const cfg = payload.agentConfig as any;
     expect(cfg?.asrEndpointingSilenceMs).toBe(150);
-    expect(cfg?.ttsMinSentenceChars).toBe(25);
+    expect(cfg?.ttsMinSentenceChars).toBe(30);
     expect(cfg?.incrementalDelay).toBe(50);
     expect(cfg?.llmMaxTokens).toBe(160);
     expect(cfg?.bargeInEnergyThreshold).toBe(800);

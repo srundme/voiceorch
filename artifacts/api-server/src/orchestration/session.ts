@@ -545,7 +545,7 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Latency tuning
     asrEndpointingSilenceMs: (agentCfg["asrEndpointingSilenceMs"] as number | undefined) ?? 250,
     llmMaxTokens: (agentCfg["llmMaxTokens"] as number | null | undefined) ?? null,
-    ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 15,
+    ttsMinSentenceChars: (agentCfg["ttsMinSentenceChars"] as number | undefined) ?? 18,
     sarvamSttMode: (agent.asrProvider ?? "").toLowerCase() === "sarvam"
       ? resolveSarvamSttMode(
           agent.asrLanguage || agent.language || "en-IN",

@@ -1409,7 +1409,7 @@ router.post("/agents/vibe-chat", requireAuth, async (req, res): Promise<void> =>
         // NEW agents get Bolna Call Engine safe defaults (same as POST /agents).
         const tunedAdvancedDefaults: Record<string, unknown> = {
           ...callEngineInsertDefaults(),
-          ttsMinSentenceChars:     25,
+          ttsMinSentenceChars:     18,
           llmMaxTokens:            150,
           startSpeakingPlan:       { waitSeconds: 0, onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.1, onNumberSeconds: 0 },
           autoRedial:              { enabled: true, maxAttempts: 3 },

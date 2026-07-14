@@ -2528,7 +2528,7 @@ function AdvancedTab({ form, agent }: { form: any; agent?: any }) {
   const [irdaiConfirmOpen, setIrdaiConfirmOpen] = useState(false);
   const bargeIn = form.watch("bargeInEnabled");
   const endpointMs = form.watch("asrEndpointingSilenceMs") ?? 300;
-  const linearMs = form.watch("linearDelayMs") ?? 400;
+  const linearMs = form.watch("linearDelayMs") ?? 350;
   const interruptWords = form.watch("stopSpeakingNumWords") ?? 3;
 
   const activePreset: CallEnginePreset | "custom" = (() => {
@@ -4892,9 +4892,9 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       preferredManagedNumber: null,
       asrEndpointingSilenceMs: 300,
       llmMaxTokens: 160,
-      ttsMinSentenceChars: 25,
+      ttsMinSentenceChars: 18,
       ttsSpeed: 1,
-      linearDelayMs: 400,
+      linearDelayMs: 350,
       kbBakedOnly: false,
       autoRedialEnabled: true,
       autoRedialMaxAttempts: 3,
@@ -4992,7 +4992,7 @@ function AgentEditorPanel({ agentId }: { agentId: number }) {
       llmMaxTokens:                    (agent as any).agentConfig?.llmMaxTokens ?? null,
       ttsMinSentenceChars:             (agent as any).agentConfig?.ttsMinSentenceChars ?? 15,
       ttsSpeed:                        (agent as any).agentConfig?.ttsSpeed ?? 1,
-      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 400),
+      linearDelayMs:                   clampLinearDelayMs((agent as any).agentConfig?.incrementalDelay ?? 350),
       kbBakedOnly:                     ((agent as any).agentConfig?.kbBakedOnly as boolean | undefined) ?? false,
       autoRedialEnabled:      (agent as any).agentConfig?.autoRedial?.enabled ?? false,
       autoRedialMaxAttempts:  (agent as any).agentConfig?.autoRedial?.maxAttempts  ?? 3,
