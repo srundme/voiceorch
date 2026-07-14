@@ -2571,6 +2571,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   existing:          session.callerProfileSnapshot,
                   callId:            session.callId,
                   wasDropped,
+                  durationSeconds,
                   callerNameInCall:  session.callerNameLatchedThisCall,
                   callerNameLatchTier: session.callerNameLatchTier,
                   personaHash:       session.personaHash ?? undefined,
@@ -2588,7 +2589,7 @@ export async function endSession(sessionId: string, reason?: string): Promise<vo
                   // wasDropped = call ended without naturalEndTriggered (user hung up
                   // mid-conversation) — memory is STILL saved; only callback-request
                   // detection is skipped for short/dropped calls.
-                  metadata: { updated: true, wasDropped, callbackDetectionSkipped: wasDropped },
+                  metadata: { updated: true, wasDropped, callbackDetectionSkipped: wasDropped, durationSeconds },
                 });
                 if (!wasDropped) {
                   await detectCallbackRequest({

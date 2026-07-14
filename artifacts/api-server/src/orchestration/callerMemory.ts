@@ -47,6 +47,19 @@ import { createHash } from "node:crypto";
 import type { ConversationTurn } from "./types.js";
 import type { createLLMAdapter } from "./adapters/llm/index.js";
 import { logger } from "../lib/logger.js";
+import {
+  DURABLE_FACT_LABELS,
+  durableFactsPromptBlock,
+  isDurableFactKey,
+  normalizeDurableFact,
+} from "./callerMemory-durable-facts.js";
+
+export {
+  DURABLE_FACT_KEYS,
+  canonicalizeFactKey,
+  isDurableFactKey,
+  normalizeDurableFact,
+} from "./callerMemory-durable-facts.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +124,25 @@ export interface CallerContext {
 // agent is repurposed (e.g. real-estate → insurance) so stale intent/facts are
 // not reused. Never shown to the LLM — filtered out of the facts list on load.
 export const PERSONA_HASH_FACT_KEY = "__agent_persona_hash";
+
+/** Keep only caller/agent speech — tool JSON must never feed extraction or L2 archive. */
+export function speakerTurns(history: ConversationTurn[]): ConversationTurn[] {
+  return history.filter((t) => {
+    if (t.role !== "user" && t.role !== "assistant") return false;
+    const text = (t.content ?? "").trim();
+    if (!text) return false;
+    // Inline tool echoes sometimes land as assistant content
+    if (/^\[Tool (?:result|call)/i.test(text)) return false;
+    if (t.role === "assistant" && t.toolCalls && t.toolCalls.length > 0 && !text) return false;
+    return true;
+  });
+}
+
+export function formatSpeakerTranscript(history: ConversationTurn[]): string {
+  return speakerTurns(history)
+    .map((t) => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`)
+    .join("\n");
+}
 
 // BCP-47 → plain-name value stored in the language_pref fact. Reverse of the
 // LANG_PREF_TO_BCP47 map session.ts uses at call start to seed the STT/agent
@@ -485,6 +517,12 @@ export function injectEnhancedMemory(
     lines.push(`Previous call summary: ${latestSummary.trim()}`);
   }
 
+  // Predicted next-call intent (profile only today — now actually used live).
+  if (!suppressDomain && profile?.predictedIntent?.trim()) {
+    lines.push("");
+    lines.push(`Likely reason for this call: ${profile.predictedIntent.trim()}`);
+  }
+
   // ── L0: current (non-superseded) structured facts ─────────────────────────
   // These are the details already known about the caller — the agent must
   // rely on them instead of re-asking questions the caller already answered.
@@ -500,15 +538,19 @@ export function injectEnhancedMemory(
     // memory captured during earlier detection-ON calls. The fact stays in the
     // DB and becomes visible again if the toggle is turned back ON.
     if (opts?.suppressGenderFact && f.key === "gender") return false;
+    // Soft/legacy keys from older open-vocab extracts stay in DB but are not
+    // injected — only durable identity facts shape the live prompt.
+    if (!isDurableFactKey(f.key)) return false;
     return true;
   });
   if (displayFacts.length > 0) {
     lines.push("");
-    lines.push("KNOWN DETAILS ABOUT THIS CALLER:");
+    lines.push("KNOWN DETAILS ABOUT THIS CALLER (stable identity — do not re-ask):");
     for (const f of displayFacts) {
       const ageDays = Math.floor((now - f.createdAt.getTime()) / 86_400_000);
       const staleTag = ageDays > STALE_DAYS ? "  ⚠️ STALE — re-verify with the caller before relying on this" : "";
-      lines.push(`• ${f.key}: ${f.value}${staleTag}`);
+      const label = isDurableFactKey(f.key) ? DURABLE_FACT_LABELS[f.key] : f.key;
+      lines.push(`• ${label}: ${f.value}${staleTag}`);
     }
   }
 
@@ -744,8 +786,9 @@ async function runLLMExtraction(opts: {
 }): Promise<ExtractedLLMResult> {
   const { llm, transcript, priorContext, priorFacts } = opts;
 
-  const priorFactsStr = priorFacts.length > 0
-    ? `\nPreviously known facts:\n${priorFacts.map(f => `  ${f.key}: ${f.value}`).join("\n")}\n`
+  const durablePrior = priorFacts.filter((f) => isDurableFactKey(f.key));
+  const priorFactsStr = durablePrior.length > 0
+    ? `\nAlready known durable facts (update only if the caller stated a clear change):\n${durablePrior.map(f => `  ${f.key}: ${f.value}`).join("\n")}\n`
     : "";
 
   let raw = "";
@@ -757,14 +800,14 @@ async function runLLMExtraction(opts: {
         `Analyze this call transcript and extract:\n` +
         `1. A concise 1-3 sentence summary of what was discussed (merge with any prior context above)\n` +
         `2. The caller's emotional sentiment for THIS call\n` +
-        `3. Key facts about the caller — ONLY things they explicitly stated\n\n` +
+        `3. DURABLE identity facts about the caller (see rules below)\n\n` +
         `Return ONLY valid JSON with exactly these fields:\n` +
         `{\n` +
         `  "name": "caller's first name if stated, otherwise null",\n` +
         `  "summary": "1-3 sentence summary",\n` +
         `  "sentiment": "one of: positive | neutral | negative | frustrated | resolved",\n` +
         `  "facts": [\n` +
-        `    { "key": "snake_case_key", "value": "the value", "confidence": 0.0-1.0 }\n` +
+        `    { "key": "allowed_durable_key", "value": "the value", "confidence": 0.0-1.0 }\n` +
         `  ]\n` +
         `}\n\n` +
         `Sentiment guide:\n` +
@@ -773,25 +816,10 @@ async function runLLMExtraction(opts: {
         `- negative: caller was unhappy or expressed dissatisfaction\n` +
         `- frustrated: caller was noticeably irritated or escalating\n` +
         `- resolved: caller was frustrated but issue was resolved by end of call\n\n` +
-        `For fact keys: use concise snake_case strings that describe what was explicitly stated.\n` +
-        `Name the key after the actual topic discussed — do NOT impose domain-specific labels.\n` +
-        `Good examples: name, age, gender, location, occupation, budget_range, language_pref,\n` +
-        `timeline, property_type, interested_in, vehicle_type, company_name, email,\n` +
-        `preferred_contact_method, concerns, follow_up_needed.\n` +
-        `Avoid forcing insurance labels (policy_interest, existing_policies, medications)\n` +
-        `unless the caller explicitly discussed insurance or health.\n\n` +
-        `Rules:\n` +
-        `- Only include facts the caller EXPLICITLY stated — never infer or assume\n` +
-        `- confidence: 0.9+ = directly stated, 0.7-0.9 = clearly implied, below 0.7 = skip\n` +
-        `- Return empty array for facts if nothing was clearly stated\n` +
-        `- Be concise with values (e.g. "4" not "a family of four people")\n` +
-        `- The "name" field is ONLY for the caller's own personal/human name. Never put a\n` +
-        `  plan tier, product, package, price, or topic of discussion in "name" — if the\n` +
-        `  caller never stated their personal name, "name" MUST be null. Example: if the\n` +
-        `  caller says "I want the managed plan", that is NOT a name — return name: null.\n\n` +
-        `Transcript:\n${transcript.slice(0, 8000)}`,
+        `${durableFactsPromptBlock()}\n\n` +
+        `Transcript (Caller / Agent speech only):\n${transcript.slice(0, 8000)}`,
     }],
-    "You extract caller profile information from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), 'sentiment' (string), and 'facts' (array of {key,value,confidence}). Be conservative and factual.",
+    "You extract DURABLE caller identity facts from voice call transcripts. Return only a JSON object with 'name' (string|null), 'summary' (string), 'sentiment' (string), and 'facts' (array of {key,value,confidence}). Never invent. Never store ephemeral sales intent as facts.",
     () => {},
     (full) => { raw = full; },
   );
@@ -996,7 +1024,8 @@ export async function updateCallerProfile(opts: {
 
   const now      = new Date();
   const newCount = (existing?.callCount ?? 0) + 1;
-  const transcript = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
+  const speechHistory = speakerTurns(history);
+  const transcript = formatSpeakerTranscript(history);
 
   // ── Phase 1: counter update (always runs, same as before) ─────────────────
   // Persist the caller's preferred language (last language spoken this call)
@@ -1057,10 +1086,16 @@ export async function updateCallerProfile(opts: {
     }
   }
 
-  if (history.length < 2) return;
+  if (speechHistory.length < 2) {
+    logger.info(
+      { agentId, phoneNumber, callId, historyLen: history.length, speechLen: speechHistory.length },
+      "Caller memory: skipped archive/extraction — not enough speaker turns after filtering tools",
+    );
+    return;
+  }
 
   // ── Phase 2: archive episode (L1) + sentences (L2) ────────────────────────
-  const parsedSentences = history.map(t => ({
+  const parsedSentences = speechHistory.map(t => ({
     speaker: (t.role === "user" ? "caller" : "agent") as "caller" | "agent",
     text:    t.content,
   }));
@@ -1198,38 +1233,65 @@ export async function updateCallerProfile(opts: {
     extracted.name = null;
   }
 
-  // ── Phase 3a: save L0 facts with supersession + fact_sources provenance ───
+  // ── Phase 3a: save L0 durable facts with supersession + provenance ────────
   // Promote the top-level `name` field into the facts array so it gets
   // stored in caller_facts and shows up in the UI Facts count.
   const nameFact = extracted.name?.trim()
     ? [{ key: "name", value: extracted.name.trim(), confidence: 0.95 }]
     : [];
 
-  const validFacts = [...nameFact, ...(extracted.facts ?? [])].filter(
-    f => f.key && f.value && typeof f.confidence === "number" && f.confidence >= 0.7,
-  );
+  const droppedKeys: string[] = [];
+  const validFacts = [...nameFact, ...(extracted.facts ?? [])]
+    .map((f) => {
+      const normalized = normalizeDurableFact({
+        key: f.key,
+        value: f.value,
+        confidence: typeof f.confidence === "number" ? f.confidence : 0,
+      });
+      if (!normalized) {
+        if (f.key) droppedKeys.push(String(f.key));
+        return null;
+      }
+      return normalized;
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
+
+  // Deduplicate by canonical key (last wins — later usually higher trust / fresher)
+  const byKey = new Map<string, (typeof validFacts)[number]>();
+  for (const f of validFacts) byKey.set(f.key, f);
+  const uniqueFacts = [...byKey.values()];
 
   const newFactIds: number[] = [];
-  for (const f of validFacts) {
-    const normKey = f.key.toLowerCase().replace(/\s+/g, "_").slice(0, 64);
+  for (const f of uniqueFacts) {
     // The explicitly-requested language (written above) is ground truth this
     // call — don't let LLM inference from the transcript overwrite it.
-    if (explicitLangPref && normKey === "language_pref") continue;
+    if (explicitLangPref && f.key === "language_pref") continue;
     const factId = await supersedeFact({
       agentId,
       phoneNumber,
-      key:               normKey,
-      value:             String(f.value),
+      key:               f.key,
+      value:             f.value,
       confidence:        f.confidence,
       sourceCallId:      callId,
-      sourceSentenceIds: sentenceIds,  // fact_sources: all sentences in this episode
+      sourceSentenceIds: sentenceIds,
     });
     if (factId !== null) newFactIds.push(factId);
   }
 
-  if (newFactIds.length > 0) {
-    logger.info({ agentId, phoneNumber, callId, factCount: newFactIds.length }, "Caller facts saved (with supersession)");
-  }
+  logger.info(
+    {
+      agentId,
+      phoneNumber,
+      callId,
+      savedFactKeys: uniqueFacts.map((f) => f.key),
+      savedFactCount: newFactIds.length,
+      droppedKeys: [...new Set(droppedKeys)].slice(0, 20),
+      sentiment: extracted.sentiment ?? null,
+      hasName: !!extracted.name,
+      hasSummary: !!extracted.summary,
+    },
+    "Caller memory: durable fact extraction complete",
+  );
 
   // ── Phase 3b: update episode summary + sentiment + insight_facts edges ───
   if (archiveId) {
@@ -1528,16 +1590,7 @@ function isPlausibleOccupation(candidate: string): boolean {
   return true;
 }
 
-// Sanity bound for a stated budget: reject 0 (nothing stated) and anything
-// with more digits than a realistic budget figure would have — long digit
-// runs at this position are far more likely to be a misheard phone number,
-// order ID, or OTP that happened to follow the anchor phrase.
-function isPlausibleBudget(candidate: string): boolean {
-  const n = Number(candidate);
-  if (!Number.isFinite(n) || n <= 0) return false;
-  if (candidate.replace(/\D/g, "").length > 9) return false;
-  return true;
-}
+// Sanity bound for a stated budget: removed — budget is ephemeral, not durable.
 
 const FACT_PATTERNS: FactPattern[] = [
   {
@@ -1588,21 +1641,6 @@ const FACT_PATTERNS: FactPattern[] = [
     extract: m => m[1]!.trim(),
     confidence: 0.8,
     isPlausible: isPlausibleOccupation,
-  },
-  {
-    key: "budget_range",
-    // Deliberately anchored to phrases where the CALLER is stating their own
-    // budget ("my budget is...", "I can afford..."). A bare currency mention
-    // (e.g. the caller repeating back a price the agent just quoted, "Rs 500?
-    // okay") is NOT evidence of a budget and must not be latched — removed
-    // the old unanchored `/₹?\d+/` pattern that matched any number mention.
-    patterns: [
-      /\bbudget (?:of |is |around )?(?:₹|rs\.?|inr)?\s?(\d[\d,]*)\b/i,
-      /\bcan (?:spend|afford|pay) (?:up to |around |about )?(?:₹|rs\.?|inr)?\s?(\d[\d,]*)\b/i,
-    ],
-    extract: m => m[1]!.replace(/,/g, ""),
-    confidence: 0.85,
-    isPlausible: isPlausibleBudget,
   },
 ];
 
@@ -1674,7 +1712,8 @@ export async function detectCallbackRequest(opts: {
 
   if (history.length < 2) return;
 
-  const transcript = history.map(t => `${t.role === "user" ? "Caller" : "Agent"}: ${t.content}`).join("\n");
+  const transcript = formatSpeakerTranscript(history);
+  if (!transcript.trim()) return;
 
   let raw = "";
   await llm.chat(
