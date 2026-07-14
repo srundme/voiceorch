@@ -46,7 +46,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment, isCallerAudioDifficulty, isFalseInterruptionScrap } from "./transcriptQuality.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -878,6 +878,8 @@ export class OrchestrationPipeline {
   private voiceHandoffActive = false;
   private voiceLinkedFromPhone: string | null = null;
   private pendingVoiceLinkNote = false;
+  /** Caller said they cannot hear the agent — next LLM turn must resume, not ask கேக்குதா. */
+  private pendingAudioDifficultyNote = false;
 
   // Tracks the current call language for per-turn LLM language injection.
   // Seeded from the agent's primary language at construction so turn 1 already
@@ -2119,6 +2121,36 @@ export class OrchestrationPipeline {
       this.clearFragmentCoalesce();
     }
 
+    // Bolna parity: ignore false-interruption scraps after energy barge-in so we
+    // don't start an LLM turn on "சொல்லுங்க" / half-cuts that only appeared because
+    // TTS was cut mid-sentence. Accidental short finals while the agent was speaking
+    // are dropped in Bolna (`≤ number_of_words_for_interruption` ⇒ continue loop).
+    {
+      const wordsThreshold = this.interruptionMgr.getWordsForInterruption();
+      if (
+        (this._lastTurnWasBargedIn || this.bargeInRequested)
+        && !isSemanticInterrupt(transcript)
+        && isFalseInterruptionScrap(transcript, wordsThreshold)
+      ) {
+        logger.info(
+          { callId: this.config.callId, transcript: transcript.slice(0, 80), wordsThreshold },
+          "Bolna-style false interruption — ignoring scrap transcript",
+        );
+        this.prepareSystemPlayback();
+        // Keep _lastTurnWasBargedIn so a follow-up scrap still skips the LLM.
+        this.streamingBargeInWordCount = 0;
+        this.safetyNet.onFinal();
+        this.clearEagerPartialTimer();
+        this.interruptionMgr.onUserSpeechEnd();
+        if (!this.closed) this.safetyNet.beginListening();
+        return;
+      }
+    }
+
+    if (isCallerAudioDifficulty(transcript)) {
+      this.pendingAudioDifficultyNote = true;
+    }
+
     // Accepted as a real turn — clear the safety timers now (deferred from the STT
     // callback so the discarded/echo transcripts above can't suppress the stall).
     this.safetyNet.onFinal();
@@ -2575,6 +2607,11 @@ export class OrchestrationPipeline {
       // Only after the greeting is delivered (armed) so we sample the caller's intro,
       // not the greeting echo or stray pre-greeting audio.
       if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
+      // Never enroll/verify on TTS echo (carrier has no AEC) — pause during agent
+      // speech + post-playback echo grace so Voice Memory only sees the caller.
+      this.speakerVerifier?.setSamplingPaused(
+        this.isPlaying || this.isSendingTtsAudio || Date.now() < this.bargeInHoldUntil,
+      );
       this.speakerVerifier?.addSpeechChunk(pcm8k);
 
       // ── Input-level self-echo gate (Live Call / carrier path only) ─────────────
@@ -2629,6 +2666,9 @@ export class OrchestrationPipeline {
     // Feed all frames to the gender detector (fires async once after 2 s of audio, then no-ops).
     // Gated on armed so detection samples the caller's intro turn, not the greeting.
     if (this.genderDetectionArmed) this.genderDetector?.addSpeechChunk(pcm8k);
+    this.speakerVerifier?.setSamplingPaused(
+      this.isPlaying || this.isSendingTtsAudio || Date.now() < this.bargeInHoldUntil,
+    );
     this.speakerVerifier?.addSpeechChunk(pcm8k);
 
     // Batch STT path with local VAD + barge-in detection
@@ -5519,13 +5559,31 @@ export class OrchestrationPipeline {
           `[INTERRUPTED — DO NOT RESTART] Your previous reply was cut mid-delivery. ` +
           `The caller already heard (possibly partial): "${heard}". ` +
           `Do NOT restart recording consent, greeting, self-intro, welcome, or sales pitch from the top. ` +
-          `Continue from the interrupted step, OR ask ONE short clarifying question about what they just said.`;
+          `Continue from the interrupted step, OR ask ONE short clarifying question about what they just said. ` +
+          `Never ask "can you hear me" / "கேக்குதா" unless the caller explicitly said nothing at all.`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: `${lastTurn.content}\n\n${hint}` },
         ];
       }
       this._interruptionHint = null;
+    }
+
+    // Caller reported they cannot hear the agent (usually because TTS was cut).
+    // Resume the unfinished point — do NOT enter a hearing-check loop.
+    if (this.pendingAudioDifficultyNote && historyForLlm.length > 0) {
+      const lastTurn = historyForLlm[historyForLlm.length - 1]!;
+      if (lastTurn.role === "user") {
+        const resume =
+          `[AUDIO FEEDBACK] The caller says they cannot hear you clearly (your line was likely cut). ` +
+          `Do NOT ask "can you hear me?", "கேக்குதா?", or any hearing check. ` +
+          `Immediately restate the ONE unfinished point in a short, clear sentence, then STOP and wait.`;
+        historyForLlm = [
+          ...historyForLlm.slice(0, -1),
+          { ...lastTurn, content: `${lastTurn.content}\n\n${resume}` },
+        ];
+      }
+      this.pendingAudioDifficultyNote = false;
     }
 
     // Layer 4: Staged Prompt — override system prompt with active stage block

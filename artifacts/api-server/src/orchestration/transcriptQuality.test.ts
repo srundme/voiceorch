@@ -5,6 +5,8 @@ import {
   isLikelyIncompleteEnglishFragment,
   shouldHoldFragmentForCoalesce,
   isUltraShortNoiseFragment,
+  isCallerAudioDifficulty,
+  isFalseInterruptionScrap,
 } from "./transcriptQuality.js";
 
 describe("checkTranscriptQuality", () => {
@@ -84,5 +86,27 @@ describe("isUltraShortNoiseFragment", () => {
     expect(isUltraShortNoiseFragment("சரி")).toBe(false);
     expect(isUltraShortNoiseFragment("ஆ Madam பேசலாம் சொல்லுங்க.")).toBe(false);
     expect(isUltraShortNoiseFragment("இல்ல Madam இப்பதான் தெரிஞ்சிருக்கு.")).toBe(false);
+  });
+});
+
+describe("isCallerAudioDifficulty", () => {
+  it("detects English and Tamil cannot-hear phrases", () => {
+    expect(isCallerAudioDifficulty("I can't hear you")).toBe(true);
+    expect(isCallerAudioDifficulty("கேக்கல")).toBe(true);
+    expect(isCallerAudioDifficulty("hello madam")).toBe(false);
+  });
+});
+
+describe("isFalseInterruptionScrap", () => {
+  it("drops Bolna-style short scraps at or under the word threshold", () => {
+    expect(isFalseInterruptionScrap("சொல்லுங்க", 3)).toBe(true);
+    expect(isFalseInterruptionScrap("call பண்ண", 3)).toBe(true);
+    expect(isFalseInterruptionScrap("wait wait wait wait", 3)).toBe(false);
+  });
+
+  it("keeps real acks and audio-difficulty reports", () => {
+    expect(isFalseInterruptionScrap("okay", 3)).toBe(false);
+    expect(isFalseInterruptionScrap("சரி", 3)).toBe(false);
+    expect(isFalseInterruptionScrap("கேக்கல", 3)).toBe(false);
   });
 });

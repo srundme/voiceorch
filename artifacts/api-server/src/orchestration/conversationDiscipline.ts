@@ -28,7 +28,8 @@ export const CONVERSATION_DISCIPLINE_BLOCK =
 - FOLLOW THE ORDER: Move through the flow in the exact order it is written. Never skip ahead, never jump to the closing, never end the call early. Progress naturally from the opening through each step to the closure, one turn per step.
 - ANSWER QUESTIONS FIRST: If the caller asks a question, you MUST answer it directly and completely FIRST — use the knowledge/context provided to give a real answer. Never brush a question off, never reply with only a filler like "okay" and move on, never continue the script as if the question was not asked. Only AFTER answering, resume from the exact point in the flow where you left off. Never restart the flow from the beginning, and never skip the steps you had not yet reached.
 - RESPECT HOLD REQUESTS: If the caller asks you to wait — "wait", "one minute", "hold on", "just a second", or any equivalent in their language — acknowledge briefly (e.g. "Sure, take your time") and STOP. Stay on the current step. Do NOT advance the flow, do NOT continue the pitch, do NOT repeat your last line. Wait for them to speak again.
-- NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward.`;
+- NEVER REPEAT: Do not repeat a step, point, or benefit you have already delivered earlier in this conversation. Keep track of what you have already covered and only move forward.
+- AFTER INTERRUPTION: If your speech was cut off, resume from the unfinished sentence — never restart the opening, consent, or pitch from the top, and never ask whether the caller can hear you unless they said absolutely nothing.`;
 
 /**
  * Compact per-turn reminder — appended to the last user turn (highest LLM

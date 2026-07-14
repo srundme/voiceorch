@@ -39,6 +39,44 @@ const VALID_COMPLETE_SHORT_UTTERANCE_RE =
 const REDUPLICATED_ACK_RE =
   /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)){0,2}[\s,.!]*$/i;
 
+/** Caller reports they cannot hear the agent (audio quality / cut TTS). */
+export function isCallerAudioDifficulty(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    /\b(can'?t|cannot|couldn'?t)\s+(hear|listen)\b/i.test(t)
+    || /\b(not\s+hearing|didn'?t\s+hear|don'?t\s+hear)\b/i.test(t)
+    || /\b(volume|voice)\s+(is\s+)?(low|soft|unclear)\b/i.test(t)
+    || /கேட்க(ல|வில்லை|முடியல)|கேக்க(ல|வில்லை)|கேட்குறது\s*(இல்ல|தெரியல)|சத்தம்\s*(கேக்க|இல்ல)/u.test(t)
+    || /सुनाई\s*नहीं|आवाज़\s*नहीं|सुन\s*नहीं/u.test(t)
+    || /கேட்டு\s*வேணாம்|கேட்கலைய்|கேட்கலை/u.test(t)
+  );
+}
+
+/**
+ * Bolna-style accidental interruption scrap: short non-semantic finals that
+ * arrive because energy barge-in cut the agent, not because the caller had a
+ * real turn. These must NOT run a full LLM reply.
+ */
+export function isFalseInterruptionScrap(
+  text: string,
+  wordsForInterruption: number,
+): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (isCallerAudioDifficulty(t)) return false;
+  if (isUltraShortNoiseFragment(t)) return true;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  if (words.length > Math.max(1, wordsForInterruption)) return false;
+  // Keep genuine flow-control acks ("okay", "சரி") — those still go to the LLM
+  // with a strong continue-hint. Everything else at ≤threshold words is scrap.
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
+  if (REDUPLICATED_ACK_RE.test(t)) return false;
+  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी)[\s,.!]*$/iu.test(t)) return false;
+  return true;
+}
+
 /**
  * Ultra-short / half-cut STT stubs that should NOT run a full LLM turn
  * (e.g. "ஆ", "call பண்ண", "Madam இப்போ"). Silent-wait for more speech instead.

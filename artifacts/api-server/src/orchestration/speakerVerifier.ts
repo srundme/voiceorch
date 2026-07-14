@@ -2,9 +2,12 @@
  * In-call Voice Memory verifier (ECAPA via gender-service).
  *
  * Phase 1 — Enroll: first ~2–4 s of caller speech → reference embedding
- * Phase 2 — Verify: every ~20 s of new caller speech → cosine vs reference
+ * Phase 2 — Verify: every ~6 s of new caller-only speech → cosine vs reference
  * On handoff (score < VOICE_HANDOFF_THRESHOLD): notify pipeline callback.
  * On enroll: persist / match via voiceMemoryStore (cross-number person linking).
+ *
+ * Sampling is paused while the agent speaks / echo grace is active so TTS
+ * echo never poisons the reference (critical on no-AEC telephony).
  *
  * Only runs when agentConfig.voiceMemoryEnabled is true.
  */
@@ -19,9 +22,12 @@ import {
 const SAMPLE_RATE = 8_000;
 const SAMPLE_BYTES = 2;
 const ENROLL_MS = Number(process.env["VOICE_MEMORY_ENROLL_MS"] ?? 2500);
-const VERIFY_MS = Number(process.env["VOICE_MEMORY_VERIFY_MS"] ?? 20_000);
+/** Faster mid-call windows so a phone handoff is detected within ~1 turn, not after 20s of mixed speech. */
+const VERIFY_MS = Number(process.env["VOICE_MEMORY_VERIFY_MS"] ?? 6_000);
 const ENROLL_BYTES = Math.round((ENROLL_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
 const VERIFY_BYTES = Math.round((VERIFY_MS / 1000) * SAMPLE_RATE) * SAMPLE_BYTES;
+/** Only adapt the reference when we are confident it's the same speaker (avoid poisoning on mixed audio). */
+const VOICE_ADAPT_THRESHOLD = Number(process.env["VOICE_MEMORY_ADAPT_THRESHOLD"] ?? 0.85);
 const MAX_BYTES = 12 * SAMPLE_RATE * SAMPLE_BYTES;
 /** ECAPA on CPU often needs >2.5s (cold load much longer). Gender health ≠ speaker ready. */
 const REQUEST_TIMEOUT_MS = Number(process.env["VOICE_MEMORY_REQUEST_TIMEOUT_MS"] ?? 20_000);
@@ -71,6 +77,9 @@ export class SpeakerVerifier {
   private armed = false;
   private handoffFired = false;
   private nextEnrollAttemptAt = 0;
+  private samplingPaused = false;
+  /** Require two consecutive low scores before handoff (reduces noise false-positives). */
+  private lowScoreStreak = 0;
   private readonly callId: number;
   private readonly agentId: number;
   private readonly phoneNumber: string | null;
@@ -97,8 +106,23 @@ export class SpeakerVerifier {
     this.log.info({ callId: this.callId }, "Voice Memory ARMED — sampling caller for enroll/verify");
   }
 
+  /**
+   * Pause while the agent is talking (or echo-grace is active). Carrier paths
+   * feed TTS echo back into the mic — that must never enter enroll/verify
+   * windows or the reference poisons and mid-call handoffs become invisible.
+   */
+  setSamplingPaused(paused: boolean): void {
+    if (this.samplingPaused === paused) return;
+    this.samplingPaused = paused;
+    if (paused) {
+      // Drop a half-built verify window that may already contain echo / speaker A.
+      this.verifyChunks = [];
+      this.verifyAccumulated = 0;
+    }
+  }
+
   addSpeechChunk(pcm8k: Buffer): void {
-    if (!this.armed) return;
+    if (!this.armed || this.samplingPaused) return;
     this.chunks.push(pcm8k);
     this.accumulated += pcm8k.byteLength;
     while (this.accumulated > MAX_BYTES && this.chunks.length > 1) {
@@ -112,6 +136,13 @@ export class SpeakerVerifier {
         const dropped = this.verifyChunks.shift()!;
         this.verifyAccumulated -= dropped.byteLength;
       }
+      // Continuous check: don't wait for turn end — run verify as soon as we
+      // have a full caller-only window (phone handoffs mid-sentence).
+      if (this.verifyAccumulated >= VERIFY_BYTES && !this.busy && !this.handoffFired) {
+        this.tick();
+      }
+    } else if (this.accumulated >= ENROLL_BYTES && !this.busy) {
+      this.tick();
     }
   }
 
@@ -143,6 +174,7 @@ export class SpeakerVerifier {
     this.reference = null;
     this.enrolled = false;
     this.handoffFired = false;
+    this.lowScoreStreak = 0;
     this.nextEnrollAttemptAt = 0;
     this.chunks = [];
     this.accumulated = 0;
@@ -191,12 +223,26 @@ export class SpeakerVerifier {
       { callId: this.callId, similarity: result.similarity, threshold: VOICE_HANDOFF_THRESHOLD },
       "Voice Memory: verify window scored",
     );
-    if (result.similarity < VOICE_HANDOFF_THRESHOLD && !this.handoffFired) {
-      this.handoffFired = true;
-      this.onEvent({ type: "handoff", similarity: result.similarity });
-    } else if (result.embedding?.length && result.similarity >= VOICE_HANDOFF_THRESHOLD) {
-      // Slowly adapt reference toward recent same-speaker audio
-      this.reference = result.embedding;
+    if (result.similarity < VOICE_HANDOFF_THRESHOLD) {
+      this.lowScoreStreak++;
+      // Two consecutive low windows ⇒ speaker changed. A single mixed/noise
+      // window can score low without a real handoff — require persistence.
+      // Very low single shot (< threshold − 0.12) still fires immediately.
+      const definite = result.similarity < VOICE_HANDOFF_THRESHOLD - 0.12;
+      if (!this.handoffFired && (definite || this.lowScoreStreak >= 2)) {
+        this.handoffFired = true;
+        this.onEvent({ type: "handoff", similarity: result.similarity });
+      }
+    } else {
+      this.lowScoreStreak = 0;
+      if (
+        result.embedding?.length
+        && result.similarity >= VOICE_ADAPT_THRESHOLD
+      ) {
+        // Only adapt on strong same-speaker matches — mixed two-person audio
+        // must not slowly rewrite the reference toward the second speaker.
+        this.reference = result.embedding;
+      }
     }
   }
 
