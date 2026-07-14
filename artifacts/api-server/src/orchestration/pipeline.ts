@@ -46,7 +46,7 @@ import {
   RESUME_DROP_POST_GREETING_STALL_MS,
   type TurnCloseReason,
 } from "./endpointing.js";
-import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce } from "./transcriptQuality.js";
+import { checkTranscriptQuality, pickClarificationPhrase, isSemanticInterrupt, shouldHoldFragmentForCoalesce, isUltraShortNoiseFragment } from "./transcriptQuality.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
 import { logger } from "../lib/logger.js";
 import { format, addMinutes } from "date-fns";
@@ -161,7 +161,9 @@ const BARGE_IN_ECHO_CALIBRATION_MS = Number(process.env.BARGE_IN_ECHO_CALIBRATIO
 // conservative cold-start fallback is used so returning echo can't self-trigger while
 // the estimate is still empty (≈ one sentence's calibration window to warm up).
 const BARGE_IN_ECHO_FLOOR_MIN_SAMPLES = Number(process.env.BARGE_IN_ECHO_FLOOR_MIN_SAMPLES ?? 10);
-const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 8); // ~160 ms of sustained above-bar speech to fire (streaming path)
+const BARGE_IN_STREAMING_MIN_FRAMES = Number(process.env.BARGE_IN_STREAMING_MIN_FRAMES ?? 10); // ~200 ms of sustained above-bar speech to fire (streaming path)
+/** Floor for telephony energy barge-in — agents with bargeInEnergyThreshold=300 (VAD floor) false-trigger constantly. */
+const BARGE_IN_TELEPHONY_MIN_ENERGY = Number(process.env.BARGE_IN_TELEPHONY_MIN_ENERGY ?? 800);
 // Browser webcall: the browser's hardware/OS AEC already cancels the agent's own TTS before the
 // audio reaches the pipeline, so the telephony anti-echo bar (1200) is unnecessary and too high
 // for a typical browser mic. Use a lower threshold so a normal speaking volume can interrupt.
@@ -919,6 +921,8 @@ export class OrchestrationPipeline {
   // can continue naturally without repeating already-delivered content.
   private _currentTurnPlayedSentences: string[] = [];
   private _interruptionHint: string | null = null;
+  /** Text of the sentence currently draining via playJob — used when barge-in cuts mid-sentence. */
+  private _activePlaybackText: string | null = null;
   // ── Speculative / eager LLM prefill state ────────────────────────────────
   // Populated by _launchSpeculativeLlm() at semantic barge-in; consumed (or
   // aborted) in processTurn() before the LLM retry loop runs.
@@ -968,12 +972,31 @@ export class OrchestrationPipeline {
 
   /** Called at every barge-in fire point. Captures the sentences fully played so
    *  far this agent turn into _interruptionHint so the next processTurn() can tell
-   *  the LLM exactly what the caller heard before interrupting. No-op if nothing
-   *  was played yet (first-sentence barge-in) or already captured. */
+   *  the LLM exactly what the caller heard before interrupting. Always sets a hint
+   *  (even on first-sentence cuts) so the next turn never silently restarts a pitch. */
   private captureInterruptionHint(): void {
     if (this._interruptionHint) return; // already captured (multiple simultaneous events)
     const played = this._currentTurnPlayedSentences.join(" ").trim();
-    if (played) this._interruptionHint = played;
+    const mid = this._activePlaybackText?.trim() ?? "";
+    if (played && mid && !played.includes(mid)) {
+      this._interruptionHint = `${played} ${mid}`.trim();
+    } else {
+      this._interruptionHint = played || mid || "(interrupted before a full sentence finished)";
+    }
+  }
+
+  /**
+   * Clear sticky barge-in / interruption WAIT so system lines (stall reprompt,
+   * silence check-in, inactivity farewell) can actually emit audio. Without this,
+   * a prior barge-in with no follow-up processTurn leaves bargeInRequested=true
+   * and playJob no-ops → audioBytes:0 / audio_gated → silent hangup.
+   */
+  private prepareSystemPlayback(): void {
+    this.bargeInRequested = false;
+    this.skipAgentPlaybackForHandoff = false;
+    this.bargeInSpeechFrames = 0;
+    this.streamingBargeInWordCount = 0;
+    this.interruptionMgr.onUserSpeechEnd();
   }
 
   private clearFragmentCoalesce(): void {
@@ -2141,6 +2164,7 @@ export class OrchestrationPipeline {
       if (!this.closed) this.safetyNet.beginListening();
       return;
     }
+    this.prepareSystemPlayback();
     logger.info(
       { evt: "turn_latency", path: "pipeline", callId: this.config.callId, turn_close_reason: "stall_reprompt" },
       "turn_latency",
@@ -2396,6 +2420,13 @@ export class OrchestrationPipeline {
     const webcallAecThreshold = this.micThresholds.webcallAecThreshold;
     if (isWebcallStreaming && effectiveThreshold > webcallAecThreshold) {
       effectiveThreshold = webcallAecThreshold;
+    }
+    // Telephony floor: agent configs that set bargeInEnergyThreshold near the VAD
+    // floor (~300) false-fire constantly and leave sticky bargeInRequested → silent
+    // farewells. Never drop the live bar below BARGE_IN_TELEPHONY_MIN_ENERGY on the
+    // carrier path (gaps between sentences included).
+    if (streamingCarrier) {
+      effectiveThreshold = Math.max(effectiveThreshold, BARGE_IN_TELEPHONY_MIN_ENERGY);
     }
 
     // Periodic diagnostic so the exact echo/voice/threshold numbers for a line are
@@ -3535,6 +3566,7 @@ export class OrchestrationPipeline {
    */
   private async silenceCheckIn(): Promise<void> {
     if (this.closed || this.isProcessing || this.isPlaying) return; // busy — watchdog re-arms itself
+    this.prepareSystemPlayback();
     logWarningEvent(this.logFn, EXEC_COMPONENTS.STT, "Silence Check-in", ["silence_reprompt"], {
       turnNumber: this._activeTurnIndex,
       detail: { reason: "silence-hangup window expired — checking if caller is still there" },
@@ -3588,6 +3620,7 @@ export class OrchestrationPipeline {
    */
   private async playInactivityMessageAndEnd(): Promise<void> {
     this.endReasonHint ??= "silence_timeout";
+    this.prepareSystemPlayback();
     const farewell = this.agent.inactivityMessage?.trim()
       || inactivityFarewell(this.currentLang || this.agent.language);
     if (!this.closed) {
@@ -3657,6 +3690,7 @@ export class OrchestrationPipeline {
     // Track what the agent is about to speak so the streaming-STT path can reject
     // this same audio when the carrier echoes it back (content-based self-echo).
     this.recordAgentSpeech(job.text);
+    this._activePlaybackText = job.text;
     const _pbStart = Date.now();
     const _pbTurn = job.turnNumber;
     logPlaybackEvent(this.logFn, "Playback Started", { provider: this.agent.ttsProvider, turnNumber: _pbTurn });
@@ -3666,6 +3700,7 @@ export class OrchestrationPipeline {
       _audioDurationMs = await this.drainSentenceJob(job);
     } finally {
       this.isSendingTtsAudio = false;
+      if (this._activePlaybackText === job.text) this._activePlaybackText = null;
       const noAudioSent = _audioDurationMs === undefined;
       const _pbEvent: PlaybackEvent = this.closed
         ? "Playback Cancelled"
@@ -4724,6 +4759,17 @@ export class OrchestrationPipeline {
 
     logger.info({ callId: this.config.callId, transcript, sttLatencyMs }, "Processing turn");
 
+    // Drop ultra-short STT stubs before history / LLM — they restart consent loops.
+    if (isUltraShortNoiseFragment(transcript)) {
+      logger.info(
+        { callId: this.config.callId, transcript: transcript.slice(0, 80) },
+        "Dropping ultra-short STT fragment — waiting for more speech",
+      );
+      this.prepareSystemPlayback();
+      this.safetyNet.beginListening();
+      return;
+    }
+
     // STT execution-log row — the recognized caller utterance for this turn.
     const _sttMeta = this._pendingSttMeta;
     this._pendingSttMeta = null;
@@ -5463,13 +5509,17 @@ export class OrchestrationPipeline {
     }
 
     // Interruption hint: if the previous agent turn was cut short by barge-in,
-    // tell the LLM exactly what the caller already heard so it can continue
-    // naturally without repeating already-delivered content.
-    // Inspired by Bolna's `developer` role interruption message injection.
+    // tell the LLM exactly what the caller already heard so it continues (or asks
+    // one short question) instead of restarting consent / greeting / pitch.
     if (this._interruptionHint && historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
-        const hint = `[Context: your previous reply was interrupted mid-sentence. The caller only heard: "${this._interruptionHint.slice(0, 300)}". Continue naturally from where you left off — do not repeat content they already heard.]`;
+        const heard = this._interruptionHint.slice(0, 300);
+        const hint =
+          `[INTERRUPTED — DO NOT RESTART] Your previous reply was cut mid-delivery. ` +
+          `The caller already heard (possibly partial): "${heard}". ` +
+          `Do NOT restart recording consent, greeting, self-intro, welcome, or sales pitch from the top. ` +
+          `Continue from the interrupted step, OR ask ONE short clarifying question about what they just said.`;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: `${lastTurn.content}\n\n${hint}` },

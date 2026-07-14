@@ -511,7 +511,10 @@ CARTESIA DELIVERY SIGNALS (use sparingly — plain speech is the default):
     // Voice Memory — default OFF (opt-in). Remembers voiceprints + mid-call handoff.
     voiceMemoryEnabled:            (agentCfg["voiceMemoryEnabled"]            as boolean | undefined) ?? false,
     // P1-G: Engine — interruption & pacing
-    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 2,
+    // Default 3: 2-word STT stubs ("call பண்ண", "Hello Madam" mid-cut) were
+    // false-firing word-count barge-in too often on telephony. Semantic
+    // interrupt keywords (stop/wait) still bypass the word count.
+    wordsForInterruption: (agentCfg["wordsForInterruption"] as number | undefined) ?? 3,
     incrementalDelay:     (agentCfg["incrementalDelay"]     as number | undefined) ?? 0,
     ttsSpeed:             (agentCfg["ttsSpeed"]             as number | undefined) ?? 1.0,
     // P1-H: Call lifecycle

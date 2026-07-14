@@ -35,6 +35,40 @@ const PHANTOM_UTTERANCE_RE =
 const VALID_COMPLETE_SHORT_UTTERANCE_RE =
   /^(hi|hello|hey|hiya|yo|yes|yeah|yep|yup|no|nope|ok|okay|sure|right|fine|thanks|thank you|bye|goodbye|namaste|vanakkam)([,.]|\s+(madam|ma'?am|sir|there))?\.?$/i;
 
+/** Reduplicated pure ack ("Okay Okay.") — treat as content-bearing, not noise. */
+const REDUPLICATED_ACK_RE =
+  /^(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)([\s,.!]+(ok(ay)?|yes|yeah|ஆமா|சரி|ठीक)){0,2}[\s,.!]*$/i;
+
+/**
+ * Ultra-short / half-cut STT stubs that should NOT run a full LLM turn
+ * (e.g. "ஆ", "call பண்ண", "Madam இப்போ"). Silent-wait for more speech instead.
+ */
+export function isUltraShortNoiseFragment(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (VALID_COMPLETE_SHORT_UTTERANCE_RE.test(t)) return false;
+  if (REDUPLICATED_ACK_RE.test(t)) return false;
+  // Common Indic one-word acks / negations — keep for flow control
+  if (/^(சரி|சரிங்க|ஆமா|ஆம்|இல்ல|இல்லை|हां|हाँ|ठीक|जी|नहीं|nahi|haan|ha[a]?n)[\s,.!]*$/iu.test(t)) {
+    return false;
+  }
+  if (/^(bye|goodbye|thanks|thank you|நன்றி|வணக்கம்|धन्यवाद)\b/i.test(t)) return false;
+  if (/[?？]/.test(t)) return false;
+  if (/\b(how|what|why|where|when|who|என்ன|எப்படி|எங்க|ஏன்|क्या|कैसे)\b/i.test(t)) return false;
+
+  const tokens = t.split(/\s+/).filter(Boolean);
+  const compact = t.replace(/[\s,.!?;:'"“”‘’…]+/g, "");
+  const graphemes = [...compact].length;
+
+  // Single short syllable / one-character Indic token ("ஆ")
+  if (tokens.length <= 1 && graphemes <= 2) return true;
+
+  // 1–2 token stubs under ~14 graphemes — typical mid-phrase STT cuts
+  if (tokens.length <= 2 && graphemes <= 14) return true;
+
+  return false;
+}
+
 function countScriptLetters(text: string): { latin: number; devanagari: number; tamil: number; telugu: number; other: number } {
   const counts = { latin: 0, devanagari: 0, tamil: 0, telugu: 0, other: 0 };
   for (const ch of text) {

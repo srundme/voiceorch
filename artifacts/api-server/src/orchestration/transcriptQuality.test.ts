@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { checkTranscriptQuality, pickClarificationPhrase, isLikelyIncompleteEnglishFragment, shouldHoldFragmentForCoalesce } from "./transcriptQuality.js";
+import {
+  checkTranscriptQuality,
+  pickClarificationPhrase,
+  isLikelyIncompleteEnglishFragment,
+  shouldHoldFragmentForCoalesce,
+  isUltraShortNoiseFragment,
+} from "./transcriptQuality.js";
 
 describe("checkTranscriptQuality", () => {
   it("flags Sarvam phantom silence hallucinations", () => {
@@ -61,5 +67,22 @@ describe("pickClarificationPhrase", () => {
     const b = pickClarificationPhrase("en-IN", "call-2527");
     expect(a).toBe(b);
     expect(a.length).toBeGreaterThan(10);
+  });
+});
+
+describe("isUltraShortNoiseFragment", () => {
+  it("drops single Indic syllables and 1–2 token stubs", () => {
+    expect(isUltraShortNoiseFragment("ஆ")).toBe(true);
+    expect(isUltraShortNoiseFragment("call பண்ண")).toBe(true);
+    expect(isUltraShortNoiseFragment("Madam இப்போ")).toBe(true);
+  });
+
+  it("keeps real acks, greetings, and fuller utterances", () => {
+    expect(isUltraShortNoiseFragment("Okay Madam")).toBe(false);
+    expect(isUltraShortNoiseFragment("Okay Okay.")).toBe(false);
+    expect(isUltraShortNoiseFragment("Hello")).toBe(false);
+    expect(isUltraShortNoiseFragment("சரி")).toBe(false);
+    expect(isUltraShortNoiseFragment("ஆ Madam பேசலாம் சொல்லுங்க.")).toBe(false);
+    expect(isUltraShortNoiseFragment("இல்ல Madam இப்பதான் தெரிஞ்சிருக்கு.")).toBe(false);
   });
 });
