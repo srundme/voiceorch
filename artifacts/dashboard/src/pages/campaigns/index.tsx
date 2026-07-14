@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AppPageHeader } from "@/components/app-page-header";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
+import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -159,10 +160,10 @@ function HealthBadge({ health }: { health: CampaignHealth }) {
 }
 
 const SOURCE_ICON: Record<string, React.ReactNode> = {
-  webhook:  <Globe className="h-3.5 w-3.5 text-blue-500" />,
-  meta_ads: <Instagram className="h-3.5 w-3.5 text-purple-500" />,
-  csv:      <Upload className="h-3.5 w-3.5 text-muted-foreground/40" />,
-  crm:      <Layers className="h-3.5 w-3.5 text-amber-500" />,
+  webhook:  <Globe className="h-3.5 w-3.5 text-muted-foreground" />,
+  meta_ads: <BrandLogo brand="meta" size={14} />,
+  csv:      <Upload className="h-3.5 w-3.5 text-muted-foreground" />,
+  crm:      <BrandLogo brand="zoho" size={14} />,
 };
 
 // ── Campaign Row ───────────────────────────────────────────────────────────
@@ -346,7 +347,7 @@ const SOURCE_OPTIONS: {
     value: "meta_ads",
     label: "Meta Ads",
     description: "Instagram and Facebook Lead Ads. New leads are called automatically as they arrive.",
-    icon: <Instagram className="h-5 w-5" />,
+    icon: <BrandLogoBadge brand="meta" size={18} className="h-9 w-9 rounded-xl" />,
     defaultTrigger: "instant",
   },
   {
@@ -360,7 +361,12 @@ const SOURCE_OPTIONS: {
     value: "crm",
     label: "CRM",
     description: "Import leads from your CRM. Choose instant trigger or scheduled batch import.",
-    icon: <Layers className="h-5 w-5" />,
+    icon: (
+      <div className="flex -space-x-1">
+        <BrandLogoBadge brand="hubspot" size={12} className="h-6 w-6" />
+        <BrandLogoBadge brand="zoho" size={12} className="h-6 w-6" />
+      </div>
+    ),
     defaultTrigger: "instant",
   },
 ];
@@ -1336,10 +1342,15 @@ export default function CampaignsPage() {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/40 text-center mb-4">Lead sources</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { icon: <FileText className="h-4 w-4 text-blue-400" />, name: "CSV Upload", desc: "Fixed list from a spreadsheet" },
-                      { icon: <Webhook className="h-4 w-4 text-violet-400" />, name: "Webhook", desc: "Any system that can POST a lead" },
-                      { icon: <Instagram className="h-4 w-4 text-orange-400" />, name: "Meta Ads", desc: "Facebook / Instagram form fills" },
-                      { icon: <Globe className="h-4 w-4 text-emerald-400" />, name: "CRM Import", desc: "HubSpot or Zoho contacts" },
+                      { icon: <FileText className="h-4 w-4 text-muted-foreground" />, name: "CSV Upload", desc: "Fixed list from a spreadsheet" },
+                      { icon: <Webhook className="h-4 w-4 text-muted-foreground" />, name: "Webhook", desc: "Any system that can POST a lead" },
+                      { icon: <BrandLogoBadge brand="meta" size={14} className="h-7 w-7" />, name: "Meta Ads", desc: "Facebook / Instagram form fills" },
+                      { icon: (
+                        <div className="flex -space-x-1.5">
+                          <BrandLogoBadge brand="hubspot" size={12} className="h-6 w-6" />
+                          <BrandLogoBadge brand="zoho" size={12} className="h-6 w-6" />
+                        </div>
+                      ), name: "CRM Import", desc: "HubSpot or Zoho contacts" },
                     ].map(src => (
                       <div key={src.name} className="rounded-lg border border-border/50 bg-card/40 p-3 flex flex-col gap-1.5">
                         {src.icon}

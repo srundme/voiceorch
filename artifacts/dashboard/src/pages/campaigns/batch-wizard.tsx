@@ -29,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { BrandLogoBadge } from "@/components/brand-logos";
 import {
   CheckCircle2, ChevronRight, Upload, FileText, Database,
   Globe, Webhook, AlertTriangle, AlertCircle,
@@ -374,8 +375,8 @@ function Step2({
   const filtered = sources.filter(s => !search || s.sourceName.toLowerCase().includes(search.toLowerCase()));
 
   const CRM_TILES = [
-    { id: "hubspot" as const, name: "HubSpot",    icon: <span className="text-orange-400 font-bold text-sm">HS</span> },
-    { id: "zoho"    as const, name: "Zoho CRM",   icon: <span className="text-blue-400 font-bold text-sm">ZO</span> },
+    { id: "hubspot" as const, name: "HubSpot",    icon: <BrandLogoBadge brand="hubspot" size={16} /> },
+    { id: "zoho"    as const, name: "Zoho CRM",   icon: <BrandLogoBadge brand="zoho" size={16} /> },
     { id: "sf"      as const, name: "Salesforce", icon: <Globe className="w-4 h-4 text-muted-foreground" />, disabled: true },
   ] as const;
 
@@ -886,8 +887,8 @@ function Step3({
 
   // CRM tiles ─────────────────────────────────────────────────────────────────
   const CRM_TILES_DEF = [
-    { id: "hubspot" as const, name: "HubSpot",    icon: <span className="text-orange-400 font-bold text-sm">HS</span> },
-    { id: "zoho"    as const, name: "Zoho CRM",   icon: <span className="text-blue-400 font-bold text-sm">ZO</span> },
+    { id: "hubspot" as const, name: "HubSpot",    icon: <BrandLogoBadge brand="hubspot" size={16} /> },
+    { id: "zoho"    as const, name: "Zoho CRM",   icon: <BrandLogoBadge brand="zoho" size={16} /> },
     { id: "sf"      as const, name: "Salesforce", icon: <Globe className="w-4 h-4 text-muted-foreground" />, disabled: true },
   ] as const;
 

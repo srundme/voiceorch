@@ -98,14 +98,14 @@ function initials(name: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
 
-/* Deterministic accent palette — gives avatars stable, varied accent color. */
+/* Deterministic accent palette — greyscale so the page stays studio-calm. */
 const AVATAR_ACCENTS = [
-  "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-  "bg-purple-500/10 text-purple-500 border-purple-500/20",
-  "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  "bg-rose-500/10 text-rose-500 border-rose-500/20",
-  "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+  "bg-foreground/10 text-foreground/80 border-border/60",
+  "bg-muted text-muted-foreground border-border/50",
+  "bg-secondary text-secondary-foreground border-border/50",
+  "bg-elevated text-foreground/70 border-border/60",
+  "bg-card text-foreground/75 border-border",
+  "bg-muted/80 text-foreground/65 border-border/40",
 ];
 
 function accentFor(seed: string): string {
@@ -134,19 +134,21 @@ function callDirection(call: Call): Direction {
   return "Inbound";
 }
 
-/* ─── Deterministic fact icon mapping (icons stay, colors are neutral) ────── */
+/* ─── Deterministic fact icon mapping (icons stay, colors stay neutral) ───── */
 type FactIcon = typeof FileText;
 
-const FACT_KEYWORDS: Array<{ test: RegExp; Icon: FactIcon; accent: string }> = [
-  { test: /(location|address|city|area|region|place)/i, Icon: MapPin, accent: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
-  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, Icon: DollarSign, accent: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
-  { test: /(follow|reminder|next step|action)/i, Icon: Bell, accent: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
-  { test: /(time|schedule|when|date|appointment|preference)/i, Icon: Clock, accent: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
-  { test: /(concern|question|issue|problem|objection)/i, Icon: HelpCircle, accent: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
-  { test: /(interest|policy|product|plan|service|offer)/i, Icon: FileText, accent: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
-  { test: /(name|contact|person|customer|client|caller)/i, Icon: User, accent: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },
-  { test: /(email|phone|number|mobile)/i, Icon: Hash, accent: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
-  { test: /(note|comment|message|detail|summary)/i, Icon: MessageSquare, accent: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+const FACT_MUTED = "bg-muted/50 text-muted-foreground border-border/50";
+
+const FACT_KEYWORDS: Array<{ test: RegExp; Icon: FactIcon }> = [
+  { test: /(location|address|city|area|region|place)/i, Icon: MapPin },
+  { test: /(budget|price|cost|range|amount|payment|salary|income)/i, Icon: DollarSign },
+  { test: /(follow|reminder|next step|action)/i, Icon: Bell },
+  { test: /(time|schedule|when|date|appointment|preference)/i, Icon: Clock },
+  { test: /(concern|question|issue|problem|objection)/i, Icon: HelpCircle },
+  { test: /(interest|policy|product|plan|service|offer)/i, Icon: FileText },
+  { test: /(name|contact|person|customer|client|caller)/i, Icon: User },
+  { test: /(email|phone|number|mobile)/i, Icon: Hash },
+  { test: /(note|comment|message|detail|summary)/i, Icon: MessageSquare },
 ];
 
 function factIcon(key: string): FactIcon {
@@ -156,11 +158,8 @@ function factIcon(key: string): FactIcon {
   return Tag;
 }
 
-function factAccent(key: string): string {
-  for (const { test, accent } of FACT_KEYWORDS) {
-    if (test.test(key)) return accent;
-  }
-  return "bg-indigo-500/10 text-indigo-500 border-indigo-500/20";
+function factAccent(_key: string): string {
+  return FACT_MUTED;
 }
 
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
@@ -453,9 +452,9 @@ function TimelineFeed({
 /* ─── Call History ───────────────────────────────────────────────────────── */
 function DirectionBadge({ direction }: { direction: Direction }) {
   const cfg: Record<Direction, { label: string; icon: React.ReactNode; cls: string }> = {
-    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" />, cls: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
-    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" />, cls: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
-    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" />,        cls: "text-purple-500 bg-purple-500/10 border-purple-500/20" },
+    Inbound:  { label: "Incoming", icon: <ArrowDownLeft className="w-2.5 h-2.5" />, cls: "text-muted-foreground bg-muted/40 border-border/50" },
+    Outbound: { label: "Outgoing", icon: <ArrowUpRight className="w-2.5 h-2.5" />, cls: "text-muted-foreground bg-muted/40 border-border/50" },
+    Web:      { label: "Web",      icon: <Globe className="w-2.5 h-2.5" />,        cls: "text-muted-foreground bg-muted/40 border-border/50" },
   };
   const c = cfg[direction];
   return (
@@ -858,10 +857,10 @@ function CallerDetailView({
         {/* Per-caller stat band — clean spaced cells, hierarchy via type weight */}
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total Calls", value: String(contact.callCount),    icon: <Phone className="h-4 w-4 text-blue-500" />,    accent: "text-blue-500" },
-            { label: "Facts",       value: String(contact.factCount),    icon: <FileText className="h-4 w-4 text-purple-500" />, accent: "text-purple-500" },
-            { label: "Episodes",    value: String(contact.archiveCount), icon: <Layers className="h-4 w-4 text-amber-500" />,  accent: "text-amber-500" },
-            { label: "Last Active", value: timeAgo(contact.lastCalledAt),icon: <Clock className="h-4 w-4 text-emerald-500" />, accent: "text-foreground" },
+            { label: "Total Calls", value: String(contact.callCount),    icon: <Phone className="h-4 w-4 text-muted-foreground" /> },
+            { label: "Facts",       value: String(contact.factCount),    icon: <FileText className="h-4 w-4 text-muted-foreground" /> },
+            { label: "Episodes",    value: String(contact.archiveCount), icon: <Layers className="h-4 w-4 text-muted-foreground" /> },
+            { label: "Last Active", value: timeAgo(contact.lastCalledAt),icon: <Clock className="h-4 w-4 text-muted-foreground" /> },
           ].map(s => (
             <div key={s.label} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
@@ -869,7 +868,7 @@ function CallerDetailView({
               </div>
               <div className="min-w-0">
                 <p className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-widest leading-none mb-1.5">{s.label}</p>
-                <p className={`text-lg font-semibold tabular-nums leading-none truncate ${s.accent}`}>{s.value}</p>
+                <p className="text-lg font-semibold tabular-nums leading-none truncate text-foreground">{s.value}</p>
               </div>
             </div>
           ))}
@@ -946,7 +945,7 @@ function CallerDetailView({
             <>
               {/* Overview: Memory Summary up top, then previews that deep-link into the tabs */}
               <TabsContent value="overview" className="mt-0 space-y-5">
-                <SectionCard icon={Brain} title="Memory Summary" accent="bg-purple-500/10 text-purple-500 border-purple-500/20">
+                <SectionCard icon={Brain} title="Memory Summary" accent="bg-muted/50 text-muted-foreground border-border/50">
                   {contact.summary ? (
                     <p className="text-[13px] text-muted-foreground leading-relaxed">{contact.summary}</p>
                   ) : (
@@ -960,7 +959,7 @@ function CallerDetailView({
                   icon={FileText}
                   title="What the agent knows"
                   count={facts.length}
-                  accent="bg-blue-500/10 text-blue-500 border-blue-500/20"
+                  accent="bg-muted/50 text-muted-foreground border-border/50"
                   action={facts.length > previewFacts.length
                     ? <ViewAllLink label="View all" onClick={() => setTab("facts")} />
                     : undefined}
@@ -981,7 +980,7 @@ function CallerDetailView({
                   icon={Layers}
                   title="Recent episodes"
                   count={episodes.length}
-                  accent="bg-amber-500/10 text-amber-500 border-amber-500/20"
+                  accent="bg-muted/50 text-muted-foreground border-border/50"
                   action={displayEpisodes.length > previewEpisodes.length
                     ? <ViewAllLink label="View all" onClick={() => setTab("episodes")} />
                     : undefined}
@@ -997,7 +996,7 @@ function CallerDetailView({
                   icon={Phone}
                   title="Call history"
                   count={callerCalls.length}
-                  accent="bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                  accent="bg-muted/50 text-muted-foreground border-border/50"
                   action={callerCalls.length > previewCalls.length
                     ? <ViewAllLink label="View all" onClick={() => setTab("calls")} />
                     : undefined}
@@ -1018,11 +1017,11 @@ function CallerDetailView({
               {/* Facts */}
               <TabsContent value="facts" className="mt-0">
                 {facts.length === 0 ? (
-                  <SectionCard icon={FileText} title="What the agent knows" accent="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                  <SectionCard icon={FileText} title="What the agent knows" accent="bg-muted/50 text-muted-foreground border-border/50">
                     <p className="text-[12.5px] text-muted-foreground py-6 text-center">No facts extracted for this caller yet.</p>
                   </SectionCard>
                 ) : (
-                  <SectionCard icon={FileText} title="What the agent knows" count={facts.length} accent="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                  <SectionCard icon={FileText} title="What the agent knows" count={facts.length} accent="bg-muted/50 text-muted-foreground border-border/50">
                     <FactsGrid
                       facts={facts.map(f => ({ ...f, phoneNumber: contact.phoneNumber }))}
                       agentId={agentId}
@@ -1035,7 +1034,7 @@ function CallerDetailView({
 
               {/* Episodes */}
               <TabsContent value="episodes" className="mt-0">
-                <SectionCard icon={Layers} title="Conversation episodes" count={displayEpisodes.length || undefined} accent="bg-amber-500/10 text-amber-500 border-amber-500/20">
+                <SectionCard icon={Layers} title="Conversation episodes" count={displayEpisodes.length || undefined} accent="bg-muted/50 text-muted-foreground border-border/50">
                   {displayEpisodes.length === 0 ? (
                     <p className="text-[12.5px] text-muted-foreground py-6 text-center">No conversation episodes recorded for this caller yet.</p>
                   ) : (
@@ -1046,14 +1045,14 @@ function CallerDetailView({
 
               {/* Timeline */}
               <TabsContent value="timeline" className="mt-0">
-                <SectionCard icon={Clock} title="Activity timeline" accent="bg-purple-500/10 text-purple-500 border-purple-500/20">
+                <SectionCard icon={Clock} title="Activity timeline" accent="bg-muted/50 text-muted-foreground border-border/50">
                   <TimelineFeed facts={facts} episodes={displayEpisodes} />
                 </SectionCard>
               </TabsContent>
 
               {/* Call History */}
               <TabsContent value="calls" className="mt-0">
-                <SectionCard icon={Phone} title="Call history" count={callerCalls.length || undefined} bodyClassName="p-2" accent="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                <SectionCard icon={Phone} title="Call history" count={callerCalls.length || undefined} bodyClassName="p-2" accent="bg-muted/50 text-muted-foreground border-border/50">
                   {callsLoading ? (
                     <div className="space-y-2 p-2">
                       {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}

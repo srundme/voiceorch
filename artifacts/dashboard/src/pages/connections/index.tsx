@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AppPageHeader } from "@/components/app-page-header";
 import { EmptyState } from "@/components/empty-state";
+import { BrandLogo, BrandLogoBadge } from "@/components/brand-logos";
 import { format } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -724,7 +725,7 @@ function WebhookRow({
 
   return (
     <>
-      <div className={cn("border-b border-border/50 last:border-b-0", hasNewEvent && "bg-violet-500/5")}>
+      <div className={cn("border-b border-border/50 last:border-b-0", hasNewEvent && "bg-foreground/[0.03]")}>
         <div className="flex items-center gap-3 px-4 py-2.5">
           <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0 text-[10px] font-bold text-muted-foreground select-none">
             {initials}
@@ -2028,7 +2029,6 @@ const CRM_PROVIDERS: Array<{
   id: "hubspot" | "zoho";
   name: string;
   description: string;
-  color: string;
   logo: React.ReactNode;
   comingSoon?: boolean;
 }> = [
@@ -2036,16 +2036,14 @@ const CRM_PROVIDERS: Array<{
     id: "hubspot",
     name: "HubSpot",
     description: "Import contacts and push call outcomes as notes",
-    color: "text-orange-400",
-    logo: <span className="text-orange-400 font-bold text-sm">HS</span>,
+    logo: <BrandLogoBadge brand="hubspot" size={18} />,
     comingSoon: true,
   },
   {
     id: "zoho",
     name: "Zoho CRM",
     description: "Import contacts and push call outcomes as notes",
-    color: "text-blue-400",
-    logo: <span className="text-blue-400 font-bold text-sm">ZO</span>,
+    logo: <BrandLogoBadge brand="zoho" size={18} />,
   },
 ];
 
@@ -2125,7 +2123,7 @@ function CrmConnectorSection() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="mt-0.5 shrink-0">
                       {provider.logo}
                     </div>
                     <div className="min-w-0">
@@ -2379,7 +2377,7 @@ export default function ConnectionsPage() {
             <div className="px-4 pb-4 space-y-2.5 border-t border-border/40 pt-3">
               <RecipeCard
                 comingSoon
-                icon={<Sheet className="w-4 h-4 text-emerald-400" />}
+                icon={<BrandLogo brand="googleSheets" size={16} />}
                 title="Google Sheets"
                 description="Forward new rows to your webhook via a Google Apps Script trigger"
               >
@@ -2387,7 +2385,7 @@ export default function ConnectionsPage() {
               </RecipeCard>
               <RecipeCard
                 comingSoon
-                icon={<Zap className="w-4 h-4 text-amber-400" />}
+                icon={<BrandLogo brand="zapier" size={15} />}
                 title="Zapier & Make"
                 description="Connect any app that supports Zapier or Make to your webhook"
               >
